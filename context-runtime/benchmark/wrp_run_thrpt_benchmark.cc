@@ -321,11 +321,14 @@ void IOWorkerThread(size_t thread_id, const BenchmarkConfig &config,
       blocks.push_back(alloc_task->blocks_[i]);
     }
 
-    // Write data across all allocated blocks
+    // Write data across all allocated blocks. Each block gets up to its
+    // own size of payload; previously this was hard-capped at 4 KiB which
+    // made the reported "Bandwidth" pure fiction for any io_size > 4 KiB.
     size_t bytes_written = 0;
     for (size_t block_idx = 0; block_idx < blocks.size(); block_idx++) {
       size_t bytes_remaining = config.io_size - bytes_written;
-      size_t bytes_to_write = std::min(bytes_remaining, size_t(4096));
+      size_t block_capacity = blocks[block_idx].size_;
+      size_t bytes_to_write = std::min(bytes_remaining, block_capacity);
 
       // Create chi::priv::vector with single block for Write operation
       chi::priv::vector<chimaera::bdev::Block> single_block(HSHM_MALLOC);

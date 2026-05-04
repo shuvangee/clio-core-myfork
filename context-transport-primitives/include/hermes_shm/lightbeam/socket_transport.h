@@ -160,11 +160,14 @@ class SocketTransport : public Transport {
 
   ~SocketTransport() {
     if (IsClient()) {
+      if (em_) em_->RemoveEvent(fd_);
       sock::Close(fd_);
     } else {
       for (auto fd : client_fds_) {
+        if (em_) em_->RemoveEvent(fd);
         sock::Close(fd);
       }
+      if (em_) em_->RemoveEvent(listen_fd_);
       sock::Close(listen_fd_);
       if (protocol_ == "ipc") {
         sock::UnlinkPath(addr_.c_str());
@@ -253,17 +256,17 @@ class SocketTransport : public Transport {
       }
     }
 
-    // 1. Serialize metadata via GlobalSerialize
+    // 1. Serialize metadata via GlobalSerialize directly into the buffer
+    //    we will hand to writev — no intermediate std::string copy.
     std::vector<char> meta_buf;
     {
       hshm::ipc::GlobalSerialize<std::vector<char>> ar(meta_buf);
       ar(meta);
       ar.Finalize();
     }
-    std::string meta_str(meta_buf.begin(), meta_buf.end());
 
     // 2. Build iovec: [4-byte BE length prefix][metadata][bulk0][bulk1]...
-    uint32_t meta_len = htonl(static_cast<uint32_t>(meta_str.size()));
+    uint32_t meta_len = htonl(static_cast<uint32_t>(meta_buf.size()));
 
     int iov_count = 2;
     for (size_t i = 0; i < meta.send.size(); ++i) {
@@ -277,8 +280,8 @@ class SocketTransport : public Transport {
     iov[idx].base = &meta_len;
     iov[idx].len = sizeof(meta_len);
     idx++;
-    iov[idx].base = const_cast<char*>(meta_str.data());
-    iov[idx].len = meta_str.size();
+    iov[idx].base = meta_buf.data();
+    iov[idx].len = meta_buf.size();
     idx++;
 
     for (size_t i = 0; i < meta.send.size(); ++i) {
@@ -328,6 +331,11 @@ class SocketTransport : public Transport {
           continue;
         }
         if (info.rc != 0) {
+          // Drop epoll registration BEFORE close so the kernel can't
+          // recycle the fd number and leave a stale entry in
+          // EventManager::fd_to_reg_ (which would later trip MOD->ENOENT
+          // when a fresh accept() picked the same number).
+          em_->RemoveEvent(fd);
           sock::Close(fd);
           client_fds_.erase(
               std::remove(client_fds_.begin(), client_fds_.end(), fd),
@@ -348,6 +356,7 @@ class SocketTransport : public Transport {
       info.fd_ = fd;
       if (info.rc == EAGAIN) continue;
       if (info.rc != 0) {
+        if (em_) em_->RemoveEvent(fd);
         sock::Close(fd);
         client_fds_.erase(client_fds_.begin() + i);
         return info;
@@ -387,12 +396,12 @@ class SocketTransport : public Transport {
     if (rc != 0) return -1;
 
     uint32_t meta_len = ntohl(net_len);
-    std::string meta_str(meta_len, '\0');
-    rc = sock::RecvExact(fd, &meta_str[0], meta_len);
+    // Recv straight into the deserialize buffer — no string intermediate.
+    std::vector<char> meta_buf(meta_len);
+    rc = sock::RecvExact(fd, meta_buf.data(), meta_len);
     if (rc != 0) return -1;
 
     try {
-      std::vector<char> meta_buf(meta_str.begin(), meta_str.end());
       hshm::ipc::GlobalDeserialize<std::vector<char>> ar(meta_buf);
       ar(meta);
     } catch (const std::exception& e) {
