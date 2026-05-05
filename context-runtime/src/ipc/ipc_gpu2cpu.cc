@@ -7,7 +7,7 @@
 
 #include "chimaera/ipc/ipc_gpu2cpu.h"
 
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
 
 #include "chimaera/ipc_manager.h"
 #include "chimaera/gpu/future.h"
@@ -83,4 +83,4 @@ void IpcGpu2Cpu::RuntimeSend(
 
 }  // namespace chi
 
-#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL

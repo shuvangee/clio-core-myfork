@@ -39,7 +39,11 @@
 #include "chimaera/gpu/gpu_info.h"
 #include <string>
 
-#if HSHM_ENABLE_GPU
+// The GPU work orchestrator and its control structures are CUDA/ROCm-only.
+// Under SYCL the GPU is a pure task producer that pushes onto the gpu2cpu
+// queue (see ipc_gpu2cpu_impl.h) — there is no persistent device-side worker
+// kernel and therefore no orchestrator to manage.
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
 
 namespace chi {
 
@@ -228,5 +232,5 @@ hipc::FullPtr<GpuTaskQueue> InitQueueOnDevice(char *device_data, size_t capacity
 }  // namespace gpu
 }  // namespace chi
 
-#endif  // HSHM_ENABLE_GPU
+#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_GPU_WORK_ORCHESTRATOR_H_

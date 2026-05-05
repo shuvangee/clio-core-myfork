@@ -997,6 +997,46 @@ install(TARGETS ${_CTE_TEST_TARGETS}
 )
 
 # ------------------------------------------------------------------------------
+# SYCL → CPU PutBlob test
+# ------------------------------------------------------------------------------
+# Companion to context-runtime/test/unit/gpu/test_sycl_chimod_to_cpu.cc.
+# Validates that a SYCL kernel can submit a CTE PutBlobTask to the CPU
+# runtime via gpu2cpu_queue + IpcGpu2Cpu::ClientSend, and the CPU-side
+# wrp_cte_core container processes it. Currently a placeholder until the
+# SYCL gpu2cpu_queue infrastructure lands — see file header for details.
+if(WRP_CORE_ENABLE_SYCL)
+  add_sycl_executable(test_sycl_cte_putblob FALSE
+    gpu/test_sycl_cte_putblob.cc
+    INCLUDE_DIRS
+      ${CMAKE_SOURCE_DIR}/context-runtime/include
+      ${CMAKE_SOURCE_DIR}/context-runtime/test
+      ${CMAKE_SOURCE_DIR}/context-runtime/modules/MOD_NAME/include
+      ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+      ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+    LINK_LIBS
+      chimaera_cxx
+      chimaera_cxx_gpu
+      chimaera_admin_client
+      chimaera_bdev_client
+      chimaera_MOD_NAME_client
+      wrp_cte_core_client
+      hshm::cxx
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_sycl_cte_putblob PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cte_sycl_cte_putblob_tests COMMAND test_sycl_cte_putblob
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cte_sycl_cte_putblob_tests PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 60
+    LABELS "gpu;sycl;cte;putblob"
+  )
+endif()
+
+# ------------------------------------------------------------------------------
 # Note: Compression tests have been moved to compressor chimod tests
 # See context-transfer-engine/compressor/test/ for compression functionality tests
 # ------------------------------------------------------------------------------

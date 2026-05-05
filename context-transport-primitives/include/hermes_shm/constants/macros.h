@@ -181,7 +181,13 @@
 #include <hip/hip_runtime.h>
 #endif
 
-#if HSHM_IS_SYCL_COMPILER
+// Pull <sycl/sycl.hpp> in whenever the SYCL backend is enabled, not only
+// when this TU is being compiled with -fsycl. Host TUs in chimaera_cxx
+// (compiled by dpcpp without -fsycl) still need sycl::malloc_host /
+// sycl::queue / sycl::free declarations because gpu_api.h's sycl::
+// branches activate on HSHM_ENABLE_SYCL=1. The header is plain C++ —
+// safe to parse without the SYCL compiler frontend.
+#if HSHM_ENABLE_SYCL
 #include <sycl/sycl.hpp>
 #endif
 

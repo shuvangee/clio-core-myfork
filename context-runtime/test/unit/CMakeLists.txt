@@ -518,43 +518,38 @@ if(WRP_CORE_ENABLE_SYCL)
     LABELS "gpu;sycl"
   )
 
-  # Per-chimod allocation smoke test — exercises the autogen SYCL kernel
-  # for each registered GpuRuntime subclass (admin, bdev, wrp_cte_core).
-  #
-  # The chimod _gpu.cc source files are added directly to the executable
-  # rather than pulled in through chimaera_cxx_gpu.so. DPC++ device-side
-  # linking does NOT propagate SYCL_EXTERNAL symbols across shared-library
-  # boundaries on the nvptx64 backend; the device images live alongside
-  # the host code inside libchimaera_cxx_gpu.so but the SYCL JIT can't
-  # resolve them when JIT-linking a downstream kernel. Including the
-  # source files keeps every HSHM_DEVICE_EXTERN-tagged definition in the
-  # same device-link unit as the autogen kernel that takes their
-  # addresses.
-  add_sycl_executable(test_sycl_chimods FALSE
-    gpu/test_sycl_chimods.cc
-    ${CHIMAERA_ROOT}/src/gpu/work_orchestrator_sycl.cc
-    ${CHIMAERA_ROOT}/modules/MOD_NAME/src/MOD_NAME_runtime_gpu.cc
-    ${CHIMAERA_ROOT}/modules/bdev/src/bdev_runtime_gpu.cc
-    ${CHIMAERA_ROOT}/../context-transfer-engine/core/src/core_runtime_gpu.cc
-    ${CHIMAERA_ROOT}/../context-transfer-engine/compressor/src/compressor_runtime_gpu.cc
+  # Per-chimod GPU container allocation smoke test was removed when the
+  # SYCL GPU runtime was retired. Under SYCL the GPU is a pure task
+  # producer that pushes onto gpu2cpu_queue (see ipc_gpu2cpu_impl.h);
+  # AllocGpuContainerHost is dead code on this backend.
+
+  # SYCL → CPU MOD_NAME submission end-to-end test. Spins up the full
+  # Chimaera CPU runtime, creates a MOD_NAME pool, then launches a SYCL
+  # single_task that submits a GpuSubmitTask via PoolQuery::ToLocalCpu().
+  # The CPU GPU worker pops gpu2cpu_queue and dispatches into the chimod
+  # CPU container. Verifies the chimod's known formula.
+  add_sycl_executable(test_sycl_chimod_to_cpu FALSE
+    gpu/test_sycl_chimod_to_cpu.cc
     INCLUDE_DIRS
       ${CHIMAERA_ROOT}/include
-      ${CHIMAERA_ROOT}/src                      # autogen/gpu_work_orchestrator_modules.h
-      ${CHIMAERA_ROOT}/modules/admin/include    # admin_gpu_runtime.h
-      ${CHIMAERA_ROOT}/modules/bdev/include     # bdev_gpu_runtime.h
-      ${CHIMAERA_ROOT}/modules/MOD_NAME/include # MOD_NAME_gpu_runtime.h
-      ${CHIMAERA_ROOT}/../context-transfer-engine/core/include      # core_gpu_runtime.h
-      ${CHIMAERA_ROOT}/../context-transfer-engine/compressor/include # compressor_gpu_runtime.h
       ${CHIMAERA_ROOT}/test
-    LINK_LIBS chimaera_cxx hshm::cxx ${CMAKE_THREAD_LIBS_INIT}
+      ${CHIMAERA_ROOT}/modules/MOD_NAME/include
+      ${CHIMAERA_ROOT}/modules/admin/include
+    LINK_LIBS
+      chimaera_cxx
+      chimaera_cxx_gpu
+      chimaera_admin_client
+      chimaera_MOD_NAME_client
+      hshm::cxx
+      ${CMAKE_THREAD_LIBS_INIT}
   )
-  set_target_properties(test_sycl_chimods PROPERTIES
+  set_target_properties(test_sycl_chimod_to_cpu PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  add_test(NAME cr_sycl_chimods_tests COMMAND test_sycl_chimods
+  add_test(NAME cr_sycl_chimod_to_cpu_tests COMMAND test_sycl_chimod_to_cpu
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_sycl_chimods_tests PROPERTIES
+  set_tests_properties(cr_sycl_chimod_to_cpu_tests PROPERTIES
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
     TIMEOUT 60
     LABELS "gpu;sycl;chimod"

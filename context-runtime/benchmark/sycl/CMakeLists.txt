@@ -11,22 +11,21 @@ if(NOT WRP_CORE_ENABLE_SYCL)
   return()
 endif()
 
-# Sources for the driver TU and the four workload TUs.
+# Sources for the driver TU and the workload TUs.
+# The orchestrator-lifecycle and container-alloc workloads were removed
+# along with the SYCL GPU runtime: under SYCL the GPU is a pure task
+# producer (push-only onto gpu2cpu_queue) so neither concept exists.
 set(WRP_SYCL_BENCH_SOURCES
   wrp_sycl_bench.cc
   workload_usm_bandwidth.cc
   workload_atomic_throughput.cc
-  workload_orchestrator_lifecycle.cc
-  workload_container_alloc.cc
   workload_cte_client_overhead_sycl.cc
   workload_bdev_sycl.cc
 )
 
-# Pull in the chimod _gpu.cc + work_orchestrator_sycl.cc sources so every
-# HSHM_DEVICE_EXTERN definition sits in the same SYCL device-link unit as
-# the autogen kernel that takes its address (see test_sycl_chimods comment).
+# Pull in the chimod _gpu.cc sources so every HSHM_DEVICE_EXTERN definition
+# sits in the same SYCL device-link unit as any kernel that takes its address.
 set(WRP_SYCL_BENCH_DEVICE_SOURCES
-  ${CMAKE_SOURCE_DIR}/context-runtime/src/gpu/work_orchestrator_sycl.cc
   ${CMAKE_SOURCE_DIR}/context-runtime/modules/MOD_NAME/src/MOD_NAME_runtime_gpu.cc
   ${CMAKE_SOURCE_DIR}/context-runtime/modules/bdev/src/bdev_runtime_gpu.cc
   ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/src/core_runtime_gpu.cc
@@ -77,18 +76,6 @@ add_test(NAME sycl_bench_atomic_throughput
   COMMAND wrp_sycl_bench --test-case atomic_throughput
           --threads 1024 --iterations 100)
 set_tests_properties(sycl_bench_atomic_throughput PROPERTIES
-  TIMEOUT 60 LABELS "gpu;sycl;bench"
-  ENVIRONMENT "${WRP_SYCL_BENCH_TEST_ENV}")
-
-add_test(NAME sycl_bench_orchestrator_lifecycle
-  COMMAND wrp_sycl_bench --test-case orchestrator_lifecycle --iterations 10)
-set_tests_properties(sycl_bench_orchestrator_lifecycle PROPERTIES
-  TIMEOUT 60 LABELS "gpu;sycl;bench"
-  ENVIRONMENT "${WRP_SYCL_BENCH_TEST_ENV}")
-
-add_test(NAME sycl_bench_container_alloc
-  COMMAND wrp_sycl_bench --test-case container_alloc --iterations 50)
-set_tests_properties(sycl_bench_container_alloc PROPERTIES
   TIMEOUT 60 LABELS "gpu;sycl;bench"
   ENVIRONMENT "${WRP_SYCL_BENCH_TEST_ENV}")
 

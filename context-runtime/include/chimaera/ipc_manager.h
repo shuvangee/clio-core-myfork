@@ -47,6 +47,7 @@
 
 #include "hermes_shm/data_structures/priv/array_vector.h"
 #include "hermes_shm/memory/allocator/round_robin_allocator.h"
+#include "hermes_shm/util/gpu_intrinsics.h"
 #include "chimaera/chimaera_manager.h"
 #include "chimaera/corwlock.h"
 #include "chimaera/scheduler/scheduler.h"
@@ -64,8 +65,10 @@
 #include "hermes_shm/memory/backend/posix_shm_mmap.h"
 #include "chimaera/gpu/gpu_info.h"
 
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
 #include "chimaera/gpu/gpu_ipc_manager.h"
+#endif
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
 #include "hermes_shm/memory/allocator/arena_allocator.h"
 #include "hermes_shm/memory/backend/gpu_malloc.h"
 #include "hermes_shm/memory/backend/gpu_shm_mmap.h"
@@ -1084,11 +1087,11 @@ class IpcManager {
     gpu_queues_.push_back(queue);
   }
 
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
   /** Get the GPU IPC manager for direct access to GPU operations. */
   gpu::IpcManager *GetGpuIpcManager() { return gpu_ipc_.get(); }
   const gpu::IpcManager *GetGpuIpcManager() const { return gpu_ipc_.get(); }
-#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
 
   /**
    * Assign all registered GPU queue lanes to the GPU worker.
@@ -1473,14 +1476,17 @@ class IpcManager {
   /** Stored IpcManagerGpuInfo for GPU orchestrator launch */
   IpcManagerGpuInfo gpu_orchestrator_info_;
 
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
   /** GPU IPC manager: owns all host-side GPU infrastructure.
-   *  CPU-side IpcManager delegates GPU operations through this. */
+   *  CPU-side IpcManager delegates GPU operations through this. Under SYCL
+   *  this holds only the gpu2cpu_queue + gpu2cpu_backend (push-only design);
+   *  the CUDA/ROCm path additionally holds cpu2gpu/gpu2gpu queues, the work
+   *  orchestrator handle, and per-device GpuMalloc/GpuShmMmap backends. */
   std::unique_ptr<gpu::IpcManager> gpu_ipc_;
 #else
   /** Layout placeholder — keeps struct size/offsets identical whether
-   *  CUDA is enabled or not, preventing ODR violations when test binaries
-   *  link chimaera_cxx without HSHM_ENABLE_CUDA. */
+   *  any GPU backend is enabled or not, preventing ODR violations when test
+   *  binaries link chimaera_cxx without GPU support. */
   void *gpu_ipc_placeholder_ = nullptr;
 #endif
 
@@ -2035,6 +2041,18 @@ Future<TaskT, AllocT>::GetFutureShm() const {
   }
 #if HSHM_IS_GPU
   return CHI_IPC->ToFullPtr(future_shm_);
+#elif HSHM_IS_SYCL_DEVICE
+  // SYCL device pass: IpcGpu2Cpu::ClientSend stores the raw FutureShm
+  // address in future_shm_.off_ with a null alloc_id_. Reinterpret
+  // directly rather than routing through CHI_IPC->ToFullPtr (which would
+  // require pulling chimaera/gpu/gpu_ipc_manager.h in here, creating the
+  // circular include / non-const-global issue we already worked around
+  // for Wait()).
+  if (future_shm_.alloc_id_ == hipc::AllocatorId::GetNull()) {
+    auto *raw = reinterpret_cast<FutureT *>(future_shm_.off_.load());
+    return hipc::FullPtr<FutureT>(raw);
+  }
+  return hipc::FullPtr<FutureT>();
 #else
   // Host stub — gpu::Future is not used for host-side resolution
   return hipc::FullPtr<FutureT>();
@@ -2079,6 +2097,26 @@ HSHM_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
                                                   bool reuse_task) {
 #if HSHM_IS_GPU
   return WaitGpu2Gpu(max_sec, reuse_task);
+#elif HSHM_IS_SYCL_DEVICE
+  // SYCL device pass: under the simplified design only ToLocalCpu routing
+  // exists, so wait inline by polling FUTURE_COMPLETE on the gpu::FutureShm.
+  // CPU GPU worker (Worker::ProcessNewTaskGpu) signals completion after
+  // dispatching the chimod method. We do NOT route through CHI_IPC->Recv
+  // here because that would require pulling chimaera/gpu/gpu_ipc_manager.h
+  // into ipc_manager.h, which creates a circular include and trips DPC++'s
+  // "kernel cannot use non-const global variable" check on g_ipc_manager_ptr.
+  (void)max_sec;
+  auto fshm_full = this->GetFutureShm();
+  if (!fshm_full.IsNull()) {
+    volatile unsigned int *fp = reinterpret_cast<volatile unsigned int *>(
+        &fshm_full.ptr_->flags_.bits_.x);
+    while (!((*fp) & FutureT::FUTURE_COMPLETE)) {}
+    HSHM_DEVICE_FENCE_SYSTEM();
+  }
+  if (reuse_task) {
+    task_ptr_.SetNull();
+  }
+  return true;
 #else
   (void)max_sec; (void)reuse_task;
   return true;

@@ -32,19 +32,11 @@
  */
 
 /**
- * SYCL backend smoke tests for the GPU orchestrator infrastructure.
- *
- * Validates the Phase 1–7 SYCL plumbing without requiring full Chimaera
- * runtime initialization (no admin pool, no IPC, no networking — those
- * have CPU-only paths that work the same under any GPU backend). The
- * three test cases here cover the SYCL-specific surface:
- *
- *   1. Device-intrinsic abstractions (fences, atomics, clock, printf
- *      routed through HSHM_DEVICE_* macros from gpu_intrinsics.h).
- *   2. GpuApi USM allocation and host<->device transfer.
- *   3. WorkOrchestrator::Launch / Finalize lifecycle on a real
- *      sycl::queue, including the persistent single_task kernel that
- *      runs WorkerSycl::PollOnce in a loop.
+ * SYCL backend smoke tests for the device-intrinsic abstraction layer
+ * and GpuApi USM round-trip. Under the SYCL design the GPU is a pure
+ * task producer (push-only onto gpu2cpu_queue), so there is no GPU
+ * orchestrator lifecycle to validate here — see test_sycl_chimod_to_cpu
+ * for an end-to-end SYCL→CPU task submission test.
  *
  * The test executable links against chimaera_cxx_gpu (the SYCL companion
  * library built by add_sycl_library when WRP_CORE_ENABLE_SYCL=ON).
@@ -54,20 +46,12 @@
 
 #include "simple_test.h"
 
-#include <chimaera/gpu/work_orchestrator.h>
-#include <chimaera/gpu/gpu_info.h>
-#include <chimaera/gpu/pool_manager.h>
-
 #include <hermes_shm/util/gpu_api.h>
 #include <hermes_shm/util/gpu_intrinsics.h>
 
 #include <sycl/sycl.hpp>
 
-#include <chrono>
 #include <cstdint>
-#include <thread>
-
-using namespace std::chrono_literals;
 
 namespace {
 
@@ -143,42 +127,6 @@ TEST_CASE("hshm::GpuApi USM round-trip", "[sycl][gpu_api]") {
   hshm::GpuApi::Free(dev_buf);
   hshm::GpuApi::FreeHost(host_buf);
   hshm::GpuApi::FreeHost(host_back);
-}
-
-TEST_CASE("WorkOrchestrator Launch/Finalize lifecycle", "[sycl][orchestrator]") {
-  // Validates that work_orchestrator_sycl.cc's host-side methods bring up
-  // the persistent single_task kernel and shut it down cleanly. We don't
-  // dispatch a real task here — that would require a full pool registry
-  // and queue infrastructure. The lifecycle alone exercises the host USM
-  // for control, the device PoolManager allocation, the dedicated
-  // sycl::queue stream, and the kernel submission path.
-  chi::gpu::WorkOrchestrator orch;
-
-  // Build a minimal IpcManagerGpuInfo; the kernel only reads
-  // queue pointers (all null here, so the poll loop sees empty queues).
-  chi::IpcManagerGpuInfo gpu_info{};
-
-  // Launch with 1 block, 1 thread (orchestrator runs as single_task
-  // anyway — the params are kept for Pause/Resume parity).
-  bool launched = orch.Launch(gpu_info, /*blocks=*/1,
-                              /*threads_per_block=*/1,
-                              /*cpu2gpu_queue_base=*/nullptr);
-  REQUIRE(launched);
-  REQUIRE(orch.is_launched_);
-
-  // Give the persistent kernel a moment to set running_flag = 1.
-  for (int i = 0; i < 200 && orch.control_->running_flag == 0; ++i) {
-    std::this_thread::sleep_for(5ms);
-  }
-  REQUIRE(orch.control_->running_flag == 1);
-
-  // Finalize signals exit_flag, syncs the queue, and frees all resources.
-  orch.Finalize();
-  REQUIRE_FALSE(orch.is_launched_);
-  REQUIRE(orch.control_ == nullptr);
-  REQUIRE(orch.d_pool_mgr_ == nullptr);
-  REQUIRE(orch.stream_ == nullptr);
-  REQUIRE(orch.gpu_info_storage_ == nullptr);
 }
 
 SIMPLE_TEST_MAIN()

@@ -193,7 +193,7 @@ class IpcManager {
   }
 
   HSHM_CROSS_FUN hipc::FullPtr<char> AllocateBuffer(size_t size) {
-#if HSHM_IS_GPU
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
     if (gpu_alloc_ != nullptr) {
       return gpu_alloc_->AllocateObjs<char>(size);
     }
@@ -203,7 +203,7 @@ class IpcManager {
   }
 
   HSHM_CROSS_FUN void FreeBuffer(hipc::FullPtr<char> buffer_ptr) {
-#if HSHM_IS_GPU
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
     if (buffer_ptr.IsNull()) return;
     if (gpu_alloc_ && gpu_alloc_->ContainsPtr(buffer_ptr.ptr_)) {
       gpu_alloc_->Free(buffer_ptr);
@@ -244,7 +244,7 @@ class IpcManager {
   template <typename TaskT, typename... Args>
   HSHM_CROSS_FUN hipc::FullPtr<TaskT> NewTaskBase(size_t append_size,
                                                     Args &&...args) {
-#if HSHM_IS_GPU
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
     if (!IsWarpScheduler()) return hipc::FullPtr<TaskT>();
     if (!gpu_alloc_) return hipc::FullPtr<TaskT>();
     size_t total = sizeof(TaskT) + append_size;
@@ -260,7 +260,7 @@ class IpcManager {
 
   template <typename TaskT, typename... Args>
   HSHM_CROSS_FUN hipc::FullPtr<TaskT> NewTask(Args &&...args) {
-#if HSHM_IS_GPU
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
     if (!IsWarpScheduler()) return hipc::FullPtr<TaskT>();
     size_t append = sizeof(FutureShm);
     auto result = NewTaskBase<TaskT>(append, std::forward<Args>(args)...);
@@ -284,7 +284,7 @@ class IpcManager {
 
   template <typename TaskT>
   HSHM_CROSS_FUN void DelTask(hipc::FullPtr<TaskT> task_ptr) {
-#if HSHM_IS_GPU
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
     if (task_ptr.IsNull()) return;
     task_ptr.ptr_->~TaskT();
     if (gpu_alloc_) gpu_alloc_->Free(task_ptr.template Cast<char>());
@@ -295,7 +295,7 @@ class IpcManager {
 
   template <typename T>
   HSHM_CROSS_FUN void DelObj(hipc::FullPtr<T> obj_ptr) {
-#if HSHM_IS_GPU
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
     if (obj_ptr.IsNull()) return;
     obj_ptr.ptr_->~T();
     FreeBuffer(obj_ptr.template Cast<char>());
@@ -386,7 +386,16 @@ class IpcManager {
   }
 #endif  // HSHM_IS_GPU_COMPILER
 
-  /** GPU-side Send: dispatches based on routing mode and runtime flag. */
+  /** GPU-side Send: dispatches based on routing mode and runtime flag.
+   *
+   * Backend routing:
+   *   - CUDA/ROCm device pass: full GPU runtime routing (Self/Gpu/Cpu).
+   *   - SYCL device pass: only ToLocalCpu is supported; the GPU is a pure
+   *     producer and all tasks land on the CPU runtime via IpcGpu2Cpu.
+   *     Other routing modes are silently routed ToLocalCpu — callers
+   *     must use PoolQuery::ToLocalCpu() under SYCL.
+   *   - Host pass: returns an empty future (the host should use chi::IpcManager::Send).
+   */
   template <typename TaskT>
   HSHM_CROSS_FUN Future<TaskT> Send(const hipc::FullPtr<TaskT> &task_ptr) {
 #if HSHM_IS_GPU
@@ -398,17 +407,27 @@ class IpcManager {
       return IpcGpu2Cpu::ClientSend(this, task_ptr);
     }
     return IpcGpu2Gpu::ClientSend(this, task_ptr);
+#elif HSHM_IS_SYCL_DEVICE
+    // SYCL: GPU runtime concept does not exist; only ToLocalCpu is valid.
+    return IpcGpu2Cpu::ClientSend(this, task_ptr);
 #else
     (void)task_ptr;
     return Future<TaskT>();
 #endif
   }
 
-  /** GPU-side Recv: delegates to IpcGpu2Gpu::ClientRecv. */
+  /** GPU-side Recv: poll the FutureShm completion bit.
+   *
+   * On CUDA/ROCm we route to IpcGpu2Gpu::ClientRecv (the same recv mechanism
+   * for both Gpu2Gpu and Gpu2Cpu — it polls FUTURE_COMPLETE on the gpu::FutureShm).
+   * On SYCL the poll is implemented in IpcGpu2Cpu::ClientRecv (single-WI safe).
+   */
   template <typename TaskT>
   HSHM_CROSS_FUN void Recv(Future<TaskT> &future, TaskT *task_ptr) {
 #if HSHM_IS_GPU
     IpcGpu2Gpu::ClientRecv(this, future, task_ptr);
+#elif HSHM_IS_SYCL_DEVICE
+    IpcGpu2Cpu::ClientRecv(this, future, task_ptr);
 #else
     (void)future; (void)task_ptr;
 #endif
@@ -531,6 +550,35 @@ class IpcManager {
   std::vector<std::unique_ptr<hipc::GpuMalloc>> client_gpu_data_backends_;
   std::vector<std::unique_ptr<hipc::GpuMalloc>> client_alloc_backends_;
 #endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+
+#if HSHM_ENABLE_SYCL && !(HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM)
+  /** SYCL-only GPU device state. Under the SYCL backend the GPU is a
+   *  pure task producer: we only need a gpu2cpu_queue (in pinned-host
+   *  USM, accessible from both CPU pop and SYCL kernel push) and a
+   *  gpu2cpu_backend that the GPU client allocates Task+FutureShm pairs
+   *  from. Both backings are sycl::malloc_host regions; no GpuMalloc /
+   *  GpuShmMmap wrappers because those are CUDA/ROCm-specific. */
+  struct SyclGpuDeviceInfo {
+    char *gpu2cpu_queue_backend = nullptr;       ///< sycl::malloc_host region holding the GpuTaskQueue
+    size_t gpu2cpu_queue_backend_size = 0;
+    char *gpu2cpu_copy_backend = nullptr;        ///< sycl::malloc_host region for client task+fshm allocs
+    size_t gpu2cpu_copy_backend_size = 0;
+    hipc::FullPtr<::chi::GpuTaskQueue> gpu2cpu_queue;  ///< constructed inside gpu2cpu_queue_backend
+  };
+
+  std::vector<SyclGpuDeviceInfo> sycl_gpu_devices_;
+
+  /** Allocate gpu2cpu_queue + gpu2cpu_backend in pinned-host SYCL USM and
+   *  populate gpu_orchestrator_info_. Called from IpcManager::ServerInit
+   *  on pure-SYCL builds.
+   *  @param queue_depth Ring-buffer depth per lane.
+   *  @param backend_bytes Size of the GPU client allocation backend.
+   *  @return true on success. */
+  bool ServerInitGpuQueuesSycl(u32 queue_depth, size_t backend_bytes);
+
+  /** Free all SYCL USM regions allocated by ServerInitGpuQueuesSycl. */
+  void FinalizeGpuQueuesSycl();
+#endif  // HSHM_ENABLE_SYCL && !(CUDA||ROCM)
 
   struct GpuAllocInfo {
     hipc::AllocatorId alloc_id;

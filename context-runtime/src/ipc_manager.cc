@@ -297,6 +297,22 @@ bool IpcManager::ServerInit() {
   if (!ServerInitGpuQueues()) {
     return false;
   }
+#elif HSHM_ENABLE_SYCL
+  // SYCL backend: GPU is a pure task producer. The bootstrap helper lives
+  // in chimaera_cxx_gpu (gpu2cpu_init_sycl.cc) — call into it via a free
+  // function with normal linkage; both libraries see the same IpcManager
+  // layout because HSHM_ENABLE_SYCL=1 is set on both.
+  {
+    ConfigManager *config = CHI_CONFIG_MANAGER;
+    u32 queue_depth = config->GetQueueDepth();
+    constexpr size_t kSyclClientBackendBytes = 64 * 1024 * 1024;  // 64 MB
+    extern bool ChiServerBootstrapSyclGpu(IpcManager *self, u32 queue_depth,
+                                           size_t backend_bytes);
+    if (!ChiServerBootstrapSyclGpu(this, queue_depth,
+                                    kSyclClientBackendBytes)) {
+      return false;
+    }
+  }
 #endif
 
   // Identify this host
@@ -1590,7 +1606,16 @@ bool IpcManager::IdentifyThisHost() {
     std::string entry_short =
         host.ip_address.substr(0, host.ip_address.find('.'));
 
-    bool is_me = (host.ip_address == local_host) ||
+    // Treat the synthetic "0.0.0.0" wildcard (pushed by LoadHostfile()
+    // when no hostfile is configured) and loopback addresses as "always
+    // me" so the runtime binds without needing the user to predeclare
+    // the local hostname.
+    bool is_loopback = (host.ip_address == "127.0.0.1") ||
+                       (host.ip_address == "localhost") ||
+                       (host.ip_address == "::1");
+    bool is_me = (host.ip_address == "0.0.0.0") ||
+                 is_loopback ||
+                 (host.ip_address == local_host) ||
                  (entry_short == local_short);
     if (!is_me) continue;
 
@@ -3217,7 +3242,7 @@ hipc::FullPtr<Task> IpcManager::RecvRuntime(
 
   u32 origin = future_shm->origin_;
   switch (origin) {
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
     case FutureShm::FUTURE_CLIENT_GPU2CPU:
       return IpcGpu2Cpu::RuntimeRecv(this, future, container,
                                       method_id, recv_transport);
@@ -3245,10 +3270,12 @@ void IpcManager::SendRuntime(
     case FutureShm::FUTURE_CLIENT_IPC:
       IpcCpu2CpuZmq::EnqueueRuntimeSend(this, run_ctx, origin);
       break;
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
     case FutureShm::FUTURE_CLIENT_GPU2CPU:
       IpcGpu2Cpu::RuntimeSend(this, task_ptr, run_ctx, container);
       break;
+#endif
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
     case FutureShm::FUTURE_CLIENT_CPU2GPU:
       IpcCpu2Gpu::RuntimeSend(this, task_ptr, run_ctx, container);
       break;

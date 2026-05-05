@@ -11,7 +11,7 @@
 #include "chimaera/types.h"
 #include "chimaera/task.h"
 
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
 
 namespace chi {
 
@@ -47,5 +47,5 @@ struct IpcGpu2Cpu {
 
 }  // namespace chi
 
-#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#endif  // HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_GPU2CPU_H_

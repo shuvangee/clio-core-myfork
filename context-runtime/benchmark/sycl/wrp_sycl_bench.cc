@@ -18,8 +18,8 @@
  * Where <name> is one of:
  *   usm_bandwidth          GpuApi::Memcpy bandwidth sweep
  *   atomic_throughput      HSHM_DEVICE_ATOMIC_ADD_U32_DEVICE ops/sec
- *   orchestrator_lifecycle WorkOrchestrator::Launch + Finalize avg latency
- *   container_alloc        gpu::AllocGpuContainerHost throughput per chimod
+ *   cte_client_overhead    GPU-initiated CHI_IPC dereference cost (CTE)
+ *   bdev_client            GPU-initiated CHI_IPC dereference cost (bdev)
  *   all                    run every workload back-to-back
  */
 
@@ -39,7 +39,6 @@ void print_usage(const char *progname) {
   std::fprintf(stderr,
       "Usage: %s --test-case <name> [options]\n"
       "  --test-case <name>   one of: usm_bandwidth, atomic_throughput,\n"
-      "                       orchestrator_lifecycle, container_alloc,\n"
       "                       cte_client_overhead, bdev_client, all\n"
       "  --iterations N       per-workload iteration count (default 100)\n"
       "  --threads N          kernel work-item count (atomic_throughput, default 1024)\n"
@@ -93,8 +92,6 @@ int main(int argc, char **argv) {
   };
   run_if("usm_bandwidth",          run_workload_usm_bandwidth);
   run_if("atomic_throughput",      run_workload_atomic_throughput);
-  run_if("orchestrator_lifecycle", run_workload_orchestrator_lifecycle);
-  run_if("container_alloc",        run_workload_container_alloc);
   run_if("cte_client_overhead",    run_workload_cte_client_overhead);
   run_if("bdev_client",            run_workload_bdev_client);
 

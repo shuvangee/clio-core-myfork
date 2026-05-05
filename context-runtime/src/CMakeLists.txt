@@ -99,6 +99,21 @@ if(CHIMAERA_GPU_SOURCES)
     )
     target_link_libraries(${CHIMAERA_LIB_NAME}_gpu PUBLIC hshm::cxx)
     target_link_libraries(${CHIMAERA_LIB_NAME} PRIVATE ${CHIMAERA_LIB_NAME}_gpu)
+    # Add HSHM_ENABLE_SYCL=1 + sycl headers to the host library (NOT -fsycl,
+    # which would force a device-pass parse of every host TU and trip
+    # type-mismatches on host-only methods accessed via CHI_IPC). Without
+    # -fsycl, host code uses sycl::malloc_host / sycl::queue / sycl::free
+    # as plain runtime API calls. The chimaera_cxx_gpu library compiled by
+    # add_sycl_library still gets full -fsycl + device-pass treatment.
+    target_compile_definitions(${CHIMAERA_LIB_NAME} PRIVATE HSHM_ENABLE_SYCL=1)
+    if(EXISTS "/opt/intel/dpcpp/include/sycl/sycl.hpp")
+      target_include_directories(${CHIMAERA_LIB_NAME} PRIVATE
+          /opt/intel/dpcpp/include
+          /opt/intel/dpcpp/include/sycl)
+    elseif(EXISTS "/opt/adaptivecpp/include/AdaptiveCpp/sycl/sycl.hpp")
+      target_include_directories(${CHIMAERA_LIB_NAME} PRIVATE
+          /opt/adaptivecpp/include/AdaptiveCpp)
+    endif()
   elseif(WRP_CORE_ENABLE_ROCM)
     add_rocm_gpu_library(${CHIMAERA_LIB_NAME}_gpu SHARED ${CHIMAERA_GPU_SOURCES})
     target_include_directories(${CHIMAERA_LIB_NAME}_gpu PUBLIC
@@ -164,12 +179,16 @@ set_target_properties(${CHIMAERA_LIB_NAME} PROPERTIES
 # Export target for parent scope
 set_target_properties(${CHIMAERA_LIB_NAME} PROPERTIES EXPORT_NAME cxx)
 
-# Precompiled headers for faster builds
-target_precompile_headers(${CHIMAERA_LIB_NAME} PRIVATE
-    <string> <vector> <memory> <unordered_map>
-    <functional> <algorithm> <cstdint> <cstring> <iostream>
-    <sstream> <fstream> <chrono> <mutex> <thread>
-)
+# Precompiled headers for faster builds. Skipped under SYCL because the
+# SYCL flag set (`-fsycl`) is incompatible with clang's PCH bundler:
+# clang-offload-bundler refuses 'pch' as an input file type.
+if(NOT WRP_CORE_ENABLE_SYCL)
+  target_precompile_headers(${CHIMAERA_LIB_NAME} PRIVATE
+      <string> <vector> <memory> <unordered_map>
+      <functional> <algorithm> <cstdint> <cstring> <iostream>
+      <sstream> <fstream> <chrono> <mutex> <thread>
+  )
+endif()
 
 # Create namespace alias for external consumption
 add_library(${CHIMAERA_NAMESPACE}::cxx ALIAS ${CHIMAERA_LIB_NAME})

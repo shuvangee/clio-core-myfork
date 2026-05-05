@@ -62,12 +62,6 @@ int run_workload_usm_bandwidth(sycl::queue &q, const BenchConfig &cfg);
 /** Atomic throughput: HSHM_DEVICE_ATOMIC_ADD ops/sec under contention. */
 int run_workload_atomic_throughput(sycl::queue &q, const BenchConfig &cfg);
 
-/** Orchestrator lifecycle: WorkOrchestrator::Launch + Finalize avg latency. */
-int run_workload_orchestrator_lifecycle(sycl::queue &q, const BenchConfig &cfg);
-
-/** Container alloc: gpu::AllocGpuContainerHost ops/sec per chimod. */
-int run_workload_container_alloc(sycl::queue &q, const BenchConfig &cfg);
-
 /** CTE client overhead (Phase 10): GPU-initiated CHI_IPC dereference cost.
  *  Microbench analogue of the CUDA workload_cte_client_overhead.cc — the
  *  full Send/WaitGpu round trip needs a real CTE pool + tag; this exercises
