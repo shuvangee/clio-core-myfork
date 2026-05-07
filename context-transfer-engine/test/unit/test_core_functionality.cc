@@ -161,6 +161,10 @@ class CTECoreFunctionalTestFixture {
       REQUIRE(success);
     }
 
+    // Drain ZMQ background threads in main() before static dtors fire — the
+    // shutdown race here used to produce flaky timeouts under repeated runs.
+    SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+
     // Generate unique pool ID for this test session
     int rand_id = 1000 + rand() % 9000;  // Random ID 1000-9999
     core_pool_id_ = chi::PoolId(static_cast<chi::u32>(rand_id), 0);

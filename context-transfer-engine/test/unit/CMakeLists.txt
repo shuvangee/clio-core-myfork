@@ -510,145 +510,15 @@ add_test(NAME cte_tag_large
 add_test(NAME cte_tag_edge
     COMMAND test_tag_operations "Tag - Edge")
 
-# Add test_core_client_config tests - comprehensive Client and Config API coverage tests
-add_test(NAME cte_client_config_default
-    COMMAND test_core_client_config "Config - Default")
+# Single-process runs of test_core_client_config / test_core_runtime_coverage.
+# Previously each Catch2 SECTION was registered as a standalone ctest entry
+# (27 + 19), which serialized via RESOURCE_LOCK but multiplied chimaera
+# init/finalize cycles and exposed shutdown ZMQ races.
+add_test(NAME cte_client_config_all
+    COMMAND test_core_client_config)
 
-add_test(NAME cte_client_config_file
-    COMMAND test_core_client_config "Config - Load from Valid YAML File")
-
-add_test(NAME cte_client_config_invalid_file
-    COMMAND test_core_client_config "Config - Load from Invalid File Path")
-
-add_test(NAME cte_client_config_empty_path
-    COMMAND test_core_client_config "Config - Load from Empty Path")
-
-add_test(NAME cte_client_config_string
-    COMMAND test_core_client_config "Config - Load from Valid YAML String")
-
-add_test(NAME cte_client_config_empty_string
-    COMMAND test_core_client_config "Config - Load from Empty String")
-
-add_test(NAME cte_client_config_invalid_yaml
-    COMMAND test_core_client_config "Config - Load from Invalid YAML")
-
-add_test(NAME cte_client_config_environment
-    COMMAND test_core_client_config "Config - Load from Environment")
-
-add_test(NAME cte_client_config_save
-    COMMAND test_core_client_config "Config - Save to File")
-
-add_test(NAME cte_client_list_targets
-    COMMAND test_core_client_config "Client - AsyncListTargets")
-
-add_test(NAME cte_client_stat_targets
-    COMMAND test_core_client_config "Client - AsyncStatTargets")
-
-add_test(NAME cte_client_get_target_info
-    COMMAND test_core_client_config "Client - AsyncGetTargetInfo")
-
-add_test(NAME cte_client_unregister_target
-    COMMAND test_core_client_config "Client - AsyncUnregisterTarget")
-
-add_test(NAME cte_client_get_or_create_tag
-    COMMAND test_core_client_config "Client - AsyncGetOrCreateTag Direct")
-
-add_test(NAME cte_client_del_tag_by_id
-    COMMAND test_core_client_config "Client - AsyncDelTag by ID")
-
-add_test(NAME cte_client_del_tag_by_name
-    COMMAND test_core_client_config "Client - AsyncDelTag by Name")
-
-add_test(NAME cte_client_get_tag_size
-    COMMAND test_core_client_config "Client - AsyncGetTagSize")
-
-add_test(NAME cte_client_putblob
-    COMMAND test_core_client_config "Client - AsyncPutBlob Direct")
-
-add_test(NAME cte_client_getblob
-    COMMAND test_core_client_config "Client - AsyncGetBlob Direct")
-
-add_test(NAME cte_client_delblob
-    COMMAND test_core_client_config "Client - AsyncDelBlob")
-
-add_test(NAME cte_client_reorganize_blob
-    COMMAND test_core_client_config "Client - AsyncReorganizeBlob Direct")
-
-add_test(NAME cte_client_get_blob_score
-    COMMAND test_core_client_config "Client - AsyncGetBlobScore Direct")
-
-add_test(NAME cte_client_get_blob_size
-    COMMAND test_core_client_config "Client - AsyncGetBlobSize Direct")
-
-add_test(NAME cte_client_get_contained_blobs
-    COMMAND test_core_client_config "Client - AsyncGetContainedBlobs Direct")
-
-add_test(NAME cte_client_tag_query
-    COMMAND test_core_client_config "Client - AsyncTagQuery")
-
-add_test(NAME cte_client_blob_query
-    COMMAND test_core_client_config "Client - AsyncBlobQuery")
-
-add_test(NAME cte_client_poll_telemetry
-    COMMAND test_core_client_config "Client - AsyncPollTelemetryLog")
-
-# Add test_core_runtime_coverage tests - comprehensive runtime method coverage
-add_test(NAME cte_runtime_get_target_info_success
-    COMMAND test_core_runtime_coverage "Runtime - GetTargetInfo Success Path")
-
-add_test(NAME cte_runtime_get_target_info_error
-    COMMAND test_core_runtime_coverage "Runtime - GetTargetInfo NonExistent Target")
-
-add_test(NAME cte_runtime_unregister_success
-    COMMAND test_core_runtime_coverage "Runtime - UnregisterTarget Success")
-
-add_test(NAME cte_runtime_unregister_error
-    COMMAND test_core_runtime_coverage "Runtime - UnregisterTarget NonExistent")
-
-add_test(NAME cte_runtime_delblob_success
-    COMMAND test_core_runtime_coverage "Runtime - DelBlob Success Path")
-
-add_test(NAME cte_runtime_delblob_nonexistent
-    COMMAND test_core_runtime_coverage "Runtime - DelBlob NonExistent Blob")
-
-add_test(NAME cte_runtime_delblob_empty
-    COMMAND test_core_runtime_coverage "Runtime - DelBlob Empty Name")
-
-add_test(NAME cte_runtime_get_blob_score_success
-    COMMAND test_core_runtime_coverage "Runtime - GetBlobScore Success")
-
-add_test(NAME cte_runtime_get_blob_score_nonexistent
-    COMMAND test_core_runtime_coverage "Runtime - GetBlobScore NonExistent Blob")
-
-add_test(NAME cte_runtime_get_blob_score_empty
-    COMMAND test_core_runtime_coverage "Runtime - GetBlobScore Empty Name")
-
-add_test(NAME cte_runtime_get_blob_size_success
-    COMMAND test_core_runtime_coverage "Runtime - GetBlobSize Success")
-
-add_test(NAME cte_runtime_get_blob_size_error
-    COMMAND test_core_runtime_coverage "Runtime - GetBlobSize NonExistent")
-
-add_test(NAME cte_runtime_get_tag_size
-    COMMAND test_core_runtime_coverage "Runtime - GetTagSize Success")
-
-add_test(NAME cte_runtime_deltag_by_name
-    COMMAND test_core_runtime_coverage "Runtime - DelTag by Name Success")
-
-add_test(NAME cte_runtime_deltag_by_id
-    COMMAND test_core_runtime_coverage "Runtime - DelTag by ID Success")
-
-add_test(NAME cte_runtime_get_contained_blobs_success
-    COMMAND test_core_runtime_coverage "Runtime - GetContainedBlobs Success")
-
-add_test(NAME cte_runtime_get_contained_blobs_empty
-    COMMAND test_core_runtime_coverage "Runtime - GetContainedBlobs Empty Tag")
-
-add_test(NAME cte_runtime_list_targets
-    COMMAND test_core_runtime_coverage "Runtime - ListTargets Success")
-
-add_test(NAME cte_runtime_stat_targets
-    COMMAND test_core_runtime_coverage "Runtime - StatTargets Success")
+add_test(NAME cte_runtime_coverage_all
+    COMMAND test_core_runtime_coverage)
 
 # Set test properties for proper execution environment
 set_tests_properties(
@@ -717,64 +587,16 @@ set_tests_properties(
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
 )
 
-set_tests_properties(
-    cte_client_config_default
-    cte_client_config_file
-    cte_client_config_invalid_file
-    cte_client_config_empty_path
-    cte_client_config_string
-    cte_client_config_empty_string
-    cte_client_config_invalid_yaml
-    cte_client_config_environment
-    cte_client_config_save
-    cte_client_list_targets
-    cte_client_stat_targets
-    cte_client_get_target_info
-    cte_client_unregister_target
-    cte_client_get_or_create_tag
-    cte_client_del_tag_by_id
-    cte_client_del_tag_by_name
-    cte_client_get_tag_size
-    cte_client_putblob
-    cte_client_getblob
-    cte_client_delblob
-    cte_client_reorganize_blob
-    cte_client_get_blob_score
-    cte_client_get_blob_size
-    cte_client_get_contained_blobs
-    cte_client_tag_query
-    cte_client_blob_query
-    cte_client_poll_telemetry
-    PROPERTIES
-        TIMEOUT 300  # 5 minute timeout for each test
-        LABELS "unit;core;cte;client;config"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+set_tests_properties(cte_client_config_all PROPERTIES
+    TIMEOUT 600
+    LABELS "unit;core;cte;client;config"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
 )
 
-set_tests_properties(
-    cte_runtime_get_target_info_success
-    cte_runtime_get_target_info_error
-    cte_runtime_unregister_success
-    cte_runtime_unregister_error
-    cte_runtime_delblob_success
-    cte_runtime_delblob_nonexistent
-    cte_runtime_delblob_empty
-    cte_runtime_get_blob_score_success
-    cte_runtime_get_blob_score_nonexistent
-    cte_runtime_get_blob_score_empty
-    cte_runtime_get_blob_size_success
-    cte_runtime_get_blob_size_error
-    cte_runtime_get_tag_size
-    cte_runtime_deltag_by_name
-    cte_runtime_deltag_by_id
-    cte_runtime_get_contained_blobs_success
-    cte_runtime_get_contained_blobs_empty
-    cte_runtime_list_targets
-    cte_runtime_stat_targets
-    PROPERTIES
-        TIMEOUT 300  # 5 minute timeout for each test
-        LABELS "unit;core;cte;runtime;coverage"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+set_tests_properties(cte_runtime_coverage_all PROPERTIES
+    TIMEOUT 600
+    LABELS "unit;core;cte;runtime;coverage"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
 )
 
 # Add tiered storage stress tests
@@ -886,52 +708,8 @@ set_tests_properties(
     cte_tag_async
     cte_tag_large
     cte_tag_edge
-    cte_client_config_default
-    cte_client_config_file
-    cte_client_config_invalid_file
-    cte_client_config_empty_path
-    cte_client_config_string
-    cte_client_config_empty_string
-    cte_client_config_invalid_yaml
-    cte_client_config_environment
-    cte_client_config_save
-    cte_client_list_targets
-    cte_client_stat_targets
-    cte_client_get_target_info
-    cte_client_unregister_target
-    cte_client_get_or_create_tag
-    cte_client_del_tag_by_id
-    cte_client_del_tag_by_name
-    cte_client_get_tag_size
-    cte_client_putblob
-    cte_client_getblob
-    cte_client_delblob
-    cte_client_reorganize_blob
-    cte_client_get_blob_score
-    cte_client_get_blob_size
-    cte_client_get_contained_blobs
-    cte_client_tag_query
-    cte_client_blob_query
-    cte_client_poll_telemetry
-    cte_runtime_get_target_info_success
-    cte_runtime_get_target_info_error
-    cte_runtime_unregister_success
-    cte_runtime_unregister_error
-    cte_runtime_delblob_success
-    cte_runtime_delblob_nonexistent
-    cte_runtime_delblob_empty
-    cte_runtime_get_blob_score_success
-    cte_runtime_get_blob_score_nonexistent
-    cte_runtime_get_blob_score_empty
-    cte_runtime_get_blob_size_success
-    cte_runtime_get_blob_size_error
-    cte_runtime_get_tag_size
-    cte_runtime_deltag_by_name
-    cte_runtime_deltag_by_id
-    cte_runtime_get_contained_blobs_success
-    cte_runtime_get_contained_blobs_empty
-    cte_runtime_list_targets
-    cte_runtime_stat_targets
+    cte_client_config_all
+    cte_runtime_coverage_all
     cte_tiered_storage_all
     cte_reorganize_all
     PROPERTIES LABELS "msan_skip"
@@ -958,6 +736,8 @@ set_tests_properties(
     cte_tag_large
     cte_tag_edge
     cte_functional_all
+    cte_client_config_all
+    cte_runtime_coverage_all
     cte_tiered_storage_all
     cte_reorganize_all
     PROPERTIES RESOURCE_LOCK "chimaera_runtime"

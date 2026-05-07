@@ -166,288 +166,43 @@ set_target_properties(${STREAMING_TEST_TARGET} PROPERTIES
 
 # Enable CTest integration if testing is enabled
 if(WRP_CORE_ENABLE_TESTS)
-  # Flush Correctness Tests
-  add_test(
-    NAME cr_flush_basic_tests
-    COMMAND ${FLUSH_TEST_TARGET} "[flush][admin]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_flush_basic_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_flush_work_orchestrator_tests
-    COMMAND ${FLUSH_TEST_TARGET} "[flush][mod_name]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_flush_work_orchestrator_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_flush_stress_tests
-    COMMAND ${FLUSH_TEST_TARGET} "[flush]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_flush_stress_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  # Comprehensive flush test (runs all tests, no filter)
+  # Each binary is registered once and runs all its Catch2 sections in a single
+  # chimaera init/finalize cycle.  The previous setup added ~22 filtered ctest
+  # entries over the same 4 binaries, which forced ~22 init/finalize cycles
+  # serialized via RESOURCE_LOCK and exposed the chimaera shutdown ZMQ race.
   add_test(
     NAME cr_all_flush_tests
     COMMAND ${FLUSH_TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_all_flush_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
 
-  # CoMutex Tests
-  add_test(
-    NAME cr_comutex_basic_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[comutex][basic]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_comutex_basic_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_comutex_concurrent_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[comutex][concurrent]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_comutex_concurrent_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_corwlock_basic_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[corwlock][basic]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_corwlock_basic_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_corwlock_readers_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[corwlock][readers]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_corwlock_readers_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_corwlock_writers_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[corwlock][writers]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_corwlock_writers_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_corwlock_interaction_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[corwlock][interaction]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_corwlock_interaction_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_tasknode_grouping_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[tasknode][grouping]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_tasknode_grouping_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_comutex_error_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[comutex][error]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_comutex_error_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_comutex_performance_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[comutex][performance]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_comutex_performance_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_comutex_integration_tests
-    COMMAND ${COMUTEX_TEST_TARGET} "[integration]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_comutex_integration_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  # Comprehensive CoMutex test (runs all tests, no filter)
   add_test(
     NAME cr_all_comutex_tests
     COMMAND ${COMUTEX_TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_all_comutex_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
 
-  # Wait Functionality Tests
-  add_test(
-    NAME cr_wait_test_basic_tests
-    COMMAND ${WAIT_FUNCTIONALITY_TEST_TARGET} "[wait_test][basic]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_wait_test_basic_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_wait_test_recursive_tests
-    COMMAND ${WAIT_FUNCTIONALITY_TEST_TARGET} "[wait_test][recursive]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_wait_test_recursive_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_wait_test_async_tests
-    COMMAND ${WAIT_FUNCTIONALITY_TEST_TARGET} "[wait_test][async]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_wait_test_async_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_wait_test_edge_cases_tests
-    COMMAND ${WAIT_FUNCTIONALITY_TEST_TARGET} "[wait_test][edge_cases]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_wait_test_edge_cases_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  # Comprehensive Wait functionality test (runs all tests, no filter)
   add_test(
     NAME cr_all_wait_functionality_tests
     COMMAND ${WAIT_FUNCTIONALITY_TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_all_wait_functionality_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
 
-  # Streaming Tests
-  add_test(
-    NAME cr_streaming_small_tests
-    COMMAND ${STREAMING_TEST_TARGET} "[streaming][small]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_streaming_small_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_streaming_large_tests
-    COMMAND ${STREAMING_TEST_TARGET} "[streaming][large]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_streaming_large_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_streaming_concurrent_tests
-    COMMAND ${STREAMING_TEST_TARGET} "[streaming][concurrent]"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_streaming_concurrent_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  # Comprehensive Streaming test (runs all tests, no filter)
   add_test(
     NAME cr_all_streaming_tests
     COMMAND ${STREAMING_TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_all_streaming_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
 
-  # Set test properties
   set_tests_properties(
-    cr_flush_basic_tests
-    cr_flush_work_orchestrator_tests
-    cr_flush_stress_tests
     cr_all_flush_tests
-    cr_comutex_basic_tests
-    cr_comutex_concurrent_tests
-    cr_corwlock_basic_tests
-    cr_corwlock_readers_tests
-    cr_corwlock_writers_tests
-    cr_corwlock_interaction_tests
-    cr_tasknode_grouping_tests
-    cr_comutex_error_tests
-    cr_comutex_performance_tests
-    cr_comutex_integration_tests
     cr_all_comutex_tests
-    cr_wait_test_basic_tests
-    cr_wait_test_recursive_tests
-    cr_wait_test_async_tests
-    cr_wait_test_edge_cases_tests
     cr_all_wait_functionality_tests
-    cr_streaming_small_tests
-    cr_streaming_large_tests
-    cr_streaming_concurrent_tests
     cr_all_streaming_tests
     PROPERTIES
-      TIMEOUT 180
+      TIMEOUT 300
       ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1"
-  )
-
-  # Mark all MOD_NAME tests as msan_skip (they use ZMQ which is uninstrumented)
-  set_tests_properties(
-    cr_flush_basic_tests
-    cr_flush_work_orchestrator_tests
-    cr_flush_stress_tests
-    cr_all_flush_tests
-    cr_comutex_basic_tests
-    cr_comutex_concurrent_tests
-    cr_corwlock_basic_tests
-    cr_corwlock_readers_tests
-    cr_corwlock_writers_tests
-    cr_corwlock_interaction_tests
-    cr_tasknode_grouping_tests
-    cr_comutex_error_tests
-    cr_comutex_performance_tests
-    cr_comutex_integration_tests
-    cr_all_comutex_tests
-    cr_wait_test_basic_tests
-    cr_wait_test_recursive_tests
-    cr_wait_test_async_tests
-    cr_wait_test_edge_cases_tests
-    cr_all_wait_functionality_tests
-    cr_streaming_small_tests
-    cr_streaming_large_tests
-    cr_streaming_concurrent_tests
-    cr_all_streaming_tests
-    PROPERTIES LABELS "msan_skip;asan_skip"
+      LABELS "msan_skip;asan_skip"
   )
 
   # GPU Client Process Tests
