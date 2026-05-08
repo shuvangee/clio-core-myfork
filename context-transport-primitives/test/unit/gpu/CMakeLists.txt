@@ -2,7 +2,7 @@
 # GPU Unit Tests
 #------------------------------------------------------------------------------
 
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
+if(WRP_CORE_ENABLE_CUDA)
   message(STATUS "Building GPU unit tests")
 
   set(HSHM_GPU_INCLUDE_DIRS

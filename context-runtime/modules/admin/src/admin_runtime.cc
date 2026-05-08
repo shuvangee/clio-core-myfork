@@ -1043,29 +1043,14 @@ chi::TaskResume Runtime::ClientConnect(hipc::FullPtr<ClientConnectTask> task,
   task->server_pid_ = static_cast<int32_t>(getpid());
   task->worker_queues_off_ = CHI_IPC->GetWorkerQueuesOffset();
 
-  // Populate GPU queue info for client attachment
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
-  auto *gpu_ipc = CHI_IPC->GetGpuIpcManager();
-  chi::u32 num_gpus = gpu_ipc ? static_cast<chi::u32>(gpu_ipc->gpu_devices_.size()) : 0;
-  if (num_gpus > kMaxGpuDevices) num_gpus = kMaxGpuDevices;
-  task->num_gpus_ = num_gpus;
-  task->gpu_queue_depth_ = CHI_CONFIG_MANAGER->GetQueueDepth();
-
-  for (chi::u32 i = 0; i < num_gpus; ++i) {
-    // Queue offsets within their respective backends
-    task->cpu2gpu_queue_off_[i] = gpu_ipc->GetCpu2GpuQueueOffset(i);
-    task->gpu2cpu_queue_off_[i] = gpu_ipc->GetGpu2CpuQueueOffset(i);
-    task->gpu2gpu_queue_off_[i] = gpu_ipc->GetGpu2GpuQueueOffset(i);
-    task->cpu2gpu_backend_size_[i] = gpu_ipc->GetCpu2GpuBackendSize(i);
-    task->gpu2cpu_backend_size_[i] = gpu_ipc->GetGpu2CpuBackendSize(i);
-
-    // IPC handle for gpu2gpu GpuMalloc backend (device memory)
-    gpu_ipc->GetGpu2GpuIpcHandle(i, task->gpu2gpu_ipc_handle_bytes_[i]);
-  }
-#else
+  // GPU queue info for client attachment.
+  //
+  // Producer-only redesign: clients no longer attach to host-managed
+  // cpu2gpu / gpu2gpu backends. They allocate their own device-memory
+  // backends and register them via admin RegisterMemory. The fields
+  // below are zeroed so legacy clients see "no GPU queues to attach".
   task->num_gpus_ = 0;
   task->gpu_queue_depth_ = 0;
-#endif
 
   task->SetReturnCode(0);
   rctx.did_work_ = true;
@@ -1645,31 +1630,52 @@ chi::TaskResume Runtime::RegisterMemory(hipc::FullPtr<RegisterMemoryTask> task,
       task->success_ = ipc_manager->RegisterMemory(alloc_id);
       break;
     }
-    case MemoryType::kGpuDeviceMemory: {
-      // GPU device memory: open IPC handle and register in gpu_alloc_map_
-      hipc::MemoryBackendId backend_id(task->alloc_major_, task->alloc_minor_);
-      HLOG(kInfo, "Admin::RegisterMemory: Registering GPU device memory ({}.{})"
-           " capacity={}", backend_id.major_, backend_id.minor_,
-           task->data_capacity_);
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
-      hshm::GpuIpcMemHandle ipc_handle;
-      memcpy(&ipc_handle, task->ipc_handle_bytes_, sizeof(ipc_handle));
-      task->success_ = ipc_manager->GetGpuIpcManager()->RegisterGpuMemoryFromClient(
-          backend_id, ipc_handle, task->data_capacity_);
+    case MemoryType::kPinnedHostMemory:
+    case MemoryType::kGpuDeviceMemory:
+    case MemoryType::kManagedUvm: {
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
+      auto *gpu_ipc = ipc_manager->GetGpuIpcManager();
+      if (!gpu_ipc) {
+        HLOG(kError, "Admin::RegisterMemory: gpu_ipc_ not initialized");
+        task->success_ = false;
+        break;
+      }
+      chi::gpu::IpcManager::ClientBackend b;
+      b.alloc_id = hipc::AllocatorId(task->alloc_major_, task->alloc_minor_);
+      b.gpu_id = task->gpu_id_;
+      b.capacity = task->data_capacity_;
+      switch (mem_type) {
+        case MemoryType::kPinnedHostMemory:
+          b.kind = chi::gpu::IpcManager::MemKind::kPinnedHost;
+          // The client passes the host pointer in ipc_handle_bytes_[0..7] for
+          // pinned host (no IPC handle needed — same address space).
+          memcpy(&b.host_view, task->ipc_handle_bytes_, sizeof(char *));
+          b.device_ptr = b.host_view;  // pinned host is device-accessible
+          break;
+        case MemoryType::kManagedUvm:
+          b.kind = chi::gpu::IpcManager::MemKind::kManagedUvm;
+          memcpy(&b.host_view, task->ipc_handle_bytes_, sizeof(char *));
+          b.device_ptr = b.host_view;
+          break;
+        case MemoryType::kGpuDeviceMemory:
+          b.kind = chi::gpu::IpcManager::MemKind::kDeviceMem;
+          // ipc_handle_bytes_ holds a cudaIpcMemHandle_t — opening it on the
+          // runtime side is left as a follow-up; for now we record the
+          // handle bytes verbatim and rely on the worker pop path to copy
+          // POD bytes via cudaMemcpy through a runtime-side cudaIpcOpenMemHandle.
+          b.host_view = nullptr;
+          memcpy(&b.device_ptr, task->ipc_handle_bytes_, sizeof(char *));
+          break;
+        default: break;
+      }
+      HLOG(kInfo, "Admin::RegisterMemory: kind={} alloc_id=({}.{}) gpu_id={} "
+           "capacity={}", static_cast<int>(b.kind), b.alloc_id.major_,
+           b.alloc_id.minor_, b.gpu_id, b.capacity);
+      task->success_ = gpu_ipc->RegisterClientBackend(b);
 #else
-      HLOG(kError, "Admin::RegisterMemory: GPU memory not supported (no CUDA/ROCm)");
+      HLOG(kError, "Admin::RegisterMemory: GPU support not compiled in");
       task->success_ = false;
 #endif
-      break;
-    }
-    case MemoryType::kPinnedHostMemory: {
-      // Pinned host memory: attach to GpuShmMmap
-      hipc::MemoryBackendId backend_id(task->alloc_major_, task->alloc_minor_);
-      HLOG(kInfo, "Admin::RegisterMemory: Registering pinned host memory ({}.{})",
-           backend_id.major_, backend_id.minor_);
-      // For pinned host memory, the client creates a GpuShmMmap with a URL
-      // and the server attaches by URL like regular SHM
-      task->success_ = false;  // TODO: implement if needed
       break;
     }
     default:

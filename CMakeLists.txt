@@ -315,10 +315,23 @@ if(WRP_CORE_ENABLE_MPI)
     message(STATUS "found mpi.h at ${MPI_CXX_INCLUDE_DIRS}")
 endif()
 
-# ROCm (conditional)
+# ROCm (conditional). Only require the HIP CMake package when HIP-AMD is
+# in use; the HIP-NVCC path goes through CMake's CUDA language and the
+# HIP CMake package isn't shipped by ROCm builds that target NVIDIA.
 if(WRP_CORE_ENABLE_ROCM)
-    find_package(HIP REQUIRED)
-    message(STATUS "found ROCm/HIP support")
+    if(NOT DEFINED WRP_ROCM_HIP_PLATFORM)
+        if(DEFINED ENV{HIP_PLATFORM})
+            set(WRP_ROCM_HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING
+                "HIP platform (amd|nvidia)")
+        else()
+            set(WRP_ROCM_HIP_PLATFORM "amd" CACHE STRING
+                "HIP platform (amd|nvidia)")
+        endif()
+    endif()
+    if(NOT WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+        find_package(HIP REQUIRED)
+    endif()
+    message(STATUS "found ROCm/HIP support (HIP_PLATFORM=${WRP_ROCM_HIP_PLATFORM})")
 endif()
 
 # OpenMP (conditional)

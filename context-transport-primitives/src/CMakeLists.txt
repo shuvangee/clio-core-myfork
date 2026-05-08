@@ -106,7 +106,7 @@ endif()
 
 # BUILD HSHM FOR ROCM ONLY
 if(WRP_CORE_ENABLE_ROCM)
-    add_rocm_gpu_library(hermes_shm_rocm_gpu STATIC TRUE ${SRC_FILES})
+    add_rocm_gpu_library(hermes_shm_rocm_gpu SHARED TRUE ${SRC_FILES})
     target_link_libraries(hermes_shm_rocm_gpu PUBLIC host_deps)
     target_compile_definitions(hermes_shm_rocm_gpu PUBLIC HSHM_ENABLE_ROCM=1)
     hshm_target_compile_definitions(hermes_shm_rocm_gpu)

@@ -18,11 +18,7 @@ install(TARGETS wrp_run_thrpt_benchmark
   DESTINATION bin
 )
 
-# GPU runtime latency benchmark
-add_subdirectory(bench_gpu_runtime)
-
-# CDP (CUDA Dynamic Parallelism) overhead benchmark — NVCC only
-add_subdirectory(bench_cdp)
-
-# SYCL workload benchmark suite (gated on WRP_CORE_ENABLE_SYCL inside)
-add_subdirectory(sycl)
+# GPU runtime / CDP / SYCL benchmark suites removed along with the GPU
+# runtime concept. Kernels now submit tasks to the CPU runtime via the
+# gpu2cpu_queue; benchmark coverage of that path is via the unit tests
+# in test/unit/gpu/test_sycl_*.cc.

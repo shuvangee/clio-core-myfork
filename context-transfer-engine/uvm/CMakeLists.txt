@@ -16,12 +16,13 @@ message(STATUS "CTE UVM: Building GPU virtual memory manager (CUDA enabled)")
 find_package(CUDAToolkit REQUIRED)
 
 # Library: wrp_cte_uvm
-# gpu_vmm.cu contains only host-side CUDA driver/runtime API calls — no
-# __global__ or __device__ functions.  Compiling as CXX avoids any CUDA device
-# compilation (nvcc -dc / nvlink) and the resulting FATBIN/PTX that NVHPC 25.5
-# embeds with a PTX ISA version newer than what the Polaris CUDA driver supports.
-set_source_files_properties(src/gpu_vmm.cu PROPERTIES LANGUAGE CXX)
-add_library(wrp_cte_uvm SHARED src/gpu_vmm.cu)
+# gpu_vmm.cc contains only host-side CUDA driver/runtime API calls — no
+# __global__ or __device__ functions. The .cc extension already implies
+# CXX language; compiling as CXX avoids any CUDA device compilation
+# (nvcc -dc / nvlink) and the resulting FATBIN/PTX that NVHPC 25.5
+# embeds with a PTX ISA version newer than what the Polaris CUDA driver
+# supports.
+add_library(wrp_cte_uvm SHARED src/gpu_vmm.cc)
 set_target_properties(wrp_cte_uvm PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
 target_include_directories(wrp_cte_uvm PUBLIC
@@ -46,10 +47,12 @@ install(DIRECTORY include/wrp_cte/uvm
     FILES_MATCHING PATTERN "*.h"
 )
 
-# Test executable
+# Test executable. test_gpu_vmm.cc launches a __global__ kernel and so
+# must be compiled by nvcc — the .cc extension defaults to CXX, so we
+# force LANGUAGE CUDA explicitly.
 if(WRP_CORE_ENABLE_TESTS)
-    set_source_files_properties(test/test_gpu_vmm.cu PROPERTIES LANGUAGE CUDA)
-    add_executable(test_gpu_vmm test/test_gpu_vmm.cu)
+    set_source_files_properties(test/test_gpu_vmm.cc PROPERTIES LANGUAGE CUDA)
+    add_executable(test_gpu_vmm test/test_gpu_vmm.cc)
     # Do NOT use CUDA_SEPARABLE_COMPILATION ON here: that would invoke nvlink,
     # but nvlink uses a default sm_52 arch (the -gencode flags are not propagated
     # in this sub-project context), producing an empty device-link object and a

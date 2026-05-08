@@ -45,8 +45,12 @@ else()
   message(STATUS "Skipping wrp_cte_score_bench - MPI not enabled (set WRP_CORE_ENABLE_MPI=ON)")
 endif()
 
-# GPU benchmark (requires CUDA) — single-file build via add_cuda_executable
-if(WRP_CORE_ENABLE_CUDA)
+# GPU benchmark removed along with the GPU runtime concept — the
+# benchmark depended on the orchestrator (workload.h includes
+# work_orchestrator.h, deleted) and on test_gpu_initiated_kernels
+# (also removed). Kernel→CPU submission is now exercised by the
+# test/unit/gpu/test_*_cte_kernel_putget tests.
+if(FALSE AND WRP_CORE_ENABLE_CUDA)
   # Collect transitive include dirs from dependencies for Clang CUDA
   set(_CTE_GPU_BENCH_EXTRA_INCLUDES "")
   foreach(_dep yaml-cpp::yaml-cpp ZeroMQ::libzmq)

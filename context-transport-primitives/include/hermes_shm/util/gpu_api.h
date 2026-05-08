@@ -205,13 +205,13 @@ class GpuApi {
   template <typename T>
   static T *MallocManaged(size_t size) {
 #if HSHM_ENABLE_ROCM
-    T *ptr;
+    void *ptr = nullptr;
     HIP_ERROR_CHECK(hipMallocManaged(&ptr, size));
-    return ptr;
+    return static_cast<T *>(ptr);
 #elif HSHM_ENABLE_CUDA
-    T *ptr;
+    void *ptr = nullptr;
     CUDA_ERROR_CHECK(cudaMallocManaged(&ptr, size));
-    return ptr;
+    return static_cast<T *>(ptr);
 #elif HSHM_ENABLE_SYCL
     return static_cast<T *>(sycl::malloc_shared(size, SyclQueue()));
 #endif
@@ -257,17 +257,26 @@ class GpuApi {
 
   template <typename T>
   static bool IsDevicePointer(T *ptr) {
+    if (ptr == nullptr) return false;
 #if HSHM_ENABLE_ROCM
-    hipPointerAttribute_t attributes;
+    hipPointerAttribute_t attributes{};
     HIP_ERROR_CHECK(hipPointerGetAttributes(&attributes, (void *)ptr));
+#if defined(HIP_VERSION) && HIP_VERSION >= 60000000
     return attributes.type == hipMemoryTypeDevice;
+#else
+    return attributes.memoryType == hipMemoryTypeDevice;
 #endif
-#if HSHM_ENABLE_CUDA
-    cudaPointerAttributes attributes;
+#elif HSHM_ENABLE_CUDA
+    cudaPointerAttributes attributes{};
     CUDA_ERROR_CHECK(cudaPointerGetAttributes(&attributes, (void *)ptr));
     return attributes.type == cudaMemoryTypeDevice;
-#endif
+#elif HSHM_ENABLE_SYCL
+    auto kind = sycl::get_pointer_type(static_cast<const void *>(ptr),
+                                        SyclQueue().get_context());
+    return kind == sycl::usm::alloc::device;
+#else
     return false;
+#endif
   }
 
   template <typename T>

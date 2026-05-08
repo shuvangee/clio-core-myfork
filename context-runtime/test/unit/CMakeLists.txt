@@ -425,8 +425,9 @@ set_target_properties(${CLIENT_RETRY_TEST_TARGET} PROPERTIES
 )
 
 
-# Create GPU IPC AllocateBuffer test executable (only if CUDA or HIP is enabled)
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
+# GPU runtime tests removed — kernels now submit tasks to the CPU
+# runtime via gpu2cpu_queue (see test/unit/gpu/test_sycl_*.cc).
+if(FALSE)
   add_cuda_executable(${IPC_ALLOCATE_BUFFER_GPU_TEST_TARGET} TRUE ${IPC_ALLOCATE_BUFFER_GPU_TEST_SOURCES}
     INCLUDE_DIRS
       ${CHIMAERA_ROOT}/test
@@ -448,88 +449,80 @@ if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
   )
   add_test(NAME ${IPC_ALLOCATE_BUFFER_GPU_TEST_TARGET} COMMAND ${IPC_ALLOCATE_BUFFER_GPU_TEST_TARGET})
 
-  # BuddyAllocator benchmark-mimic GPU test
-  add_cuda_executable(test_buddy_benchmark_gpu TRUE gpu/test_buddy_benchmark_gpu.cc
-    INCLUDE_DIRS
-      ${CHIMAERA_ROOT}/test
-      ${CHIMAERA_ROOT}/modules/MOD_NAME/include
-    LINK_LIBS chimaera_cxx hshm::cuda_cxx
-  )
-  target_include_directories(test_buddy_benchmark_gpu PRIVATE
-    ${CHIMAERA_ROOT}/include
-    ${CHIMAERA_ROOT}/test
-    ${CHIMAERA_ROOT}/modules/MOD_NAME/include
-  )
-  target_link_libraries(test_buddy_benchmark_gpu
-    chimaera_cxx
-    hshm::cuda_cxx
-    ${CMAKE_THREAD_LIBS_INIT}
-  )
-  set_target_properties(test_buddy_benchmark_gpu PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  add_test(NAME test_buddy_benchmark_gpu COMMAND test_buddy_benchmark_gpu)
-
-  # GPU Runtime test executable (pure host code, compiled by g++)
-  set(GPU_RUNTIME_TEST_TARGET test_chimaera_gpu_runtime)
-  set(GPU_RUNTIME_TEST_SOURCES gpu/test_gpu_runtime.cc)
-  add_executable(${GPU_RUNTIME_TEST_TARGET} ${GPU_RUNTIME_TEST_SOURCES})
-  target_include_directories(${GPU_RUNTIME_TEST_TARGET} PRIVATE
-    ${CHIMAERA_ROOT}/include
-    ${CHIMAERA_ROOT}/test
-  )
-  target_link_libraries(${GPU_RUNTIME_TEST_TARGET}
-    chimaera_cxx
-    hshm::cuda_cxx
-    ${CMAKE_THREAD_LIBS_INIT}
-  )
-  set_target_properties(${GPU_RUNTIME_TEST_TARGET} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  add_test(NAME cr_gpu_runtime_tests COMMAND ${GPU_RUNTIME_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_gpu_runtime_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 120
-    LABELS "msan_skip"
-  )
+  # GPU runtime / buddy-benchmark CUDA-only tests removed along with
+  # the GPU runtime concept.
 endif()
 
-# SYCL backend smoke test (WorkOrchestrator + GpuApi + HSHM_DEVICE_*
-# intrinsics). Built by add_sycl_executable so it picks up the same
-# -fsycl flags that compile chimaera_cxx_gpu under DPC++/AdaptiveCpp.
-if(WRP_CORE_ENABLE_SYCL)
-  add_sycl_executable(test_sycl_runtime FALSE gpu/test_sycl_runtime.cc
+# GPU producer-only stress test.
+#
+# Three flavors compile from the same `test_gpu_kernel_stress_common.h`
+# host fixture, one per backend. Each runs the same end-to-end pipeline
+# (allocate registered backend -> place N tasks -> launch a kernel
+# that submits all N concurrently via gpu2cpu_queue -> CPU worker
+# dispatches MOD_NAME::Runtime::GpuSubmit -> verify formula).
+if(WRP_CORE_ENABLE_CUDA)
+  add_cuda_executable(test_gpu_kernel_stress FALSE
+    gpu/test_gpu_kernel_stress_gpu.cc
     INCLUDE_DIRS
       ${CHIMAERA_ROOT}/include
       ${CHIMAERA_ROOT}/test
-    LINK_LIBS chimaera_cxx chimaera_cxx_gpu hshm::cxx ${CMAKE_THREAD_LIBS_INIT}
+      ${CHIMAERA_ROOT}/modules/MOD_NAME/include
+      ${CHIMAERA_ROOT}/modules/admin/include
+    LINK_LIBS
+      chimaera_cxx
+      chimaera_cxx_gpu
+      chimaera_admin_client
+      chimaera_MOD_NAME_client
+      hshm::cuda_cxx
+      ${CMAKE_THREAD_LIBS_INIT}
   )
-  set_target_properties(test_sycl_runtime PROPERTIES
+  set_target_properties(test_gpu_kernel_stress PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  add_test(NAME cr_sycl_runtime_tests COMMAND test_sycl_runtime
+  add_test(NAME cr_gpu_kernel_stress_cuda COMMAND test_gpu_kernel_stress
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_sycl_runtime_tests PROPERTIES
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 60
-    LABELS "gpu;sycl"
+  set_tests_properties(cr_gpu_kernel_stress_cuda PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin"
+    TIMEOUT 120
+    LABELS "gpu;cuda;stress"
   )
+endif()
 
-  # Per-chimod GPU container allocation smoke test was removed when the
-  # SYCL GPU runtime was retired. Under SYCL the GPU is a pure task
-  # producer that pushes onto gpu2cpu_queue (see ipc_gpu2cpu_impl.h);
-  # AllocGpuContainerHost is dead code on this backend.
+if(WRP_CORE_ENABLE_ROCM)
+  add_rocm_gpu_executable(test_gpu_kernel_stress FALSE
+    gpu/test_gpu_kernel_stress_gpu.cc
+  )
+  target_include_directories(test_gpu_kernel_stress PUBLIC
+    ${CHIMAERA_ROOT}/include
+    ${CHIMAERA_ROOT}/test
+    ${CHIMAERA_ROOT}/modules/MOD_NAME/include
+    ${CHIMAERA_ROOT}/modules/admin/include
+  )
+  target_link_libraries(test_gpu_kernel_stress PUBLIC
+    chimaera_cxx
+    chimaera_cxx_gpu
+    chimaera_admin_client
+    chimaera_MOD_NAME_client
+    hshm::rocm_cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_gpu_kernel_stress PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cr_gpu_kernel_stress_rocm COMMAND test_gpu_kernel_stress
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cr_gpu_kernel_stress_rocm PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin"
+    TIMEOUT 120
+    LABELS "gpu;rocm;stress"
+  )
+endif()
 
-  # SYCL → CPU MOD_NAME submission end-to-end test. Spins up the full
-  # Chimaera CPU runtime, creates a MOD_NAME pool, then launches a SYCL
-  # single_task that submits a GpuSubmitTask via PoolQuery::ToLocalCpu().
-  # The CPU GPU worker pops gpu2cpu_queue and dispatches into the chimod
-  # CPU container. Verifies the chimod's known formula.
-  add_sycl_executable(test_sycl_chimod_to_cpu FALSE
-    gpu/test_sycl_chimod_to_cpu.cc
+if(WRP_CORE_ENABLE_SYCL)
+  add_sycl_executable(test_gpu_kernel_stress FALSE
+    gpu/test_gpu_kernel_stress_sycl.cc
     INCLUDE_DIRS
       ${CHIMAERA_ROOT}/include
       ${CHIMAERA_ROOT}/test
@@ -543,94 +536,24 @@ if(WRP_CORE_ENABLE_SYCL)
       hshm::cxx
       ${CMAKE_THREAD_LIBS_INIT}
   )
-  set_target_properties(test_sycl_chimod_to_cpu PROPERTIES
+  set_target_properties(test_gpu_kernel_stress PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  add_test(NAME cr_sycl_chimod_to_cpu_tests COMMAND test_sycl_chimod_to_cpu
+  add_test(NAME cr_gpu_kernel_stress_sycl COMMAND test_gpu_kernel_stress
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_sycl_chimod_to_cpu_tests PROPERTIES
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 60
-    LABELS "gpu;sycl;chimod"
-  )
-endif()
-
-# GPU task trace tests — CPU->GPU, GPU->GPU, GPU->CPU end-to-end traces
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
-  add_cuda_executable(test_gpu_task_trace FALSE gpu/test_gpu_task_trace.cc
-    INCLUDE_DIRS
-      ${CHIMAERA_ROOT}/include
-      ${CHIMAERA_ROOT}/test
-      ${CHIMAERA_ROOT}/modules/admin/include
-      ${CHIMAERA_ROOT}/modules/MOD_NAME/include
-      ${CMAKE_SOURCE_DIR}/context-transport-primitives/include
-    LINK_LIBS
-      chimaera_admin_runtime
-      chimaera_admin_client
-      chimaera_MOD_NAME_runtime
-      chimaera_MOD_NAME_client
-      hshm::cuda_cxx
-      ${CMAKE_THREAD_LIBS_INIT}
-  )
-  set_target_properties(test_gpu_task_trace PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  add_test(NAME cr_gpu_task_trace COMMAND test_gpu_task_trace
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_gpu_task_trace PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+  set_tests_properties(cr_gpu_kernel_stress_sycl PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin"
     TIMEOUT 120
-    LABELS "gpu;msan_skip"
+    LABELS "gpu;sycl;stress"
   )
 endif()
 
-# GPU POD Transfer test — proves CPU↔GPU task transfer via cudaMemcpy
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
-  find_package(CUDAToolkit QUIET)
-  add_cuda_executable(test_gpu_pod_transfer FALSE gpu/test_gpu_pod_transfer.cu
-    INCLUDE_DIRS
-      ${CHIMAERA_ROOT}/include
-      ${CHIMAERA_ROOT}/modules/admin/include
-      ${CHIMAERA_ROOT}/modules/MOD_NAME/include
-      ${CHIMAERA_ROOT}/modules/bdev/include
-      ${CMAKE_SOURCE_DIR}/context-transport-primitives/include
-      ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
-    LINK_LIBS
-      chimaera::cxx
-      hshm::cuda_cxx
-      Catch2::Catch2WithMain
-    DEFS CUDA_FORCE_CDP1_IF_SUPPORTED __CDPRT_SUPPRESS_SYNC_DEPRECATION_WARNING
-  )
-  target_compile_options(test_gpu_pod_transfer PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>)
-  add_test(NAME test_gpu_pod_transfer COMMAND test_gpu_pod_transfer)
-  set_tests_properties(test_gpu_pod_transfer PROPERTIES
-    TIMEOUT 60 LABELS "gpu;transfer")
-endif()
+# GPU task-trace, POD-transfer, and runtime tests were removed along
+# with the GPU runtime. Coverage of the kernel→CPU path now lives in
+# the SYCL kernel-side tests (test_sycl_chimod_to_cpu, test_sycl_cte_*).
 
-# GPU Coroutine test removed (coroutines removed from GPU path in CDP migration)
-if(FALSE AND (WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM))
-  set(GPU_COROUTINE_TEST_TARGET test_gpu_coroutine)
-  add_cuda_executable(${GPU_COROUTINE_TEST_TARGET} FALSE test_gpu_coroutine.cu
-    INCLUDE_DIRS
-      ${CHIMAERA_ROOT}/compiler/include
-    LINK_LIBS chimaera_cxx_gpu hshm::cuda_cxx
-  )
-  target_link_libraries(${GPU_COROUTINE_TEST_TARGET}
-    chimaera_cxx_gpu
-    hshm::cuda_cxx
-  )
-  set_target_properties(${GPU_COROUTINE_TEST_TARGET} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  add_test(NAME cr_gpu_coroutine_tests COMMAND ${GPU_COROUTINE_TEST_TARGET})
-  set_tests_properties(cr_gpu_coroutine_tests PROPERTIES
-    TIMEOUT 60
-    LABELS "gpu;msan_skip"
-  )
-endif()
+# GPU coroutine test removed along with the GPU runtime concept.
 
 # Enable CTest integration if testing is enabled
 if(WRP_CORE_ENABLE_TESTS)

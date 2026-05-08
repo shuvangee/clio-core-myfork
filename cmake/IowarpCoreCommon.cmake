@@ -93,24 +93,53 @@ endmacro()
 
 # Enable rocm boilerplate
 macro(wrp_core_enable_rocm GPU_RUNTIME CXX_STANDARD)
-    set(GPU_RUNTIME ${GPU_RUNTIME})
-    enable_language(${GPU_RUNTIME})
-    set(CMAKE_${GPU_RUNTIME}_STANDARD ${CXX_STANDARD})
-    set(CMAKE_${GPU_RUNTIME}_EXTENSIONS OFF)
-    set(CMAKE_${GPU_RUNTIME}_STANDARD_REQUIRED ON)
-    # --forward-unknown-to-host-compiler is nvcc-only; not needed with clang
+    # Detect HIP platform once so the add_rocm_* helpers below can route
+    # NVIDIA-backed builds (HIP_PLATFORM=nvidia, e.g. dev container with
+    # only CUDA hardware) through nvcc instead of clang/HIP-AMD. The env
+    # var is what hipconfig and hipcc use; mirror it into a cache var.
+    if(NOT DEFINED WRP_ROCM_HIP_PLATFORM)
+        if(DEFINED ENV{HIP_PLATFORM})
+            set(WRP_ROCM_HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING
+                "HIP platform (amd|nvidia)")
+        else()
+            set(WRP_ROCM_HIP_PLATFORM "amd" CACHE STRING
+                "HIP platform (amd|nvidia)")
+        endif()
+    endif()
+    message(STATUS "ROCm enabled: HIP_PLATFORM=${WRP_ROCM_HIP_PLATFORM}")
+
     set(ROCM_ROOT
         "/opt/rocm"
         CACHE PATH
         "Root directory of the ROCm installation"
     )
 
-    if(GPU_RUNTIME STREQUAL "CUDA")
-        include_directories("${ROCM_ROOT}/include")
-    endif()
-
-    if(NOT HIP_FOUND)
-        find_package(HIP REQUIRED)
+    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+        # HIP-NVCC: hipcc internally invokes nvcc. Reuse CMake's CUDA
+        # language so the GPU sources are compiled with nvcc + the HIP
+        # runtime headers. The add_rocm_* helpers below set
+        # `__HIP_PLATFORM_NVIDIA__` and add ${ROCM_ROOT}/include.
+        if(NOT CMAKE_CUDA_ARCHITECTURES)
+            set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING
+                "CUDA architectures to compile for" FORCE)
+        endif()
+        enable_language(CUDA)
+        set(CMAKE_CUDA_STANDARD ${CXX_STANDARD})
+        set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+        set(GPU_RUNTIME "CUDA")
+    else()
+        # HIP-AMD: hipcc invokes clang/Clang. Use CMake's HIP language.
+        set(GPU_RUNTIME ${GPU_RUNTIME})
+        enable_language(${GPU_RUNTIME})
+        set(CMAKE_${GPU_RUNTIME}_STANDARD ${CXX_STANDARD})
+        set(CMAKE_${GPU_RUNTIME}_EXTENSIONS OFF)
+        set(CMAKE_${GPU_RUNTIME}_STANDARD_REQUIRED ON)
+        if(GPU_RUNTIME STREQUAL "CUDA")
+            include_directories("${ROCM_ROOT}/include")
+        endif()
+        if(NOT HIP_FOUND)
+            find_package(HIP REQUIRED)
+        endif()
     endif()
 endmacro()
 
@@ -250,6 +279,16 @@ function(set_rocm_sources MODE DO_COPY SRC_FILES ROCM_SOURCE_FILES_VAR)
     set(ROCM_SOURCE_FILES ${${ROCM_SOURCE_FILES_VAR}} PARENT_SCOPE)
     set(GPU_RUNTIME ${GPU_RUNTIME} PARENT_SCOPE)
 
+    # Pick the language CMake should use for these sources. Under
+    # HIP-NVCC mode (HIP_PLATFORM=nvidia) we route through nvcc via
+    # CMake's CUDA language; otherwise stick with the requested HIP
+    # runtime (typically HIP for AMD).
+    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+        set(_wrp_rocm_lang CUDA)
+    else()
+        set(_wrp_rocm_lang ${GPU_RUNTIME})
+    endif()
+
     foreach(SOURCE IN LISTS SRC_FILES)
         if(${DO_COPY})
             set(ROCM_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/rocm_${MODE}/${SOURCE})
@@ -259,7 +298,7 @@ function(set_rocm_sources MODE DO_COPY SRC_FILES ROCM_SOURCE_FILES_VAR)
         endif()
 
         list(APPEND ROCM_SOURCE_FILES ${ROCM_SOURCE})
-        set_source_files_properties(${ROCM_SOURCE} PROPERTIES LANGUAGE ${GPU_RUNTIME})
+        set_source_files_properties(${ROCM_SOURCE} PROPERTIES LANGUAGE ${_wrp_rocm_lang})
     endforeach()
 
     set(${ROCM_SOURCE_FILES_VAR} ${ROCM_SOURCE_FILES} PARENT_SCOPE)
@@ -284,15 +323,50 @@ function(set_cuda_sources DO_COPY SRC_FILES CUDA_SOURCE_FILES_VAR)
     set(${CUDA_SOURCE_FILES_VAR} ${CUDA_SOURCE_FILES} PARENT_SCOPE)
 endfunction()
 
+# Apply HIP / ROCm flags appropriate for the current HIP_PLATFORM. On
+# AMD this means -fgpu-rdc (Clang relocatable device code) plus the
+# AMD HIP runtime libraries; on NVIDIA we route through nvcc (CUDA
+# language) and link cudart instead, with the ROCm include directory
+# in the path so `hip/hip_runtime.h` resolves to the HIP-NVCC headers.
+function(_wrp_apply_rocm_flags TARGET)
+    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+        target_compile_definitions(${TARGET} PUBLIC
+            __HIP_PLATFORM_NVIDIA__=1
+            __HIP_PLATFORM_NVCC__=1)
+        target_include_directories(${TARGET} PUBLIC ${ROCM_ROOT}/include)
+        find_package(CUDAToolkit QUIET)
+        if(TARGET CUDA::cudart)
+            target_link_libraries(${TARGET} PUBLIC CUDA::cudart)
+        endif()
+        # Resolve "native" to the real CUDA arch like add_cuda_library does;
+        # CMake otherwise leaves CUDA_ARCHITECTURES literally "native" on
+        # subdirectory targets, which produces a cubin that the active
+        # device's compute capability rejects ("invalid device function").
+        if(CMAKE_CUDA_ARCHITECTURES STREQUAL "native"
+           AND CMAKE_CUDA_ARCHITECTURES_NATIVE)
+            set(CMAKE_CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES_NATIVE}"
+                CACHE STRING "CUDA architectures to compile for" FORCE)
+        endif()
+        set_target_properties(${TARGET} PROPERTIES
+            CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
+            CUDA_SEPARABLE_COMPILATION ON
+            POSITION_INDEPENDENT_CODE ON
+            CUDA_RUNTIME_LIBRARY Shared)
+    else()
+        target_link_libraries(${TARGET} PUBLIC -fgpu-rdc)
+        target_compile_options(${TARGET} PUBLIC -fgpu-rdc)
+        set_target_properties(${TARGET} PROPERTIES
+            POSITION_INDEPENDENT_CODE ON)
+    endif()
+endfunction()
+
 # Function for adding a ROCm library
 function(add_rocm_gpu_library TARGET SHARED DO_COPY)
     set(SRC_FILES ${ARGN})
     set(ROCM_SOURCE_FILES "")
     set_rocm_sources(gpu "${DO_COPY}" "${SRC_FILES}" ROCM_SOURCE_FILES)
     add_library(${TARGET} ${SHARED} ${ROCM_SOURCE_FILES})
-    target_link_libraries(${TARGET} PUBLIC -fgpu-rdc)
-    target_compile_options(${TARGET} PUBLIC -fgpu-rdc)
-    set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    _wrp_apply_rocm_flags(${TARGET})
 endfunction()
 
 # Function for adding a ROCm host-only library
@@ -301,17 +375,14 @@ function(add_rocm_host_library TARGET DO_COPY)
     set(ROCM_SOURCE_FILES "")
     set_rocm_sources(host "${DO_COPY}" "${SRC_FILES}" ROCM_SOURCE_FILES)
     add_library(${TARGET} ${ROCM_SOURCE_FILES})
-    target_link_libraries(${TARGET} PUBLIC -fgpu-rdc)
-    target_compile_options(${TARGET} PUBLIC -fgpu-rdc)
-    set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    _wrp_apply_rocm_flags(${TARGET})
 endfunction()
 
-# Function for adding a ROCm executable
+# Function for adding a ROCm host-only executable
 function(add_rocm_host_executable TARGET)
     set(SRC_FILES ${ARGN})
     add_executable(${TARGET} ${SRC_FILES})
-    target_link_libraries(${TARGET} PUBLIC -fgpu-rdc)
-    target_compile_options(${TARGET} PUBLIC -fgpu-rdc)
+    _wrp_apply_rocm_flags(${TARGET})
 endfunction()
 
 # Function for adding a ROCm executable
@@ -320,9 +391,12 @@ function(add_rocm_gpu_executable TARGET DO_COPY)
     set(ROCM_SOURCE_FILES "")
     set_rocm_sources(exec "${DO_COPY}" "${SRC_FILES}" ROCM_SOURCE_FILES)
     add_executable(${TARGET} ${ROCM_SOURCE_FILES})
-    target_link_libraries(${TARGET} PUBLIC amdhip64 amd_comgr)
-    target_link_libraries(${TARGET} PUBLIC -fgpu-rdc)
-    target_compile_options(${TARGET} PUBLIC -fgpu-rdc)
+    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+        # On NVIDIA hardware no AMD runtime libs to link.
+    else()
+        target_link_libraries(${TARGET} PUBLIC amdhip64 amd_comgr)
+    endif()
+    _wrp_apply_rocm_flags(${TARGET})
 endfunction()
 
 
@@ -891,48 +965,11 @@ function(add_chimod_runtime)
   # Create target name
   set(TARGET_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_runtime")
 
-  # Separate _gpu.cc sources from regular sources
-  set(CPU_SOURCES "")
-  set(GPU_SOURCES "")
-  foreach(SRC ${ARG_SOURCES})
-    if(SRC MATCHES "_gpu\\.cc$")
-      list(APPEND GPU_SOURCES ${SRC})
-    else()
-      list(APPEND CPU_SOURCES ${SRC})
-    endif()
-  endforeach()
-
-  # Create the library (CPU sources only)
-  add_library(${TARGET_NAME} SHARED ${CPU_SOURCES})
-
-  # Build GPU companion library if GPU sources exist and GPU is enabled
-  set(GPU_TARGET_NAME "${TARGET_NAME}_gpu")
-  if(GPU_SOURCES)
-    if(WRP_CORE_ENABLE_CUDA)
-      add_cuda_library(${GPU_TARGET_NAME} SHARED TRUE ${GPU_SOURCES})
-      target_link_libraries(${GPU_TARGET_NAME} PUBLIC ${TARGET_NAME} hshm::cuda_cxx)
-      target_include_directories(${GPU_TARGET_NAME} PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-      )
-      message(STATUS "GPU companion ${GPU_TARGET_NAME} created with CUDA for: ${GPU_SOURCES}")
-    elseif(WRP_CORE_ENABLE_SYCL)
-      add_sycl_library(${GPU_TARGET_NAME} SHARED TRUE ${GPU_SOURCES})
-      target_link_libraries(${GPU_TARGET_NAME} PUBLIC ${TARGET_NAME} hshm::cxx)
-      target_include_directories(${GPU_TARGET_NAME} PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-      )
-      message(STATUS "GPU companion ${GPU_TARGET_NAME} created with SYCL for: ${GPU_SOURCES}")
-    elseif(WRP_CORE_ENABLE_ROCM)
-      add_rocm_gpu_library(${GPU_TARGET_NAME} SHARED TRUE ${GPU_SOURCES})
-      target_link_libraries(${GPU_TARGET_NAME} PUBLIC ${TARGET_NAME} hshm::cxx)
-      target_include_directories(${GPU_TARGET_NAME} PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-      )
-      message(STATUS "GPU companion ${GPU_TARGET_NAME} created with ROCm for: ${GPU_SOURCES}")
-    else()
-      message(STATUS "GPU sources found but no GPU backend enabled, skipping: ${GPU_SOURCES}")
-    endif()
-  endif()
+  # The GPU companion library concept (separate _gpu.cc files compiled
+  # into a *_runtime_gpu shared library) was removed along with the GPU
+  # runtime. ChiMods now only have CPU runtime handlers; kernels submit
+  # tasks to the CPU via the gpu2cpu_queue.
+  add_library(${TARGET_NAME} SHARED ${ARG_SOURCES})
 
   # Set C++ standard
   set(CHIMAERA_CXX_STANDARD 20)

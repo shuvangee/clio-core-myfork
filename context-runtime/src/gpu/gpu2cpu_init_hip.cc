@@ -6,15 +6,17 @@
  */
 
 /**
- * SYCL gpu2cpu init.
+ * Slim CUDA / ROCm gpu2cpu init.
  *
- * Producer-only design (mirror of gpu2cpu_init_hip.cc): per detected SYCL
- * GPU, allocate one pinned-host (sycl::malloc_host) backend holding a
- * GpuTaskQueue. Clients allocate their own task / data backends and
+ * Producer-only design: per detected GPU, allocate one pinned-host backend
+ * holding a chi::GpuTaskQueue. The CPU GPU worker polls each queue;
+ * kernels push admin-registered task allocations onto them via
+ * IpcGpu2Cpu::ClientSend. There is no longer a per-device "copy_backend"
+ * — clients allocate their own task and data backends on the host and
  * register them through admin RegisterMemory.
  */
 
-#if HSHM_ENABLE_SYCL && !(HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM)
+#if (HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM) && !HSHM_ENABLE_SYCL
 
 #include "chimaera/ipc_manager.h"
 #include "chimaera/gpu/gpu_ipc_manager.h"
@@ -24,81 +26,77 @@
 #include "hermes_shm/util/gpu_api.h"
 #include "hermes_shm/util/logging.h"
 
-#include <sycl/sycl.hpp>
-
 #include <cstring>
 #include <memory>
 #include <new>
 
 namespace chi {
 
-namespace {
-class chimaera_sycl_init_queue_kernel;
-}
+// Note: queue construction happens host-side (see ServerInitGpuQueues).
+// We previously launched a single-thread kernel to construct the
+// BuddyAllocator + GpuTaskQueue in device memory, but the kernel had no
+// host/device asymmetry that required device-side construction (the
+// queue_backend is pinned host memory mapped 1:1 into device address
+// space) and the cross-shared-library kernel registration was unreliable
+// under HIP-NVCC ("cudaErrorInvalidDeviceFunction" on launch).
 
 #if HSHM_IS_HOST
 
 bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
-  if (!per_gpu_devices_.empty()) return true;
+  if (!per_gpu_devices_.empty()) {
+    return true;  // already initialized
+  }
 
-  auto sycl_devices = sycl::device::get_devices(sycl::info::device_type::gpu);
-  if (sycl_devices.empty()) {
-    HLOG(kWarning, "ServerInitGpuQueues (SYCL): no GPU devices detected");
+  int device_count = static_cast<int>(hshm::GpuApi::GetDeviceCount());
+  if (device_count <= 0) {
+    HLOG(kWarning, "ServerInitGpuQueues: no GPU devices detected");
     return false;
   }
-  per_gpu_devices_.resize(sycl_devices.size());
+  per_gpu_devices_.resize(device_count);
 
   constexpr size_t kQueueBackendBytes = 16 * 1024 * 1024;
-  auto &q = hshm::GpuApi::SyclQueue();
 
-  for (size_t gpu_id = 0; gpu_id < sycl_devices.size(); ++gpu_id) {
+  for (int gpu_id = 0; gpu_id < device_count; ++gpu_id) {
     PerGpuDeviceState &dev = per_gpu_devices_[gpu_id];
     dev.gpu_id = static_cast<u32>(gpu_id);
 
-    dev.queue_backend = static_cast<char *>(
-        sycl::malloc_host(kQueueBackendBytes, q));
+    hshm::GpuApi::SetDevice(gpu_id);
+
+    dev.queue_backend = hshm::GpuApi::MallocHost<char>(kQueueBackendBytes);
     if (!dev.queue_backend) {
-      HLOG(kError, "ServerInitGpuQueues (SYCL): malloc_host failed (gpu_id={})",
-           gpu_id);
+      HLOG(kError, "ServerInitGpuQueues: MallocHost for queue backend "
+           "failed (gpu_id={})", gpu_id);
       FinalizeGpuQueues();
       return false;
     }
     dev.queue_backend_size = kQueueBackendBytes;
     std::memset(dev.queue_backend, 0, kQueueBackendBytes);
 
-    size_t *out_off = sycl::malloc_shared<size_t>(1, q);
-    if (!out_off) {
-      HLOG(kError, "ServerInitGpuQueues (SYCL): malloc_shared(out_off) failed");
-      FinalizeGpuQueues();
-      return false;
-    }
-    *out_off = static_cast<size_t>(-1);
-
-    char *queue_backend_ptr = dev.queue_backend;
-    size_t queue_backend_size = kQueueBackendBytes;
-    q.submit([&](sycl::handler &cgh) {
-      cgh.single_task<chimaera_sycl_init_queue_kernel>([=]() {
-        hipc::MemoryBackend proxy;
-        proxy.data_ = queue_backend_ptr;
-        proxy.data_capacity_ = queue_backend_size;
-        CHI_QUEUE_ALLOC_T *alloc = proxy.MakeAlloc<CHI_QUEUE_ALLOC_T>();
-        if (!alloc) {
-          *out_off = static_cast<size_t>(-1);
-          return;
-        }
+    // Host-side construction. queue_backend is pinned host memory mapped
+    // into device address space at the same virtual address, so the
+    // BuddyAllocator's internal offset-based bookkeeping is safe to set
+    // up from the host. We previously constructed inside a single-thread
+    // CUDA kernel; under HIP-NVCC that path hit "invalid device function"
+    // intermittently, and the kernel had no host/device asymmetry that
+    // required device-side construction in the first place.
+    size_t queue_off = static_cast<size_t>(-1);
+    {
+      hipc::MemoryBackend proxy;
+      proxy.data_ = dev.queue_backend;
+      proxy.data_capacity_ = kQueueBackendBytes;
+      CHI_QUEUE_ALLOC_T *alloc = proxy.MakeAlloc<CHI_QUEUE_ALLOC_T>();
+      if (alloc) {
         hipc::FullPtr<chi::GpuTaskQueue> queue =
             alloc->NewObj<chi::GpuTaskQueue>(
                 alloc, /*num_lanes=*/1u, /*num_prio=*/2u, queue_depth);
-        *out_off = queue.IsNull() ? static_cast<size_t>(-1)
-                                  : queue.shm_.off_.load();
-      });
-    }).wait_and_throw();
-
-    size_t queue_off = *out_off;
-    sycl::free(out_off, q);
+        if (!queue.IsNull()) {
+          queue_off = queue.shm_.off_.load();
+        }
+      }
+    }
     if (queue_off == static_cast<size_t>(-1)) {
-      HLOG(kError, "ServerInitGpuQueues (SYCL): device queue construction "
-           "failed (gpu_id={})", gpu_id);
+      HLOG(kError, "ServerInitGpuQueues: queue construction failed "
+           "(gpu_id={})", gpu_id);
       FinalizeGpuQueues();
       return false;
     }
@@ -107,11 +105,13 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
     dev.gpu2cpu_queue.ptr_ = reinterpret_cast<chi::GpuTaskQueue *>(
         dev.queue_backend + queue_off);
 
-    HLOG(kInfo, "ServerInitGpuQueues (SYCL): gpu_id={} queue at {} ({}MB)",
+    HLOG(kInfo, "ServerInitGpuQueues: gpu_id={} queue at {} ({}MB)",
          gpu_id, static_cast<void *>(dev.gpu2cpu_queue.ptr_),
          kQueueBackendBytes / (1024 * 1024));
   }
 
+  // Install device-aware memcpy + IsDevicePointer hooks (consumed by the
+  // bdev runtime when WriteToRam / ReadFromRam see device USM pointers).
   chi::g_device_aware_memcpy.store(
       [](void *dst, const void *src, std::size_t n) {
         if (n == 0) return;
@@ -129,11 +129,9 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
 }
 
 void gpu::IpcManager::FinalizeGpuQueues() {
-  if (per_gpu_devices_.empty()) return;
-  auto &q = hshm::GpuApi::SyclQueue();
   for (auto &dev : per_gpu_devices_) {
     if (dev.queue_backend) {
-      sycl::free(dev.queue_backend, q);
+      hshm::GpuApi::FreeHost(dev.queue_backend);
       dev.queue_backend = nullptr;
     }
     dev.gpu2cpu_queue = hipc::FullPtr<chi::GpuTaskQueue>::GetNull();
@@ -146,7 +144,8 @@ bool gpu::IpcManager::RegisterClientBackend(const ClientBackend &b) {
   if (b.gpu_id >= per_gpu_devices_.size()) return false;
   u64 key = (static_cast<u64>(b.alloc_id.major_) << 32) |
             static_cast<u64>(b.alloc_id.minor_);
-  per_gpu_devices_[b.gpu_id].client_backends[key] = b;
+  auto &dev = per_gpu_devices_[b.gpu_id];
+  dev.client_backends[key] = b;
   return true;
 }
 
@@ -169,9 +168,9 @@ const gpu::IpcManager::ClientBackend *gpu::IpcManager::FindClientBackend(
   return &it->second;
 }
 
-bool ChiServerBootstrapSyclGpu(IpcManager *self, chi::u32 queue_depth,
-                                size_t backend_bytes) {
-  (void)backend_bytes;
+bool ChiServerBootstrapHipGpu(IpcManager *self, chi::u32 queue_depth,
+                               std::size_t backend_bytes) {
+  (void)backend_bytes;  // No host-managed copy_backend in producer-only model.
   if (!self) return false;
   if (!self->gpu_ipc_) {
     self->gpu_ipc_ = std::make_unique<gpu::IpcManager>();
@@ -183,4 +182,4 @@ bool ChiServerBootstrapSyclGpu(IpcManager *self, chi::u32 queue_depth,
 
 }  // namespace chi
 
-#endif  // HSHM_ENABLE_SYCL && !(CUDA||ROCM)
+#endif  // (HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM) && !HSHM_ENABLE_SYCL

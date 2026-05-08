@@ -36,6 +36,20 @@ add_chimod_runtime(
     ${BDEV_GPU_LIBS}
 )
 
+# SYCL HBM bdev support: a separate task. Adding -fsycl to
+# chimaera_bdev_runtime conflicts with the runtime's precompiled
+# headers (clang-offload-bundler rejects .pch). When that's resolved
+# (likely needs PCH disabled for SYCL builds), enable here:
+#
+#   if(WRP_CORE_ENABLE_SYCL AND TARGET chimaera_bdev_runtime)
+#     set_target_properties(chimaera_bdev_runtime PROPERTIES
+#       DISABLE_PRECOMPILE_HEADERS ON)
+#     wrp_core_apply_sycl_flags(chimaera_bdev_runtime)
+#   endif()
+#
+# Until then, the kHbm bdev path under SYCL is compiled out by the
+# `#if HSHM_ENABLE_SYCL && !(CUDA||ROCM)` guard in src/bdev_runtime.cc.
+
 # Unit tests
 if(WRP_CORE_ENABLE_TESTS)
   add_subdirectory(test)

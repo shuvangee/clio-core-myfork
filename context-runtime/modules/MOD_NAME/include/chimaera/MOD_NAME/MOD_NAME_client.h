@@ -66,7 +66,7 @@ class Client : public chi::ContainerClient {
   chi::Future<CreateTask> AsyncCreate(const chi::PoolQuery& pool_query,
                                        const std::string& pool_name,
                                        const chi::PoolId& custom_pool_id) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     // CreateTask is a GetOrCreatePoolTask, which must be handled by admin pool
     // Pass 'this' as client pointer for PostWait callback
@@ -88,7 +88,7 @@ class Client : public chi::ContainerClient {
    */
   chi::Future<MonitorTask> AsyncMonitor(const chi::PoolQuery &pool_query,
                                         const std::string &query) {
-    auto *ipc_manager = CHI_IPC;
+    auto *ipc_manager = CHI_CPU_IPC;
     auto task = ipc_manager->NewTask<MonitorTask>(
         chi::CreateTaskId(), pool_id_, pool_query, query);
     return ipc_manager->Send(task);
@@ -104,7 +104,7 @@ class Client : public chi::ContainerClient {
   chi::Future<CustomTask> AsyncCustom(const chi::PoolQuery& pool_query,
                                        const std::string& input_data,
                                        chi::u32 operation_id) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<CustomTask>(
         chi::CreateTaskId(), pool_id_, pool_query, input_data, operation_id);
@@ -122,7 +122,7 @@ class Client : public chi::ContainerClient {
   chi::Future<CoMutexTestTask> AsyncCoMutexTest(
       const chi::PoolQuery& pool_query,
       chi::u32 test_id, chi::u32 hold_duration_ms) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<CoMutexTestTask>(
         chi::CreateTaskId(), pool_id_, pool_query, test_id, hold_duration_ms);
@@ -141,7 +141,7 @@ class Client : public chi::ContainerClient {
   chi::Future<CoRwLockTestTask> AsyncCoRwLockTest(
       const chi::PoolQuery& pool_query,
       chi::u32 test_id, bool is_writer, chi::u32 hold_duration_ms) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<CoRwLockTestTask>(
         chi::CreateTaskId(), pool_id_, pool_query, test_id, is_writer,
@@ -161,7 +161,7 @@ class Client : public chi::ContainerClient {
   chi::Future<WaitTestTask> AsyncWaitTest(const chi::PoolQuery& pool_query,
                                            chi::u32 depth,
                                            chi::u32 test_id) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<WaitTestTask>(
         chi::CreateTaskId(), pool_id_, pool_query, depth, test_id);
@@ -176,7 +176,7 @@ class Client : public chi::ContainerClient {
    * @return Future for the TestLargeOutputTask
    */
   chi::Future<TestLargeOutputTask> AsyncTestLargeOutput(const chi::PoolQuery& pool_query) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<TestLargeOutputTask>(
         chi::CreateTaskId(), pool_id_, pool_query);
@@ -199,7 +199,7 @@ class Client : public chi::ContainerClient {
   chi::Future<SubtaskTestTask> AsyncSubtaskTest(const chi::PoolQuery& pool_query,
                                                 chi::u32 test_value,
                                                 chi::u32 num_subtasks = 1) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
     auto task = ipc_manager->NewTask<SubtaskTestTask>(
         chi::CreateTaskId(), pool_id_, pool_query, test_value, num_subtasks);
     return ipc_manager->Send(task);
@@ -208,7 +208,7 @@ class Client : public chi::ContainerClient {
   chi::Future<GpuSubmitTask> AsyncGpuSubmit(const chi::PoolQuery& pool_query,
                                             chi::u32 gpu_id,
                                             chi::u32 test_value) {
-    auto* ipc_manager = CHI_IPC;
+    auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<GpuSubmitTask>(
         chi::CreateTaskId(), pool_id_, pool_query, gpu_id, test_value);

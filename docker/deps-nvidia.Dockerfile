@@ -91,6 +91,48 @@ ENV PATH=/opt/intel/dpcpp/bin:${PATH}
 ENV LD_LIBRARY_PATH=/opt/intel/dpcpp/lib:${LD_LIBRARY_PATH}
 
 #------------------------------------------------------------
+# ROCm / HIP-NVCC Installation
+#------------------------------------------------------------
+#
+# Installs the AMD ROCm 6.4 toolchain configured for the NVIDIA backend
+# (HIP-NVCC). hipcc dispatches to nvcc, the HIP host headers map onto
+# cudart, and code compiled with HSHM_ENABLE_ROCM=1 runs on the local
+# CUDA GPU. The hip-dev metapackage normally pulls in `hipcc` (a thin
+# wrapper that defaults to AMD); we install `hipcc-nvidia` instead and
+# extract hip-dev with --force-overwrite so the dev headers land
+# without the AMD-flavored hipcc dropping a conflicting binary.
+#
+# Required env at build time: HIP_PLATFORM=nvidia (forwarded into the
+# CMake configure step by IowarpCoreCommon's wrp_core_enable_rocm
+# macro). At runtime nothing extra is needed because the HIP runtime
+# is header-only on NVIDIA — calls inline directly into cudart.
+
+USER root
+
+# AMD ROCm apt repository (Ubuntu 24.04 noble, ROCm 6.4)
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /etc/apt/keyrings/rocm.gpg \
+    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.4 noble main" > /etc/apt/sources.list.d/rocm.list \
+    && printf "Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600\n" > /etc/apt/preferences.d/rocm-pin-600 \
+    && apt-get update
+
+# hipcc-nvidia + hip-dev (with --force-overwrite to step over the file
+# clash with the AMD hipcc package — same binary path, different default
+# platform — see file header comment).
+RUN apt-get install -y --no-install-recommends hipcc-nvidia hip-runtime-nvidia \
+    && apt-get download hip-dev \
+    && dpkg -i --force-overwrite --force-depends hip-dev_*.deb \
+    && rm -f hip-dev_*.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV ROCM_PATH=/opt/rocm
+ENV HIP_PLATFORM=nvidia
+ENV PATH=/opt/rocm/bin:${PATH}
+# /opt/rocm/lib not added to LD_LIBRARY_PATH on purpose: under HIP-NVCC the
+# runtime is header-only against cudart, and adding it can cause amdhip64.so
+# to override cudart symbols when both end up resident in the same process.
+
+#------------------------------------------------------------
 # AdaptiveCpp (Open SYCL) Installation
 #------------------------------------------------------------
 
@@ -181,7 +223,12 @@ RUN echo '' >> /home/iowarp/.bashrc \
     && echo '# AdaptiveCpp SYCL environment' >> /home/iowarp/.bashrc \
     && echo 'export ADAPTIVECPP_HOME=/opt/adaptivecpp' >> /home/iowarp/.bashrc \
     && echo 'export PATH=/opt/adaptivecpp/bin:$PATH' >> /home/iowarp/.bashrc \
-    && echo 'export LD_LIBRARY_PATH=/opt/adaptivecpp/lib:$LD_LIBRARY_PATH' >> /home/iowarp/.bashrc
+    && echo 'export LD_LIBRARY_PATH=/opt/adaptivecpp/lib:$LD_LIBRARY_PATH' >> /home/iowarp/.bashrc \
+    && echo '' >> /home/iowarp/.bashrc \
+    && echo '# ROCm/HIP environment (HIP-NVCC backend on NVIDIA hardware)' >> /home/iowarp/.bashrc \
+    && echo 'export ROCM_PATH=/opt/rocm' >> /home/iowarp/.bashrc \
+    && echo 'export HIP_PLATFORM=nvidia' >> /home/iowarp/.bashrc \
+    && echo 'export PATH=/opt/rocm/bin:$PATH' >> /home/iowarp/.bashrc
 
 WORKDIR /workspace
 

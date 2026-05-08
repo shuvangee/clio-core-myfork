@@ -287,6 +287,24 @@ bool Config::ParseYamlNode(const YAML::Node &node) {
     }
   }
 
+  // Parse GPU metadata cache configuration (optional)
+  if (node["gpu_metadata_cache"]) {
+    const YAML::Node &gmc = node["gpu_metadata_cache"];
+    if (gmc["enabled"]) {
+      gpu_metadata_cache_.enabled_ = gmc["enabled"].as<bool>();
+    }
+    if (gmc["capacity"]) {
+      std::string cap_str = gmc["capacity"].as<std::string>();
+      ParseSizeString(cap_str, gpu_metadata_cache_.capacity_bytes_);
+    }
+    if (gmc["max_blobs"]) {
+      gpu_metadata_cache_.max_blobs_ = gmc["max_blobs"].as<chi::u32>();
+    }
+    if (gmc["max_tags"]) {
+      gpu_metadata_cache_.max_tags_ = gmc["max_tags"].as<chi::u32>();
+    }
+  }
+
   // Parse environment variable configuration
   if (node["config_env_var"]) {
     config_env_var_ = node["config_env_var"].as<std::string>();

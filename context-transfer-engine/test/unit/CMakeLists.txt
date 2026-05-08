@@ -58,99 +58,12 @@ add_executable(test_reorganize_blob
     test_reorganize_blob.cc
 )
 
-# Create test_gpu_core executable for GPU client API tests (AsyncPutBlob/AsyncGetBlob)
-# GPU-initiated kernel compiled via add_cuda_library (clang-cuda dual-pass)
-if(WRP_CORE_ENABLE_CUDA)
-  # Unified CUDA GPU kernel library: all CTE GPU test + benchmark kernels
-  # compiled into a single device-link unit alongside chimaera_cxx_gpu.
-  # This ensures volatile completion flag reads see CDP child writes.
-  # Glob all GPU workload/test kernel sources that need unified device linking
-  file(GLOB _CTE_BENCH_GPU_SOURCES
-      ${CMAKE_SOURCE_DIR}/context-transfer-engine/benchmark/gpu/workload_*.cc)
-  file(GLOB _CR_MOD_GPU_SOURCES
-      ${CMAKE_SOURCE_DIR}/context-runtime/modules/MOD_NAME/test/test_gpu_*_gpu.cc)
-  add_cuda_library(test_gpu_initiated_kernels STATIC TRUE
-      gpu/test_gpu_initiated_gpu.cc
-      gpu/test_gpu_coroutine_gpu.cc
-      gpu/test_gpu_tiered_gpu.cc
-      ${_CTE_BENCH_GPU_SOURCES}
-      ${_CR_MOD_GPU_SOURCES}
-      INCLUDE_DIRS
-          ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
-          ${CMAKE_SOURCE_DIR}/context-transfer-engine/benchmark
-          ${CMAKE_SOURCE_DIR}/context-transfer-engine/benchmark/gpu
-          ${CMAKE_SOURCE_DIR}/context-runtime/modules/MOD_NAME/include
-          ${CMAKE_SOURCE_DIR}/context-runtime/modules/bdev/include
-      LINK_LIBS hshm::cuda_cxx chimaera_cxx_gpu
-  )
-  target_link_libraries(test_gpu_initiated_kernels hshm::cuda_cxx)
-
-  # GPU-tiered test: PutBlob 200MB + GetBlob 100MB with HBM+pinned tiers
-  # GPU kernel compiled by nvcc, host code compiled by g++ (avoids CHI_IPC
-  # macro resolving to gpu::GetGpuIpcManager() which is nullptr on host).
-  add_executable(test_gpu_tiered
-      gpu/test_gpu_tiered.cc
-  )
-  set_target_properties(test_gpu_tiered PROPERTIES
-      CUDA_SEPARABLE_COMPILATION ON
-      LINKER_LANGUAGE CUDA
-      POSITION_INDEPENDENT_CODE ON
-  )
-  install(TARGETS test_gpu_tiered RUNTIME DESTINATION bin)
-
-  # Copy config yaml next to the source (where __FILE__ resolves)
-  add_custom_command(TARGET test_gpu_tiered POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      ${CMAKE_CURRENT_SOURCE_DIR}/gpu/test_gpu_tiered_config.yaml
-      ${CMAKE_CURRENT_BINARY_DIR}/gpu/test_gpu_tiered_config.yaml
-  )
-
-  add_test(NAME cte_gpu_tiered_test COMMAND test_gpu_tiered)
-  set_tests_properties(cte_gpu_tiered_test PROPERTIES
-      TIMEOUT 180
-      LABELS "msan_skip"
-      ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}")
-endif()
-
-if(WRP_CORE_ENABLE_CUDA)
-add_executable(test_cte_gpu_coroutine
-    gpu/test_gpu_coroutine.cc
-)
-
-add_executable(test_gpu_core
-    gpu/test_gpu_core.cc
-)
-
-# Create test_gpu_create executable for GPU AsyncCreate tests
-# GPU kernel file compiled with HSHM_ENABLE_CUDA=1 so device APIs are available
-add_library(test_gpu_create_kernels OBJECT gpu/test_gpu_create_gpu.cu)
-target_include_directories(test_gpu_create_kernels PRIVATE
-    ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
-    ${CMAKE_SOURCE_DIR}/context-runtime/include
-    ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
-    ${CMAKE_SOURCE_DIR}/context-transport-primitives/include
-    ${CMAKE_SOURCE_DIR}/build/context-transport-primitives/src/include
-)
-target_compile_definitions(test_gpu_create_kernels PRIVATE HSHM_ENABLE_CUDA=1)
-target_link_libraries(test_gpu_create_kernels PRIVATE hermes_shm_cuda)
-set_target_properties(test_gpu_create_kernels PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
-)
-target_compile_options(test_gpu_create_kernels PUBLIC
-    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-)
-
-add_executable(test_gpu_create
-    gpu/test_gpu_create_cpu.cc
-    $<TARGET_OBJECTS:test_gpu_create_kernels>
-)
-set_target_properties(test_gpu_create PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    LINKER_LANGUAGE CUDA
-    POSITION_INDEPENDENT_CODE ON
-)
-endif()  # WRP_CORE_ENABLE_CUDA (GPU test executables)
+# GPU-runtime-era CUDA tests (test_gpu_core, test_gpu_create,
+# test_gpu_tiered, test_cte_gpu_coroutine, test_gpu_initiated*) were
+# removed when the GPU runtime concept was retired. The kernel→CPU
+# submission path is now exercised by the SYCL kernel tests in this
+# directory: test_sycl_cte_kernel_putget, test_sycl_cte_putblob,
+# test_sycl_gpu_metadata_cache.
 
 # Include directories for all tests - using unified simple_test.h framework
 target_include_directories(cte_core_unit_tests PRIVATE
@@ -189,29 +102,7 @@ target_include_directories(test_reorganize_blob PRIVATE
 
 )
 
-if(WRP_CORE_ENABLE_CUDA)
-target_include_directories(test_cte_gpu_coroutine PRIVATE
-  ${CMAKE_SOURCE_DIR}/context-runtime/test  # For simple_test.h with g_test_finalize
-  ${CMAKE_SOURCE_DIR}/context-runtime/modules/MOD_NAME/include
-)
-
-target_include_directories(test_gpu_core PRIVATE
-
-)
-
-target_include_directories(test_gpu_create PRIVATE
-
-)
-
-target_include_directories(test_gpu_tiered PRIVATE
-  ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
-  ${CMAKE_SOURCE_DIR}/context-runtime/include
-  ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
-  ${CMAKE_SOURCE_DIR}/context-runtime/modules/bdev/include
-  ${CMAKE_SOURCE_DIR}/context-transport-primitives/include
-  ${CMAKE_SOURCE_DIR}/build/context-transport-primitives/src/include
-)
-endif()  # WRP_CORE_ENABLE_CUDA (GPU include dirs)
+# GPU runtime tests + their include directories removed.
 
 # Link against required libraries using simple_test.h framework (NOT Catch2)
 target_link_libraries(cte_core_unit_tests
@@ -321,69 +212,7 @@ target_link_libraries(test_reorganize_blob
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
 
-if(WRP_CORE_ENABLE_CUDA)
-# Link test_cte_gpu_coroutine
-target_link_libraries(test_cte_gpu_coroutine
-    wrp_cte_core_runtime
-    wrp_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
-    hshm::cxx
-    hermes_shm_cuda
-    test_gpu_initiated_kernels
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-# Link test_gpu_core
-target_link_libraries(test_gpu_core
-    wrp_cte_core_runtime
-    wrp_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
-    hshm::cxx
-    hermes_shm_cuda
-    test_gpu_initiated_kernels
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-# Link test_gpu_create
-target_link_libraries(test_gpu_create
-    wrp_cte_core_runtime
-    wrp_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
-    hshm::cxx
-    hermes_shm_cuda
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-# Link test_gpu_tiered
-target_link_libraries(test_gpu_tiered
-    wrp_cte_core_runtime
-    wrp_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
-    hshm::cxx
-    hermes_shm_cuda
-    test_gpu_initiated_kernels
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-if(CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES)
-  find_package(CUDAToolkit QUIET)
-  set_property(TARGET test_cte_gpu_coroutine APPEND PROPERTY LINK_LIBRARIES "CUDA::cudart")
-  set_property(TARGET test_gpu_core APPEND PROPERTY LINK_LIBRARIES "CUDA::cudart")
-  set_property(TARGET test_gpu_tiered APPEND PROPERTY LINK_LIBRARIES "CUDA::cudart")
-endif()
-endif()  # WRP_CORE_ENABLE_CUDA (GPU link libraries)
+# GPU-runtime-era link rules removed.
 
 # Note: Include directories are provided automatically via linked ChiMod targets
 # wrp_cte_core_client provides ${WRP_CTE_ROOT}/core/include via transitive includes
@@ -987,9 +816,10 @@ set_tests_properties(
 # Install Targets
 # ------------------------------------------------------------------------------
 set(_CTE_TEST_TARGETS cte_core_unit_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_reorganize_blob)
-if(WRP_CORE_ENABLE_CUDA)
-  list(APPEND _CTE_TEST_TARGETS test_cte_gpu_coroutine test_gpu_core test_gpu_create)
-endif()
+# (Legacy test_cte_gpu_coroutine / test_gpu_core / test_gpu_create were
+# removed along with the GPU runtime — see deletions earlier in this
+# file. The new CUDA test target test_cuda_cte_kernel_putget is added
+# below with its own install rule via add_cuda_executable.)
 install(TARGETS ${_CTE_TEST_TARGETS}
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
@@ -1004,7 +834,13 @@ install(TARGETS ${_CTE_TEST_TARGETS}
 # runtime via gpu2cpu_queue + IpcGpu2Cpu::ClientSend, and the CPU-side
 # wrp_cte_core container processes it. Currently a placeholder until the
 # SYCL gpu2cpu_queue infrastructure lands — see file header for details.
-if(WRP_CORE_ENABLE_SYCL)
+#
+# DISABLED: these SYCL CTE kernel-side tests still use the legacy
+# GpuIpcManager APIs (CreateGpuAllocator, gpu2cpu_backend) that the
+# producer-only redesign removed. Re-enable once they are migrated to use
+# AllocateAndRegisterGpuBackend + the slim IpcManagerGpuInfo, mirroring
+# context-runtime/test/unit/gpu/test_gpu_kernel_stress_sycl.cc.
+if(FALSE AND WRP_CORE_ENABLE_SYCL)
   add_sycl_executable(test_sycl_cte_putblob FALSE
     gpu/test_sycl_cte_putblob.cc
     INCLUDE_DIRS
@@ -1033,6 +869,157 @@ if(WRP_CORE_ENABLE_SYCL)
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
     TIMEOUT 60
     LABELS "gpu;sycl;cte;putblob"
+  )
+
+  # SYCL GPU metadata cache smoke test
+  # Validates that CTE Core's GpuMetadataCache projection works:
+  #   - Create allocates the managed-USM cache when enabled in config
+  #   - PutBlob populates an entry via Runtime::GpuCacheOnPutBlob()
+  #   - A SYCL kernel can read the cache and find the projected blob
+  add_sycl_executable(test_sycl_gpu_metadata_cache FALSE
+    gpu/test_sycl_gpu_metadata_cache.cc
+    INCLUDE_DIRS
+      ${CMAKE_SOURCE_DIR}/context-runtime/include
+      ${CMAKE_SOURCE_DIR}/context-runtime/test
+      ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+      ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+    LINK_LIBS
+      chimaera_cxx
+      chimaera_cxx_gpu
+      chimaera_admin_client
+      chimaera_bdev_client
+      wrp_cte_core_client
+      # wrp_cte_core_runtime provides Config::LoadFromString, which
+      # template-instantiation pulls in via CreateParams::LoadConfig
+      # (a do_compose_ branch reachable from GetParams). The test only
+      # uses non-compose mode so the function is never called at
+      # runtime, but it must resolve at link time.
+      wrp_cte_core_runtime
+      hshm::cxx
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_sycl_gpu_metadata_cache PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cte_sycl_gpu_metadata_cache_tests
+    COMMAND test_sycl_gpu_metadata_cache
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cte_sycl_gpu_metadata_cache_tests PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 60
+    LABELS "gpu;sycl;cte;metadata_cache"
+  )
+
+  # SYCL kernel-side PutBlob + GetBlob round trip
+  # Validates that a single SYCL kernel can submit BOTH a CTE PutBlobTask
+  # and a CTE GetBlobTask via the gpu2cpu_queue, and read back bytes
+  # byte-identical to those it wrote. See file header for the layout
+  # discipline (KernelCtx struct in shared USM) that sidesteps DPC++'s
+  # host-vs-device kernel-arg layout mismatch.
+  add_sycl_executable(test_sycl_cte_kernel_putget FALSE
+    gpu/test_sycl_cte_kernel_putget.cc
+    INCLUDE_DIRS
+      ${CMAKE_SOURCE_DIR}/context-runtime/include
+      ${CMAKE_SOURCE_DIR}/context-runtime/test
+      ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+      ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+    LINK_LIBS
+      chimaera_cxx
+      chimaera_cxx_gpu
+      chimaera_admin_client
+      chimaera_bdev_client
+      wrp_cte_core_client
+      # wrp_cte_core_runtime: needed for Config::LoadFromString
+      # template instantiation (see metadata_cache test for context).
+      wrp_cte_core_runtime
+      hshm::cxx
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_sycl_cte_kernel_putget PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cte_sycl_cte_kernel_putget_tests
+    COMMAND test_sycl_cte_kernel_putget
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cte_sycl_cte_kernel_putget_tests PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 60
+    LABELS "gpu;sycl;cte;kernel_putget"
+  )
+endif()
+
+# CUDA / ROCm kernel-side PutBlob + GetBlob round-trip test.
+# Mirror of test_sycl_cte_kernel_putget — uses HSHM macros + hshm::GpuApi
+# so the same source compiles for both CUDA (nvcc) and ROCm (hipcc).
+# Extension is .cc per project policy; set_cuda_sources marks it as
+# CUDA language so nvcc picks up the `<<<>>>` launch syntax.
+#
+# DISABLED: the test source still uses the legacy GpuIpcManager APIs
+# (CreateGpuAllocator, gpu2cpu_backend) that were removed by the
+# producer-only redesign. Re-enable once the test is migrated to use
+# AllocateAndRegisterGpuBackend + the slim IpcManagerGpuInfo.
+if(FALSE AND WRP_CORE_ENABLE_CUDA)
+  add_cuda_executable(test_cuda_cte_kernel_putget FALSE
+    gpu/test_cuda_cte_kernel_putget.cc
+    INCLUDE_DIRS
+      ${CMAKE_SOURCE_DIR}/context-runtime/include
+      ${CMAKE_SOURCE_DIR}/context-runtime/test
+      ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+      ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+    LINK_LIBS
+      chimaera_cxx
+      chimaera_cxx_gpu
+      chimaera_admin_client
+      chimaera_bdev_client
+      wrp_cte_core_client
+      wrp_cte_core_runtime
+      hshm::cuda_cxx
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_cuda_cte_kernel_putget PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cte_cuda_cte_kernel_putget_tests
+    COMMAND test_cuda_cte_kernel_putget
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cte_cuda_cte_kernel_putget_tests PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 60
+    LABELS "gpu;cuda;cte;kernel_putget"
+  )
+endif()
+
+if(FALSE AND WRP_CORE_ENABLE_ROCM)
+  # DISABLED — see CUDA branch above. Same legacy-API issue.
+  add_rocm_gpu_library(test_cuda_cte_kernel_putget_objs SHARED FALSE
+    gpu/test_cuda_cte_kernel_putget.cc
+  )
+  add_executable(test_cuda_cte_kernel_putget gpu/test_cuda_cte_kernel_putget.cc)
+  target_link_libraries(test_cuda_cte_kernel_putget
+    test_cuda_cte_kernel_putget_objs
+    chimaera_cxx
+    chimaera_cxx_gpu
+    chimaera_admin_client
+    chimaera_bdev_client
+    wrp_cte_core_client
+    wrp_cte_core_runtime
+    hshm::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_cuda_cte_kernel_putget PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cte_rocm_cte_kernel_putget_tests
+    COMMAND test_cuda_cte_kernel_putget
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cte_rocm_cte_kernel_putget_tests PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 60
+    LABELS "gpu;rocm;cte;kernel_putget"
   )
 endif()
 

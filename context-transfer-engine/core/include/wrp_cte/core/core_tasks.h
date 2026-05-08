@@ -106,6 +106,15 @@ struct CreateParams {
   // CTE configuration object (not serialized, loaded from pool_config)
   Config config_;
 
+  // OUT: Raw pointer (uintptr_t cast) to GpuMetadataCacheHeader allocated by
+  // the server during Create. Zero when the GPU metadata cache is disabled
+  // or no GPU backend is built in. The pointer is a managed/shared USM
+  // address valid for both host and device access in the SAME process; it
+  // is NOT a cross-process IPC handle (cross-process sharing requires
+  // Level-Zero IPC on SYCL or cudaIpc on CUDA — see
+  // gpu_metadata_cache.h header for the eventual extension).
+  chi::u64 gpu_cache_ptr_ = 0;
+
   // Required: chimod library name for module manager
   static constexpr const char *chimod_lib_name = "wrp_cte_core";
 
@@ -113,12 +122,15 @@ struct CreateParams {
   CreateParams() {}
 
   // Copy constructor (required for task creation)
-  CreateParams(const CreateParams &other) : config_(other.config_) {}
+  CreateParams(const CreateParams &other)
+      : config_(other.config_),
+        gpu_cache_ptr_(other.gpu_cache_ptr_) {}
 
   // Constructor with pool_id and CreateParams (required for admin
   // task creation)
   CreateParams(const chi::PoolId &pool_id, const CreateParams &other)
-      : config_(other.config_) {
+      : config_(other.config_),
+        gpu_cache_ptr_(other.gpu_cache_ptr_) {
     // pool_id is used by the admin task framework, but we don't need to store
     // it
     (void)pool_id;  // Suppress unused parameter warning
@@ -128,9 +140,20 @@ struct CreateParams {
   // Serialization support for cereal
   template <class Archive>
   void serialize(Archive &ar) {
-    // Config is not serialized - it's loaded from pool_config.config_ in
-    // LoadConfig
-    (void)ar;
+    // Most of Config is loaded server-side from pool_config.config_ via
+    // LoadConfig (compose mode). The GPU metadata cache settings are
+    // serialized explicitly so callers can opt in directly via
+    // CreateParams (no compose YAML required) — the server reads them
+    // from CreateParams::config_.gpu_metadata_cache_.
+    //
+    // gpu_cache_ptr_ flows back on the OUT path: the server writes the
+    // managed-USM cache pointer into chimod_params_ at the end of
+    // Create, and the client's GetParams() returns it.
+    ar(config_.gpu_metadata_cache_.enabled_,
+       config_.gpu_metadata_cache_.capacity_bytes_,
+       config_.gpu_metadata_cache_.max_blobs_,
+       config_.gpu_metadata_cache_.max_tags_,
+       gpu_cache_ptr_);
   }
 
   /**
@@ -196,6 +219,10 @@ struct TargetInfo {
   chi::u64 remaining_space_;  // Remaining allocatable space in bytes
   chimaera::bdev::PerfMetrics perf_metrics_;  // Performance metrics from bdev
   chimaera::bdev::PersistenceLevel persistence_level_;
+  // Underlying bdev type, captured at RegisterTarget time. Used by the
+  // GPU metadata cache projection to decide whether a blob landed in a
+  // GPU-reachable tier (kRam / kHbm / kPinned).
+  chimaera::bdev::BdevType bdev_type_;
 
   HSHM_CROSS_FUN TargetInfo()
       : target_name_(CHI_PRIV_ALLOC),
@@ -206,7 +233,8 @@ struct TargetInfo {
         ops_written_(0),
         target_score_(0.0f),
         remaining_space_(0),
-        persistence_level_(chimaera::bdev::PersistenceLevel::kVolatile) {}
+        persistence_level_(chimaera::bdev::PersistenceLevel::kVolatile),
+        bdev_type_(chimaera::bdev::BdevType::kFile) {}
 
 #if HSHM_IS_HOST
   TargetInfo(const std::string &name, const std::string &bdev_name)
@@ -233,7 +261,8 @@ struct TargetInfo {
         target_score_(other.target_score_),
         remaining_space_(other.remaining_space_),
         perf_metrics_(other.perf_metrics_),
-        persistence_level_(other.persistence_level_) {}
+        persistence_level_(other.persistence_level_),
+        bdev_type_(other.bdev_type_) {}
 
   HSHM_CROSS_FUN TargetInfo &operator=(const TargetInfo &other) {
     if (this != &other) {
@@ -249,6 +278,7 @@ struct TargetInfo {
       remaining_space_ = other.remaining_space_;
       perf_metrics_ = other.perf_metrics_;
       persistence_level_ = other.persistence_level_;
+      bdev_type_ = other.bdev_type_;
     }
     return *this;
   }

@@ -230,8 +230,6 @@ class Runtime : public chi::Container {
   Runtime() : bdev_type_(BdevType::kFile), file_size_(0), alignment_(4096),
               io_depth_(32), max_blocks_per_operation_(64),
               ram_buffer_(nullptr), ram_size_(0),
-              hbm_buffer_(nullptr), hbm_size_(0),
-              pinned_buffer_(nullptr), pinned_size_(0),
               total_reads_(0), total_writes_(0),
               total_bytes_read_(0), total_bytes_written_(0) {
     start_time_ = std::chrono::high_resolution_clock::now();
@@ -385,13 +383,7 @@ class Runtime : public chi::Container {
   char* ram_buffer_;                              // RAM storage buffer
   chi::u64 ram_size_;                            // Total RAM buffer size
 
-  // GPU HBM storage (kHbm) — device memory via cudaMalloc
-  char* hbm_buffer_;
-  chi::u64 hbm_size_;
-
-  // Pinned host storage (kPinned) — pinned memory via cudaMallocHost
-  char* pinned_buffer_;
-  chi::u64 pinned_size_;
+  // kHbm / kPinned removed — see WriteToRam comment above.
 
   // New allocator components
   GlobalBlockMap global_block_map_;              // Global block cache with per-worker locking
@@ -468,24 +460,18 @@ class Runtime : public chi::Container {
   chi::TaskResume ReadFromFile(hipc::FullPtr<ReadTask> task, chi::RunContext &ctx);
 
   /**
-   * Backend-specific RAM operations (synchronous, no coroutine needed)
+   * Backend-specific RAM operations (synchronous, no coroutine needed).
+   * Uses chi::DeviceAwareMemcpy so the data ShmPtr may resolve to either
+   * a host or a device-USM pointer.
    */
   void WriteToRam(hipc::FullPtr<WriteTask> task);
   void ReadFromRam(hipc::FullPtr<ReadTask> task);
 
-  /**
-   * Backend-specific HBM operations (GPU device memory, async cudaMemcpyAsync)
-   * Uses cudaMemcpyAsync + cudaStreamQuery polling with coroutine yield.
-   */
-  chi::TaskResume WriteToHbm(hipc::FullPtr<WriteTask> task, chi::RunContext &ctx);
-  chi::TaskResume ReadFromHbm(hipc::FullPtr<ReadTask> task, chi::RunContext &ctx);
-
-  /**
-   * Backend-specific pinned-host-memory operations (async cudaMemcpyAsync)
-   * Uses cudaMemcpyAsync + cudaStreamQuery polling with coroutine yield.
-   */
-  chi::TaskResume WriteToPinned(hipc::FullPtr<WriteTask> task, chi::RunContext &ctx);
-  chi::TaskResume ReadFromPinned(hipc::FullPtr<ReadTask> task, chi::RunContext &ctx);
+  // BdevType::kHbm / BdevType::kPinned tiers were removed. PutBlob /
+  // GetBlob with HBM-resident ShmPtr data buffers route through kRam
+  // (or kFile, with host-buffer staging) and the bdev uses the
+  // device-aware memcpy + IsDevicePointer hooks installed at server
+  // init by gpu/gpu2cpu_init_sycl.cc.
 
   /**
    * Update performance metrics

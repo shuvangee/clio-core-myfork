@@ -49,9 +49,7 @@ enum class RoutingMode {
   Broadcast,      /**< Broadcast to all containers */
   Physical,       /**< Route to specific physical node by ID */
   Dynamic,        /**< Dynamic routing with cache optimization (routes to Monitor) */
-  LocalGpuBcast,  /**< Broadcast to every GPU on this node */
-  ToLocalGpu,     /**< Send to specific GPU (reuse node_id_ for gpu_id) */
-  ToLocalCpu,     /**< GPU → CPU direction */
+  ToLocalCpu,     /**< GPU → CPU direction (the only GPU-related mode) */
   Null            /**< Do nothing */
 };
 
@@ -182,29 +180,6 @@ class PoolQuery {
    * @return PoolQuery configured for dynamic routing with cache optimization
    */
   static PoolQuery Dynamic(float net_timeout = -1);
-
-  /**
-   * Create a local GPU broadcast pool query
-   * @return PoolQuery configured for broadcasting to all GPUs on this node
-   */
-  static HSHM_CROSS_FUN PoolQuery LocalGpuBcast() {
-    PoolQuery query;
-    query.routing_mode_ = RoutingMode::LocalGpuBcast;
-    return query;
-  }
-
-  /**
-   * Create a pool query targeting a specific local GPU
-   * @param gpu_id GPU device ID on this node
-   * @return PoolQuery configured for routing to a specific GPU
-   */
-  static HSHM_CROSS_FUN PoolQuery ToLocalGpu(u32 gpu_id, u32 parallelism = 32) {
-    PoolQuery query;
-    query.routing_mode_ = RoutingMode::ToLocalGpu;
-    query.node_id_ = gpu_id;
-    query.parallelism_ = parallelism;
-    return query;
-  }
 
   /**
    * Create a pool query for GPU → CPU direction
@@ -340,22 +315,6 @@ class PoolQuery {
    */
   HSHM_CROSS_FUN bool IsDynamicMode() const {
     return routing_mode_ == RoutingMode::Dynamic;
-  }
-
-  /**
-   * Check if pool query is in LocalGpuBcast routing mode
-   * @return true if routing mode is LocalGpuBcast
-   */
-  HSHM_CROSS_FUN bool IsLocalGpuBcastMode() const {
-    return routing_mode_ == RoutingMode::LocalGpuBcast;
-  }
-
-  /**
-   * Check if pool query is in ToLocalGpu routing mode
-   * @return true if routing mode is ToLocalGpu
-   */
-  HSHM_CROSS_FUN bool IsToLocalGpuMode() const {
-    return routing_mode_ == RoutingMode::ToLocalGpu;
   }
 
   /**

@@ -52,19 +52,64 @@ If you add new methods to a chimod, please edit chimaera_mod.yaml and use the ch
 2. Remove ALL CMakeFiles, CMakeCache.txt, cmake_install.cmake, Makefile from source tree
 3. Rebuild properly from `/workspace/build`
 
-## GPU Memory and Pointer Rules
+## GPU Producer-Only Model
 
-### FutureShm Allocation on GPU
-Allocate `FutureShm` from the per-thread `BuddyAllocator` via `AllocateBuffer()` in GPU send paths (`SendGpuForward`, `SendGpuLocal`, etc.).
+The GPU side of Chimaera is a **pure task producer** — kernels do not allocate
+tasks, FutureShm, or data buffers. All allocations happen on the host before
+kernel launch into client-owned device-memory backends that are registered
+with the runtime via `admin::RegisterMemoryTask`. Inside a kernel the only
+operation `chi::gpu::IpcManager` exposes is `Send` — pack a pre-allocated
+task and push it onto the per-device gpu2cpu_queue.
 
-**Key rules:**
-- Always store the **real ShmPtr** (with non-null `alloc_id_`) using `buffer.Cast<FutureShm>().shm_`. Never store an absolute UVA pointer with null `alloc_id_`.
-- The null `alloc_id_` convention causes `FreeBuffer(ShmPtr)` to silently skip the free, causing allocator exhaustion after N tasks.
-- `Future::~Future()` automatically frees the `FutureShm` via `FreeBuffer(ShmPtr)` when consumed — this only works if `alloc_id_` is non-null.
-- Do NOT pre-allocate FutureShm slots. Do NOT use `ArenaAllocator` for this purpose.
+### Lifecycle (host)
+1. Runtime init: `gpu::IpcManager::ServerInitGpuQueues` enumerates GPUs and
+   allocates one pinned-host gpu2cpu_queue per device. The CPU GPU worker
+   polls every queue.
+2. Client backend allocation:
+   ```cpp
+   char *base = nullptr;
+   auto alloc_id = ipc->AllocateAndRegisterGpuBackend(
+       gpu_id, chi::gpu::IpcManager::MemKind::kPinnedHost, bytes, &base);
+   ```
+   Available kinds: `kPinnedHost` (pinned host, fastest), `kManagedUvm`
+   (CUDA managed / SYCL shared), `kDeviceMem` (device-only; worker copies
+   POD bytes via cudaMemcpy on each pop). First-cut implementation only
+   wires `kPinnedHost` end-to-end; the others register correctly but the
+   worker pop path logs a warning for `kDeviceMem`.
+3. Pre-construct task + FutureShm pairs in the registered backend with
+   placement new. Tasks are POD with identical layout on CPU and GPU.
 
-### FullPtr Casting
-**Always** use `FullPtr::Cast<T>()` to change the type of a `FullPtr`. **Never** manually cast a raw pointer that was previously wrapped in a `FullPtr` (e.g., `reinterpret_cast<FutureShm*>(buffer.ptr_)`). Use `buffer.Cast<FutureShm>()` instead. This preserves the allocator ID and offset metadata needed for correct `ShmPtr` resolution and `FreeBuffer` calls.
+### Lifecycle (kernel)
+```cpp
+__global__ void MyKernel(IpcManagerGpuInfo info,
+                         hipc::FullPtr<MyTaskT> task) {
+  CHIMAERA_GPU_INIT(info, /*ipc_ptr=*/nullptr);
+  if (threadIdx.x == 0) {
+    // Mutate POD task fields. No NewTask, no AllocateBuffer.
+    task->some_input_ = ...;
+    auto fut = CHI_IPC->Send(task);
+    fut.Wait();
+    // Read result fields back from the same POD task.
+  }
+}
+```
+SYCL kernels get a kernel-scope IpcManager pointer; CUDA/ROCm kernels use
+the per-block `__shared__` IpcManager via `GetBlockIpcManager()`. The
+single `CHIMAERA_GPU_INIT(gpu_info, ipc_ptr)` macro covers both backends.
+
+### Worker pop path
+The CPU GPU worker (`Worker::ProcessNewTaskGpu`) pops a `gpu::Future<Task>`
+off `gpu2cpu_queue`, resolves both the task ShmPtr and the FutureShm
+ShmPtr via `gpu::IpcManager::FindClientBackend`, dispatches the chimod
+method on the local CPU runtime, and signals `FUTURE_COMPLETE` on the
+device-side gpu::FutureShm so the kernel poll-loop unblocks.
+
+### Forbidden on the GPU
+- `CHI_IPC->NewTask(...)`, `CHI_IPC->NewObj(...)`, `CHI_IPC->AllocateBuffer(...)`
+  — these are host-only.
+- `PoolQuery::ToLocalGpu(...)`, `PoolQuery::LocalGpuBcast()` — both removed.
+  Use `PoolQuery::ToLocalCpu()` exclusively for kernel→runtime submission.
+- `IpcCpu2Gpu`, `IpcGpu2Gpu` — both deleted with the GPU runtime concept.
 
 ## Code Style
 

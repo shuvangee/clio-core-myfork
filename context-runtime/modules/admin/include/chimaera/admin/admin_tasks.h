@@ -1119,8 +1119,11 @@ class TaskBatch {
    */
   template <typename TaskT, typename... Args>
   void Add(Args &&...args) {
-#if HSHM_IS_HOST
-    // Create new task in IPC
+#if !HSHM_IS_DEVICE_PASS
+    // Host-only: under any device pass (CUDA __device__, SYCL device
+    // compilation) `CHI_IPC` resolves to a `chi::gpu::IpcManager*` which
+    // has no `NewTask` after the producer-only redesign. Skip the body
+    // on device passes — Add() is never reachable from kernel code.
     auto task = CHI_IPC->NewTask<TaskT>(std::forward<Args>(args)...);
 
     // Serialize task inputs using DefaultSaveArchive
@@ -1287,8 +1290,9 @@ struct SubmitBatchTask : public chi::Task {
  */
 enum class MemoryType : chi::u32 {
   kCpuMemory = 0,         ///< Regular POSIX shared memory (current default)
-  kPinnedHostMemory = 1,  ///< cudaHostRegister'd pinned memory (GpuShmMmap)
-  kGpuDeviceMemory = 2,   ///< cudaMalloc'd + IPC handle (GpuMalloc)
+  kPinnedHostMemory = 1,  ///< cudaHostAlloc / hipHostMalloc / sycl::malloc_host
+  kGpuDeviceMemory = 2,   ///< cudaMalloc + IPC handle / sycl::malloc_device
+  kManagedUvm = 3,        ///< cudaMallocManaged / sycl::malloc_shared (UVM)
 };
 
 /**

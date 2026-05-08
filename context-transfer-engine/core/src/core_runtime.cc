@@ -55,6 +55,7 @@
 #include <vector>
 
 #include "chimaera/worker.h"
+#include "hermes_shm/util/gpu_api.h"
 #include "hermes_shm/util/logging.h"
 #include "hermes_shm/util/timer.h"
 
@@ -161,8 +162,10 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   auto params = task->GetParams();
   config_ = params.config_;
   HLOG(kDebug,
-       "CTE Create: GetParams() returned, storage devices in config: {}",
-       config_.storage_.devices_.size());
+       "CTE Create: GetParams() returned, storage devices in config: {}, "
+       "gpu_metadata_cache.enabled={}",
+       config_.storage_.devices_.size(),
+       config_.gpu_metadata_cache_.enabled_);
 
   // Configuration is now loaded from compose pool_config via
   // CreateParams::LoadConfig()
@@ -321,6 +324,18 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
                            config_.performance_.flush_data_min_persistence_,
                            config_.performance_.flush_data_period_ms_ * 1000.0);
   }
+
+  // Allocate the optional GPU metadata cache. The OUT pointer is
+  // re-serialized back into chimod_params_ (a chi::priv::string) so
+  // the client's GetParams() sees the populated gpu_cache_ptr_ after
+  // Wait().
+  CreateParams out_params;
+  out_params.config_ = config_;
+  out_params.gpu_cache_ptr_ =
+      GpuCacheCreate() ? reinterpret_cast<chi::u64>(gpu_cache_)
+                       : static_cast<chi::u64>(0);
+  chi::Task::Serialize(CHI_PRIV_ALLOC, task->chimod_params_, out_params);
+
   CHI_CO_RETURN;
   CHI_TASK_BODY_END
 }
@@ -547,6 +562,7 @@ chi::TaskResume Runtime::RegisterTarget(hipc::FullPtr<RegisterTargetTask> task,
     target_info.perf_metrics_ =
         perf_metrics;  // Store the entire PerfMetrics structure
     target_info.persistence_level_ = GetPersistenceLevelForTarget(target_name);
+    target_info.bdev_type_ = task->bdev_type_;
 
     // Register the target using TargetId as key
     {
@@ -760,6 +776,7 @@ chi::TaskResume Runtime::GetOrCreateTag(
         tag_name_to_id_.insert_or_assign(tag_name, preferred_id);
       }
       task->tag_id_ = preferred_id;
+      GpuCacheOnGetOrCreateTag(preferred_id, tag_name);
       task->return_code_ = 0;
       CHI_CO_RETURN;
     }
@@ -777,6 +794,7 @@ chi::TaskResume Runtime::GetOrCreateTag(
                      tag_info_ptr->last_modified_, now);
       }
     }
+    GpuCacheOnGetOrCreateTag(tag_id, tag_name);
     task->return_code_ = 0;
 
   } catch (const std::exception &e) {
@@ -975,6 +993,7 @@ chi::TaskResume Runtime::PutBlob(hipc::FullPtr<PutBlobTask> task,
 
     LogTelemetry(CteOp::kPutBlob, offset, size, tag_id, now,
                  blob_info_ptr->last_read_);
+    GpuCacheOnPutBlob(tag_id, blob_name, *blob_info_ptr);
     task->return_code_ = 0;
   } catch (const std::exception &e) {
     HLOG(kError, "PutBlob failed with exception: {}", e.what());
@@ -1254,6 +1273,7 @@ chi::TaskResume Runtime::DelBlob(hipc::FullPtr<DelBlobTask> task,
     }
 
     // Success
+    GpuCacheOnDelBlob(tag_id, blob_name);
     task->return_code_ = 0;
     HLOG(kDebug, "DelBlob successful: name={}, blob_size={}", blob_name,
          blob_size);
@@ -1405,6 +1425,7 @@ chi::TaskResume Runtime::DelTag(hipc::FullPtr<DelTagTask> task,
     }
 
     // Success
+    GpuCacheOnDelTag(tag_id);
     task->return_code_ = 0;
     HLOG(kDebug,
          "DelTag successful: tag_id={},{}, removed {} blobs, total_size={}",
@@ -3286,6 +3307,152 @@ chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
   task->SetReturnCode(0);
   (void)rctx;
   CHI_CO_RETURN;
+}
+
+// =====================================================================
+// GPU metadata cache helpers
+// ---------------------------------------------------------------------
+// These helpers are the ONLY places that mutate the GPU cache. Methods
+// like PutBlob / DelBlob / GetOrCreateTag / DelTag stay free of cache-
+// management noise — they invoke the matching GpuCacheOn* helper and
+// move on. The cache lives in managed/shared USM, so calls to the
+// inline GpuCacheUpsert* / GpuCacheRemove* primitives in
+// gpu_metadata_cache.h work directly from the host. A pure-device-
+// memory variant (one-WI kernel per mutation) is a future extension.
+// =====================================================================
+
+bool Runtime::GpuCacheCreate() {
+  if (!config_.gpu_metadata_cache_.enabled_) {
+    gpu_cache_ = nullptr;
+    gpu_cache_bytes_ = 0;
+    return true;
+  }
+
+#if !(HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL)
+  HLOG(kWarning,
+       "GpuMetadataCache: enabled in config, but no GPU backend was built "
+       "in. Cache will not be allocated.");
+  gpu_cache_ = nullptr;
+  gpu_cache_bytes_ = 0;
+  return false;
+#else
+  // Cap the slot counts at what the requested capacity can fit.
+  chi::u32 max_tags = config_.gpu_metadata_cache_.max_tags_;
+  chi::u32 max_blobs = config_.gpu_metadata_cache_.max_blobs_;
+  size_t needed = GpuMetadataCacheHeader::Layout(max_tags, max_blobs);
+  size_t cap = static_cast<size_t>(config_.gpu_metadata_cache_.capacity_bytes_);
+  if (needed > cap) {
+    // Shrink slot counts proportionally so we stay within budget.
+    double scale =
+        static_cast<double>(cap - sizeof(GpuMetadataCacheHeader)) /
+        static_cast<double>(needed - sizeof(GpuMetadataCacheHeader));
+    if (scale < 0.0) scale = 0.0;
+    if (scale > 1.0) scale = 1.0;
+    max_tags = std::max<chi::u32>(
+        1u, static_cast<chi::u32>(static_cast<double>(max_tags) * scale));
+    max_blobs = std::max<chi::u32>(
+        1u, static_cast<chi::u32>(static_cast<double>(max_blobs) * scale));
+    needed = GpuMetadataCacheHeader::Layout(max_tags, max_blobs);
+    HLOG(kWarning,
+         "GpuMetadataCache: requested capacity {} bytes too small for the "
+         "configured slot counts; rescaled to max_tags={} max_blobs={} "
+         "({} bytes).",
+         cap, max_tags, max_blobs, needed);
+  }
+
+  // Managed/shared USM is host- and device-readable through the same
+  // virtual address. CUDA -> cudaMallocManaged, ROCm -> hipMallocManaged,
+  // SYCL -> sycl::malloc_shared. All three give us a pointer the CPU can
+  // call GpuCacheUpsert*/Remove* through directly.
+  void *region = hshm::GpuApi::MallocManaged<char>(needed);
+  if (!region) {
+    HLOG(kError,
+         "GpuMetadataCache: MallocManaged({} bytes) failed", needed);
+    gpu_cache_ = nullptr;
+    gpu_cache_bytes_ = 0;
+    return false;
+  }
+  std::memset(region, 0, needed);
+  gpu_cache_ = reinterpret_cast<GpuMetadataCacheHeader *>(region);
+  gpu_cache_bytes_ = needed;
+  gpu_cache_->Init(max_tags, max_blobs, needed);
+  HLOG(kInfo,
+       "GpuMetadataCache: allocated {} bytes (max_tags={}, max_blobs={}) "
+       "at {}",
+       needed, max_tags, max_blobs, static_cast<void *>(gpu_cache_));
+  return true;
+#endif
+}
+
+void Runtime::GpuCacheDestroy() {
+#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM || HSHM_ENABLE_SYCL
+  if (gpu_cache_ != nullptr) {
+    hshm::GpuApi::Free(reinterpret_cast<char *>(gpu_cache_));
+    gpu_cache_ = nullptr;
+    gpu_cache_bytes_ = 0;
+  }
+#else
+  gpu_cache_ = nullptr;
+  gpu_cache_bytes_ = 0;
+#endif
+}
+
+void Runtime::GpuCacheOnPutBlob(const TagId &tag_id,
+                                const std::string &blob_name,
+                                const BlobInfo &blob_info) {
+  if (gpu_cache_ == nullptr) return;
+  std::string bdev_type = GetBdevTypeForBlob(blob_info);
+  chi::u32 sc = gpu_cache::BdevTypeToStorageClass(bdev_type.c_str());
+  chi::u64 size = blob_info.GetTotalSize();
+  float score = blob_info.score_;
+  if (gpu_cache::IsGpuVisible(sc)) {
+    GpuCacheUpsertBlob(gpu_cache_, tag_id.major_, tag_id.minor_,
+                       blob_name.c_str(), size, score, sc);
+  } else {
+    GpuCacheRemoveBlob(gpu_cache_, tag_id.major_, tag_id.minor_,
+                       blob_name.c_str());
+  }
+}
+
+std::string Runtime::GetBdevTypeForBlob(const BlobInfo &blob_info) {
+  // Empty-blob (no blocks placed yet) -> nothing the GPU can reach.
+  if (blob_info.blocks_.empty()) return std::string();
+
+  // Resolve the bdev_type from the TargetInfo recorded at RegisterTarget
+  // time. This is the source of truth for any target — both YAML-composed
+  // ones AND those registered programmatically by tests / external code.
+  const auto &first_block = blob_info.blocks_[0];
+  chi::ScopedCoRwReadLock lock(target_lock_);
+  TargetInfo *target_info =
+      registered_targets_.find(first_block.bdev_client_.pool_id_);
+  if (!target_info) return std::string();
+  switch (target_info->bdev_type_) {
+    case chimaera::bdev::BdevType::kRam:    return std::string("ram");
+    case chimaera::bdev::BdevType::kHbm:    return std::string("hbm");
+    case chimaera::bdev::BdevType::kPinned: return std::string("pinned");
+    case chimaera::bdev::BdevType::kFile:   return std::string("file");
+    case chimaera::bdev::BdevType::kNoop:   return std::string("noop");
+    default:                                return std::string();
+  }
+}
+
+void Runtime::GpuCacheOnDelBlob(const TagId &tag_id,
+                                const std::string &blob_name) {
+  if (gpu_cache_ == nullptr) return;
+  GpuCacheRemoveBlob(gpu_cache_, tag_id.major_, tag_id.minor_,
+                     blob_name.c_str());
+}
+
+void Runtime::GpuCacheOnGetOrCreateTag(const TagId &tag_id,
+                                       const std::string &tag_name) {
+  if (gpu_cache_ == nullptr) return;
+  GpuCacheUpsertTag(gpu_cache_, tag_id.major_, tag_id.minor_,
+                    tag_name.c_str());
+}
+
+void Runtime::GpuCacheOnDelTag(const TagId &tag_id) {
+  if (gpu_cache_ == nullptr) return;
+  GpuCacheRemoveTag(gpu_cache_, tag_id.major_, tag_id.minor_);
 }
 
 }  // namespace wrp_cte::core

@@ -11,7 +11,6 @@ set(COMPRESSOR_SOURCES
     src/models/linreg_table_predictor.cc
     src/models/qtable_predictor.cc
     src/autogen/compressor_lib_exec.cc
-    src/compressor_runtime_gpu.cc
 )
 
 # Add dense NN predictor if Eigen is available

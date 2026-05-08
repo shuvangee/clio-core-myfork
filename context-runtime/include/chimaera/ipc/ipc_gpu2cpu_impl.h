@@ -17,23 +17,18 @@ namespace chi {
 
 #if HSHM_IS_GPU_COMPILER || HSHM_IS_SYCL_COMPILER
 /**
- * GPU-side ClientSend: enqueue task to gpu2cpu_queue (pinned host).
- * The CPU GPU worker polls this queue and dispatches on the CPU side.
+ * GPU-side ClientSend.
+ *
+ * Producer-only design: the host pre-allocated Task+FutureShm in a
+ * registered backend and passed `task_ptr` to the kernel. The kernel
+ * already mutated POD input fields. We just clear the FutureShm flags,
+ * build a gpu::Future<TaskT> carrying ShmPtrs to both the task and its
+ * co-located FutureShm, then push onto gpu2cpu_queue with a system fence.
  *
  * Threading:
- *   - Under CUDA/ROCm this is typically called inside a kernel block where
- *     only thread 0 should perform the enqueue; the threadIdx.x==0 guard
- *     ensures a single push per block.
- *   - Under SYCL the kernel is single_task (no threadIdx), so the whole
- *     work-item enqueues unconditionally. The same SYCL kernel SHOULD NOT
- *     be a parallel_for that calls Send concurrently — if it is, the
- *     caller is responsible for the single-WI guard.
- *
- * @param ipc gpu::IpcManager pointer (provides gpu2cpu_queue handle).
- * @param task_ptr Task in pinned-host or unified memory; must remain valid
- *                 until the CPU runtime signals the future complete.
- * @return Future bound to the gpu::FutureShm placed immediately after the
- *         task in memory.
+ *   - CUDA/ROCm: only thread 0 of the block enqueues; other threads
+ *     return an empty future (caller is expected to broadcast).
+ *   - SYCL: kernels are single_task by convention, so the full WI runs.
  */
 template <typename TaskT>
 HSHM_GPU_FUN gpu::Future<TaskT> IpcGpu2Cpu::ClientSend(
@@ -41,28 +36,41 @@ HSHM_GPU_FUN gpu::Future<TaskT> IpcGpu2Cpu::ClientSend(
   gpu::Future<TaskT> future;
 
 #if HSHM_IS_GPU_COMPILER
-  // CUDA/ROCm: only one thread per block performs the enqueue.
   if (threadIdx.x != 0) return future;
 #endif
 
   if (task_ptr.IsNull() || !ipc->gpu_info_.gpu2cpu_queue) {
     return future;
   }
+
+  // Co-located FutureShm sits immediately after the POD task struct.
   gpu::FutureShm *fshm = reinterpret_cast<gpu::FutureShm *>(
       reinterpret_cast<char *>(task_ptr.ptr_) + sizeof(TaskT));
-  fshm->Reset(task_ptr->pool_id_, task_ptr->method_);
-  fshm->client_task_vaddr_ =
-      reinterpret_cast<size_t>(static_cast<Task *>(task_ptr.ptr_));
-  fshm->flags_.SetBits(gpu::FutureShm::FUTURE_DEVICE_SCOPE);
+  fshm->Reset(static_cast<u32>(sizeof(TaskT)));
 
+  // For kPinnedHost / kManagedUvm backends the host_view pointer is also
+  // the device-accessible address — the kernel and the CPU worker can both
+  // dereference it directly. We therefore stash the *raw address* in off_
+  // and keep the AllocatorId for backend lookup. The worker pop path
+  // dereferences off_ directly without per-backend resolution math. When
+  // kDeviceMem is wired up the worker will branch on `kind` and issue a
+  // cudaMemcpy of size sizeof(FutureShm) from device_ptr+task_off instead.
   hipc::ShmPtr<gpu::FutureShm> fshmptr;
-  fshmptr.alloc_id_ = hipc::AllocatorId::GetNull();
+  fshmptr.alloc_id_ = task_ptr.shm_.alloc_id_;
   fshmptr.off_ = reinterpret_cast<size_t>(fshm);
+
+  // Mirror raw addressing for the task ShmPtr in the queue entry so the
+  // CPU worker can dereference the task pointer the same way.
+  hipc::FullPtr<Task> task_for_queue;
+  task_for_queue.shm_.alloc_id_ = task_ptr.shm_.alloc_id_;
+  task_for_queue.shm_.off_ = reinterpret_cast<size_t>(task_ptr.ptr_);
+  task_for_queue.ptr_ = static_cast<Task *>(task_ptr.ptr_);
+
   future = gpu::Future<TaskT>(fshmptr, task_ptr);
 
-  auto &qlane = ipc->gpu_info_.gpu2cpu_queue->GetLane(0, 0);
-  gpu::Future<Task> task_future(future.GetFutureShmPtr());
+  gpu::Future<Task> task_future(fshmptr, task_for_queue);
   HSHM_DEVICE_FENCE_SYSTEM();
+  auto &qlane = ipc->gpu_info_.gpu2cpu_queue->GetLane(0, 0);
   qlane.Push(task_future);
   return future;
 }
@@ -70,34 +78,26 @@ HSHM_GPU_FUN gpu::Future<TaskT> IpcGpu2Cpu::ClientSend(
 
 #if HSHM_IS_GPU_COMPILER || HSHM_IS_SYCL_COMPILER
 /**
- * GPU-side ClientRecv: poll gpu::FutureShm FUTURE_COMPLETE.
- * Unlike IpcGpu2Gpu::ClientRecv, this does NOT mark the future as consumed
- * because the CPU RuntimeSend owns task cleanup for gpu2cpu tasks. The GPU
- * kernel must not free the task — the pinned host memory is freed by the
- * CPU after signaling completion.
+ * GPU-side Wait.
  *
- * @param ipc gpu::IpcManager pointer (unused, kept for API parity).
- * @param future Future returned by ClientSend.
- * @param task_ptr Pointer to the task (unused, kept for API parity).
+ * Polls FUTURE_COMPLETE via volatile read on the FutureShm. Backend is
+ * pinned host or UVM, so the CPU's system-scope SetBitsSystem write is
+ * visible to a device-side volatile read through PCIe cache snooping.
  */
-template <typename TaskT>
-HSHM_GPU_FUN void IpcGpu2Cpu::ClientRecv(
-    gpu::IpcManager *ipc, gpu::Future<TaskT> &future, TaskT *task_ptr) {
-  (void)ipc; (void)task_ptr;
+template <typename TaskT, typename AllocT>
+HSHM_CROSS_FUN void gpu::Future<TaskT, AllocT>::Wait() {
+#if HSHM_IS_GPU || HSHM_IS_SYCL_DEVICE
 #if HSHM_IS_GPU_COMPILER
   if (threadIdx.x != 0) return;
 #endif
-
-  hipc::FullPtr<gpu::FutureShm> fshm_full = future.GetFutureShm();
-  if (fshm_full.IsNull()) return;
-  gpu::FutureShm *fshm = fshm_full.ptr_;
-  // Poll FUTURE_COMPLETE via volatile read (safe for pinned host memory).
+  if (future_shm_.IsNull()) return;
+  gpu::FutureShm *fshm = GetFutureShmPtrRaw();
+  if (!fshm) return;
   volatile unsigned int *fp =
       reinterpret_cast<volatile unsigned int *>(&fshm->flags_.bits_.x);
   while (!((*fp) & gpu::FutureShm::FUTURE_COMPLETE)) {}
   HSHM_DEVICE_FENCE_SYSTEM();
-  // Do NOT call future.Destroy(true): that sets consumed_=true which
-  // causes ~Future to call DelTask. The CPU RuntimeSend handles cleanup.
+#endif
 }
 #endif  // HSHM_IS_GPU_COMPILER || HSHM_IS_SYCL_COMPILER
 
