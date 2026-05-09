@@ -271,7 +271,7 @@ void TestGetAddress() {
   std::cout << "\n==== Testing ZMQ GetAddress ====\n";
 
   std::string addr = "127.0.0.1";
-  int port = 8305;
+  int port = 8306;
 
   auto server = std::make_unique<ZeroMqTransport>(
       TransportMode::kServer, addr, "tcp", port);

@@ -605,7 +605,7 @@ void TestAcceptNewClient() {
   std::cout << "\n==== Testing Socket AcceptNewClient ====\n";
 
   std::string addr = "127.0.0.1";
-  int port = 9200;
+  int port = 9120;
 
   auto server = std::make_unique<SocketTransport>(
       TransportMode::kServer, addr, "tcp", port);
