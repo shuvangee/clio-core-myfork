@@ -480,10 +480,21 @@ void IpcManager::AwakenWorker(TaskLane *lane) {
     return;
   }
 
-  // Always send signal to ensure worker wakes up
-  // The worker may transition from active->inactive between our check and
-  // signal send Sending signal when already active is safe - it's a no-op if
-  // worker is processing
+  // Park-flag fast path: if the worker is still spinning (active_=true), it
+  // will pick up our enqueued task on its next loop iteration without needing
+  // a signal. Skip the tgkill syscall entirely.
+  //
+  // Race window: producer pushed task → load active_=true → skips signal,
+  // and concurrently worker set active_=false → enters epoll_pwait2. To
+  // prevent a missed wakeup, Worker::SuspendMe rechecks its queues after
+  // storing active_=false but before calling Wait() — see worker.cc.
+  // Both stores/loads are seq_cst on the opt_atomic, so the worker's
+  // post-store recheck is guaranteed to observe a producer push that
+  // happened before the worker's store.
+  if (lane->IsActive()) {
+    return;
+  }
+
   pid_t tid = lane->GetTid();
   if (tid > 0) {
     pid_t runtime_pid = runtime_pid_ ? runtime_pid_ : getpid();

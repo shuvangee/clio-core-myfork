@@ -646,9 +646,22 @@ void Worker::SuspendMe() {
       return;
     }
 
-    // Mark worker as inactive (blocked in epoll_wait)
+    // Park-flag handshake: publish inactive, then recheck queues. Producers
+    // use IpcManager::AwakenWorker which skips tgkill if active_ is true, so
+    // any push that landed AFTER our store(false) will see active_=false and
+    // signal. Any push that landed BEFORE our store(false) is visible here
+    // in the post-store recheck (seq_cst ordering on the active_ atomic
+    // pairs with the producer's push + active load).
     if (assigned_lane_) {
       assigned_lane_->SetActive(false);
+      bool work_pending = !assigned_lane_->Empty();
+      if (!work_pending && event_queue_) {
+        work_pending = !event_queue_->Empty();
+      }
+      if (work_pending) {
+        assigned_lane_->SetActive(true);
+        return;
+      }
     }
 
     // Calculate timeout from periodic tasks
@@ -658,6 +671,12 @@ void Worker::SuspendMe() {
 
     // Wait for signal using EventManager
     int nfds = event_manager_.Wait(timeout_us);
+
+    // Restore active_=true so subsequent producers can skip the tgkill
+    // syscall while we're back in the busy-spin / processing path.
+    if (assigned_lane_) {
+      assigned_lane_->SetActive(true);
+    }
 
     if (nfds == 0) {
       sleep_count_++;
