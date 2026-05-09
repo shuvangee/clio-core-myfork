@@ -43,6 +43,7 @@
 #include <hermes_shm/memory/allocator/malloc_allocator.h>
 #include <wrp_cte/core/core_client.h>
 #include <wrp_cte/core/core_config.h>
+#include <wrp_cte/core/core_dpe.h>
 #include <wrp_cte/core/core_tasks.h>
 #include <wrp_cte/core/transaction_log.h>
 
@@ -197,9 +198,17 @@ private:
   // Client for this ChiMod
   Client client_;
 
-  // Target management data structures (using hshm::priv::unordered_map_ll for
-  // thread-safe concurrent access)
+  // Target management data structures.
+  //
+  // Two parallel structures, kept in sync under target_lock_:
+  //   - registered_targets_: hash map for O(1) lookup by PoolId
+  //   - target_list_:        contiguous vector for O(N_live) iteration
+  //                          (avoids scanning the map's empty slots; size()
+  //                          returns exact live count)
+  // The DPE consumes std::vector<TargetInfo>, so ExtendBlob hands it
+  // target_list_ directly with no materialization step.
   hshm::priv::unordered_map_ll<chi::PoolId, TargetInfo> registered_targets_;
+  std::vector<TargetInfo> target_list_;
   hshm::priv::unordered_map_ll<std::string, chi::PoolId>
       target_name_to_id_; // reverse lookup: target_name -> target_id
 
@@ -237,6 +246,10 @@ private:
 
   // CTE configuration (replaces ConfigManager singleton)
   Config config_;
+
+  // Cached Data Placement Engine — built once from config_ in Create() so
+  // ExtendBlob does not allocate a fresh DPE on every PutBlob.
+  std::unique_ptr<DataPlacementEngine> dpe_;
 
   // Restart flag: set by Restart() before calling Init()/Create()
   bool is_restart_ = false;

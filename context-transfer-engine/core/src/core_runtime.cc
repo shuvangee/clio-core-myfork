@@ -118,12 +118,15 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
 #endif
   CHI_TASK_BODY_BEGIN
   // Initialize unordered_map_ll instances with appropriately sized bucket
-  // counts Tag/blob maps are large to avoid excessive collisions at scale
-  // Target maps use tag size since target counts are similar
+  // counts. Tag/blob maps are large to avoid excessive collisions at scale.
+  // Target maps stay small — target counts are O(1–10), not O(100K) — so
+  // for_each over registered_targets_ does not have to scan 100K empty slots
+  // on every PutBlob.
+  static const size_t kTargetMapSize = 64;
   registered_targets_ =
-      hshm::priv::unordered_map_ll<chi::PoolId, TargetInfo>(kTagMapSize);
+      hshm::priv::unordered_map_ll<chi::PoolId, TargetInfo>(kTargetMapSize);
   target_name_to_id_ =
-      hshm::priv::unordered_map_ll<std::string, chi::PoolId>(kTagMapSize);
+      hshm::priv::unordered_map_ll<std::string, chi::PoolId>(kTargetMapSize);
   tag_name_to_id_ =
       hshm::priv::unordered_map_ll<std::string, TagId>(kTagMapSize);
   tag_id_to_info_ = hshm::priv::unordered_map_ll<TagId, TagInfo>(kTagMapSize);
@@ -166,6 +169,10 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
 
   // Configuration is now loaded from compose pool_config via
   // CreateParams::LoadConfig()
+
+  // Build the DPE once from config so ExtendBlob does not pay a heap alloc
+  // (and the per-call vtable construction) on every PutBlob.
+  dpe_ = DpeFactory::CreateDpe(config_.dpe_.dpe_type_);
 
   // Store storage configuration in runtime
   storage_devices_ = config_.storage_.devices_;
@@ -346,6 +353,7 @@ chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
 
     // Clear all registered targets and their associated data
     registered_targets_.clear();
+    target_list_.clear();
     target_name_to_id_.clear();
 
     // Clear tag and blob management structures
@@ -548,13 +556,27 @@ chi::TaskResume Runtime::RegisterTarget(hipc::FullPtr<RegisterTargetTask> task,
         perf_metrics;  // Store the entire PerfMetrics structure
     target_info.persistence_level_ = GetPersistenceLevelForTarget(target_name);
 
-    // Register the target using TargetId as key
+    // Register the target using TargetId as key. Mirror into target_list_ so
+    // iteration sites (ExtendBlob, ListTargets, StatTargets, FlushData) can
+    // walk live entries directly without scanning empty map slots.
     {
       chi::ScopedCoRwWriteLock write_lock(target_lock_);
       registered_targets_.insert_or_assign(target_id, target_info);
       target_name_to_id_.insert_or_assign(
           target_name,
           target_id);  // Maintain reverse lookup
+      // Replace existing entry if present, else append.
+      bool found_in_list = false;
+      for (auto &t : target_list_) {
+        if (t.bdev_client_.pool_id_ == target_id) {
+          t = target_info;
+          found_in_list = true;
+          break;
+        }
+      }
+      if (!found_in_list) {
+        target_list_.push_back(target_info);
+      }
     }
 
     task->return_code_ = 0;  // Success
@@ -610,6 +632,16 @@ chi::TaskResume Runtime::UnregisterTarget(
 
       registered_targets_.erase(target_id);
       target_name_to_id_.erase(target_name);  // Remove reverse lookup
+      // Remove from target_list_ via swap-and-pop (order doesn't matter)
+      for (size_t i = 0; i < target_list_.size(); ++i) {
+        if (target_list_[i].bdev_client_.pool_id_ == target_id) {
+          if (i + 1 != target_list_.size()) {
+            target_list_[i] = target_list_.back();
+          }
+          target_list_.pop_back();
+          break;
+        }
+      }
     }
 
     task->return_code_ = 0;  // Success
@@ -636,12 +668,11 @@ chi::TaskResume Runtime::ListTargets(hipc::FullPtr<ListTargetsTask> task,
 
     chi::ScopedCoRwReadLock read_lock(target_lock_);
 
-    // Populate target name list while lock is held
-    task->target_names_.reserve(registered_targets_.size());
-    registered_targets_.for_each(
-        [&task](const chi::PoolId &target_id, const TargetInfo &target_info) {
-          task->target_names_.push_back(target_info.target_name_.str());
-        });
+    // Populate target name list from the contiguous mirror (live entries only)
+    task->target_names_.reserve(target_list_.size());
+    for (const auto &t : target_list_) {
+      task->target_names_.push_back(t.target_name_.str());
+    }
 
     task->return_code_ = 0;  // Success
 
@@ -665,11 +696,10 @@ chi::TaskResume Runtime::StatTargets(hipc::FullPtr<StatTargetsTask> task,
     std::vector<chi::PoolId> target_ids;
     {
       chi::ScopedCoRwReadLock read_lock(target_lock_);
-      registered_targets_.for_each(
-          [&target_ids](const chi::PoolId &target_id, TargetInfo &target_info) {
-            (void)target_info;
-            target_ids.push_back(target_id);
-          });
+      target_ids.reserve(target_list_.size());
+      for (const auto &t : target_list_) {
+        target_ids.push_back(t.bdev_client_.pool_id_);
+      }
     }
 
     // Now iterate and co_await each UpdateTargetStats call
@@ -695,7 +725,8 @@ chi::TaskResume Runtime::StatTargets(hipc::FullPtr<StatTargetsTask> task,
       chimaera::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
       remaining_size = stats_task->remaining_size_;
 
-      // Re-acquire write lock to update target info
+      // Re-acquire write lock to update target info. Mutate the map and the
+      // mirror in target_list_ in lockstep so DPE selection sees fresh stats.
       {
         chi::ScopedCoRwWriteLock write_lock(target_lock_);
         TargetInfo *target_info = registered_targets_.find(target_id);
@@ -718,6 +749,15 @@ chi::TaskResume Runtime::StatTargets(hipc::FullPtr<StatTargetsTask> task,
                                      std::log(global_max_bandwidth + 1.0));
               target_info->target_score_ =
                   std::max(0.0f, std::min(1.0f, target_info->target_score_));
+            }
+          }
+          // Mirror into target_list_
+          for (auto &t : target_list_) {
+            if (t.bdev_client_.pool_id_ == target_id) {
+              t.perf_metrics_ = target_info->perf_metrics_;
+              t.remaining_space_ = target_info->remaining_space_;
+              t.target_score_ = target_info->target_score_;
+              break;
             }
           }
         }
@@ -1699,12 +1739,11 @@ chi::TaskResume Runtime::FlushData(hipc::FullPtr<FlushDataTask> task,
   std::vector<chi::PoolId> nonvolatile_targets;
   {
     chi::ScopedCoRwReadLock read_lock(target_lock_);
-    registered_targets_.for_each(
-        [&](const chi::PoolId &id, const TargetInfo &info) {
-          if (static_cast<int>(info.persistence_level_) >= target_level) {
-            nonvolatile_targets.push_back(id);
-          }
-        });
+    for (const auto &t : target_list_) {
+      if (static_cast<int>(t.persistence_level_) >= target_level) {
+        nonvolatile_targets.push_back(t.bdev_client_.pool_id_);
+      }
+    }
   }
 
   if (nonvolatile_targets.empty()) {
@@ -2312,31 +2351,22 @@ chi::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, chi::u64 offset,
 
   chi::u64 additional_size = required_size - current_blob_size;
 
-  // Get ALL available targets for data placement (no pre-filtering)
+  // Snapshot available targets for the DPE. target_list_ is the contiguous
+  // mirror of registered_targets_ — copying it under the read lock is O(N_live)
+  // with no map iteration over empty slots.
   std::vector<TargetInfo> available_targets;
   {
     chi::ScopedCoRwReadLock read_lock(target_lock_);
-    available_targets.reserve(registered_targets_.size());
-    registered_targets_.for_each(
-        [&available_targets](const chi::PoolId &target_id,
-                             const TargetInfo &target_info) {
-          (void)target_id;
-          available_targets.push_back(target_info);
-        });
+    available_targets = target_list_;
   }
   if (available_targets.empty()) {
     error_code = 1;
     CHI_CO_RETURN;
   }
 
-  // Create Data Placement Engine based on configuration
-  const Config &config = GetConfig();
-  std::unique_ptr<DataPlacementEngine> dpe =
-      DpeFactory::CreateDpe(config.dpe_.dpe_type_);
-
-  // DPE selects targets from ALL available targets
+  // Use cached Data Placement Engine (built once in Create() from config)
   std::vector<TargetInfo> ordered_targets =
-      dpe->SelectTargets(available_targets, blob_score, additional_size);
+      dpe_->SelectTargets(available_targets, blob_score, additional_size);
 
   // Filter AFTER DPE by persistence level
   if (min_persistence_level > 0) {
