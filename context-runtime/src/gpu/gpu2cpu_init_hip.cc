@@ -126,6 +126,30 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
       [](void *dst, const void *src, std::size_t n) {
         if (n == 0) return;
 #if HSHM_ENABLE_CUDA
+        // Fast path: when both pointers are plain host memory, use
+        // std::memcpy. The CUDA host->host path goes through the driver's
+        // generic copy and tops out at ~1.5-3 GB/s on x86; std::memcpy
+        // hits 8-15 GB/s on a single core. Pinned host (cudaMemoryTypeHost)
+        // and unregistered system memory both work with plain memcpy.
+        // Managed (UVM) and Device pointers stay on the cudaMemcpyAsync
+        // path so the driver handles migration / D2H / D2D correctly.
+        auto is_host_kind = [](const void *p) {
+          cudaPointerAttributes a{};
+          cudaError_t rc = cudaPointerGetAttributes(&a, p);
+          if (rc == cudaErrorInvalidValue) {
+            // Older CUDA returned this for unregistered host memory; clear
+            // the sticky error so it doesn't trip the next CUDA call.
+            (void)cudaGetLastError();
+            return true;
+          }
+          if (rc != cudaSuccess) return false;
+          return a.type == cudaMemoryTypeHost ||
+                 a.type == cudaMemoryTypeUnregistered;
+        };
+        if (is_host_kind(dst) && is_host_kind(src)) {
+          std::memcpy(dst, src, n);
+          return;
+        }
         thread_local cudaStream_t s = nullptr;
         if (!s) {
           CUDA_ERROR_CHECK(cudaStreamCreateWithFlags(
@@ -135,6 +159,26 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
                                           cudaMemcpyDefault, s));
         CUDA_ERROR_CHECK(cudaStreamSynchronize(s));
 #elif HSHM_ENABLE_ROCM
+        auto is_host_kind = [](const void *p) {
+          hipPointerAttribute_t a{};
+          hipError_t rc = hipPointerGetAttributes(&a, p);
+          if (rc == hipErrorInvalidValue) {
+            (void)hipGetLastError();
+            return true;
+          }
+          if (rc != hipSuccess) return false;
+#if HIP_VERSION >= 60000000
+          return a.type == hipMemoryTypeHost ||
+                 a.type == hipMemoryTypeUnregistered;
+#else
+          return a.memoryType == hipMemoryTypeHost ||
+                 a.memoryType == hipMemoryTypeUnregistered;
+#endif
+        };
+        if (is_host_kind(dst) && is_host_kind(src)) {
+          std::memcpy(dst, src, n);
+          return;
+        }
         thread_local hipStream_t s = nullptr;
         if (!s) {
           HIP_ERROR_CHECK(hipStreamCreateWithFlags(

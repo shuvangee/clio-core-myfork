@@ -174,19 +174,22 @@ class CTEBenchmark {
 
   /**
    * Run the benchmark
+   * @return true on success, false if any PutBlob/GetBlob returned a
+   *         non-zero return_code_ in any worker thread.
    */
-  void Run() {
+  bool Run() {
     PrintBenchmarkInfo();
 
     if (test_case_ == "Put") {
-      RunPutBenchmark();
+      return RunPutBenchmark();
     } else if (test_case_ == "Get") {
-      RunGetBenchmark();
+      return RunGetBenchmark();
     } else if (test_case_ == "PutGet") {
-      RunPutGetBenchmark();
+      return RunPutGetBenchmark();
     } else {
       HLOG(kError, "Unknown test case: {}", test_case_);
       HLOG(kError, "Valid options: Put, Get, PutGet");
+      return false;
     }
   }
 
@@ -243,6 +246,12 @@ class CTEBenchmark {
 
       for (auto &task : tasks) {
         task.Wait();
+        if (task->return_code_.load() != 0) {
+          HLOG(kError,
+               "[PutWorker {}] PutBlob failed with return_code_={}",
+               thread_id, task->return_code_.load());
+          error_flag.store(true, std::memory_order_relaxed);
+        }
       }
     }
 
@@ -253,7 +262,7 @@ class CTEBenchmark {
     CHI_IPC->FreeBuffer(shm_buffer);
   }
 
-  void RunPutBenchmark() {
+  bool RunPutBenchmark() {
     std::vector<std::thread> threads;
     std::vector<long long> thread_times(num_threads_);
     std::atomic<bool> error_flag{false};
@@ -270,6 +279,7 @@ class CTEBenchmark {
     }
 
     PrintResults("Put", thread_times);
+    return !error_flag.load();
   }
 
   /**
@@ -285,6 +295,13 @@ class CTEBenchmark {
     hipc::ShmPtr<> put_ptr = put_shm.shm_.template Cast<void>();
     hipc::ShmPtr<> get_ptr = get_shm.shm_.template Cast<void>();
 
+    // Pre-fault both buffers so OS page faults don't leak into the timed
+    // loop. AllocateBuffer hands back virtually-mapped shm; the first
+    // write to each 4 KiB OS page faults at ~3-5 us/page, which is ~1 s
+    // of overhead per GiB if the buffer is fresh.
+    std::memset(put_shm.ptr_, 0, io_size_);
+    std::memset(get_shm.ptr_, 0, io_size_);
+
     // Create one tag per node+thread so replicas on different nodes never clash
     std::string tag_name = "tag_n" + node_id_ + "_t" + std::to_string(thread_id);
     auto tag_task = cte_client->AsyncGetOrCreateTag(tag_name);
@@ -298,6 +315,15 @@ class CTEBenchmark {
       auto task = cte_client->AsyncPutBlob(tag_id, blob_name, 0, io_size_,
                                            put_ptr, 0.8f);
       task.Wait();
+      if (task->return_code_.load() != 0) {
+        HLOG(kError,
+             "[GetWorker {}] populate-PutBlob failed with return_code_={}",
+             thread_id, task->return_code_.load());
+        error_flag.store(true, std::memory_order_relaxed);
+        CHI_IPC->FreeBuffer(put_shm);
+        CHI_IPC->FreeBuffer(get_shm);
+        return;
+      }
     }
 
     auto start_time = high_resolution_clock::now();
@@ -314,6 +340,12 @@ class CTEBenchmark {
         auto task = cte_client->AsyncGetBlob(tag_id, blob_name, 0, io_size_, 0,
                                              get_ptr);
         task.Wait();
+        if (task->return_code_.load() != 0) {
+          HLOG(kError,
+               "[GetWorker {}] GetBlob failed with return_code_={}",
+               thread_id, task->return_code_.load());
+          error_flag.store(true, std::memory_order_relaxed);
+        }
       }
     }
 
@@ -325,7 +357,7 @@ class CTEBenchmark {
     CHI_IPC->FreeBuffer(get_shm);
   }
 
-  void RunGetBenchmark() {
+  bool RunGetBenchmark() {
     HLOG(kInfo, "Populating data for Get benchmark...");
 
     std::vector<std::thread> threads;
@@ -344,6 +376,7 @@ class CTEBenchmark {
     }
 
     PrintResults("Get", thread_times);
+    return !error_flag.load();
   }
 
   /**
@@ -386,6 +419,12 @@ class CTEBenchmark {
 
       for (auto &task : put_tasks) {
         task.Wait();
+        if (task->return_code_.load() != 0) {
+          HLOG(kError,
+               "[PutGetWorker {}] PutBlob failed with return_code_={}",
+               thread_id, task->return_code_.load());
+          error_flag.store(true, std::memory_order_relaxed);
+        }
       }
 
       for (int j = 0; j < batch_size; ++j) {
@@ -393,6 +432,12 @@ class CTEBenchmark {
         auto task = cte_client->AsyncGetBlob(tag_id, blob_name, 0, io_size_, 0,
                                              get_ptr);
         task.Wait();
+        if (task->return_code_.load() != 0) {
+          HLOG(kError,
+               "[PutGetWorker {}] GetBlob failed with return_code_={}",
+               thread_id, task->return_code_.load());
+          error_flag.store(true, std::memory_order_relaxed);
+        }
       }
     }
 
@@ -404,7 +449,7 @@ class CTEBenchmark {
     CHI_IPC->FreeBuffer(get_shm);
   }
 
-  void RunPutGetBenchmark() {
+  bool RunPutGetBenchmark() {
     std::vector<std::thread> threads;
     std::vector<long long> thread_times(num_threads_);
     std::atomic<bool> error_flag{false};
@@ -421,6 +466,7 @@ class CTEBenchmark {
     }
 
     PrintResults("PutGet", thread_times);
+    return !error_flag.load();
   }
 
   void PrintResults(const std::string &operation,
@@ -570,7 +616,12 @@ int main(int argc, char **argv) {
 
   // Run benchmark
   CTEBenchmark benchmark(num_threads, test_case, depth, io_size, io_count, node_id);
-  benchmark.Run();
+  bool ok = benchmark.Run();
+  if (!ok) {
+    HLOG(kError, "Benchmark failed: at least one PutBlob/GetBlob "
+                 "returned a non-zero return_code_");
+    return 1;
+  }
 
   return 0;
 }

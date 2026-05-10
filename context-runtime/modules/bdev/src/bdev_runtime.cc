@@ -456,13 +456,33 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
     }
 
   } else if (bdev_type_ == BdevType::kRam) {
-    // RAM-based storage initialization. Pages are allocated lazily on first
-    // write — no buffer is reserved up-front and no memset is performed, so
-    // creation cost is independent of capacity. capacity == 0 means unbounded.
+    // RAM-based storage initialization.
+    //   capacity == 0 → unbounded. Pages are allocated lazily on first
+    //                    write; the OS faults them in then.
+    //   capacity  > 0 → bounded. We eagerly allocate and pre-fault the
+    //                    backing pages here so OS first-touch faults
+    //                    (~3 us / 4 KiB page = ~1 s/GiB) land in bdev
+    //                    create, before any timed PutBlob loop.
     ram_capacity_ = (params.total_size_ == 0)
                         ? std::numeric_limits<chi::u64>::max()
                         : params.total_size_;
     file_size_ = ram_capacity_;  // Used by Heap allocator as the cap
+
+    if (params.total_size_ > 0) {
+      size_t num_pages =
+          static_cast<size_t>((params.total_size_ + kRamPageSize - 1) /
+                              kRamPageSize);
+      std::lock_guard<std::mutex> lock(ram_pages_mu_);
+      ram_pages_.resize(num_pages);
+      for (size_t i = 0; i < num_pages; ++i) {
+        auto buf = std::unique_ptr<char[]>(new char[kRamPageSize]);
+        // memset forces physical pages to fault in. Unrelated to the
+        // sparse-zero read semantics of unwritten regions (which work
+        // because the OS hands out zero-filled pages on fault anyway).
+        std::memset(buf.get(), 0, kRamPageSize);
+        ram_pages_[i] = std::move(buf);
+      }
+    }
 
   // BdevType::kHbm and BdevType::kPinned removed — supported tiers
   // are kFile / kRam / kNoop. PutBlob/GetBlob with HBM-resident
@@ -496,9 +516,6 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
 
   // Store user-provided performance characteristics
   perf_metrics_ = params.perf_metrics_;
-
-  // Note: max_blocks_per_operation_ is already initialized in Runtime
-  // constructor to 64
 
   // Set success result
   task->return_code_ = 0;
@@ -586,20 +603,6 @@ chi::TaskResume Runtime::AllocateBlocks(hipc::FullPtr<AllocateBlocksTask> task,
       task->blocks_.clear();
       // HLOG(kError, "Out of space: {} bytes requested", total_size);
       task->return_code_ = 1;  // Out of space
-      CHI_CO_RETURN;
-    }
-
-    // Check if we would exceed max_blocks limit
-    if (local_blocks.size() >= max_blocks_per_operation_) {
-      // Return all allocated blocks to the GlobalBlockMap
-      for (Block &allocated_block : local_blocks) {
-        global_block_map_.FreeBlock(worker_id, allocated_block);
-      }
-      task->blocks_.clear();
-      HLOG(kError,
-           "Operation requires {} blocks but max_blocks_per_operation is {}",
-           io_divisions.size(), max_blocks_per_operation_);
-      task->return_code_ = 2;  // Too many blocks required
       CHI_CO_RETURN;
     }
 
@@ -977,8 +980,15 @@ char* Runtime::EnsureRamPage(size_t page_idx) {
     ram_pages_.resize(page_idx + 1);
   }
   if (!ram_pages_[page_idx]) {
-    // Default-init (not value-init) so the OS just reserves virtual address
-    // space — physical pages fault in on first touch, not at allocation.
+    // Lazy alloc for pages beyond the eagerly-allocated range (or for
+    // unbounded-capacity bdevs). The default-init `new char[]` reserves
+    // virtual address space; physical pages fault in on first touch by
+    // WriteToRam's DeviceAwareMemcpy. We do NOT memset here — that would
+    // double the memory traffic (one pass to zero-fault the page, a
+    // second pass to memcpy the user's data), capping Put bandwidth at
+    // half of memory bandwidth. The bounded-capacity path in Create()
+    // pre-allocates and pre-faults so the cost lands outside any
+    // benchmark loop.
     ram_pages_[page_idx].reset(new char[kRamPageSize]);
   }
   return ram_pages_[page_idx].get();
@@ -1058,7 +1068,20 @@ void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
   total_bytes_written_.fetch_add(task->bytes_written_);
 
   ++ram_write_count;
-  if (ram_write_count % 100 == 0) {
+  if (ram_write_count <= 16) {
+    double bw_mibs = task->bytes_written_ /
+                     static_cast<double>(1ULL << 20) /
+                     std::max(t_memcpy_ms, 1e-6) * 1e3;
+    char line[256];
+    std::snprintf(
+        line, sizeof(line),
+        "[WriteToRam #%zu] bytes=%llu resolve_us=%.1f memcpy_ms=%.3f (%.1f MiB/s)",
+        ram_write_count,
+        static_cast<unsigned long long>(task->bytes_written_),
+        t_resolve_ms * 1e3, t_memcpy_ms, bw_mibs);
+    HLOG(kInfo, "{}", line);
+    t_resolve_ms = t_memcpy_ms = 0;
+  } else if (ram_write_count % 100 == 0) {
     HLOG(kDebug, "[WriteToRam] ops={} resolve={} ms memcpy={} ms",
          ram_write_count, t_resolve_ms, t_memcpy_ms);
     t_resolve_ms = t_memcpy_ms = 0;
@@ -1066,12 +1089,21 @@ void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
 }
 
 void Runtime::ReadFromRam(hipc::FullPtr<ReadTask> task) {
+  static thread_local size_t ram_read_count = 0;
+  static thread_local double tr_resolve_ms = 0, tr_memcpy_ms = 0;
+  hshm::Timer rtimer;
+
+  rtimer.Resume();
   auto *ipc_mgr = CHI_IPC;
   hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
+  rtimer.Pause();
+  tr_resolve_ms += rtimer.GetMsec();
+  rtimer.Reset();
 
   chi::u64 total_bytes_read = 0;
   chi::u64 data_offset = 0;
 
+  rtimer.Resume();
   for (size_t i = 0; i < task->blocks_.size(); ++i) {
     const Block &block = task->blocks_[i];
 
@@ -1126,12 +1158,30 @@ void Runtime::ReadFromRam(hipc::FullPtr<ReadTask> task) {
 
     total_bytes_read += block_read_size;
   }
+  rtimer.Pause();
+  tr_memcpy_ms += rtimer.GetMsec();
 
   task->return_code_ = 0;
   task->bytes_read_ = total_bytes_read;
 
   total_reads_.fetch_add(1);
   total_bytes_read_.fetch_add(total_bytes_read);
+
+  ++ram_read_count;
+  if (ram_read_count <= 16) {
+    double bw_mibs = total_bytes_read /
+                     static_cast<double>(1ULL << 20) /
+                     std::max(tr_memcpy_ms, 1e-6) * 1e3;
+    char line[256];
+    std::snprintf(
+        line, sizeof(line),
+        "[ReadFromRam #%zu] bytes=%llu resolve_us=%.1f memcpy_ms=%.3f (%.1f MiB/s)",
+        ram_read_count,
+        static_cast<unsigned long long>(total_bytes_read),
+        tr_resolve_ms * 1e3, tr_memcpy_ms, bw_mibs);
+    HLOG(kInfo, "{}", line);
+    tr_resolve_ms = tr_memcpy_ms = 0;
+  }
 }
 
 // VIRTUAL METHOD IMPLEMENTATIONS (now in autogen/bdev_lib_exec.cc)

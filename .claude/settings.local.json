@@ -62,7 +62,13 @@
       "Bash(pkill -9 -f /workspace/build/bin)",
       "Read(//dev/shm/**)",
       "Bash(rm -f /tmp/chimaera_iowarp/* /tmp/wrp_runtime.log)",
-      "Bash(rm -f /dev/shm/iowarp* /dev/shm/chi*)"
+      "Bash(rm -f /dev/shm/iowarp* /dev/shm/chi*)",
+      "Bash(sudo -n cp /workspace/build/bin/libchimaera_bdev_runtime.so /usr/local/lib/libchimaera_bdev_runtime.so)",
+      "Bash(rm -rf /dev/shm/*)",
+      "Bash(chimaera runtime *)",
+      "Bash(rm -rf /tmp/srv.log)",
+      "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Put 1 1 1g 1)",
+      "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Get 1 1 1g 1)"
     ],
     "deny": [],
     "ask": []

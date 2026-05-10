@@ -230,7 +230,7 @@ class Runtime : public chi::Container {
   using CreateParams = chimaera::bdev::CreateParams;
   
   Runtime() : bdev_type_(BdevType::kFile), file_size_(0), alignment_(4096),
-              io_depth_(32), max_blocks_per_operation_(64),
+              io_depth_(32),
               ram_capacity_(0),
               total_reads_(0), total_writes_(0),
               total_bytes_read_(0), total_bytes_written_(0) {
@@ -379,7 +379,6 @@ class Runtime : public chi::Container {
   chi::u64 file_size_;                            // Total file size
   chi::u32 alignment_;                            // I/O alignment requirement
   chi::u32 io_depth_;                             // Max concurrent I/O operations
-  chi::u32 max_blocks_per_operation_;             // Maximum blocks per I/O operation
 
   // RAM-based storage (kRam) — vector of fixed-size pages, lazily allocated.
   // Pages are not pre-faulted: each page is allocated only when first written

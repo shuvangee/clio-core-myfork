@@ -42,6 +42,48 @@ if(WRP_CORE_ENABLE_CUDA)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
     install(TARGETS wrp_cte_gpu_vector_bench RUNTIME DESTINATION bin)
+
+    # Traditional out-of-memory baseline: synchronous D2H + synchronous PutBlob.
+    add_cuda_executable(wrp_traditional_oom_bench FALSE
+        wrp_traditional_oom_bench.cc
+        INCLUDE_DIRS
+            ${CMAKE_SOURCE_DIR}/context-runtime/include
+            ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+            ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+        LINK_LIBS
+            chimaera_cxx
+            chimaera_admin_client
+            chimaera_bdev_client
+            wrp_cte_core_client
+            wrp_cte_core_runtime
+            hshm::cuda_cxx
+            ${CMAKE_THREAD_LIBS_INIT}
+    )
+    set_target_properties(wrp_traditional_oom_bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    install(TARGETS wrp_traditional_oom_bench RUNTIME DESTINATION bin)
+
+    # CUDA UVM baseline: cudaMallocManaged + synchronous PutBlob.
+    add_cuda_executable(wrp_uvm_bench FALSE
+        wrp_uvm_bench.cc
+        INCLUDE_DIRS
+            ${CMAKE_SOURCE_DIR}/context-runtime/include
+            ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+            ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+        LINK_LIBS
+            chimaera_cxx
+            chimaera_admin_client
+            chimaera_bdev_client
+            wrp_cte_core_client
+            wrp_cte_core_runtime
+            hshm::cuda_cxx
+            ${CMAKE_THREAD_LIBS_INIT}
+    )
+    set_target_properties(wrp_uvm_bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    install(TARGETS wrp_uvm_bench RUNTIME DESTINATION bin)
 endif()
 
 if(WRP_CORE_ENABLE_ROCM)
@@ -93,4 +135,62 @@ if(WRP_CORE_ENABLE_ROCM)
         ${CMAKE_THREAD_LIBS_INIT}
     )
     install(TARGETS wrp_cte_gpu_vector_bench RUNTIME DESTINATION bin)
+
+    # Traditional out-of-memory baseline (ROCm).
+    add_rocm_gpu_executable(wrp_traditional_oom_bench FALSE
+        wrp_traditional_oom_bench.cc
+    )
+    target_compile_options(wrp_traditional_oom_bench PRIVATE
+        "$<$<COMPILE_LANGUAGE:CUDA>:SHELL:--generate-code=arch=compute_89,code=sm_89>"
+    )
+    set_target_properties(wrp_traditional_oom_bench PROPERTIES
+        CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    target_include_directories(wrp_traditional_oom_bench PUBLIC
+        ${CMAKE_SOURCE_DIR}/context-runtime/include
+        ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+        ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+    )
+    target_link_libraries(wrp_traditional_oom_bench PUBLIC
+        chimaera_cxx
+        chimaera_admin_client
+        chimaera_bdev_client
+        wrp_cte_core_client
+        wrp_cte_core_runtime
+        hshm::rocm_cxx
+        ${CMAKE_THREAD_LIBS_INIT}
+    )
+    install(TARGETS wrp_traditional_oom_bench RUNTIME DESTINATION bin)
+
+    # CUDA UVM baseline (ROCm).
+    add_rocm_gpu_executable(wrp_uvm_bench FALSE
+        wrp_uvm_bench.cc
+    )
+    target_compile_options(wrp_uvm_bench PRIVATE
+        "$<$<COMPILE_LANGUAGE:CUDA>:SHELL:--generate-code=arch=compute_89,code=sm_89>"
+    )
+    set_target_properties(wrp_uvm_bench PROPERTIES
+        CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    target_include_directories(wrp_uvm_bench PUBLIC
+        ${CMAKE_SOURCE_DIR}/context-runtime/include
+        ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
+        ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+    )
+    target_link_libraries(wrp_uvm_bench PUBLIC
+        chimaera_cxx
+        chimaera_admin_client
+        chimaera_bdev_client
+        wrp_cte_core_client
+        wrp_cte_core_runtime
+        hshm::rocm_cxx
+        ${CMAKE_THREAD_LIBS_INIT}
+    )
+    install(TARGETS wrp_uvm_bench RUNTIME DESTINATION bin)
 endif()

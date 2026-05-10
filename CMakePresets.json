@@ -36,13 +36,13 @@
             }
         },
         {
-            "name": "cuda-debug",
+            "name": "cuda-release",
             "displayName": "CUDA Debug (producer-only GPU)",
             "hidden": false,
             "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_C_COMPILER": "gcc",
                 "CMAKE_CXX_COMPILER": "g++",
                 "WRP_CORE_ENABLE_RUNTIME": "ON",
@@ -50,7 +50,7 @@
                 "WRP_CORE_ENABLE_CAE": "OFF",
                 "WRP_CORE_ENABLE_CEE": "OFF",
                 "WRP_CORE_ENABLE_TESTS": "ON",
-                "WRP_CORE_ENABLE_BENCHMARKS": "OFF",
+                "WRP_CORE_ENABLE_BENCHMARKS": "ON",
                 "WRP_CORE_ENABLE_ELF": "OFF",
                 "WRP_CORE_ENABLE_CUDA": "ON",
                 "CMAKE_CUDA_ARCHITECTURES": "native",
