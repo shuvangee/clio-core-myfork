@@ -74,6 +74,7 @@ struct BenchOpts {
   chi::u64 page_size = 1ULL << 20;  // 1 MiB
   double ratio = 1.0;
   chi::u64 total_bytes = 0;          // 0 = derive from ratio
+  chi::u64 per_block_bytes = 0;      // 0 = derive from ratio / total_bytes
   chi::u32 cache_period_ms = 0;
   chi::u32 iters = 1;
   bool do_read = true;
@@ -88,6 +89,10 @@ void PrintUsage(const char *prog) {
                "  --blocks N             Cache blocks (default 32)\n"
                "  --pages-per-block P    Pages per cache block (default 2)\n"
                "  --page-size BYTES      Page size in bytes (default 1048576)\n"
+               "  --per-block-bytes B    Bytes each block writes/reads (overrides --ratio\n"
+               "                         and --total-bytes; total_bytes = blocks * B).\n"
+               "                         Use this to amortize kernel-launch overhead\n"
+               "                         (e.g. --per-block-bytes 16777216 = 16 MiB/block).\n"
                "  --ratio R              total_bytes = R * cache_bytes (default 1.0)\n"
                "  --total-bytes BYTES    Override total bytes (takes precedence over --ratio)\n"
                "  --cache-period-ms N    Periodic CacheMgmtKernel period (0=off, default 0)\n"
@@ -119,6 +124,9 @@ bool ParseOpts(int argc, char *argv[], BenchOpts &opts) {
       opts.ratio = std::atof(next("--ratio"));
     else if (a == "--total-bytes")
       opts.total_bytes = std::strtoull(next("--total-bytes"), nullptr, 10);
+    else if (a == "--per-block-bytes")
+      opts.per_block_bytes =
+          std::strtoull(next("--per-block-bytes"), nullptr, 10);
     else if (a == "--cache-period-ms")
       opts.cache_period_ms = std::atoi(next("--cache-period-ms"));
     else if (a == "--iters")
@@ -277,17 +285,25 @@ int main(int argc, char *argv[]) {
 
   chi::u64 cache_bytes = static_cast<chi::u64>(opts.nblocks) *
                          opts.pages_per_block * opts.page_size;
-  if (opts.total_bytes == 0) {
-    opts.total_bytes = static_cast<chi::u64>(opts.ratio * cache_bytes);
-    if (opts.total_bytes < opts.page_size) opts.total_bytes = opts.page_size;
+  // Resolve in priority: --per-block-bytes > --total-bytes > --ratio.
+  chi::u64 per_block_bytes;
+  if (opts.per_block_bytes > 0) {
+    per_block_bytes = opts.per_block_bytes;
+  } else if (opts.total_bytes > 0) {
+    per_block_bytes = opts.total_bytes / opts.nblocks;
+  } else {
+    chi::u64 t = static_cast<chi::u64>(opts.ratio * cache_bytes);
+    if (t < opts.page_size) t = opts.page_size;
+    per_block_bytes = t / opts.nblocks;
   }
-  // Round total_bytes up to a multiple of (nblocks * page_size) so each
-  // block gets an integral number of pages.
-  chi::u64 stripe = static_cast<chi::u64>(opts.nblocks) * opts.page_size;
-  if (opts.total_bytes % stripe != 0) {
-    opts.total_bytes = ((opts.total_bytes + stripe - 1) / stripe) * stripe;
+  // Round per_block_bytes up to a whole number of pages so the kernel
+  // doesn't have to handle a partial-page tail.
+  if (per_block_bytes < opts.page_size) per_block_bytes = opts.page_size;
+  if (per_block_bytes % opts.page_size != 0) {
+    per_block_bytes = ((per_block_bytes + opts.page_size - 1) /
+                       opts.page_size) * opts.page_size;
   }
-  chi::u64 per_block_bytes = opts.total_bytes / opts.nblocks;
+  opts.total_bytes = per_block_bytes * opts.nblocks;
   chi::u64 per_block_pages = per_block_bytes / opts.page_size;
   chi::u64 total_elems = opts.total_bytes / sizeof(chi::u32);
   chi::u64 per_block_elems = per_block_bytes / sizeof(chi::u32);
@@ -327,18 +343,18 @@ int main(int argc, char *argv[]) {
   auto *ipc = CHI_CPU_IPC;
 
   using clock = std::chrono::steady_clock;
-  auto ms_since = [](clock::time_point t0) {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
+  auto us_since = [](clock::time_point t0) -> long long {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
                clock::now() - t0)
         .count();
   };
 
-  std::vector<long long> write_ms;
-  std::vector<long long> flush_ms;
-  std::vector<long long> read_ms;
-  write_ms.reserve(opts.iters);
-  flush_ms.reserve(opts.iters);
-  read_ms.reserve(opts.iters);
+  std::vector<long long> write_us;
+  std::vector<long long> flush_us;
+  std::vector<long long> read_us;
+  write_us.reserve(opts.iters);
+  flush_us.reserve(opts.iters);
+  read_us.reserve(opts.iters);
 
   for (chi::u32 it = 0; it < opts.iters; ++it) {
     // Fresh Vector per iteration to avoid cumulative cache state.
@@ -350,16 +366,17 @@ int main(int argc, char *argv[]) {
     chi::IpcManagerGpuInfo gpu_info =
         ipc->GetGpuIpcManager()->GetGpuInfo(opts.gpu_id);
 
-    // ----- Write -----
+    // ----- Write (kernel launch + entire kernel duration + cudaSync) -----
     auto t0 = clock::now();
     BenchWriteKernel<<<opts.nblocks, 32>>>(gpu_info, view, per_block_elems);
     hshm::GpuApi::Synchronize();
-    long long w = ms_since(t0);
+    long long w = us_since(t0);
 
-    // ----- Flush -----
+    // ----- Flush (CacheMgmtKernel + DrainKernel; this is where the real
+    //              PutBlob round-trips happen at ratio=1.0) -----
     auto t1 = clock::now();
     vec.FlushAllSync();
-    long long f = ms_since(t1);
+    long long f = us_since(t1);
 
     long long r = 0;
     if (opts.do_read) {
@@ -377,24 +394,28 @@ int main(int argc, char *argv[]) {
       BenchReadKernel<<<opts.nblocks, 32>>>(gpu_info, view, result,
                                               per_block_elems);
       hshm::GpuApi::Synchronize();
-      r = ms_since(t2);
+      r = us_since(t2);
       hshm::GpuApi::FreeHost(result);
     }
 
-    write_ms.push_back(w);
-    flush_ms.push_back(f);
-    read_ms.push_back(r);
+    write_us.push_back(w);
+    flush_us.push_back(f);
+    read_us.push_back(r);
 
-    auto bw = [&](long long ms) {
-      if (ms <= 0) return 0.0;
+    auto bw = [&](long long us) {
+      if (us <= 0) return 0.0;
       return (opts.total_bytes / static_cast<double>(1ULL << 20)) /
-             (ms / 1000.0);
+             (us / 1e6);
     };
     std::fprintf(stderr,
-                 "[ITER %u/%u] write=%lld ms (%.1f MiB/s) "
-                 "flush=%lld ms read=%lld ms (%.1f MiB/s)\n",
-                 it + 1, opts.iters, w, bw(w), f, r,
-                 opts.do_read ? bw(r) : 0.0);
+                 "[ITER %u/%u] write=%.3f ms (%.1f MiB/s) "
+                 "flush=%.3f ms read=%.3f ms (%.1f MiB/s) "
+                 "write+flush=%.1f MiB/s\n",
+                 it + 1, opts.iters,
+                 w / 1e3, bw(w),
+                 f / 1e3, r / 1e3,
+                 opts.do_read ? bw(r) : 0.0,
+                 bw(w + f));
   }
 
   // ----- Summary -----
@@ -404,31 +425,37 @@ int main(int argc, char *argv[]) {
     return std::tuple<long long, long long, long long>(
         v.front(), v[v.size() / 2], v.back());
   };
-  auto [wmin, wmed, wmax] = stat(write_ms);
-  auto [fmin, fmed, fmax] = stat(flush_ms);
-  auto [rmin, rmed, rmax] = stat(read_ms);
-  auto bw_med = [&](long long ms) {
-    if (ms <= 0) return 0.0;
+  auto [wmin, wmed, wmax] = stat(write_us);
+  auto [fmin, fmed, fmax] = stat(flush_us);
+  auto [rmin, rmed, rmax] = stat(read_us);
+  auto bw_med = [&](long long us) {
+    if (us <= 0) return 0.0;
     return (opts.total_bytes / static_cast<double>(1ULL << 20)) /
-           (ms / 1000.0);
+           (us / 1e6);
   };
 
   std::fprintf(stderr,
-               "\n[SUMMARY] write : min=%lld med=%lld max=%lld ms "
-               "(median %.1f MiB/s, %.2f ms/put)\n",
-               wmin, wmed, wmax, bw_med(wmed),
-               expected_puts ? wmed / static_cast<double>(expected_puts)
-                             : 0.0);
+               "\n[SUMMARY] write : min=%.3f med=%.3f max=%.3f ms "
+               "(median %.1f MiB/s, %.3f ms/put)\n",
+               wmin / 1e3, wmed / 1e3, wmax / 1e3, bw_med(wmed),
+               expected_puts
+                   ? (wmed / 1e3) / static_cast<double>(expected_puts)
+                   : 0.0);
   std::fprintf(stderr,
-               "[SUMMARY] flush : min=%lld med=%lld max=%lld ms\n",
-               fmin, fmed, fmax);
+               "[SUMMARY] flush : min=%.3f med=%.3f max=%.3f ms "
+               "(median %.1f MiB/s, %.3f ms/put)\n",
+               fmin / 1e3, fmed / 1e3, fmax / 1e3, bw_med(fmed),
+               expected_puts
+                   ? (fmed / 1e3) / static_cast<double>(expected_puts)
+                   : 0.0);
   if (opts.do_read) {
     std::fprintf(stderr,
-                 "[SUMMARY] read  : min=%lld med=%lld max=%lld ms "
-                 "(median %.1f MiB/s, %.2f ms/get)\n",
-                 rmin, rmed, rmax, bw_med(rmed),
-                 expected_gets ? rmed / static_cast<double>(expected_gets)
-                               : 0.0);
+                 "[SUMMARY] read  : min=%.3f med=%.3f max=%.3f ms "
+                 "(median %.1f MiB/s, %.3f ms/get)\n",
+                 rmin / 1e3, rmed / 1e3, rmax / 1e3, bw_med(rmed),
+                 expected_gets
+                     ? (rmed / 1e3) / static_cast<double>(expected_gets)
+                     : 0.0);
   }
   std::fprintf(stderr,
                "[SUMMARY] write+flush+read : %.1f MiB/s end-to-end "
