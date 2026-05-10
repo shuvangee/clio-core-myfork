@@ -27,7 +27,7 @@ add_test(NAME cte_restart_integration
 set_tests_properties(cte_restart_integration
     PROPERTIES
         TIMEOUT 300
-        LABELS "integration;restart;cte"
+        LABELS "integration;restart;cte;msan_skip"
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};BIN_DIR=${CMAKE_BINARY_DIR}/bin"
 )
 

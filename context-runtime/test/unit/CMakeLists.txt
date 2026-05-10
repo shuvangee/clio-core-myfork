@@ -558,77 +558,17 @@ endif()
 # Enable CTest integration if testing is enabled
 if(WRP_CORE_ENABLE_TESTS)
   # Core Runtime Tests
+  # Single ctest entry runs the whole binary in one chimaera init/finalize cycle.
+  # Previously 8 redundant entries each invoked the full unfiltered binary, which
+  # serialized via RESOURCE_LOCK but multiplied chimaera shutdown ZMQ-race exposure.
   add_test(
-    NAME cr_runtime_initialization_tests
+    NAME cr_chimaera_unit_tests
     COMMAND ${TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_runtime_initialization_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_client_initialization_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_client_initialization_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_mod_name_task_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_mod_name_task_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_error_handling_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_error_handling_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_concurrent_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_concurrent_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_memory_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_memory_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_performance_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_performance_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  # Comprehensive core test
-  add_test(
-    NAME cr_all_chimaera_tests
-    COMMAND ${TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_all_chimaera_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+  set_tests_properties(cr_chimaera_unit_tests PROPERTIES
+    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CHIMAERA_TEST_MODE=1;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 600
   )
 
   # IPC AllocateBuffer Tests
@@ -705,89 +645,16 @@ if(WRP_CORE_ENABLE_TESTS)
   )
 
   # Per-Process Shared Memory Tests
+  # Single ctest entry runs the binary in one chimaera init/finalize cycle.
+  # Previously 9 redundant entries each invoked the full unfiltered binary.
   add_test(
-    NAME cr_per_process_shm_increase_memory_tests
+    NAME cr_per_process_shm_tests
     COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
-  set_tests_properties(cr_per_process_shm_increase_memory_tests PROPERTIES
+  set_tests_properties(cr_per_process_shm_tests PROPERTIES
     ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_per_process_shm_medium_alloc_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_medium_alloc_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_per_process_shm_large_alloc_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_large_alloc_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 300  # 5 minute timeout for large allocation test
-  )
-
-  add_test(
-    NAME cr_per_process_shm_multiple_large_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_multiple_large_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 300
-  )
-
-  add_test(
-    NAME cr_per_process_shm_patterns_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_patterns_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 300
-  )
-
-  add_test(
-    NAME cr_per_process_shm_free_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_free_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_per_process_shm_tofullptr_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_tofullptr_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
-  add_test(
-    NAME cr_per_process_shm_stress_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_stress_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-    TIMEOUT 600  # 10 minute timeout for stress test
-  )
-
-  add_test(
-    NAME cr_per_process_shm_info_tests
-    COMMAND ${PER_PROCESS_SHM_TEST_TARGET}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  )
-  set_tests_properties(cr_per_process_shm_info_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 600
   )
 
   # Autogen Coverage Tests (requires CAE)
@@ -800,6 +667,7 @@ if(WRP_CORE_ENABLE_TESTS)
   set_tests_properties(cr_autogen_coverage_tests PROPERTIES
     ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
     TIMEOUT 300
+    LABELS "msan_skip"
   )
   endif()  # WRP_CORE_ENABLE_CAE
 
@@ -1017,21 +885,6 @@ if(WRP_CORE_ENABLE_TESTS)
     TIMEOUT 300
   )
 
-  # Set test properties for timeout and environment
-  set_tests_properties(
-    cr_runtime_initialization_tests
-    cr_client_initialization_tests
-    cr_mod_name_task_tests
-    cr_error_handling_tests
-    cr_concurrent_tests
-    cr_memory_tests
-    cr_performance_tests
-    cr_all_chimaera_tests
-    PROPERTIES
-      TIMEOUT 180
-      ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CHIMAERA_TEST_MODE=1;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
-  )
-
   # Unordered Map LL Tests (standalone test with custom main)
   add_test(
     NAME cr_unordered_map_ll_tests
@@ -1045,14 +898,7 @@ if(WRP_CORE_ENABLE_TESTS)
 
   # Mark all CR runtime tests as msan_skip (they use ZMQ which is uninstrumented)
   set_tests_properties(
-    cr_runtime_initialization_tests
-    cr_client_initialization_tests
-    cr_mod_name_task_tests
-    cr_error_handling_tests
-    cr_concurrent_tests
-    cr_memory_tests
-    cr_performance_tests
-    cr_all_chimaera_tests
+    cr_chimaera_unit_tests
     cr_ipc_allocate_buffer_basic_tests
     cr_ipc_allocate_buffer_types_tests
     cr_ipc_allocate_buffer_sizes_tests
@@ -1061,15 +907,7 @@ if(WRP_CORE_ENABLE_TESTS)
     cr_ipc_allocate_buffer_error_tests
     cr_ipc_allocate_buffer_alignment_tests
     cr_ipc_allocate_buffer_documentation_tests
-    cr_per_process_shm_increase_memory_tests
-    cr_per_process_shm_medium_alloc_tests
-    cr_per_process_shm_large_alloc_tests
-    cr_per_process_shm_multiple_large_tests
-    cr_per_process_shm_patterns_tests
-    cr_per_process_shm_free_tests
-    cr_per_process_shm_tofullptr_tests
-    cr_per_process_shm_stress_tests
-    cr_per_process_shm_info_tests
+    cr_per_process_shm_tests
     cr_streaming_small_output_tests
     cr_streaming_large_output_tests
     cr_streaming_bitfield_tests

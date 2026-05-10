@@ -32,8 +32,11 @@ add_test(NAME ctp_numbers COMMAND
 
 # Skip under MSan: uses precompiled Catch2 (FatalConditionHandler/sigaction
 # false positives) and yaml-cpp (uninstrumented) for config parsing.
+# ctp_numbers uses the same Catch2 harness, producing identical sigaction
+# false positives even though the tested code is pure arithmetic.
 set_tests_properties(
   ctp_config_parse
+  ctp_numbers
   PROPERTIES LABELS "msan_skip"
 )
 

@@ -193,13 +193,16 @@ class WrpCte(Service):
         #      ctx and the existing reconnect path is never triggered).
         # When either lands, drop this loop and revert to:
         #   cmd = f'chimaera compose {self.compose_config_path}'
-        cmd = (
-            'for i in 1 2 3 4 5; do '
-            f'  timeout 60 chimaera compose {self.compose_config_path} && exit 0; '
-            '  sleep 5; '
-            'done; '
-            'exit 1'
-        )
+        # Single-shot compose. The jarvis-cd SSH layer prepends env vars
+        # as ``KEY=VAL`` before the command, and bash only forwards them
+        # to a *simple* command — wrapping in ``for ... do ... done``
+        # would strip the env (notably CHI_SERVER_CONF), causing the
+        # chimaera compose client to fall back to ~/.chimaera and load
+        # unrelated compose entries that occupy our target pool IDs.
+        # The original retry loop existed for an Aurora apptainer
+        # ZMTP-greeting race at >=64 daemons; for the bare-metal /
+        # single-node path here the simple form is enough.
+        cmd = f'chimaera compose {self.compose_config_path}'
 
         Exec(cmd, PsshExecInfo(
             env=self.mod_env,

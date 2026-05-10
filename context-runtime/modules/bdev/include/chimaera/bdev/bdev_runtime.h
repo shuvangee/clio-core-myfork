@@ -43,6 +43,8 @@
 #include <list>
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <mutex>
 
 /**
  * Runtime container for bdev ChiMod
@@ -229,7 +231,7 @@ class Runtime : public chi::Container {
   
   Runtime() : bdev_type_(BdevType::kFile), file_size_(0), alignment_(4096),
               io_depth_(32), max_blocks_per_operation_(64),
-              ram_buffer_(nullptr), ram_size_(0),
+              ram_capacity_(0),
               total_reads_(0), total_writes_(0),
               total_bytes_read_(0), total_bytes_written_(0) {
     start_time_ = std::chrono::high_resolution_clock::now();
@@ -379,9 +381,14 @@ class Runtime : public chi::Container {
   chi::u32 io_depth_;                             // Max concurrent I/O operations
   chi::u32 max_blocks_per_operation_;             // Maximum blocks per I/O operation
 
-  // RAM-based storage (kRam)
-  char* ram_buffer_;                              // RAM storage buffer
-  chi::u64 ram_size_;                            // Total RAM buffer size
+  // RAM-based storage (kRam) — vector of fixed-size pages, lazily allocated.
+  // Pages are not pre-faulted: each page is allocated only when first written
+  // to, and the OS faults the underlying physical pages on first touch. This
+  // keeps memory usage proportional to data actually stored, not capacity.
+  static constexpr chi::u64 kRamPageSize = 1ULL << 30;  // 1 GiB
+  std::vector<std::unique_ptr<char[]>> ram_pages_;
+  chi::u64 ram_capacity_;  // Soft cap; UINT64_MAX = unbounded
+  mutable std::mutex ram_pages_mu_;
 
   // kHbm / kPinned removed — see WriteToRam comment above.
 
@@ -472,6 +479,13 @@ class Runtime : public chi::Container {
   // (or kFile, with host-buffer staging) and the bdev uses the
   // device-aware memcpy + IsDevicePointer hooks installed at server
   // init by gpu/gpu2cpu_init_sycl.cc.
+
+  // Get (allocating if needed) the page at page_idx. Allocation uses
+  // default-initialized new char[] so the OS reserves virtual address space
+  // without pre-faulting physical pages.
+  char* EnsureRamPage(size_t page_idx);
+  // Lookup without allocating; returns nullptr for never-written pages.
+  char* GetRamPage(size_t page_idx) const;
 
   /**
    * Update performance metrics

@@ -92,12 +92,15 @@ add_test(NAME ctp_thread_allocator_multithread COMMAND
 add_test(NAME ctp_hshm_malloc COMMAND
         ${CMAKE_BINARY_DIR}/bin/test_hshm_malloc_exec)
 
-# Skip under MSan: buddy allocator and hshm malloc use raw mmap/brk memory
-# regions that MSan cannot instrument (no instrumented allocator backing).
+# Skip under MSan: buddy allocator, thread/partitioned allocator, and hshm
+# malloc all use raw mmap/brk memory that MSan cannot instrument (no
+# instrumented allocator backing).
 set_tests_properties(
   ctp_buddy_allocator
   ctp_buddy_compaction
   ctp_hshm_malloc
+  ctp_thread_allocator
+  ctp_thread_allocator_multithread
   PROPERTIES LABELS "msan_skip"
 )
 

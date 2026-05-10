@@ -39,9 +39,11 @@
 
 #include <hermes_shm/serialize/msgpack_wrapper.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <thread>
 
 #include "hermes_shm/util/timer.h"
@@ -285,11 +287,7 @@ Runtime::~Runtime() {
     CleanupWorkerIOContexts();
   }
 
-  // Clean up RAM backend
-  if (bdev_type_ == BdevType::kRam && ram_buffer_ != nullptr) {
-    delete[] ram_buffer_;
-    ram_buffer_ = nullptr;
-  }
+  // Clean up RAM backend (vector of unique_ptr<char[]> handles itself)
 
   // kHbm / kPinned bdev tiers were removed — kRam/kFile handle device
   // USM source/dest pointers directly via chi::DeviceAwareMemcpy.
@@ -458,21 +456,13 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
     }
 
   } else if (bdev_type_ == BdevType::kRam) {
-    // RAM-based storage initialization
-    if (params.total_size_ == 0) {
-      // RAM backend requires explicit size
-      task->return_code_ = 4;
-      CHI_CO_RETURN;
-    }
-
-    ram_size_ = params.total_size_;
-    ram_buffer_ = new (std::nothrow) char[ram_size_];
-    if (ram_buffer_ == nullptr) {
-      task->return_code_ = 5;
-      CHI_CO_RETURN;
-    }
-    memset(ram_buffer_, 0, ram_size_);
-    file_size_ = ram_size_;  // Use file_size_ for common allocation logic
+    // RAM-based storage initialization. Pages are allocated lazily on first
+    // write — no buffer is reserved up-front and no memset is performed, so
+    // creation cost is independent of capacity. capacity == 0 means unbounded.
+    ram_capacity_ = (params.total_size_ == 0)
+                        ? std::numeric_limits<chi::u64>::max()
+                        : params.total_size_;
+    file_size_ = ram_capacity_;  // Used by Heap allocator as the cap
 
   // BdevType::kHbm and BdevType::kPinned removed — supported tiers
   // are kFile / kRam / kNoop. PutBlob/GetBlob with HBM-resident
@@ -981,12 +971,30 @@ void Runtime::CleanupAsyncIO() {
   // No cleanup needed for POSIX AIO fallback
 }
 
+char* Runtime::EnsureRamPage(size_t page_idx) {
+  std::lock_guard<std::mutex> lock(ram_pages_mu_);
+  if (page_idx >= ram_pages_.size()) {
+    ram_pages_.resize(page_idx + 1);
+  }
+  if (!ram_pages_[page_idx]) {
+    // Default-init (not value-init) so the OS just reserves virtual address
+    // space — physical pages fault in on first touch, not at allocation.
+    ram_pages_[page_idx].reset(new char[kRamPageSize]);
+  }
+  return ram_pages_[page_idx].get();
+}
+
+char* Runtime::GetRamPage(size_t page_idx) const {
+  std::lock_guard<std::mutex> lock(ram_pages_mu_);
+  if (page_idx >= ram_pages_.size()) return nullptr;
+  return ram_pages_[page_idx].get();
+}
+
 void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
   static thread_local size_t ram_write_count = 0;
   static thread_local double t_resolve_ms = 0, t_memcpy_ms = 0;
   hshm::Timer timer;
 
-  // Convert hipc::ShmPtr<> to hipc::FullPtr<char> for data access
   timer.Resume();
   auto *ipc_mgr = CHI_IPC;
   hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
@@ -997,40 +1005,47 @@ void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
   chi::u64 total_bytes_written = 0;
   chi::u64 data_offset = 0;
 
-  // Iterate over all blocks
   timer.Resume();
   for (size_t i = 0; i < task->blocks_.size(); ++i) {
     const Block &block = task->blocks_[i];
 
-    // Calculate how much data to write to this block
     chi::u64 remaining = task->length_ - total_bytes_written;
-    if (remaining == 0) {
-      break;  // All data has been written
-    }
+    if (remaining == 0) break;
     chi::u64 block_write_size = std::min(remaining, block.size_);
 
-    // Check bounds
-    if (block.offset_ + block_write_size > ram_size_) {
-      task->return_code_ = 1;  // Write beyond buffer bounds
+    if (ram_capacity_ != std::numeric_limits<chi::u64>::max() &&
+        block.offset_ + block_write_size > ram_capacity_) {
+      task->return_code_ = 1;
       task->bytes_written_ = total_bytes_written;
       HLOG(kError,
-           "Write to RAM beyond buffer bounds offset: {}, length: {}, "
-           "ram_size: {}",
-           block.offset_, block_write_size, ram_size_);
+           "Write to RAM beyond capacity offset: {}, length: {}, "
+           "ram_capacity: {}",
+           block.offset_, block_write_size, ram_capacity_);
       return;
     }
 
-    // Device-aware memcpy: dispatches through sycl::queue::memcpy
-    // (or the CUDA equivalent) when the data ShmPtr resolves to device
-    // USM. Falls back to std::memcpy when no GPU runtime is registered
-    // — same semantics as the original plain memcpy on host buffers.
-    chi::DeviceAwareMemcpy(ram_buffer_ + block.offset_,
-                           data_ptr.ptr_ + data_offset,
-                           block_write_size);
+    // Walk the (offset, size) range across 1 GiB pages, allocating a page
+    // on first write only. Bench-sized writes (≤ block size, typically MBs)
+    // touch one page; this loop only runs >1 iteration when a block straddles
+    // a 1 GiB boundary. DeviceAwareMemcpy dispatches through
+    // sycl::queue::memcpy (or the CUDA equivalent) when the data ShmPtr
+    // resolves to device USM, and falls back to std::memcpy otherwise.
+    chi::u64 cur_off = block.offset_;
+    chi::u64 left = block_write_size;
+    while (left > 0) {
+      size_t page_idx = static_cast<size_t>(cur_off / kRamPageSize);
+      chi::u64 intra = cur_off % kRamPageSize;
+      chi::u64 chunk = std::min<chi::u64>(left, kRamPageSize - intra);
+      char* page = EnsureRamPage(page_idx);
+      chi::DeviceAwareMemcpy(page + intra,
+                             data_ptr.ptr_ + data_offset,
+                             chunk);
+      cur_off += chunk;
+      data_offset += chunk;
+      left -= chunk;
+    }
 
-    // Update counters
     total_bytes_written += block_write_size;
-    data_offset += block_write_size;
   }
   timer.Pause();
   t_memcpy_ms += timer.GetMsec();
@@ -1039,7 +1054,6 @@ void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
   task->return_code_ = 0;
   task->bytes_written_ = total_bytes_written;
 
-  // Update performance metrics
   total_writes_.fetch_add(1);
   total_bytes_written_.fetch_add(task->bytes_written_);
 
@@ -1052,49 +1066,70 @@ void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
 }
 
 void Runtime::ReadFromRam(hipc::FullPtr<ReadTask> task) {
-  // Convert hipc::ShmPtr<> to hipc::FullPtr<char> for data access
   auto *ipc_mgr = CHI_IPC;
   hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
 
   chi::u64 total_bytes_read = 0;
   chi::u64 data_offset = 0;
 
-  // Iterate over all blocks
   for (size_t i = 0; i < task->blocks_.size(); ++i) {
     const Block &block = task->blocks_[i];
 
-    // Calculate how much data to read from this block
     chi::u64 remaining = task->length_ - total_bytes_read;
-    if (remaining == 0) {
-      break;  // All data has been read
-    }
+    if (remaining == 0) break;
     chi::u64 block_read_size = std::min(remaining, block.size_);
 
-    // Check bounds
-    if (block.offset_ + block_read_size > ram_size_) {
-      task->return_code_ = 1;  // Read beyond buffer bounds
+    if (ram_capacity_ != std::numeric_limits<chi::u64>::max() &&
+        block.offset_ + block_read_size > ram_capacity_) {
+      task->return_code_ = 1;
       task->bytes_read_ = total_bytes_read;
       HLOG(kError,
-           "Read from RAM beyond buffer bounds offset: {}, length: {}, "
-           "ram_size: {}",
-           block.offset_, block_read_size, ram_size_);
+           "Read from RAM beyond capacity offset: {}, length: {}, "
+           "ram_capacity: {}",
+           block.offset_, block_read_size, ram_capacity_);
       return;
     }
 
-    // Device-aware memcpy (see WriteToRam comment).
-    chi::DeviceAwareMemcpy(data_ptr.ptr_ + data_offset,
-                           ram_buffer_ + block.offset_,
-                           block_read_size);
+    // Sparse semantics: a never-written page reads back as zeros, mirroring
+    // a sparse file. DeviceAwareMemcpy handles device-USM data buffers
+    // (see WriteToRam comment); for the zero-fill branch we copy from a
+    // static zero scratch when the dest is device-resident, since plain
+    // memset on a device USM pointer would segfault on the host.
+    chi::u64 cur_off = block.offset_;
+    chi::u64 left = block_read_size;
+    while (left > 0) {
+      size_t page_idx = static_cast<size_t>(cur_off / kRamPageSize);
+      chi::u64 intra = cur_off % kRamPageSize;
+      chi::u64 chunk = std::min<chi::u64>(left, kRamPageSize - intra);
+      char* page = GetRamPage(page_idx);
+      char *dst = data_ptr.ptr_ + data_offset;
+      if (page) {
+        chi::DeviceAwareMemcpy(dst, page + intra, chunk);
+      } else if (chi::IsDevicePointer(dst)) {
+        static const char kZeroScratch[4096] = {};
+        chi::u64 z_left = chunk;
+        chi::u64 z_off = 0;
+        while (z_left > 0) {
+          chi::u64 z_chunk =
+              std::min<chi::u64>(z_left, sizeof(kZeroScratch));
+          chi::DeviceAwareMemcpy(dst + z_off, kZeroScratch, z_chunk);
+          z_off += z_chunk;
+          z_left -= z_chunk;
+        }
+      } else {
+        memset(dst, 0, chunk);
+      }
+      cur_off += chunk;
+      data_offset += chunk;
+      left -= chunk;
+    }
 
-    // Update counters
     total_bytes_read += block_read_size;
-    data_offset += block_read_size;
   }
 
   task->return_code_ = 0;
   task->bytes_read_ = total_bytes_read;
 
-  // Update performance metrics
   total_reads_.fetch_add(1);
   total_bytes_read_.fetch_add(total_bytes_read);
 }

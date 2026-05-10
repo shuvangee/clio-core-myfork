@@ -69,6 +69,8 @@ public:
       if (!success) {
         throw std::runtime_error("CHIMAERA_INIT failed");
       }
+      // Drain ZMQ background threads in main() before static dtors fire.
+      SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       // Step 2: Initialize CTE client subsystem (CRITICAL!)

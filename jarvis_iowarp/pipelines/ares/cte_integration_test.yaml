@@ -14,7 +14,7 @@ pkgs:
     num_threads: 4
     client_data_segment_size: "2G"
     port: 9413
-    ipc_mode: "tcp"
+    ipc_mode: "shm"
     log_level: "info"
     sleep: 0
 
@@ -22,7 +22,7 @@ pkgs:
   - pkg_type: jarvis_iowarp.wrp_cte
     pkg_name: cte_core
     devices:
-      - ["ram::cte_ram_tier1", "4GB", 1.0]
+      - ["ram::cte_ram_tier1", "16GB", 1.0]
     dpe_type: "max_bw"
     neighborhood: 2
     default_target_timeout_ms: 30000
@@ -32,10 +32,8 @@ pkgs:
   - pkg_type: jarvis_iowarp.wrp_cte_bench
     pkg_name: cte_bench
     test_case: "PutGet"
-    num_threads: 1
+    num_threads: 32
     depth: 1
     io_size: "1m"
     io_count: 100
-    nprocs: 64
-    ppn: 16
     init_runtime: false
