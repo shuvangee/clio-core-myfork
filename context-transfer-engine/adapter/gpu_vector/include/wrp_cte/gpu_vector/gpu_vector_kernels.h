@@ -325,25 +325,32 @@ HSHM_GPU_FUN T *Resolve(::chi::gpu::IpcManager *ipc, DeviceView<T> v,
   // Wait on outstanding fault before returning the byte (read path).
   if (!is_write) DrainGet(hit);
 
-  // LRU clock bump.
-  hit->lru_clock = clock64();
+  // LRU bookkeeping intentionally elided — clock64() is several hundred
+  // cycles and only useful on miss for victim selection. Eviction
+  // currently falls back to the lowest-numbered free slot or slot 0
+  // when all are bound, which is fine while pages_per_block stays
+  // small. Re-introduce a coarser clock (e.g. monotonic counter
+  // incremented on miss) when LRU quality starts to matter.
 
   if (is_write) {
     int32_t off_i = static_cast<int32_t>(off_t);
-    // First-writer-wins CAS to seed [modify_min, modify_max] from -1
-    // sentinel state. Once seeded, future writers extend the range
-    // with atomic min/max.
-    int32_t prev_min = atomicCAS(reinterpret_cast<int *>(&hit->modify_min),
-                                 -1, off_i);
-    if (prev_min == -1) {
-      // We won the first-write race. Pair the max with our seed so the
-      // range covers exactly off_i.
-      atomicExch(reinterpret_cast<int *>(&hit->modify_max), off_i);
-      // First dirty marker on this page → bump the block's dirty count.
-      detail::AtomicIncU32(&b->num_modified);
+    // Plain stores everywhere on the per-page dirty range.
+    //
+    // Concurrency assumption: ONE thread mutates a given (block,page) at
+    // a time AND no concurrent CacheMgmtKernel atomicExch'es modify_min
+    // /max to -1 mid-update. The first invariant holds today because
+    // only threadIdx.x == 0 of each block calls Resolve. The second
+    // invariant requires cache_period_ms = 0 (no periodic flush thread).
+    // If you need concurrent flushing, revert this branch to atomicCAS
+    // for the first-write seed and AtomicMinI32 / AtomicMaxI32 for the
+    // range extension — see git history for the prior implementation.
+    if (hit->modify_min == -1) {
+      hit->modify_min = off_i;
+      hit->modify_max = off_i;
+      ++b->num_modified;
     } else {
-      detail::AtomicMinI32(&hit->modify_min, off_i);
-      detail::AtomicMaxI32(&hit->modify_max, off_i);
+      if (off_i < hit->modify_min) hit->modify_min = off_i;
+      if (off_i > hit->modify_max) hit->modify_max = off_i;
     }
   }
   return reinterpret_cast<T *>(hit->device_ptr) + off_t;
