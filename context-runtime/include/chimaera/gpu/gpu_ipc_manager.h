@@ -231,11 +231,21 @@ class IpcManager {
 
   /**
    * Resolve an AllocatorId to its registered ClientBackend record.
-   * Used by Worker::ProcessNewTaskGpu when popping gpu2cpu_queue.
+   * Used by IpcManager::ToFullPtr when a CPU SHM allocator lookup
+   * misses, so this must be inline (header-only) — callers like
+   * chimaera_commands link without libchimaera_cxx_gpu.
    * Returns nullptr if unknown.
    */
-  const ClientBackend *FindClientBackend(
-      u32 gpu_id, const hipc::AllocatorId &alloc_id) const;
+  inline const ClientBackend *FindClientBackend(
+      u32 gpu_id, const hipc::AllocatorId &alloc_id) const {
+    if (gpu_id >= per_gpu_devices_.size()) return nullptr;
+    u64 key = (static_cast<u64>(alloc_id.major_) << 32) |
+              static_cast<u64>(alloc_id.minor_);
+    const auto &dev = per_gpu_devices_[gpu_id];
+    auto it = dev.client_backends.find(key);
+    if (it == dev.client_backends.end()) return nullptr;
+    return &it->second;
+  }
 
 #endif  // HSHM_IS_HOST
 

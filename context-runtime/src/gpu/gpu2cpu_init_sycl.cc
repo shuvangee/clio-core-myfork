@@ -158,16 +158,7 @@ void gpu::IpcManager::UnregisterClientBackend(
   per_gpu_devices_[gpu_id].client_backends.erase(key);
 }
 
-const gpu::IpcManager::ClientBackend *gpu::IpcManager::FindClientBackend(
-    u32 gpu_id, const hipc::AllocatorId &alloc_id) const {
-  if (gpu_id >= per_gpu_devices_.size()) return nullptr;
-  u64 key = (static_cast<u64>(alloc_id.major_) << 32) |
-            static_cast<u64>(alloc_id.minor_);
-  const auto &dev = per_gpu_devices_[gpu_id];
-  auto it = dev.client_backends.find(key);
-  if (it == dev.client_backends.end()) return nullptr;
-  return &it->second;
-}
+// FindClientBackend is now inline in gpu_ipc_manager.h.
 
 bool ChiServerBootstrapSyclGpu(IpcManager *self, chi::u32 queue_depth,
                                 size_t backend_bytes) {

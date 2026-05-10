@@ -74,16 +74,24 @@ HSHM_GPU_FUN chi::u32 AtomicDecU32(chi::u32 *p) {
 }
 
 /**
- * Build a ShmPtr<> that the runtime resolves via a registered GPU client
- * backend. We stash the raw device pointer in `off_` (matching the
- * convention used by IpcGpu2Cpu::ClientSend for kPinnedHost — same shape
- * works for kDeviceMem because the bdev runtime hands the resolved
- * pointer to chi::g_device_aware_memcpy, which uses cudaMemcpy auto-detect).
+ * Build a blob_data_ ShmPtr that ToFullPtr resolves directly to a raw
+ * pointer via its null-alloc_id branch (the canonical pattern used by
+ * the kernel-side CTE benchmarks: see workload_cte_client_overhead.cc).
+ *
+ * For kDeviceMem-backed pages, off_ holds a CUDA/HIP device address.
+ * The bdev runtime calls DeviceAwareMemcpy with that address;
+ * DeviceAwareMemcpy's registered hook (cudaMemcpyDefault /
+ * hipMemcpyDefault) auto-detects the memory kind via pointer attributes
+ * and copies device→host without staging.
+ *
+ * `alloc_id` is unused but kept in the signature so callers can pass
+ * the page backend's id without special-casing.
  */
 HSHM_GPU_FUN hipc::ShmPtr<> MakeBlobShmPtr(void *device_addr,
                                                   hipc::AllocatorId alloc_id) {
+  (void)alloc_id;
   hipc::ShmPtr<> p;
-  p.alloc_id_ = alloc_id;
+  p.alloc_id_ = hipc::AllocatorId::GetNull();
   p.off_ = reinterpret_cast<chi::u64>(device_addr);
   return p;
 }

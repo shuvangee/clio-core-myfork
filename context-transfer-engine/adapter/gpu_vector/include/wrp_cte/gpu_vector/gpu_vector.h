@@ -330,9 +330,9 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
       if (!self->impl_->cache_thread_run.load()) break;
       chi::u32 total =
           self->view_.base.nblocks * self->view_.base.pages_per_block;
-      chi::u32 threads = total < 256u ? total : 256u;
-      chi::u32 blocks = (total + threads - 1) / threads;
-      detail::CacheMgmtKernel<<<blocks, threads>>>(info, self->view_.base);
+      // <<<total, 1>>>: one thread per (block,slot) pair, each as
+      // threadIdx.x==0 so ClientSend's producer constraint is satisfied.
+      detail::CacheMgmtKernel<<<total, 1>>>(info, self->view_.base);
       hshm::GpuApi::Synchronize();
     }
   });
@@ -371,12 +371,17 @@ inline void Vector<T>::FlushAllSync() {
 #if !HSHM_IS_DEVICE_PASS
   auto *gpu_ipc_mgr = CHI_CPU_IPC->GetGpuIpcManager();
   chi::IpcManagerGpuInfo info = gpu_ipc_mgr->GetGpuInfo(impl_->gpu_id);
+  // Launch one thread per (block,slot) pair, each in its own GPU block,
+  // so every thread has threadIdx.x == 0 — required by
+  // IpcGpu2Cpu::ClientSend (only thread 0 of a block actually pushes
+  // onto the gpu2cpu queue; non-zero threads return an empty future
+  // but still atomically reset the page's modify_min, orphaning the
+  // dirty data). Same constraint applies to DrainKernel since it
+  // can race with FlushPage submissions.
   chi::u32 total = view_.base.nblocks * view_.base.pages_per_block;
-  chi::u32 threads = total < 256u ? total : 256u;
-  chi::u32 blocks = (total + threads - 1) / threads;
-  detail::CacheMgmtKernel<<<blocks, threads>>>(info, view_.base);
+  detail::CacheMgmtKernel<<<total, 1>>>(info, view_.base);
   hshm::GpuApi::Synchronize();
-  detail::DrainKernel<<<blocks, threads>>>(info, view_.base);
+  detail::DrainKernel<<<total, 1>>>(info, view_.base);
   hshm::GpuApi::Synchronize();
 #endif
 }

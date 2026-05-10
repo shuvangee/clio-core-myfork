@@ -148,10 +148,29 @@ struct FutureShm {
   /** Number of warps sharing this FutureShm */
   u32 total_warps_;
 
-  /** Device pointer to POD task for cudaMemcpy (POD copy paths) */
-  uintptr_t task_device_ptr_;
-  /** sizeof(TaskT) for POD copy sizing */
-  u32 task_size_;
+  /**
+   * GPU device-memory pointer to the *task POD* (set when the kernel
+   * placed the Task struct in kDeviceMem). The CPU worker D2H-copies
+   * `gpu_task_size_` bytes from here into a host scratch slot for
+   * dispatch, and on completion H2D-copies the (mutated) POD bytes
+   * back to this address so the kernel sees output fields. Zero when
+   * the task is in kPinnedHost / kManagedUvm (host-dereferenceable).
+   */
+  uintptr_t gpu_task_device_ptr_;
+
+  /**
+   * sizeof(TaskT) for the H2D writeback copy. Mirrors
+   * gpu::FutureShm::task_size_ which the kernel filled in via Reset.
+   */
+  u32 gpu_task_size_;
+
+  /**
+   * GPU device-memory pointer to the *gpu::FutureShm* co-located with
+   * the task. RuntimeSend writes FUTURE_COMPLETE to this address (via
+   * cudaMemcpy when the FutureShm itself is in kDeviceMem) so the
+   * kernel poll-loop unblocks. Always non-zero on the GPU origin path.
+   */
+  uintptr_t gpu_fshm_device_ptr_;
 
   /** Copy space for serialized task data (flexible array member).
    *  Must be 4-byte aligned for WarpMemCpy uint32_t strided access. */
@@ -173,8 +192,9 @@ struct FutureShm {
     parent_gpu_rctx_ = nullptr;
     completion_counter_.store(0);
     total_warps_ = 1;
-    task_device_ptr_ = 0;
-    task_size_ = 0;
+    gpu_task_device_ptr_ = 0;
+    gpu_task_size_ = 0;
+    gpu_fshm_device_ptr_ = 0;
     flags_.Clear();
   }
 
@@ -191,8 +211,9 @@ struct FutureShm {
     method_id_ = method_id;
     client_task_vaddr_ = 0;
     parent_gpu_rctx_ = nullptr;
-    task_device_ptr_ = 0;
-    task_size_ = 0;
+    gpu_task_device_ptr_ = 0;
+    gpu_task_size_ = 0;
+    gpu_fshm_device_ptr_ = 0;
     flags_.Clear();
     input_.total_written_.store(0);
     input_.total_read_.store(0);

@@ -110,6 +110,27 @@ chi::u64 Runtime::ParseCapacityToBytes(const std::string &capacity_str) {
   return static_cast<chi::u64>(value * multiplier);
 }
 
+void Runtime::FixupAfterCopy(chi::u32 method,
+                              hipc::FullPtr<chi::Task> task_ptr) {
+  switch (method) {
+    case Method::kRegisterTarget:
+      task_ptr.template Cast<RegisterTargetTask>().ptr_->FixupAfterCopy();
+      break;
+    case Method::kGetOrCreateTag:
+      task_ptr.template Cast<GetOrCreateTagTask<CreateParams>>()
+          .ptr_->FixupAfterCopy();
+      break;
+    case Method::kPutBlob:
+      task_ptr.template Cast<PutBlobTask>().ptr_->FixupAfterCopy();
+      break;
+    case Method::kGetBlob:
+      task_ptr.template Cast<GetBlobTask>().ptr_->FixupAfterCopy();
+      break;
+    default:
+      break;
+  }
+}
+
 chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
                                 chi::RunContext &ctx) {
 #ifdef __NVCOMPILER

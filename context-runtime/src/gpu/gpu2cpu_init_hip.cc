@@ -111,12 +111,42 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
   }
 
   // Install device-aware memcpy + IsDevicePointer hooks (consumed by the
-  // bdev runtime when WriteToRam / ReadFromRam see device USM pointers).
+  // bdev runtime when WriteToRam / ReadFromRam see device USM pointers,
+  // and by the GPU2CPU worker pop path when D2H/H2D-copying POD tasks).
+  //
+  // We MUST use a non-blocking, per-thread stream here. The kernel that
+  // submitted the task is parked on a Wait() spin-loop on its own
+  // (default) stream, polling FUTURE_COMPLETE on the device-side
+  // gpu::FutureShm. If we issued cudaMemcpy on the legacy default
+  // stream it would block until prior default-stream work (the spinning
+  // kernel) drained — classic CUDA deadlock. cudaMemcpyAsync on a
+  // separate non-blocking stream uses an independent DMA engine and
+  // proceeds concurrently with the kernel.
   chi::g_device_aware_memcpy.store(
       [](void *dst, const void *src, std::size_t n) {
         if (n == 0) return;
+#if HSHM_ENABLE_CUDA
+        thread_local cudaStream_t s = nullptr;
+        if (!s) {
+          CUDA_ERROR_CHECK(cudaStreamCreateWithFlags(
+              &s, cudaStreamNonBlocking));
+        }
+        CUDA_ERROR_CHECK(cudaMemcpyAsync(dst, src, n,
+                                          cudaMemcpyDefault, s));
+        CUDA_ERROR_CHECK(cudaStreamSynchronize(s));
+#elif HSHM_ENABLE_ROCM
+        thread_local hipStream_t s = nullptr;
+        if (!s) {
+          HIP_ERROR_CHECK(hipStreamCreateWithFlags(
+              &s, hipStreamNonBlocking));
+        }
+        HIP_ERROR_CHECK(hipMemcpyAsync(dst, src, n,
+                                        hipMemcpyDefault, s));
+        HIP_ERROR_CHECK(hipStreamSynchronize(s));
+#else
         hshm::GpuApi::Memcpy(static_cast<char *>(dst),
                              static_cast<const char *>(src), n);
+#endif
       },
       std::memory_order_release);
   chi::g_is_device_pointer.store(
@@ -157,16 +187,8 @@ void gpu::IpcManager::UnregisterClientBackend(
   per_gpu_devices_[gpu_id].client_backends.erase(key);
 }
 
-const gpu::IpcManager::ClientBackend *gpu::IpcManager::FindClientBackend(
-    u32 gpu_id, const hipc::AllocatorId &alloc_id) const {
-  if (gpu_id >= per_gpu_devices_.size()) return nullptr;
-  u64 key = (static_cast<u64>(alloc_id.major_) << 32) |
-            static_cast<u64>(alloc_id.minor_);
-  const auto &dev = per_gpu_devices_[gpu_id];
-  auto it = dev.client_backends.find(key);
-  if (it == dev.client_backends.end()) return nullptr;
-  return &it->second;
-}
+// FindClientBackend is now inline in gpu_ipc_manager.h so it's
+// available without linking libchimaera_cxx_gpu (used by ToFullPtr).
 
 bool ChiServerBootstrapHipGpu(IpcManager *self, chi::u32 queue_depth,
                                std::size_t backend_bytes) {

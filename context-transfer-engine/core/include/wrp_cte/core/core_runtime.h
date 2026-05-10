@@ -67,6 +67,14 @@ public:
   ~Runtime() override = default;
 
   /**
+   * Fix up POD task members (chi::priv::string SSO data_ pointers,
+   * etc.) after a GPU2CPU D2H POD memcpy. Dispatched by the GPU pop
+   * path on the worker before Run.
+   */
+  void FixupAfterCopy(chi::u32 method,
+                      hipc::FullPtr<chi::Task> task_ptr) override;
+
+  /**
    * Create the container (Method::kCreate)
    * This method both creates and initializes the container
    * Returns TaskResume for coroutine-based async operations
