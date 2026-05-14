@@ -1390,13 +1390,10 @@ class IpcManager {
   int client_try_new_servers_ = 0;  // CHI_CLIENT_TRY_NEW_SERVERS (default 0)
   std::atomic<bool> reconnecting_{false};  // Guards against recursive reconnect
 
-  // K parallel DEALER sockets per peer; ZMQ I/O threads drain them
-  // concurrently into K TCP connections. Receiver ROUTER fair-queues.
-  std::unordered_map<std::string, std::vector<hshm::lbm::TransportPtr>>
-      client_pool_;
-  mutable std::mutex client_pool_mutex_;
-  int peer_sockets_per_peer_ = 1;  // CHI_PEER_SOCKETS_PER_PEER
-  std::atomic<uint64_t> client_shard_rotator_{0};
+  // Persistent ZeroMQ transport connection pool
+  // Key format: "ip_address:port"
+  std::unordered_map<std::string, hshm::lbm::TransportPtr> client_pool_;
+  mutable std::mutex client_pool_mutex_;  // Mutex for thread-safe pool access
 
   // Scheduler for task routing
   std::unique_ptr<Scheduler> scheduler_;

@@ -363,19 +363,12 @@ class ZeroMqTransport : public Transport {
 
       // ZMQ_IDENTITY is only meaningful for DEALER → ROUTER routing.
       // PUSH/PULL doesn't track sender identity, so skip the setopt.
-      // Per-DEALER unique suffix: with K parallel DEALERs from the same
-      // process, sharing "hostname:pid" makes ROUTER_HANDOVER kick the
-      // first one out when the second connects.
       if (topology_ != Topology::kPushPull) {
-        static std::atomic<uint64_t> g_dealer_instance{0};
-        uint64_t instance =
-            g_dealer_instance.fetch_add(1, std::memory_order_relaxed);
         char hostname_buf[64] = {};
         gethostname(hostname_buf, sizeof(hostname_buf) - 1);
         uint32_t pid = static_cast<uint32_t>(hshm::SystemInfo::GetPid());
         std::string identity = std::string(hostname_buf) + ":" +
-                                std::to_string(pid) + ":" +
-                                std::to_string(instance);
+                                std::to_string(pid);
         zmq_setsockopt(socket_, ZMQ_IDENTITY, identity.data(),
                         identity.size());
       }
