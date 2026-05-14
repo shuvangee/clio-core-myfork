@@ -140,21 +140,33 @@ std::string WaitForServerAddr(const std::string& filename) {
 }
 
 std::string GetPrimaryIp() {
+  // If LBM_BENCH_DEV is set, prefer that interface (e.g. "enp47s0np0" for
+  // the Ares 40 GbE rail). Otherwise fall back to the first non-loopback
+  // UP IPv4 address, which on multi-rail hosts is often the 1 GbE
+  // management NIC and silently sandbags throughput tests.
+  const char *dev_env = std::getenv("LBM_BENCH_DEV");
+  std::string preferred_dev = (dev_env && *dev_env) ? dev_env : "";
+
   struct ifaddrs *ifaddr, *ifa;
   char ip[INET_ADDRSTRLEN];
-  std::string result;
+  std::string preferred_ip;
+  std::string fallback_ip;
   getifaddrs(&ifaddr);
   for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-    if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET &&
-        !(ifa->ifa_flags & IFF_LOOPBACK) && (ifa->ifa_flags & IFF_UP)) {
-      void* addr_ptr = &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr;
-      inet_ntop(AF_INET, addr_ptr, ip, INET_ADDRSTRLEN);
-      result = ip;
+    if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+    if (ifa->ifa_flags & IFF_LOOPBACK) continue;
+    if (!(ifa->ifa_flags & IFF_UP)) continue;
+    void* addr_ptr = &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr;
+    inet_ntop(AF_INET, addr_ptr, ip, INET_ADDRSTRLEN);
+    if (!preferred_dev.empty() && ifa->ifa_name &&
+        preferred_dev == ifa->ifa_name) {
+      preferred_ip = ip;
       break;
     }
+    if (fallback_ip.empty()) fallback_ip = ip;
   }
   freeifaddrs(ifaddr);
-  return result;
+  return preferred_ip.empty() ? fallback_ip : preferred_ip;
 }
 
 void PrintAllInterfaces() {
@@ -209,12 +221,57 @@ int main(int argc, char** argv) {
   int my_port = port + my_rank;
   std::string bind_addr = GetPrimaryIp();
   std::string domain_arg = domain;
-  auto server_ptr = TransportFactory::Get(bind_addr, transport,
-                                          TransportMode::kServer, protocol,
-                                          my_port, domain_arg);
+
+  // Pick topology via env LBM_BENCH_TOPOLOGY: "router_dealer" (default)
+  // or "push_pull". push_pull skips identity + delim frames and uses
+  // ZMQ_PUSH / ZMQ_PULL — closer to what chimaera peer-to-peer actually
+  // needs (no per-message identity routing).
+  ZeroMqTransport::Topology topology = ZeroMqTransport::Topology::kRouterDealer;
+  if (const char *t = std::getenv("LBM_BENCH_TOPOLOGY")) {
+    std::string tv = t;
+    if (tv == "push_pull" || tv == "push-pull" || tv == "pp") {
+      topology = ZeroMqTransport::Topology::kPushPull;
+    }
+  }
+  if (my_rank == 0) {
+    std::cout << "[Bench] topology="
+              << (topology == ZeroMqTransport::Topology::kPushPull
+                      ? "push_pull"
+                      : "router_dealer")
+              << std::endl;
+  }
+
+  // The TransportFactory path doesn't know about Topology yet, so
+  // construct the ZeroMqTransport server directly for the bench. We
+  // only exercise the kZeroMq path for performance work; thallium /
+  // libfabric backends would need their own constructor here.
+  if (transport != TransportType::kZeroMq) {
+    std::cerr << "Bench Topology selection only implemented for zeromq.\n";
+    MPI_Finalize();
+    return 1;
+  }
+  auto server_owned = std::make_unique<ZeroMqTransport>(
+      TransportMode::kServer, bind_addr, protocol, my_port, topology);
+  ZeroMqTransport *server_ptr = server_owned.get();
   std::string actual_addr = server_ptr->GetAddress();
   std::cout << "[Rank " << my_rank << "] Server address: " << actual_addr
             << ", port: " << my_port << std::endl;
+  // Match chimaera's PeerRecvThread polling cadence: chimaera sleeps 1 µs
+  // on EAGAIN (busy-poll with backoff), not 1 ms. Env LBM_BENCH_EAGAIN_US
+  // overrides for diagnostics.
+  long eagain_us = 1;
+  if (const char *e = std::getenv("LBM_BENCH_EAGAIN_US")) {
+    eagain_us = std::atol(e);
+    if (eagain_us < 0) eagain_us = 0;
+  }
+  // Per-message stdout prints in the hot loop were also eating wall time
+  // (PRTE OOB serialises all rank stdout). Suppress unless
+  // LBM_BENCH_VERBOSE=1.
+  bool verbose = []() {
+    const char *v = std::getenv("LBM_BENCH_VERBOSE");
+    return v && *v && std::atoi(v) != 0;
+  }();
+
   // Start timing before any send
   auto global_start = std::chrono::high_resolution_clock::now();
   // Start server thread with num_msgs
@@ -226,7 +283,8 @@ int main(int argc, char** argv) {
     for (int i = 0; i < num_msgs * world_size; ++i) {
       auto recv_time = std::chrono::high_resolution_clock::now();
 
-      // Recv with retry loop (does everything - metadata + bulks)
+      // Recv with retry loop (does everything - metadata + bulks). Match
+      // chimaera: 1 µs sleep_for on EAGAIN.
       LbmMeta<> meta;
       int rc;
       while (true) {
@@ -238,14 +296,18 @@ int main(int argc, char** argv) {
                     << "\n";
           return;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (eagain_us > 0) {
+          std::this_thread::sleep_for(std::chrono::microseconds(eagain_us));
+        }
       }
       received++;
 
-      double t =
-          std::chrono::duration<double>(recv_time - global_start).count();
-      std::cout << "[Rank " << my_rank << "] Received message " << received
-                << " at " << t << " s" << std::endl;
+      if (verbose) {
+        double t =
+            std::chrono::duration<double>(recv_time - global_start).count();
+        std::cout << "[Rank " << my_rank << "] Received message "
+                  << received << " at " << t << " s" << std::endl;
+      }
     }
     auto end = std::chrono::high_resolution_clock::now();
     double elapsed = std::chrono::duration<double>(end - global_start).count();
@@ -270,26 +332,111 @@ int main(int argc, char** argv) {
   std::vector<std::unique_ptr<ZeroMqTransport>> clients;
   for (int i = 0; i < world_size; ++i) {
     int target_port = port + i;
-    auto client_ptr = std::make_unique<ZeroMqTransport>(TransportMode::kClient, server_addrs[i], protocol, target_port);
+    auto client_ptr = std::make_unique<ZeroMqTransport>(
+        TransportMode::kClient, server_addrs[i], protocol, target_port,
+        topology);
     clients.emplace_back(std::move(client_ptr));
   }
-  int sent = 0;
-  for (int m = 0; m < num_msgs; ++m) {
-    for (size_t i = 0; i < clients.size(); ++i) {
-      auto send_time = std::chrono::high_resolution_clock::now();
-      LbmMeta<> meta;
-      Bulk bulk = clients[i]->Expose(
-          hipc::FullPtr<char>(const_cast<char*>(magic.data())),
-          magic.size(), BULK_XFER);
-      meta.send.push_back(bulk);
-      int rc = clients[i]->Send(meta);
-      assert(rc == 0);
-      sent++;
-      double t =
-          std::chrono::duration<double>(send_time - global_start).count();
-      std::cout << "[Rank " << my_rank << "] Sent message " << sent
-                << " to server " << i << " at " << t << " s" << std::endl;
+  // LBM_BENCH_PARALLEL_SEND=1: one sender thread per peer (the prior
+  //   parallel-send mode; equivalent to LBM_BENCH_THREADS_PER_PEER=1
+  //   with parallel_send on).
+  // LBM_BENCH_THREADS_PER_PEER=K (default 1): K dedicated PUSH sockets
+  //   + K threads per peer (mirrors zmq_ring.py's --threads-per-peer).
+  //   Each thread sends num_msgs/K messages so the total per peer-pair
+  //   stays constant (num_msgs) and the server's recv expectation
+  //   (num_msgs * world_size) doesn't change. Implies parallel_send.
+  bool parallel_send = []() {
+    const char *v = std::getenv("LBM_BENCH_PARALLEL_SEND");
+    return v && *v && std::atoi(v) != 0;
+  }();
+  int threads_per_peer = 1;
+  if (const char *v = std::getenv("LBM_BENCH_THREADS_PER_PEER")) {
+    threads_per_peer = std::atoi(v);
+    if (threads_per_peer < 1) threads_per_peer = 1;
+  }
+  if (threads_per_peer > 1) parallel_send = true;
+  if (my_rank == 0) {
+    std::cout << "[Bench] parallel_send=" << (parallel_send ? "yes" : "no")
+              << " threads_per_peer=" << threads_per_peer << std::endl;
+  }
+
+  // For threads_per_peer > 1, open additional PUSH sockets per peer so
+  // each sender thread has its own ZMQ pipe (the Python smoketest
+  // pattern). Each peer's bin has clients[i*tpp + t] for t=0..tpp-1.
+  // We construct the extras here; clients[0..world_size-1] from above
+  // are reused as the first thread per peer.
+  std::vector<std::unique_ptr<ZeroMqTransport>> extra_clients;
+  if (threads_per_peer > 1) {
+    extra_clients.reserve(world_size * (threads_per_peer - 1));
+    for (int i = 0; i < world_size; ++i) {
+      int target_port = port + i;
+      for (int t = 1; t < threads_per_peer; ++t) {
+        extra_clients.emplace_back(std::make_unique<ZeroMqTransport>(
+            TransportMode::kClient, server_addrs[i], protocol, target_port,
+            topology));
+      }
     }
+  }
+  auto peer_socket = [&](int peer_idx, int thread_idx) -> ZeroMqTransport * {
+    if (thread_idx == 0) return clients[peer_idx].get();
+    return extra_clients[peer_idx * (threads_per_peer - 1) +
+                          (thread_idx - 1)].get();
+  };
+
+  std::atomic<int> sent_total{0};
+  if (parallel_send) {
+    int msgs_per_thread = std::max(1, num_msgs / threads_per_peer);
+    int remainder_thread = num_msgs - (msgs_per_thread * threads_per_peer);
+    std::vector<std::thread> sender_threads;
+    sender_threads.reserve(static_cast<size_t>(world_size) * threads_per_peer);
+    for (int i = 0; i < world_size; ++i) {
+      for (int t = 0; t < threads_per_peer; ++t) {
+        // Distribute the remainder messages onto the first few threads
+        // of each peer so the total per peer-pair is exactly num_msgs.
+        int my_msgs = msgs_per_thread + (t < remainder_thread ? 1 : 0);
+        ZeroMqTransport *sock = peer_socket(i, t);
+        sender_threads.emplace_back([&, i, t, my_msgs, sock]() {
+          for (int m = 0; m < my_msgs; ++m) {
+            LbmMeta<> meta;
+            Bulk bulk = sock->Expose(
+                hipc::FullPtr<char>(const_cast<char*>(magic.data())),
+                magic.size(), BULK_XFER);
+            meta.send.push_back(bulk);
+            int rc = sock->Send(meta);
+            if (rc != 0) {
+              std::cerr << "[Rank " << my_rank
+                        << "] parallel Send to peer " << i
+                        << " thread " << t << " rc=" << rc << "\n";
+              return;
+            }
+            sent_total.fetch_add(1, std::memory_order_relaxed);
+          }
+        });
+      }
+    }
+    for (auto &th : sender_threads) th.join();
+  } else {
+    int sent = 0;
+    for (int m = 0; m < num_msgs; ++m) {
+      for (size_t i = 0; i < clients.size(); ++i) {
+        auto send_time = std::chrono::high_resolution_clock::now();
+        LbmMeta<> meta;
+        Bulk bulk = clients[i]->Expose(
+            hipc::FullPtr<char>(const_cast<char*>(magic.data())),
+            magic.size(), BULK_XFER);
+        meta.send.push_back(bulk);
+        int rc = clients[i]->Send(meta);
+        assert(rc == 0);
+        sent++;
+        if (verbose) {
+          double t =
+              std::chrono::duration<double>(send_time - global_start).count();
+          std::cout << "[Rank " << my_rank << "] Sent message " << sent
+                    << " to server " << i << " at " << t << " s" << std::endl;
+        }
+      }
+    }
+    sent_total.store(sent);
   }
   server_thread.join();
   auto global_end = std::chrono::high_resolution_clock::now();
@@ -300,6 +447,21 @@ int main(int argc, char** argv) {
   std::cout << "[Rank " << my_rank
             << "] Overall runtime (first send to last receive): "
             << global_elapsed << " s" << std::endl;
+
+  // Per-phase Send/Recv breakdown (no-op unless CHI_LBM_ZMQ_STATS=1).
+  // Rank-0-only dump keeps the log readable; counters are process-wide
+  // (one process per rank), and the workload is symmetric, so rank 0
+  // is representative of any single daemon.
+  if (my_rank == 0) {
+    ZmqStats::DumpStats("rank0");
+  }
+  // Barrier to make sure the dump appears before MPI tears down.
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (my_rank != 0) {
+    // Also dump from rank 1 for cross-validation that the timings are
+    // symmetric (rank 0 is the spurious-skew suspect if anything).
+    if (my_rank == 1) ZmqStats::DumpStats("rank1");
+  }
   MPI_Finalize();
   return 0;
 }
