@@ -331,6 +331,14 @@ if(HSHM_ENABLE_IO_URING)
     find_path(URING_INCLUDE_DIR NAMES liburing.h)
     find_library(URING_LIBRARY NAMES uring)
     if(URING_INCLUDE_DIR AND URING_LIBRARY)
+        # Propagate the liburing header dir to consumers. Without this,
+        # any target that includes iouring_io.h (-> #include <liburing.h>)
+        # only compiles when liburing.h happens to sit on a default system
+        # include path. On hosts where liburing lives only in a non-default
+        # prefix (e.g. the conda env, with WRP_CORE_ENABLE_CONDA=OFF) the
+        # io_uring unit tests fail with "liburing.h: No such file or
+        # directory". Mirrors the libaio branch below.
+        target_include_directories(aio INTERFACE ${URING_INCLUDE_DIR})
         if(WRP_CORE_STATIC_DEPS)
             find_library(URING_STATIC_LIB NAMES liburing.a REQUIRED)
             message(STATUS "Static liburing: ${URING_STATIC_LIB}")
@@ -338,6 +346,7 @@ if(HSHM_ENABLE_IO_URING)
         else()
             target_link_libraries(aio INTERFACE ${URING_LIBRARY})
         endif()
+        message(STATUS "io_uring enabled: ${URING_INCLUDE_DIR} / ${URING_LIBRARY}")
     else()
         message(WARNING "io_uring requested but liburing not found, disabling io_uring")
         set(HSHM_ENABLE_IO_URING OFF)

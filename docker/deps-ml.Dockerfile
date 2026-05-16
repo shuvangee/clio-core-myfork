@@ -4,8 +4,8 @@
 # Provides:
 #   - llama.cpp C++ library + server (CUDA-enabled, system-installed)
 #   - llama-cpp-python (Python bindings for llama.cpp, CUDA-enabled)
-#   - vLLM (packaged release for experimentation; submodule at external/vllm for dev)
-#   - SGLang (packaged release for experimentation; submodule at external/sglang for dev)
+#   - vLLM (packaged release for experimentation; clone into external/vllm for dev)
+#   - SGLang (packaged release for experimentation; clone into external/sglang for dev)
 #   - PyTorch with CUDA 12.6 support
 #
 # Usage:
@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Build and install llama.cpp C++ library + server (system-wide)
 # This provides libllama.so, headers, and llama-server binary
 # for the C++ integration work (context-transfer-engine/llm-hooks/).
-# The workspace submodule at external/llama.cpp is used for
+# A workspace clone at external/llama.cpp (not a submodule) is used for
 # modifying llama.cpp itself; this install is for stable baseline use.
 #------------------------------------------------------------
 RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp /tmp/llama.cpp-build \
@@ -62,11 +62,11 @@ RUN CMAKE_ARGS="-DGGML_CUDA=ON" \
     llama-cpp-python
 
 # vLLM packaged release (for quick experimentation and benchmarking baseline)
-# The git submodule at external/vllm is for source-level development
+# A clone at external/vllm (not a submodule) is for source-level development
 RUN /home/iowarp/miniconda3/bin/pip install --no-cache-dir vllm
 
 # SGLang packaged release (for quick experimentation)
-# The git submodule at external/sglang is for iowarp-specific modifications
+# A clone at external/sglang (not a submodule) is for iowarp-specific modifications
 RUN /home/iowarp/miniconda3/bin/pip install --no-cache-dir "sglang[all]"
 
 # Useful ML/inference utilities

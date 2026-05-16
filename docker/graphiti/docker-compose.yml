@@ -16,6 +16,8 @@ services:
       start_period: 30s
 
   graphiti:
+    # graphiti is NOT a git submodule. Run `docker/graphiti/fetch.sh`
+    # before `docker compose build` to populate ../../external/graphiti.
     build:
       context: ../../external/graphiti
       dockerfile: Dockerfile
