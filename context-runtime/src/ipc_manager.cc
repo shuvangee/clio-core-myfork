@@ -41,6 +41,7 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <endian.h>
+#include <ifaddrs.h>
 #include <netdb.h>
 #include <signal.h>
 #include <sys/epoll.h>
@@ -61,6 +62,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <set>
 
 #include "chimaera/admin.h"
 #include "chimaera/admin/admin_client.h"
@@ -1085,6 +1087,96 @@ u64 IpcManager::AddNode(const std::string &ip_address, u32 port) {
   return new_node_id;
 }
 
+namespace {
+
+// Collect every IPv4/IPv6 address bound to a local network interface
+// (loopback included). Used so IdentifyThisHost can recognize a hostfile
+// entry that is an IP literal (or a hostname resolving to one of our
+// interface IPs) as "this node" — hostname string matching alone breaks
+// when the hostfile uses addresses instead of names.
+std::set<std::string> CollectLocalInterfaceIps() {
+  std::set<std::string> ips;
+  struct ifaddrs *ifaddr = nullptr;
+  if (getifaddrs(&ifaddr) != 0 || ifaddr == nullptr) {
+    return ips;  // Best-effort: empty set just disables IP matching.
+  }
+  for (struct ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+    if (ifa->ifa_addr == nullptr) {
+      continue;
+    }
+    char buf[INET6_ADDRSTRLEN] = {0};
+    const int fam = ifa->ifa_addr->sa_family;
+    if (fam == AF_INET) {
+      auto *sa = reinterpret_cast<struct sockaddr_in *>(ifa->ifa_addr);
+      if (inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf))) {
+        ips.insert(buf);
+      }
+    } else if (fam == AF_INET6) {
+      auto *sa = reinterpret_cast<struct sockaddr_in6 *>(ifa->ifa_addr);
+      if (inet_ntop(AF_INET6, &sa->sin6_addr, buf, sizeof(buf))) {
+        // Strip a zone index (e.g. "fe80::1%eth0") for comparison.
+        std::string s(buf);
+        auto pct = s.find('%');
+        ips.insert(pct == std::string::npos ? s : s.substr(0, pct));
+      }
+    }
+  }
+  freeifaddrs(ifaddr);
+  return ips;
+}
+
+// True when `entry` (an IP literal or a resolvable hostname from the
+// hostfile) names an address that is bound to one of this node's local
+// interfaces. Handles the case the hostname-only matcher misses:
+// hostfiles written with raw IPs, or DNS/hosts names that resolve to a
+// local NIC IP whose reverse name differs from gethostname().
+bool HostMatchesLocalIp(const std::string &entry,
+                        const std::set<std::string> &local_ips) {
+  if (entry.empty() || local_ips.empty()) {
+    return false;
+  }
+  // Fast path: the entry is itself a literal IP we already hold.
+  if (local_ips.count(entry)) {
+    return true;
+  }
+  // Otherwise resolve the entry (works for both IP literals and names)
+  // and test each resolved address against the local interface set.
+  struct addrinfo hints {};
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  struct addrinfo *res = nullptr;
+  if (getaddrinfo(entry.c_str(), nullptr, &hints, &res) != 0 ||
+      res == nullptr) {
+    return false;
+  }
+  bool matched = false;
+  for (struct addrinfo *ai = res; ai != nullptr && !matched;
+       ai = ai->ai_next) {
+    char buf[INET6_ADDRSTRLEN] = {0};
+    if (ai->ai_family == AF_INET) {
+      auto *sa = reinterpret_cast<struct sockaddr_in *>(ai->ai_addr);
+      if (inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf)) &&
+          local_ips.count(buf)) {
+        matched = true;
+      }
+    } else if (ai->ai_family == AF_INET6) {
+      auto *sa = reinterpret_cast<struct sockaddr_in6 *>(ai->ai_addr);
+      if (inet_ntop(AF_INET6, &sa->sin6_addr, buf, sizeof(buf))) {
+        std::string s(buf);
+        auto pct = s.find('%');
+        if (local_ips.count(pct == std::string::npos ? s
+                                                     : s.substr(0, pct))) {
+          matched = true;
+        }
+      }
+    }
+  }
+  freeaddrinfo(res);
+  return matched;
+}
+
+}  // namespace
+
 bool IpcManager::IdentifyThisHost() {
   HLOG(kDebug, "Identifying current host");
 
@@ -1129,7 +1221,12 @@ bool IpcManager::IdentifyThisHost() {
   std::string local_short =
       local_host.substr(0, local_host.find('.'));
 
-  // Try to identify (by hostname match) and start the server.
+  // All IPs bound to local interfaces, so a hostfile entry written as a
+  // raw IP (or a name resolving to a local NIC) is recognized as this
+  // node even when its reverse name differs from gethostname().
+  const std::set<std::string> local_ips = CollectLocalInterfaceIps();
+
+  // Try to identify (by hostname OR local-IP match) and start the server.
   for (const auto &pair : hostfile_map_) {
     const Host &host = pair.second;
     attempted_hosts.push_back(host.ip_address);
@@ -1156,7 +1253,8 @@ bool IpcManager::IdentifyThisHost() {
                  is_loopback ||
                  (host.ip_address == local_host) ||
                  (entry_short == local_short) ||
-                 suffix_match;
+                 suffix_match ||
+                 HostMatchesLocalIp(host.ip_address, local_ips);
     if (!is_me) continue;
 
     HLOG(kDebug, "Hostfile entry {} matches local host {}; binding 0.0.0.0",
