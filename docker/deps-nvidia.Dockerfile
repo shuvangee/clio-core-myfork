@@ -91,6 +91,24 @@ ENV PATH=/opt/intel/dpcpp/bin:${PATH}
 ENV LD_LIBRARY_PATH=/opt/intel/dpcpp/lib:${LD_LIBRARY_PATH}
 
 #------------------------------------------------------------
+# LLVM 18 dev packages (required by AdaptiveCpp, built below)
+#------------------------------------------------------------
+#
+# Installed BEFORE the ROCm section on purpose. The ROCm step below
+# force-installs hip-dev with `dpkg -i --force-depends` (and adds a
+# broad `Package: * Pin-Priority: 600` preference for repo.radeon.com).
+# Either of those leaves apt unable to cleanly resolve the distro
+# libclang-18-dev / llvm-18-dev / lld-18 afterward ("E: Unmet
+# dependencies"). Resolving them here, against pristine Ubuntu noble
+# state, keeps both the LLVM toolchain and ROCm installable.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    libclang-18-dev \
+    llvm-18-dev \
+    lld-18 \
+    && rm -rf /var/lib/apt/lists/*
+
+#------------------------------------------------------------
 # ROCm / HIP-NVCC Installation
 #------------------------------------------------------------
 #
@@ -135,14 +153,8 @@ ENV PATH=/opt/rocm/bin:${PATH}
 #------------------------------------------------------------
 # AdaptiveCpp (Open SYCL) Installation
 #------------------------------------------------------------
-
-# Install LLVM dev packages required by AdaptiveCpp
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-    libclang-18-dev \
-    llvm-18-dev \
-    lld-18 \
-    && rm -rf /var/lib/apt/lists/*
+# (LLVM 18 dev packages were installed earlier, before the ROCm
+# section, so they resolve against pristine Ubuntu apt state.)
 
 # Build and install AdaptiveCpp with CUDA backend
 RUN git clone --depth=1 https://github.com/AdaptiveCpp/AdaptiveCpp.git /tmp/adaptivecpp-src \
