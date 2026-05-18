@@ -78,7 +78,8 @@ set_tests_properties(
   PROPERTIES
     TIMEOUT 180
     LABELS "cee;comprehensive;coverage;msan_skip"
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+    RESOURCE_LOCK "chimaera_runtime"
 )
 
 #------------------------------------------------------------------------------

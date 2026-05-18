@@ -56,6 +56,11 @@
 
 namespace fs = std::filesystem;
 
+static std::string chi_test_data_dir() {
+  const char *d = std::getenv("CHI_TEST_DATA_DIR");
+  return (d && *d) ? d : ".";
+}
+
 /**
  * Test fixture for Tag operation tests
  */
@@ -76,7 +81,7 @@ class TagTestFixture {
     // Initialize test storage path
     std::string home_dir = hshm::SystemInfo::Getenv("HOME");
     REQUIRE(!home_dir.empty());
-    test_storage_path_ = home_dir + "/cte_tag_test.dat";
+    test_storage_path_ = chi_test_data_dir() + "/cte_tag_test.dat";
 
     // Initialize Chimaera and CTE client once
     if (!g_cte_initialized) {

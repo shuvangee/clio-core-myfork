@@ -58,6 +58,11 @@
 
 using namespace iowarp;
 
+static std::string chi_test_data_dir() {
+  const char *d = std::getenv("CHI_TEST_DATA_DIR");
+  return (d && *d) ? d : ".";
+}
+
 /**
  * Test fixture for CEE comprehensive tests
  */
@@ -135,7 +140,7 @@ public:
       g_initialized = true;
     }
 
-    test_data_dir_ = std::string(std::getenv("HOME")) + "/cee_test_data";
+    test_data_dir_ = chi_test_data_dir() + "/cee_test_data";
     test_binary_file_ = test_data_dir_ + "/test_cee_data.bin";
   }
 

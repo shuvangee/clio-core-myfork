@@ -57,6 +57,11 @@
 
 namespace fs = std::filesystem;
 
+static std::string chi_test_data_dir() {
+  const char *d = std::getenv("CHI_TEST_DATA_DIR");
+  return (d && *d) ? d : ".";
+}
+
 // Test constants
 static constexpr chi::u64 kDramCapacity = 64 * 1024 * 1024;   // 64MB
 static constexpr chi::u64 kFileCapacity = 256 * 1024 * 1024;  // 256MB
@@ -82,8 +87,8 @@ class TieredStorageStressFixture {
     // Setup paths
     std::string home_dir = hshm::SystemInfo::Getenv("HOME");
     REQUIRE(!home_dir.empty());
-    config_path_ = home_dir + "/tiered_stress_config.yaml";
-    file_storage_path_ = home_dir + "/tiered_stress_storage.bin";
+    config_path_ = chi_test_data_dir() + "/tiered_stress_config.yaml";
+    file_storage_path_ = chi_test_data_dir() + "/tiered_stress_storage.bin";
 
     // Clean up existing files
     Cleanup();

@@ -60,6 +60,11 @@
 
 namespace fs = std::filesystem;
 
+static std::string chi_test_data_dir() {
+  const char *d = std::getenv("CHI_TEST_DATA_DIR");
+  return (d && *d) ? d : ".";
+}
+
 // Test constants for two-tier storage
 static constexpr chi::u64 kDramCapacity = 16 * 1024 * 1024;  // 16MB
 static constexpr chi::u64 kDiskCapacity = 64 * 1024 * 1024;  // 64MB
@@ -84,8 +89,8 @@ class ReorganizeBlobTestFixture {
     // Setup paths
     std::string home_dir = hshm::SystemInfo::Getenv("HOME");
     REQUIRE(!home_dir.empty());
-    config_path_ = home_dir + "/reorganize_blob_config.yaml";
-    file_storage_path_ = home_dir + "/reorganize_blob_storage.bin";
+    config_path_ = chi_test_data_dir() + "/reorganize_blob_config.yaml";
+    file_storage_path_ = chi_test_data_dir() + "/reorganize_blob_storage.bin";
 
     // Clean up existing files
     Cleanup();

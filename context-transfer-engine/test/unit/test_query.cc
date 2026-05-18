@@ -79,6 +79,11 @@
 
  namespace fs = std::filesystem;
 
+static std::string chi_test_data_dir() {
+  const char *d = std::getenv("CHI_TEST_DATA_DIR");
+  return (d && *d) ? d : ".";
+}
+
  // Global state tracking for initialization (following pattern from other tests)
  namespace {
    bool g_initialized = false;
@@ -157,7 +162,7 @@
        throw std::runtime_error("HOME environment variable is not set");
      }
 
-     test_storage_path_ = home_dir + "/cte_query_test.dat";
+     test_storage_path_ = chi_test_data_dir() + "/cte_query_test.dat";
 
      // Clean up any existing test file
      if (fs::exists(test_storage_path_)) {

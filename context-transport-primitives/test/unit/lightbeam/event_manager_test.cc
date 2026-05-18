@@ -220,9 +220,13 @@ void TestMultipleEvents() {
   EventManager em;
 
   int pipe1[2] = {}, pipe2[2] = {}, pipe3[2] = {};
-  assert(pipe(pipe1) == 0);
-  assert(pipe(pipe2) == 0);
-  assert(pipe(pipe3) == 0);
+  int rc1 = pipe(pipe1);
+  int rc2 = pipe(pipe2);
+  int rc3 = pipe(pipe3);
+  assert(rc1 == 0);
+  assert(rc2 == 0);
+  assert(rc3 == 0);
+  (void)rc1; (void)rc2; (void)rc3;
 
   em.AddEvent(pipe1[0], kDefaultReadEvent);
   em.AddEvent(pipe2[0], kDefaultReadEvent);
