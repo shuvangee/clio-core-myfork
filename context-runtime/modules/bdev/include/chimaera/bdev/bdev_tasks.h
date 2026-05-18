@@ -36,6 +36,7 @@
 
 #include <chimaera/chimaera.h>
 #include <chimaera/config_manager.h>
+#include <hermes_shm/introspect/system_info.h>
 #include <yaml-cpp/yaml.h>
 
 #include "autogen/bdev_methods.h"
@@ -51,6 +52,28 @@
 namespace chimaera::bdev {
 
 using MonitorTask = chimaera::admin::MonitorTask;
+
+/**
+ * Default RAM-tier sizing policy.
+ *
+ * When a RAM bdev is configured with a capacity of 0 (e.g. "0g"), it is
+ * NOT treated as unbounded. An unbounded RAM tier lets the allocator
+ * hand out more than physical memory and OOM-kills the daemon on a
+ * shared compute node. Instead it defaults to a fixed fraction of the
+ * machine's total physical DRAM. This is the single source of truth for
+ * that policy — CTE (context-transfer-engine) uses the same helper so a
+ * "0g" RAM device means the same thing whether the bdev is created
+ * directly or through CTE's storage config.
+ */
+constexpr double kDefaultRamCapacityFraction = 0.80;
+
+/** Bytes to use for a RAM bdev configured with capacity 0/"0g": 80% of
+ *  total system DRAM. */
+inline chi::u64 DefaultRamCapacityBytes() {
+  return static_cast<chi::u64>(
+      static_cast<double>(hshm::SystemInfo::GetRamCapacity()) *
+      kDefaultRamCapacityFraction);
+}
 
 /**
  * Block device type enumeration

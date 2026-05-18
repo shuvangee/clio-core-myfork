@@ -39,7 +39,10 @@ jobs:
       - name: Install conda-build
         shell: bash -l {0}
         run: |
-          conda install -y conda-build anaconda-client
+          # setup-miniconda activates the "test" env; the `conda build`
+          # subcommand is only registered when conda-build lives in the
+          # base env (otherwise: "conda: error: ... invalid choice: 'build'").
+          conda install -y -n base conda-build anaconda-client
 
       - name: Determine preset
         id: preset

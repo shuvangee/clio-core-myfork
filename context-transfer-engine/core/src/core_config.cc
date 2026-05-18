@@ -32,6 +32,7 @@
  */
 
 #include <wrp_cte/core/core_config.h>
+#include <chimaera/bdev/bdev_tasks.h>
 #include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <iostream>
@@ -499,8 +500,28 @@ bool Config::ParseStorageConfig(const YAML::Node &node) {
     }
     
     if (device_config.capacity_limit_ == 0) {
-      HLOG(kError, "Config error: Storage device capacity_limit must be greater than 0");
-      return false;
+      // Policy: a RAM device configured with capacity 0 ("0g") defaults
+      // to 80% of total system DRAM — identical to the bdev module's
+      // own behavior (chimaera::bdev::DefaultRamCapacityBytes), so "0g"
+      // means the same whether a bdev is created directly or via CTE.
+      // Other tiers (file/noop/...) have no DRAM-based default, so 0
+      // remains an error for them.
+      if (device_config.bdev_type_ == "ram") {
+        device_config.capacity_limit_ =
+            chimaera::bdev::DefaultRamCapacityBytes();
+        HLOG(kInfo,
+             "Storage device {}: capacity_limit 0/'0g' for ram tier -> "
+             "defaulting to {}% of system DRAM = {} bytes",
+             device_config.path_,
+             static_cast<int>(
+                 chimaera::bdev::kDefaultRamCapacityFraction * 100),
+             device_config.capacity_limit_);
+      } else {
+        HLOG(kError,
+             "Config error: Storage device capacity_limit must be greater "
+             "than 0 (only 'ram' tier supports 0 = 80% DRAM default)");
+        return false;
+      }
     }
     
     storage_.devices_.push_back(std::move(device_config));

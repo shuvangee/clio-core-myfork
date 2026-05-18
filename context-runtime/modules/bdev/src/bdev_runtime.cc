@@ -37,6 +37,7 @@
 #include <chimaera/work_orchestrator.h>
 #include <chimaera/worker.h>
 
+#include <hermes_shm/introspect/system_info.h>
 #include <hermes_shm/serialize/msgpack_wrapper.h>
 
 #include <algorithm>
@@ -466,7 +467,10 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
 
   } else if (bdev_type_ == BdevType::kRam) {
     // RAM-based storage initialization.
-    //   capacity == 0 → unbounded.
+    //   capacity == 0 → default to 80% of total system DRAM (NOT
+    //                    unbounded: an unbounded RAM tier lets the
+    //                    allocator hand out more than physical memory and
+    //                    OOM-kills the daemon on a shared compute node).
     //   capacity  > 0 → bounded; size enforced lazily on AllocateBlocks /
     //                    WriteToRam (see file_size_ in the Heap allocator).
     //
@@ -489,9 +493,14 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
     // reservation entirely is the correct fix: the only producer of
     // ram_pages_ entries is WriteToRam, which already handles "page not
     // yet allocated" by allocating on the spot under ram_pages_mu_.
-    ram_capacity_ = (params.total_size_ == 0)
-                        ? std::numeric_limits<chi::u64>::max()
-                        : params.total_size_;
+    ram_capacity_ = (params.total_size_ == 0) ? DefaultRamCapacityBytes()
+                                               : params.total_size_;
+    HLOG(kInfo,
+         "RAM bdev '{}' capacity: configured={} -> using {} bytes "
+         "({}% of {} total DRAM when configured as 0/0g)",
+         pool_name, params.total_size_, ram_capacity_,
+         static_cast<int>(kDefaultRamCapacityFraction * 100),
+         hshm::SystemInfo::GetRamCapacity());
     file_size_ = ram_capacity_;  // Heap allocator's soft cap
 
   // BdevType::kHbm and BdevType::kPinned removed — supported tiers

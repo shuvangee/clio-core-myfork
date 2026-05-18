@@ -53,6 +53,12 @@ add_executable(test_tiered_storage_stress
     test_tiered_storage_stress.cc
 )
 
+# Create test_tiered_storage_dram_default executable — stresses the
+# "0g" -> 80% DRAM RAM-tier default through the CTE tiering path.
+add_executable(test_tiered_storage_dram_default
+    test_tiered_storage_dram_default.cc
+)
+
 # Create test_reorganize_blob executable for ReorganizeBlob API tests
 add_executable(test_reorganize_blob
     test_reorganize_blob.cc
@@ -95,6 +101,10 @@ target_include_directories(test_core_runtime_coverage PRIVATE
 )
 
 target_include_directories(test_tiered_storage_stress PRIVATE
+
+)
+
+target_include_directories(test_tiered_storage_dram_default PRIVATE
 
 )
 
@@ -196,6 +206,18 @@ target_link_libraries(test_tiered_storage_stress
     chimaera::admin_client       # Admin module client
     chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
     chimaera::bdev_client        # Bdev client for BdevType enum
+    hshm::cxx                    # HermesShm library
+    ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+# Link test_tiered_storage_dram_default - using simple_test.h framework
+target_link_libraries(test_tiered_storage_dram_default
+    wrp_cte_core_runtime         # CTE core runtime library
+    wrp_cte_core_client          # CTE core client library
+    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
+    chimaera::admin_client       # Admin module client
+    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    chimaera::bdev_client        # Bdev client for BdevType enum + policy helper
     hshm::cxx                    # HermesShm library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -443,6 +465,20 @@ set_tests_properties(
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
 )
 
+# Stresses the "0g" -> 80% DRAM RAM-tier default through the CTE tiering
+# path. Chained (policy -> Put -> Reorganize -> Integrity -> Cleanup) and
+# share global state via g_fixture, so they run together in one process.
+add_test(NAME cte_tiered_dram_default_all
+    COMMAND test_tiered_storage_dram_default)
+
+set_tests_properties(
+    cte_tiered_dram_default_all
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout
+        LABELS "stress;tiered;cte"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+)
+
 # Add reorganize blob tests
 # NOTE: These tests are chained (Put -> Move -> Integrity -> Promote -> Cleanup)
 # and share global state via g_fixture, so they must run together in a single
@@ -540,6 +576,7 @@ set_tests_properties(
     cte_client_config_all
     cte_runtime_coverage_all
     cte_tiered_storage_all
+    cte_tiered_dram_default_all
     cte_reorganize_all
     PROPERTIES LABELS "msan_skip"
 )
@@ -580,6 +617,7 @@ set_tests_properties(
     cte_client_config_all
     cte_runtime_coverage_all
     cte_tiered_storage_all
+    cte_tiered_dram_default_all
     cte_reorganize_all
     PROPERTIES RESOURCE_LOCK "chimaera_runtime"
 )
@@ -607,7 +645,7 @@ set_tests_properties(
 # ------------------------------------------------------------------------------
 # Install Targets
 # ------------------------------------------------------------------------------
-set(_CTE_TEST_TARGETS cte_core_unit_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_reorganize_blob)
+set(_CTE_TEST_TARGETS cte_core_unit_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_reorganize_blob)
 # (Legacy test_cte_gpu_coroutine / test_gpu_core / test_gpu_create were
 # removed along with the GPU runtime — see deletions earlier in this
 # file. The new CUDA test target test_cuda_cte_kernel_putget is added
