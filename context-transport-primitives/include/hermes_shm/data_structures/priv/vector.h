@@ -824,7 +824,15 @@ class vector {
       capacity_ = other.capacity_;
       other.InitSvo();
       other.size_ = 0;
-      other.alloc_ = nullptr;
+      // Keep other.alloc_ intact: InitSvo() already left `other` in a
+      // valid empty state whose destructor is a no-op (IsUsingSvo()), so
+      // clearing alloc_ is unnecessary for safety -- and harmful, since
+      // reserve() treats alloc_==nullptr as "no-op success", which would
+      // make a moved-from vector silently unable to grow (its next
+      // resize() would write past the SVO buffer). Retaining the
+      // allocator keeps the moved-from vector reusable, matching
+      // std::vector semantics and the move-then-reuse pattern in
+      // unordered_map_ll::rehash_no_lock().
     }
   }
 
@@ -887,7 +895,9 @@ class vector {
         capacity_ = other.capacity_;
         other.InitSvo();
         other.size_ = 0;
-        other.alloc_ = nullptr;
+        // Keep other.alloc_ intact (see move-ctor rationale): clearing it
+        // would make the moved-from vector silently unable to grow,
+        // overflowing its SVO buffer on the next resize().
       }
     }
     return *this;

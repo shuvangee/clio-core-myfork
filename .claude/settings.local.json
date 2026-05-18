@@ -68,7 +68,8 @@
       "Bash(chimaera runtime *)",
       "Bash(rm -rf /tmp/srv.log)",
       "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Put 1 1 1g 1)",
-      "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Get 1 1 1g 1)"
+      "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Get 1 1 1g 1)",
+      "Bash(rm -f /tmp/srv.log)"
     ],
     "deny": [],
     "ask": []

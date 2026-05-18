@@ -43,6 +43,24 @@
 // `EnableLocking = false` for a single-threaded variant with zero lock
 // overhead.
 //
+// THREAD-SAFETY CONTRACT (important):
+//   * Single-key operations (insert, insert_or_assign, operator[],
+//     find, contains, count, erase) ARE self-locking and safe to call
+//     concurrently from many threads when EnableLocking is true.
+//   * Rehash is NOT thread-safe and is intentionally not made so. A
+//     rehash reallocates BOTH the bucket array and the per-bucket lock
+//     array; the lock array cannot protect its own reallocation, so a
+//     rehash that runs concurrently with ANY other map operation is a
+//     data race / use-after-free. Rehash happens (a) automatically
+//     inside maybe_rehash() when size exceeds bucket_count() after an
+//     insert, and (b) explicitly via rehash().
+//   * Therefore, for concurrent use the caller MUST guarantee the map
+//     never rehashes while other threads touch it. The simple, intended
+//     way is to construct the map with bucket_count() > the maximum
+//     number of distinct keys ever inserted, so the load factor stays
+//     <= 1 and maybe_rehash() always early-returns. Otherwise the
+//     caller must quiesce all other threads around any rehash.
+//
 // Counterpart to `unordered_map_lhash` (linear-probing open-addressing,
 // previously named `unordered_map_ll`). Chaining trades the predictable
 // cache behavior that made linear probing nice on GPU for an unbounded
@@ -221,7 +239,14 @@ class unordered_map_ll {
   }
 
   /** Trigger rehash if load factor (size / num_buckets) > 1. Caller
-   *  must NOT hold any per-bucket lock. */
+   *  must NOT hold any per-bucket lock.
+   *
+   *  NOT thread-safe: see the THREAD-SAFETY CONTRACT at the top of this
+   *  file. Although this takes write_lock_all(), the rehash reallocates
+   *  the lock array itself, so it races with any concurrent operation.
+   *  Concurrent users must size the map so this always early-returns
+   *  (bucket_count() > max distinct keys) or otherwise quiesce all
+   *  threads around growth. */
   HSHM_INLINE_CROSS_FUN
   void maybe_rehash() {
     size_type cur_size = size_.load();
@@ -230,8 +255,16 @@ class unordered_map_ll {
     write_lock_all();
     cur_size = size_.load();
     cap = buckets_.size();
-    if (cur_size > cap) rehash_no_lock(cap * 2);
-    write_unlock_all();
+    if (cur_size > cap) {
+      // rehash_no_lock() re-Init()s (and thereby releases) every bucket
+      // lock while resizing locks_. Do NOT write_unlock_all() afterward:
+      // unlocking freshly Init()'d locks underflows writers_ and bumps
+      // cur_writer_, which wedges every subsequent WriteLock() forever.
+      rehash_no_lock(cap * 2);
+    } else {
+      // No rehash happened, so release exactly the locks we acquired.
+      write_unlock_all();
+    }
   }
 
  public:
@@ -292,12 +325,23 @@ class unordered_map_ll {
     return buckets_.size();
   }
 
-  /** Force a rehash to a new bucket count. */
+  /** Force a rehash to a new bucket count.
+   *
+   *  NOT thread-safe (by design): see the THREAD-SAFETY CONTRACT at the
+   *  top of this file. The caller must ensure no other thread is
+   *  touching the map for the duration of this call -- the bucket and
+   *  lock arrays are both reallocated, so concurrent inserts/finds/
+   *  erases would race and use freed memory. */
   HSHM_CROSS_FUN
   bool rehash(size_type new_bucket_count) {
     write_lock_all();
+    // rehash_no_lock() resizes locks_ and re-Init()s every bucket lock,
+    // which both releases the locks we just took and discards their held
+    // state. Calling write_unlock_all() afterward would run WriteUnlock()
+    // on freshly Init()'d (unlocked) locks -- underflowing writers_ and
+    // advancing cur_writer_ -- permanently wedging all future WriteLock()
+    // calls in an infinite spin. The rehash itself is the release.
     rehash_no_lock(new_bucket_count);
-    write_unlock_all();
     return true;
   }
 

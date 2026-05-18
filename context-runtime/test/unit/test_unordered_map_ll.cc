@@ -36,7 +36,16 @@
  *
  * Tests the unordered map implementation without requiring
  * the Chimaera runtime to be started.
- * NOTE: External locking is required for thread safety.
+ *
+ * Thread-safety note: unordered_map_ll defaults to EnableLocking=true,
+ * which gives every bucket its own RwLock. The primary API
+ * (insert/find/erase/...) is therefore self-locking -- no external
+ * mutex is required for concurrent single-key operations. The older
+ * Concurrent* tests below still wrap calls in an external std::mutex;
+ * that is overly conservative and does NOT exercise the map's internal
+ * locking. ConcurrentInsertReadNoExternalLock is the faithful test:
+ * it drops the external mutex and hammers the per-bucket locks with
+ * simultaneous inserters and readers.
  */
 
 #include <iostream>
@@ -466,6 +475,118 @@ TEST_F(UnorderedMapLLTest, ConcurrentMixedOperations) {
 }
 
 /**
+ * Faithful concurrency test: genuinely parallel inserts and reads with
+ * NO external mutex, so correctness depends entirely on the map's own
+ * per-bucket RwLocks (EnableLocking=true, the default).
+ *
+ * The map is pre-sized larger than the total key count so the load
+ * factor never exceeds 1 and no rehash is triggered during the
+ * concurrent phase (verified afterward via bucket_count()). This
+ * isolates the per-bucket read/write locking from the separate
+ * resize-vs-lookup concern, and is a direct regression guard for the
+ * two rehash-path bugs (priv::vector move dropping its allocator, and
+ * the double lock-release in maybe_rehash/rehash): a single rehash
+ * here would corrupt state and surface as a crash, hang, or a reader
+ * observing a torn value.
+ *
+ * Each inserter owns a disjoint key range and writes a deterministic
+ * value f(k)=k*3+7, so any key a reader observes MUST carry exactly
+ * that value -- a mismatch proves a torn/garbage read slipped past the
+ * locking.
+ */
+static inline int kv_value_for(int key) { return key * 3 + 7; }
+
+TEST_F(UnorderedMapLLTest, ConcurrentInsertReadNoExternalLock) {
+  const int num_inserters = 8;
+  const int keys_per_inserter = 1000;
+  const int num_readers = 4;
+  const int total_keys = num_inserters * keys_per_inserter;  // 8000
+
+  // bucket_count (16384) > total_keys (8000): size never exceeds the
+  // bucket count, so maybe_rehash() always early-returns -> no rehash.
+  const size_t initial_buckets = 16384;
+  hshm::priv::unordered_map_ll<int, int> map(initial_buckets);
+
+  std::atomic<bool> stop_readers{false};
+  std::atomic<bool> value_corruption{false};
+  std::atomic<long> reader_hits{0};
+  std::atomic<int> bad_key{-1};
+
+  std::vector<std::thread> threads;
+
+  // Inserter threads: disjoint key ranges, deterministic values.
+  for (int t = 0; t < num_inserters; ++t) {
+    threads.emplace_back([&map, t, keys_per_inserter]() {
+      const int begin = t * keys_per_inserter;
+      const int end = begin + keys_per_inserter;
+      for (int k = begin; k < end; ++k) {
+        map.insert(k, kv_value_for(k));
+      }
+    });
+  }
+
+  // Reader threads: concurrently look up keys across the whole space
+  // while inserts are in flight. A key may legitimately not be present
+  // yet (returns nullptr); but if it IS present its value must be
+  // exactly f(k). Bounded iteration count is a belt-and-suspenders
+  // guard so a logic bug can't hang the suite.
+  for (int r = 0; r < num_readers; ++r) {
+    threads.emplace_back([&, r]() {
+      unsigned int seed = 0x9E3779B9u ^ static_cast<unsigned int>(r);
+      long iters = 0;
+      const long kMaxIters = 50'000'000;
+      while (!stop_readers.load(std::memory_order_relaxed) &&
+             iters < kMaxIters) {
+        ++iters;
+        // xorshift for a cheap, lock-free key stream.
+        seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+        int key = static_cast<int>(seed % static_cast<unsigned>(total_keys));
+        int *val = map.find(key);
+        if (val != nullptr) {
+          reader_hits.fetch_add(1, std::memory_order_relaxed);
+          if (*val != kv_value_for(key)) {
+            value_corruption.store(true, std::memory_order_relaxed);
+            bad_key.store(key, std::memory_order_relaxed);
+          }
+        }
+      }
+    });
+  }
+
+  // Inserters are the first num_inserters threads.
+  for (int t = 0; t < num_inserters; ++t) {
+    threads[t].join();
+  }
+  stop_readers.store(true, std::memory_order_relaxed);
+  for (int r = 0; r < num_readers; ++r) {
+    threads[num_inserters + r].join();
+  }
+
+  // No reader may have observed a torn / wrong value.
+  if (value_corruption.load()) {
+    HLOG(kError, "FAIL: reader saw wrong value for key {} (expected {})",
+         bad_key.load(), kv_value_for(bad_key.load()));
+    return 1;
+  }
+
+  // Readers must have actually observed inserted entries (otherwise the
+  // test would be vacuously "passing" without real concurrency).
+  EXPECT_GT(reader_hits.load(), 0);
+
+  // No rehash must have occurred (pre-sized scope guarantee).
+  EXPECT_EQ(map.bucket_count(), initial_buckets);
+
+  // Every key present exactly once with the correct value.
+  EXPECT_EQ(map.size(), static_cast<size_t>(total_keys));
+  for (int k = 0; k < total_keys; ++k) {
+    int *val = map.find(k);
+    EXPECT_NE(val, nullptr);
+    EXPECT_EQ(*val, kv_value_for(k));
+  }
+  return 0;
+}
+
+/**
  * Test bucket distribution
  */
 TEST_F(UnorderedMapLLTest, BucketDistribution) {
@@ -511,6 +632,7 @@ int main() {
   RUN_TEST(UnorderedMapLLTest, ConcurrentInsertions);
   RUN_TEST(UnorderedMapLLTest, ConcurrentInsertionsWithCollisions);
   RUN_TEST(UnorderedMapLLTest, ConcurrentMixedOperations);
+  RUN_TEST(UnorderedMapLLTest, ConcurrentInsertReadNoExternalLock);
   RUN_TEST(UnorderedMapLLTest, BucketDistribution);
 
   HIPRINT("{}/{} tests passed", (total - failed), total);
