@@ -101,11 +101,20 @@ ENV LD_LIBRARY_PATH=/opt/intel/dpcpp/lib:${LD_LIBRARY_PATH}
 # libclang-18-dev / llvm-18-dev / lld-18 afterward ("E: Unmet
 # dependencies"). Resolving them here, against pristine Ubuntu noble
 # state, keeps both the LLVM toolchain and ROCm installable.
+# libnuma-dev / ninja-build (needed by the NIXL build further below) are
+# installed here too, on purpose. They must go in before the ROCm section:
+# that step force-installs hip-dev with `dpkg -i --force-depends`, which
+# leaves apt with intentionally-unmet dependencies. Any `apt-get install`
+# run *after* it aborts with "E: Unmet dependencies" (exit 100) during
+# apt's pre-install broken-state check — even for packages already present.
+# Resolving everything here, against pristine Ubuntu noble state, avoids that.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     libclang-18-dev \
     llvm-18-dev \
     lld-18 \
+    libnuma-dev \
+    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 #------------------------------------------------------------
@@ -184,11 +193,10 @@ ENV LD_LIBRARY_PATH=/opt/adaptivecpp/lib:${LD_LIBRARY_PATH}
 
 USER root
 
-# Install build dependencies for NIXL
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnuma-dev \
-    ninja-build \
-    && rm -rf /var/lib/apt/lists/*
+# NIXL build deps (libnuma-dev, ninja-build) were installed earlier, before
+# the ROCm section, against pristine apt state — see comment there. apt is
+# left in an intentionally-broken-deps state by the hip-dev force install,
+# so no apt-get install can run here.
 
 # Install meson and pybind11 in the iowarp venv
 RUN /bin/bash -c "source /home/iowarp/venv/bin/activate && \
