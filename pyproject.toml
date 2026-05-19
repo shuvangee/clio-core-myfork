@@ -43,6 +43,13 @@ cmake.source-dir = "."
 cmake.build-type = "Release"
 install.components = ["pip_package"]
 wheel.packages = ["installers/pip/iowarp_core"]
+# Sets CMAKE_INSTALL_PREFIX = <wheel>/platlib/iowarp_core, so every install()
+# DESTINATION is package-relative ("lib", "bin", "ext", ...) instead of having
+# to manually prefix each one with iowarp_core/.  The single exception is the
+# .pth file, which uses DESTINATION ".." in CMakeLists.txt to escape one level
+# up so it lands at site-packages root.  Must stay in sync with the
+# installers/pip/pyproject.toml copy used by local `pip install installers/pip`.
+wheel.install-dir = "iowarp_core"
 build-dir = "build/{wheel_tag}"
 
 [tool.scikit-build.cmake.define]
