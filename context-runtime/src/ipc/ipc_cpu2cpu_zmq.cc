@@ -72,9 +72,30 @@ bool IpcCpu2CpuZmq::RuntimeRecv(IpcManager *ipc, u32 &tasks_received) {
       // Allocate and deserialize the task
       hipc::FullPtr<Task> task_ptr =
           container->AllocLoadTask(method_id, archive);
+
+      // SerializeIn copied any zmq-owned BULK_XFER payloads into
+      // CHI-owned buffers (LoadTaskArchive::bulk), so the zmq_msg_t
+      // handles in archive.recv[*].desc are now unreferenced. Free them
+      // here — this is the only place that closes them on the server
+      // inbound path; without it every inbound TCP bulk leaks one
+      // zmq_msg_t + its payload. Safe to call unconditionally: the zmq
+      // ClearRecvHandles only closes/deletes desc handles and leaves the
+      // (now CHI-owned) data buffers alone; SHM recv has desc==null so
+      // this is a no-op there.
+      transport->ClearRecvHandles(archive);
+
       if (task_ptr.IsNull()) {
         HLOG(kError, "IpcCpu2CpuZmq::RuntimeRecv: Failed to deserialize task");
         continue;
+      }
+
+      // If SerializeIn copied any ZMQ-owned BULK_XFER input into a fresh
+      // CHI buffer, the task now owns that buffer. Promote the count to
+      // TASK_DATA_OWNER so the task destructor frees it (mirrors admin
+      // RecvIn). Without this the copied buffer leaks one io_size
+      // allocation per inbound TCP/IPC bulk.
+      if (archive.daemon_allocated_bulk_count_ > 0) {
+        task_ptr->SetFlags(TASK_DATA_OWNER);
       }
 
       // Create FutureShm for the task (server-side)
@@ -245,8 +266,17 @@ bool IpcCpu2CpuZmq::RuntimeSend(
         continue;
       }
 
-      // Defer task deletion for zero-copy send safety
-      origin_task->ClearFlags(TASK_DATA_OWNER);
+      // Defer task deletion by one invocation for zero-copy send safety:
+      // ZMQ's IO thread may still be reading the task's send buffer after
+      // Send() returns, so DelTask (and the task destructor's owned-buffer
+      // free) only runs on the next invocation, by which point the message
+      // has flushed. This mirrors the cross-node admin SendOut path, which
+      // also keeps TASK_DATA_OWNER across this same one-invocation window
+      // so the task destructor can free a receiver-allocated bulk buffer
+      // (~PutBlobTask / ~GetBlobTask). The flag is intentionally NOT
+      // cleared here: on the client ZMQ path it was historically a no-op
+      // (RuntimeRecv never set it), and clearing it now would re-leak the
+      // CHI buffer that LoadTaskArchive::bulk copied the ZMQ payload into.
       deferred_deletes.push_back(origin_task);
 
       did_work = true;

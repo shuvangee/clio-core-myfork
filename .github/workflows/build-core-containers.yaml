@@ -53,8 +53,16 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: iowarp/deploy-cpu:latest-amd64
-          cache-from: type=registry,ref=iowarp/deploy-cpu:buildcache-amd64
-          cache-to: type=registry,ref=iowarp/deploy-cpu:buildcache-amd64,mode=max
+          # GitHub Actions cache, not Docker Hub registry cache. The
+          # deploy-cpu buildcache caches the full compiled clio-core
+          # tree (~250MB+ layers); importing it from Docker Hub
+          # routinely stalled mid-download and timed the job out at
+          # 60min (alternating arch each run). type=gha is co-located
+          # with the runner, so it keeps the expensive compile cached
+          # without the flaky Docker Hub pull. Scope is per-arch to
+          # avoid amd64/arm64 cache collisions.
+          cache-from: type=gha,scope=deploy-cpu-amd64
+          cache-to: type=gha,scope=deploy-cpu-amd64,mode=max
 
   # Deploy containers - ARM64
   deploy-cpu-arm64:
@@ -85,8 +93,10 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: iowarp/deploy-cpu:latest-arm64
-          cache-from: type=registry,ref=iowarp/deploy-cpu:buildcache-arm64
-          cache-to: type=registry,ref=iowarp/deploy-cpu:buildcache-arm64,mode=max
+          # See the amd64 job above: type=gha avoids the Docker Hub
+          # registry-buildcache pull that stalled this job out at 60min.
+          cache-from: type=gha,scope=deploy-cpu-arm64
+          cache-to: type=gha,scope=deploy-cpu-arm64,mode=max
 
   # Create multi-arch manifest for deploy-cpu
   create-deploy-cpu-manifest:

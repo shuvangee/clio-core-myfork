@@ -83,9 +83,34 @@ void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
     // so we look into the recv vector and use the FullPtr at the current index
     if (current_bulk_index_ < recv.size()) {
       if (!recv[current_bulk_index_].data.shm_.IsNull()) {
-        // Valid ShmPtr: either SHM transport (data in shared memory) or
-        // ZMQ/socket transport (data received into buffer)
-        ptr = recv[current_bulk_index_].data.shm_.template Cast<void>();
+        if (recv[current_bulk_index_].desc != nullptr) {
+          // ZMQ zero-copy recv: the data currently lives in a
+          // libzmq-owned zmq_msg_t buffer (RecvBulks stored its handle
+          // in Bulk::desc). Pointing the task directly at it leaks that
+          // zmq_msg_t on every inbound BULK_XFER: FreeBuffer cannot free
+          // libzmq memory (so the TASK_DATA_OWNER destructor path can't
+          // reclaim it — see admin_runtime.cc RecvIn), and the only
+          // ClearRecvHandles call sites are the client *response* path,
+          // never this server inbound path. Instead, copy into an owned
+          // CHI buffer so the existing daemon_allocated_bulk_count_ /
+          // TASK_DATA_OWNER machinery frees it safely; the caller then
+          // frees the now-unreferenced zmq_msg_t via ClearRecvHandles
+          // immediately after AllocLoadTask. One extra 1 MiB memcpy on
+          // the TCP path (which already memcpys); SHM path (desc==null)
+          // stays zero-copy and untouched.
+          hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(size);
+          char *src = recv[current_bulk_index_].data.ptr_;
+          if (buf.ptr_ && src) {
+            memcpy(buf.ptr_, src, size);
+          }
+          ptr = buf.shm_.template Cast<void>();
+          recv[current_bulk_index_].data = buf;
+          ++daemon_allocated_bulk_count_;
+        } else {
+          // Valid ShmPtr, no zmq handle: SHM transport (data already in
+          // shared memory) — keep zero-copy.
+          ptr = recv[current_bulk_index_].data.shm_.template Cast<void>();
+        }
       } else {
         // Null ShmPtr: BULK_EXPOSE via ZMQ/socket where no data was sent.
         // Allocate a buffer for the receiver to fill (e.g., ReadTask).

@@ -2596,6 +2596,30 @@ chi::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, chi::u64 offset,
                         allocate_size);
     blob_info.blocks_.push_back(new_block);
 
+    // Debit the CANONICAL target's remaining_space_ (mirror of
+    // FreeAllBlobBlocks' credit). AllocateFromTarget only decremented the
+    // throwaway target_info_copy, so without this allocs never reduced
+    // the real counter and accounting drifted between StatTargets polls.
+    //
+    // registered_targets_ is structurally STATIONARY on the data path
+    // (only RegisterTarget inserts, at setup), so a shared READ lock is
+    // sufficient to traverse/find it — no exclusive write lock for a
+    // plain integer update. The counter is mutated lock-free via
+    // std::atomic_ref with a CAS loop that saturates at 0 instead of
+    // underflowing the unsigned value.
+    {
+      chi::ScopedCoRwReadLock read_lock(target_lock_);
+      TargetInfo *ti = registered_targets_.find(selected_target_id);
+      if (ti != nullptr) {
+        std::atomic_ref<chi::u64> rs(ti->remaining_space_);
+        chi::u64 cur = rs.load(std::memory_order_relaxed);
+        while (!rs.compare_exchange_weak(
+            cur, (cur > allocate_size) ? cur - allocate_size : 0,
+            std::memory_order_relaxed)) {
+        }
+      }
+    }
+
     remaining_to_allocate -= allocate_size;
   }
 
@@ -2975,7 +2999,10 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
     chimaera::bdev::Block block;
     block.offset_ = blob_block.target_offset_;
     block.size_ = blob_block.size_;
-    block.block_type_ = 0;  // Default block type
+    // BlobBlock does not track the allocator's size class; bdev
+    // Runtime::FreeBlocks re-derives block_type_ from size_ so the block
+    // returns to the same partition AllocateBlock draws from. Leave 0.
+    block.block_type_ = 0;
 
     // Store target_query with blocks for this pool
     if (blocks_by_pool.find(pool_id) == blocks_by_pool.end()) {
@@ -3005,13 +3032,19 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
     if (free_result != 0) {
       HLOG(kWarning, "Failed to free blocks from pool {}", pool_id.major_);
     } else {
-      // Successfully freed blocks - update target's remaining_space_
-      chi::ScopedCoRwWriteLock write_lock(target_lock_);
+      // Successfully freed blocks - credit target's remaining_space_.
+      // Shared READ lock only: registered_targets_ is structurally
+      // stationary on the data path; the counter is bumped lock-free
+      // via std::atomic_ref (no exclusive lock for an integer add).
+      chi::ScopedCoRwReadLock read_lock(target_lock_);
       TargetInfo *target_info = registered_targets_.find(pool_id);
       if (target_info != nullptr) {
-        target_info->remaining_space_ += bytes_freed;
+        chi::u64 now = std::atomic_ref<chi::u64>(target_info->remaining_space_)
+                           .fetch_add(bytes_freed,
+                                      std::memory_order_relaxed) +
+                       bytes_freed;
         HLOG(kDebug, "Updated target {} remaining_space_ by +{} bytes (now {})",
-             pool_id.major_, bytes_freed, target_info->remaining_space_);
+             pool_id.major_, bytes_freed, now);
       }
     }
   }

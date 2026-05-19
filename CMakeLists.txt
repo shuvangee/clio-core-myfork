@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(iowarp-core VERSION 1.0.3 LANGUAGES C CXX)
+project(iowarp-core VERSION 1.5.1 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
 # Project Options
@@ -88,6 +88,7 @@ option(WRP_CORE_ENABLE_MPI "Enable MPI support" OFF)
 option(WRP_CORE_ENABLE_ZMQ "Enable ZeroMQ transport" ON)
 option(WRP_CORE_ENABLE_LIBFABRIC "Enable Libfabric transport" OFF)
 option(WRP_CORE_ENABLE_THALLIUM "Build tests which depend on thallium" OFF)
+option(WRP_CORE_ENABLE_REDIS "Find hiredis and build the Redis comparison benchmark" OFF)
 
 #------------------------------------------------------------------------------
 # Data and Serialization Features
@@ -349,6 +350,20 @@ if(WRP_CORE_ENABLE_THALLIUM)
     endif()
     set(SERIALIZATION_LIBS thallium ${SERIALIZATION_LIBS})
     set(WRP_CORE_ENABLE_CEREAL ON)
+endif()
+
+# hiredis (conditional) — Redis comparison benchmark only.
+if(WRP_CORE_ENABLE_REDIS)
+    find_package(hiredis CONFIG QUIET)
+    if(hiredis_FOUND)
+        set(WRP_REDIS_LIBS hiredis::hiredis)
+        message(STATUS "found hiredis (CMake config) at ${hiredis_DIR}")
+    else()
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(HIREDIS REQUIRED IMPORTED_TARGET hiredis)
+        set(WRP_REDIS_LIBS PkgConfig::HIREDIS)
+        message(STATUS "found hiredis (pkg-config) v${HIREDIS_VERSION}")
+    endif()
 endif()
 
 # Update cereal libraries if enabled

@@ -632,9 +632,15 @@ chi::TaskResume Runtime::AllocateBlocks(hipc::FullPtr<AllocateBlocksTask> task,
   // Copy the local vector to the task's shared memory vector using assignment
   // operator
   // task->blocks_ = local_blocks;
+  chi::u64 alloc_bytes = 0;
   for (size_t i = 0; i < local_blocks.size(); i++) {
     task->blocks_.push_back(local_blocks[i]);
+    alloc_bytes += local_blocks[i].size_;
   }
+  // Track LIVE allocated bytes (same per-block size FreeBlocks subtracts),
+  // independent of free-list vs heap source. Drives GetStats' true
+  // remaining capacity instead of heap_'s monotonic bump high-water.
+  allocated_bytes_.fetch_add(alloc_bytes, std::memory_order_relaxed);
 
   HLOG(kDebug,
        "bdev::AllocateBlocks: SUCCESS - allocated {} blocks, "
@@ -653,11 +659,43 @@ chi::TaskResume Runtime::FreeBlocks(hipc::FullPtr<FreeBlocksTask> task,
   // Get worker ID for free operation
   int worker_id = static_cast<int>(GetWorkerID(rctx));
 
-  // Free all blocks in the vector using GlobalBlockMap
+  // Free all blocks in the vector using GlobalBlockMap.
+  //
+  // Normalize block_type_ from the block's SIZE before filing it into the
+  // free list. AllocateBlock picks the free list via FindBlockType(size),
+  // so a freed block must be filed in that same size class to ever be
+  // reused. Callers do not (and cannot) reliably track the allocator's
+  // size class: BlobBlock carries only {offset,size}, so CTE's
+  // FreeAllBlobBlocks passes block_type_=0. Trusting that put every freed
+  // 1 MiB block in the 4 KiB list, so 1 MiB AllocateBlock never found
+  // them and fell through to the monotonic heap — RAM usage grew with op
+  // count regardless of the live key set until the tier cap was hit.
+  // Classifying by size here makes the allocator self-consistent for
+  // every caller.
+  chi::u64 freed_bytes = 0;
   for (size_t i = 0; i < task->blocks_.size(); ++i) {
     Block block_copy = task->blocks_[i];  // Make a copy since FreeBlock takes
                                           // non-const reference
+    size_t cat_size = 0;
+    int bt = FindBlockTypeForSize(static_cast<size_t>(block_copy.size_),
+                                  cat_size);
+    if (bt < 0) {
+      // Larger than every cached class — mirror AllocateBlocks, which
+      // uses the largest category for such sizes.
+      bt = static_cast<int>(BlockSizeCategory::kMaxCategories) - 1;
+    }
+    block_copy.block_type_ = static_cast<chi::u32>(bt);
+    freed_bytes += block_copy.size_;
     global_block_map_.FreeBlock(worker_id, block_copy);
+  }
+  // Reclaim live-byte accounting so GetStats' remaining recovers as
+  // blocks are reused (pairs with AllocateBlocks' fetch_add). Guard the
+  // subtraction so a double-free / mismatched free can't underflow the
+  // unsigned counter.
+  {
+    chi::u64 cur = allocated_bytes_.load(std::memory_order_relaxed);
+    chi::u64 dec = std::min(cur, freed_bytes);
+    allocated_bytes_.fetch_sub(dec, std::memory_order_relaxed);
   }
 
   task->return_code_ = 0;
@@ -926,8 +964,14 @@ chi::TaskResume Runtime::GetStats(hipc::FullPtr<GetStatsTask> task,
   task->metrics_.read_latency_us_ = read_wall_us;
   task->metrics_.write_latency_us_ = write_wall_us;
   task->metrics_.iops_ = perf_metrics_.iops_;
-  // Get remaining size from heap allocator
-  chi::u64 remaining = heap_.GetRemainingSize();
+  // Remaining = capacity - LIVE allocated bytes. NOT heap_.GetRemainingSize()
+  // (heap_ is a monotonic bump pointer never rolled back on free, so under
+  // concurrent free-list misses it raced past the true live set and
+  // collapsed CTE's StatTargets remaining_space_ to ~0 -> MaxBwDpe
+  // rejected the only target -> ExtendBlob=2 -> PutBlob rc=12). file_size_
+  // is what heap_ was Init'd with (= ram_capacity_ for kRam).
+  chi::u64 live = allocated_bytes_.load(std::memory_order_relaxed);
+  chi::u64 remaining = (file_size_ > live) ? (file_size_ - live) : 0;
   task->remaining_size_ = remaining;
   task->return_code_ = 0;
   CHI_CO_RETURN;

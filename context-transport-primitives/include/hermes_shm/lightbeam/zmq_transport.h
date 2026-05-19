@@ -682,12 +682,11 @@ class ZeroMqTransport : public Transport {
     };
     uint64_t t_send_begin = stamp();
 
-    // Serialize the multipart send so frames from different threads
-    // don't interleave. Without this the ZMTP frame stream is racy:
-    // identityA, delimiter, identityB (oops), metaA, ... — receiver
-    // drops the message and our SWIM probe never gets a reply.
+    // Serialize ALL socket access (send + recv share one mutex): the
+    // multipart send must not interleave with another send's frames NOR
+    // run concurrently with a recv on this same non-thread-safe socket.
     uint64_t t_lock_begin = stamp();
-    std::lock_guard<std::mutex> lock(send_mtx_);
+    std::lock_guard<std::mutex> lock(sock_mtx_);
     uint64_t t_lock_end = stamp();
 
     // Compute send_bulks before serialization so receiver knows how many
@@ -837,11 +836,11 @@ class ZeroMqTransport : public Transport {
     };
     uint64_t t_recv_begin = stamp();
 
-    // Mirror of Send's locking: a multipart Recv must consume identity /
-    // delimiter / meta / bulk frames atomically or threads can take
-    // each other's frames mid-message.
+    // Same single socket mutex as Send: recv must not run concurrently
+    // with a send (or another recv) on this non-thread-safe socket, and
+    // a multipart recv must consume id/delim/meta/bulk frames atomically.
     uint64_t t_lock_begin = stamp();
-    std::lock_guard<std::mutex> lock(recv_mtx_);
+    std::lock_guard<std::mutex> lock(sock_mtx_);
     uint64_t t_lock_end = stamp();
 
     ClientInfo info;
@@ -1115,15 +1114,19 @@ class ZeroMqTransport : public Transport {
   bool owns_ctx_;
   void* socket_;
   ZmqFiredAction zmq_fired_action_;
-  // ZMQ sockets are not thread-safe (per the ZeroMQ guide). Multipart
-  // sends (identity / delimiter / meta / N bulk frames) issued from
-  // multiple chimaera worker threads on the same socket can interleave,
-  // corrupting the ZMTP frame stream. Receivers then silently drop
-  // unparseable messages — appearing as e.g. SWIM HeartbeatProbe
-  // timeouts on multi-node deployments. Hold these around Send/Recv so
-  // each multipart message is atomic.
-  std::mutex send_mtx_;
-  std::mutex recv_mtx_;
+  // ZMQ sockets are not thread-safe (per the ZeroMQ guide) — and the
+  // constraint is the WHOLE socket, not send vs recv separately:
+  // concurrent send-on-one-thread + recv-on-another is still undefined
+  // behavior and corrupts libzmq's internal pipe_t/msg_t state
+  // (observed: SIGSEGV in zmq::pipe_t::read, "double free or
+  // corruption", zmq object.cpp:142 assertion under client
+  // connect/disconnect churn — the daemon's dedicated client-recv
+  // thread races the periodic AsyncClientSend worker task on this same
+  // ROUTER socket). A SINGLE mutex therefore guards ALL socket access
+  // (every multipart send AND recv), so the socket is only ever touched
+  // by one thread at a time. One non-recursive mutex, never nested with
+  // any other lock => deadlock-free by construction.
+  std::mutex sock_mtx_;
   // ZMQ socket monitor — diagnostic for ZMTP-layer connection events.
   std::thread monitor_thread_;
   std::atomic<bool> monitor_running_{false};

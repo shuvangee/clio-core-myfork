@@ -71,6 +71,24 @@ class WrpCteBench(Application):
                 'help': 'Total number of I/O operations each MPI rank will perform'
             },
             {
+                'name': 'time_limit',
+                'msg': 'Run each phase for N seconds instead of io_count',
+                'type': int,
+                'default': 0,
+                'help': '0 = use io_count; >0 = run that many seconds '
+                        '(maps to wrp_cte_bench --time-limit)'
+            },
+            {
+                'name': 'max_total_blobs',
+                'msg': 'Cap TOTAL distinct blobs across all threads',
+                'type': int,
+                'default': 0,
+                'help': '0 = unbounded; else global keyspace split evenly '
+                        'across threads (maps to --max-total-blobs). Total '
+                        'unique bytes = max_total_blobs * io_size, '
+                        'independent of num_threads.'
+            },
+            {
                 'name': 'nprocs',
                 'msg': 'Number of MPI processes',
                 'type': int,
@@ -123,9 +141,12 @@ class WrpCteBench(Application):
         if self.config['depth'] <= 0:
             raise ValueError(f"Invalid depth: {self.config['depth']}. Must be > 0")
 
-        # Validate io_count
-        if self.config['io_count'] <= 0:
-            raise ValueError(f"Invalid io_count: {self.config['io_count']}. Must be > 0")
+        # Validate io_count (only required when not time-limited)
+        if (int(self.config['time_limit']) <= 0 and
+                self.config['io_count'] <= 0):
+            raise ValueError(
+                f"Invalid io_count: {self.config['io_count']}. Must be > 0 "
+                f"(or set time_limit > 0)")
 
         # Validate io_size format (should have k/K, m/M, g/G suffix or be a number)
         io_size_str = str(self.config['io_size']).lower()
@@ -164,16 +185,23 @@ class WrpCteBench(Application):
         """
         self.log(f"Starting CTE benchmark: {self.config['test_case']}")
 
-        # Build command line arguments
-        # Usage: wrp_cte_bench <test_case> <num_threads> <depth> <io_size> <io_count>
+        # Semantic-flag CLI (bench_common.h). Use --time-limit when set,
+        # otherwise --io-count. (The binary still accepts the legacy
+        # positional form, but flags make time_limit/max_total_blobs
+        # possible.)
         cmd = [
             self.benchmark_executable,
-            self.config['test_case'],
-            str(self.config['num_threads']),
-            str(self.config['depth']),
-            str(self.config['io_size']),
-            str(self.config['io_count'])
+            '--op', str(self.config['test_case']),
+            '--threads', str(self.config['num_threads']),
+            '--depth', str(self.config['depth']),
+            '--io-size', str(self.config['io_size']),
         ]
+        if int(self.config['time_limit']) > 0:
+            cmd += ['--time-limit', str(self.config['time_limit'])]
+        else:
+            cmd += ['--io-count', str(self.config['io_count'])]
+        if int(self.config['max_total_blobs']) > 0:
+            cmd += ['--max-total-blobs', str(self.config['max_total_blobs'])]
 
         self.log(
             f"Running benchmark via Pssh: {self.config['nprocs']} procs, "

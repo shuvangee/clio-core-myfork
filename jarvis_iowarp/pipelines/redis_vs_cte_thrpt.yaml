@@ -1,0 +1,100 @@
+# Redis vs CTE throughput comparison — multi-experiment pipeline.
+#
+# Brings up the Chimaera runtime + CTE core AND a Redis server in the
+# same deployment, then runs the two apples-to-apples benchmarks
+# (wrp_cte_bench and wrp_redis_bench — same CLI/metrics via
+# bench_common.h) back to back under identical conditions.
+#
+# Experiment matrix (cross product => 2 x 5 = 10 experiments):
+#   * I/O size:        4k, 1m
+#   * client threads:  1, 2, 4, 8, 16
+#   * 10 seconds per benchmark phase (--time-limit 10)
+#   * keyspace bounded to 1 GiB unique TOTAL (--max-total-blobs):
+#       4k -> 262144 keys, 1m -> 1024 keys. This is a GLOBAL cap split
+#       evenly across threads, so the working set stays 1 GiB at every
+#       thread count (16 threads -> 64 keys/thread @1m) instead of
+#       scaling with --threads and overrunning the 16 GiB tier.
+#
+# Requires: wrp_cte_bench + wrp_redis_bench in PATH (build with
+#           -DWRP_CORE_ENABLE_REDIS=ON), redis-server in PATH.
+#
+# Usage:
+#   jarvis pipeline test redis_vs_cte_thrpt.yaml
+
+config:
+  name: redis_vs_cte_thrpt
+  pkgs:
+    # --- Chimaera runtime (owns the daemon) ---
+    - pkg_type: jarvis_iowarp.wrp_runtime
+      pkg_name: runtime
+      num_threads: 4
+      port: 9413
+      ipc_mode: "shm"
+      log_level: "info"
+      sleep: 4
+
+    # --- CTE core: single RAM tier ---
+    - pkg_type: jarvis_iowarp.wrp_cte
+      pkg_name: cte_core
+      devices:
+        - ["ram::cte_ram_tier1", "16GB", 1.0]
+      dpe_type: "max_bw"
+      neighborhood: 1
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
+
+    # --- Redis server (no persistence: fair vs CTE RAM tier) ---
+    - pkg_type: jarvis_iowarp.redis
+      pkg_name: redis
+      port: 6379
+
+    # --- CTE benchmark ---
+    - pkg_type: jarvis_iowarp.wrp_cte_bench
+      pkg_name: cte_bench
+      test_case: "Put"
+      num_threads: 1
+      depth: 1
+      io_size: "1m"
+      time_limit: 10
+      max_total_blobs: 1024
+      nprocs: 1
+      ppn: 1
+      init_runtime: false
+      output_file: cte_bench.log
+
+    # --- Redis benchmark (mirror) ---
+    - pkg_type: jarvis_iowarp.wrp_redis_bench
+      pkg_name: redis_bench
+      test_case: "Put"
+      num_threads: 1
+      depth: 1
+      io_size: "1m"
+      time_limit: 10
+      max_total_blobs: 1024
+      redis_host: "127.0.0.1"
+      redis_port: 6379
+      nprocs: 1
+      ppn: 1
+      output_file: redis_bench.log
+
+vars:
+  # I/O size + matching 1 GiB-unique GLOBAL keyspace, applied to BOTH
+  # benches (zipped so 4k<->262144 and 1m<->1024 stay paired). Because
+  # --max-total-blobs is split across threads, these values are
+  # thread-count-independent (no need to scale with num_threads).
+  cte_bench.io_size:            ["4k",   "1m"]
+  redis_bench.io_size:          ["4k",   "1m"]
+  cte_bench.max_total_blobs:    [262144, 1024]
+  redis_bench.max_total_blobs:  [262144, 1024]
+
+  # Client thread scaling, applied to BOTH benches.
+  cte_bench.num_threads:   [1, 2, 4, 8, 16]
+  redis_bench.num_threads: [1, 2, 4, 8, 16]
+
+loop:
+  - [cte_bench.io_size, redis_bench.io_size,
+     cte_bench.max_total_blobs, redis_bench.max_total_blobs]
+  - [cte_bench.num_threads, redis_bench.num_threads]
+
+repeat: 1
+output: "${HOME}/redis_vs_cte_results"

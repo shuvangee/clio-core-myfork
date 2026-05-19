@@ -37,6 +37,19 @@ for arg in "$@"; do
 done
 PRESET="${PRESET:-release}"
 
+# Single source of truth for the build/target Python: the recipe's
+# conda_build_config.yaml `python:` pin. We deliberately do NOT derive
+# this from whatever `python3` is active — conda-forge's `python`
+# metapackage moved its default to 3.14, and forcing `conda build
+# --python=3.14` (overriding the recipe pin) crashes conda-build in
+# get_upstream_pins/execute_download_actions with
+# "IndexError: list index out of range". Pinning the env, the build,
+# and the install to the recipe's value keeps all three consistent.
+CBC_FILE="$SCRIPT_DIR/installers/conda/conda_build_config.yaml"
+PYVER="$(grep -A2 '^python:' "$CBC_FILE" 2>/dev/null \
+    | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+PYVER="${PYVER:-3.12}"
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -160,8 +173,8 @@ if [ -z "$CONDA_PREFIX" ]; then
     if conda env list | grep -q "^$ENV_NAME "; then
         echo -e "${YELLOW}Environment '$ENV_NAME' already exists. Using existing environment.${NC}"
     else
-        conda create -n "$ENV_NAME" -y python
-        echo -e "${GREEN}Environment created${NC}"
+        conda create -n "$ENV_NAME" -y "python=$PYVER"
+        echo -e "${GREEN}Environment created (python=$PYVER)${NC}"
     fi
 
     echo -e "${BLUE}Activating environment: $ENV_NAME${NC}"
@@ -227,10 +240,9 @@ mkdir -p "$OUTPUT_DIR"
 
 export IOWARP_PRESET="$PRESET"
 
-# Match the build Python version to the target environment so that
-# the built package's python pin is satisfiable at install time.
-TARGET_PYTHON="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-echo -e "${BLUE}Target Python version: $TARGET_PYTHON${NC}"
+# Build/target Python comes from the recipe pin (computed above as
+# $PYVER), NOT from the active interpreter. See the comment at the top.
+echo -e "${BLUE}Target Python version: $PYVER (from conda_build_config.yaml)${NC}"
 
 # --only-deps: render the recipe to resolve jinja, extract the union
 # of build/host/run requirements, and conda-install them. Skip the
@@ -244,9 +256,11 @@ if [ "$ONLY_DEPS" = true ]; then
     # -f writes the rendered YAML to FILE without the "Hash contents:"
     # / "meta.yaml:" prelude that `conda render` would otherwise emit
     # on stdout (which is not parseable as pure YAML).
+    # No --python: the recipe's conda_build_config.yaml `python:` pin
+    # drives the variant. Passing --python on the CLI overrides that
+    # pin and trips conda-build's execute_download_actions IndexError.
     if ! "$CONDA_BIN" render "$RECIPE_DIR" \
             -c conda-forge \
-            --python="$TARGET_PYTHON" \
             -f "$RENDERED" >/dev/null 2>&1; then
         echo -e "${RED}conda render failed${NC}"
         rm -f "$RENDERED"
@@ -309,10 +323,14 @@ echo -e "${BLUE}>>> Building conda package with conda-build...${NC}"
 echo -e "${YELLOW}This may take 10-30 minutes depending on your system${NC}"
 echo ""
 
+# No --python flag: the recipe's conda_build_config.yaml pins
+# python (3.12). Passing --python on the CLI overrides that pin and
+# crashes conda-build in execute_download_actions
+# ("IndexError: list index out of range"), even when the value
+# matches the pin. This mirrors the known-good install-conda.yml job.
 if "$CONDA_BIN" build "$RECIPE_DIR" \
     --output-folder "$OUTPUT_DIR" \
     -c conda-forge \
-    --python="$TARGET_PYTHON" \
     --no-anaconda-upload; then
     BUILD_SUCCESS=true
 else

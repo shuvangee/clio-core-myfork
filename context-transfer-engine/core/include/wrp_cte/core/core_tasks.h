@@ -1135,6 +1135,34 @@ struct PutBlobTask : public chi::Task {
     pool_query_ = pool_query;
   }
 
+  /** Destructor — frees blob_data_ when this task owns the buffer.
+   *
+   * The destructor runs for every PutBlobTask, but TASK_DATA_OWNER is
+   * only set on the receiver side when LoadTaskArchive::bulk had to copy
+   * a ZMQ-owned BULK_XFER input into a fresh CHI buffer (zmq zero-copy
+   * recv on the client TCP/IPC path — IpcCpu2CpuZmq::RuntimeRecv, or the
+   * cross-node admin RecvIn path). The original libzmq buffer is freed
+   * separately via ClearRecvHandles right after AllocLoadTask; this frees
+   * the owned copy when the task is destroyed.
+   *
+   * Client-side PutBlobTask (created by an emplace constructor) calls
+   * task_flags_.Clear() so the flag is off and the destructor leaves the
+   * client's blob_data_ alone (the client allocated it and frees it
+   * itself after task.Wait()). The SHM zero-copy recv path also leaves
+   * the flag clear (no copy was made). Without this destructor every
+   * inbound ZMQ BULK_XFER PutBlob leaked one io_size allocation.
+   */
+  HSHM_CROSS_FUN ~PutBlobTask() {
+#if !HSHM_IS_DEVICE_PASS
+    if (task_flags_.Any(TASK_DATA_OWNER) && !blob_data_.IsNull()) {
+      auto *ipc_manager = CHI_CPU_IPC;
+      if (ipc_manager) {
+        ipc_manager->FreeBuffer(blob_data_.template Cast<char>());
+      }
+    }
+#endif
+  }
+
   /**
    * Serialize IN and INOUT parameters.
    */

@@ -402,6 +402,14 @@ class Runtime : public chi::Container {
   std::atomic<chi::u64> total_writes_;
   std::atomic<chi::u64> total_bytes_read_;
   std::atomic<chi::u64> total_bytes_written_;
+  // True LIVE allocated bytes (incremented in AllocateBlocks regardless of
+  // whether the block came from the GlobalBlockMap free list or the heap;
+  // decremented in FreeBlocks). GetStats reports remaining = capacity -
+  // allocated_bytes_ from this, NOT heap_'s monotonic bump high-water —
+  // the bump pointer is never rolled back on free, so under concurrent
+  // free-list misses it raced past the true live set and made CTE's
+  // StatTargets see ~0 remaining (the 16-thread rc=12 placement bug).
+  std::atomic<chi::u64> allocated_bytes_{0};
   std::chrono::high_resolution_clock::time_point start_time_;
   
   // User-provided performance characteristics

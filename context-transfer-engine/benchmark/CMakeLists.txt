@@ -45,5 +45,25 @@ else()
   message(STATUS "Skipping wrp_cte_score_bench - MPI not enabled (set WRP_CORE_ENABLE_MPI=ON)")
 endif()
 
+# Redis comparison benchmark — apples-to-apples mirror of wrp_cte_bench
+# (shares bench_common.h). Built only when WRP_CORE_ENABLE_REDIS=ON, which
+# locates hiredis and sets WRP_REDIS_LIBS (see top-level CMakeLists.txt).
+if(WRP_CORE_ENABLE_REDIS)
+  add_executable(wrp_redis_bench
+    wrp_redis_bench.cc
+  )
+  target_link_libraries(wrp_redis_bench
+    ${WRP_REDIS_LIBS}
+    hshm::cxx
+  )
+  target_compile_features(wrp_redis_bench PRIVATE cxx_std_17)
+  install(TARGETS wrp_redis_bench
+    RUNTIME DESTINATION bin
+  )
+else()
+  message(STATUS "Skipping wrp_redis_bench - Redis not enabled "
+                 "(set WRP_CORE_ENABLE_REDIS=ON; requires hiredis)")
+endif()
+
 # NOTE: Compression benchmark (wrp_cte_compress_bench) has been moved to
 # context-transfer-engine/compressor/test/

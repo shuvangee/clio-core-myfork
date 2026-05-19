@@ -69,7 +69,12 @@
       "Bash(rm -rf /tmp/srv.log)",
       "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Put 1 1 1g 1)",
       "Bash(CHI_IPC_MODE=shm timeout 120 ./bin/wrp_cte_bench Get 1 1 1g 1)",
-      "Bash(rm -f /tmp/srv.log)"
+      "Bash(rm -f /tmp/srv.log)",
+      "Bash(pkill -9 -f \"chimaera\")",
+      "Bash(pkill -9 -f \"wrp_cte_bench\")",
+      "Bash(pkill -9 -f \"chi_rss\")",
+      "Bash(ps -eo pid,cmd)",
+      "Bash(pkill -9 -f chi_rss)"
     ],
     "deny": [],
     "ask": []

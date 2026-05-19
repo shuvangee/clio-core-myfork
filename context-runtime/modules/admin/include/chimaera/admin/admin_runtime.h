@@ -133,7 +133,7 @@ private:
   // inbound network path. Single thread per channel:
   //   - peer_recv_thread_   owns the cross-node ROUTER (port 9413)
   //   - client_recv_thread_ owns the client TCP+IPC transports
-  // A multi-thread recv pool was tried; the transport's recv_mtx_
+  // A multi-thread recv pool was tried; the transport's sock_mtx_
   // serialises the entire multipart Recv (including bulk frames), so
   // pooling parallelised only the post-Recv LoadTask/Aggregate work
   // and bought little once contention overhead was paid. 8n read also
