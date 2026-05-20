@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(iowarp-core VERSION 1.5.3 LANGUAGES C CXX)
+project(iowarp-core VERSION 1.5.4 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
 # Project Options
@@ -1317,6 +1317,25 @@ if(TARGET chimaera)
     install(TARGETS chimaera
       RUNTIME DESTINATION "${PYTHON_SITE_PACKAGES}/iowarp_core/bin")
   endif()
+endif()
+
+# Benchmark binaries -> iowarp_core/bin/
+# Per-subdir install(TARGETS) calls in */benchmark/CMakeLists.txt land in
+# the default component, which scikit-build-core filters out of the wheel.
+# Re-install the user-facing benchmarks here under COMPONENT pip_package
+# so they ship in the wheel.  if(TARGET ...) guards skip benchmarks that
+# weren't built (e.g. MPI/Redis-only ones disabled in pip configurations).
+if(WRP_CORE_ENABLE_BENCHMARKS)
+  set(PIP_BENCH_TARGETS
+    wrp_cte_bench
+    wrp_run_thrpt_benchmark)
+  foreach(_bench ${PIP_BENCH_TARGETS})
+    if(TARGET ${_bench})
+      install(TARGETS ${_bench}
+        COMPONENT pip_package
+        RUNTIME DESTINATION bin)
+    endif()
+  endforeach()
 endif()
 
 # Python extensions -> iowarp_core/ext/

@@ -32,6 +32,8 @@ visualizer = [
 
 [project.scripts]
 chimaera = "iowarp_core._cli:main"
+wrp_cte_bench = "iowarp_core._cli:cte_bench_main"
+wrp_run_thrpt_benchmark = "iowarp_core._cli:run_thrpt_main"
 
 [project.urls]
 Homepage = "https://iowarp.ai"
@@ -61,7 +63,7 @@ WRP_CORE_ENABLE_CAE = "ON"
 WRP_CORE_ENABLE_CEE = "ON"
 WRP_CORE_ENABLE_PYTHON = "ON"
 WRP_CORE_ENABLE_TESTS = "OFF"
-WRP_CORE_ENABLE_BENCHMARKS = "OFF"
+WRP_CORE_ENABLE_BENCHMARKS = "ON"
 WRP_CORE_ENABLE_RPATH = "OFF"
 WRP_CORE_ENABLE_ZMQ = "ON"
 WRP_CORE_ENABLE_CEREAL = "ON"
