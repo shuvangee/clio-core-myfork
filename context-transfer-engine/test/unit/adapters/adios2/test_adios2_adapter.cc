@@ -40,7 +40,7 @@
 
 #include <adios2.h>
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 
 namespace fs = std::filesystem;
 
@@ -86,7 +86,7 @@ public:
     REQUIRE(CHI_IPC->IsInitialized());
 
     // Initialize CTE client using singleton
-    if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+    if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
       FAIL("Failed to initialize CTE client");
     }
 

@@ -188,17 +188,17 @@ After installation, IOWarp Core files are organized as follows:
 $CONDA_PREFIX/
 ├── bin/                           # Command-line tools
 │   ├── chimaera runtime start
-│   ├── wrp_cte
+│   ├── clio_cte
 │   ├── clio_cae_omni
 │   └── ...
 ├── lib/                           # Shared libraries
 │   ├── libchimaera_cxx.so
-│   ├── libhermes_shm_host.so
+│   ├── libclio_ctp_host.so
 │   ├── chimaera_admin_runtime.so
 │   └── ...
 ├── lib/python3.X/site-packages/   # Python modules
-│   ├── wrp_cte/
-│   └── wrp_cee/
+│   ├── clio_cte/
+│   └── clio_cee/
 ├── include/                       # C++ headers
 │   ├── chimaera/
 │   ├── hshm/
@@ -206,7 +206,7 @@ $CONDA_PREFIX/
 └── lib/cmake/                     # CMake package configs
     ├── iowarp-core/
     ├── chimaera/
-    ├── HermesShm/
+    ├── ClioCtp/
     └── ...
 ```
 
@@ -221,14 +221,14 @@ After installation, you can use IOWarp Core in several ways:
 chimaera runtime start
 
 # Use CTE tools
-wrp_cte --help
+clio_cte --help
 ```
 
 ### 2. Python
 
 ```python
-import wrp_cte
-import wrp_cee
+import clio_cte
+import clio_cee
 
 # Use the Python bindings
 ```
@@ -241,7 +241,7 @@ find_package(iowarp-core REQUIRED)
 
 target_link_libraries(your_app
     chimaera::admin_client
-    wrp_cte::core_client
+    clio_cte::core_client
 )
 ```
 

@@ -73,9 +73,9 @@
  #include <chimaera/bdev/bdev_client.h>
  #include <chimaera/bdev/bdev_tasks.h>
  #include <chimaera/chimaera.h>
- #include <wrp_cte/core/core_client.h>
- #include <wrp_cte/core/core_runtime.h>
- #include <wrp_cte/core/core_tasks.h>
+ #include <clio_cte/core/core_client.h>
+ #include <clio_cte/core/core_runtime.h>
+ #include <clio_cte/core/core_tasks.h>
 
  namespace fs = std::filesystem;
 
@@ -110,8 +110,8 @@ static std::string chi_test_data_dir() {
    static constexpr size_t kTestBlobSize = 4096; // 4KB test blobs
 
    // CTE Core pool configuration - use constants from core_tasks.h
-   static inline const chi::PoolId& kCTECorePoolId = wrp_cte::core::kCtePoolId;
-   static inline const char* kCTECorePoolName = wrp_cte::core::kCtePoolName;
+   static inline const chi::PoolId& kCTECorePoolId = clio_cte::core::kCtePoolId;
+   static inline const char* kCTECorePoolName = clio_cte::core::kCtePoolName;
 
    std::string test_storage_path_;
 
@@ -125,7 +125,7 @@ static std::string chi_test_data_dir() {
    /**
     * Helper: Async TagQuery
     */
-   static std::vector<std::string> TagQueryAsync(wrp_cte::core::Client* client,
+   static std::vector<std::string> TagQueryAsync(clio_cte::core::Client* client,
                                                   const std::string& tag_pattern,
                                                   chi::u32 flags,
                                                   const chi::PoolQuery& pool_query) {
@@ -138,7 +138,7 @@ static std::string chi_test_data_dir() {
     * Helper: Async BlobQuery
     */
    static std::vector<std::pair<std::string, std::string>> BlobQueryAsync(
-       wrp_cte::core::Client* client,
+       clio_cte::core::Client* client,
        const std::string& tag_pattern,
        const std::string& blob_pattern,
        chi::u32 flags,
@@ -179,7 +179,7 @@ static std::string chi_test_data_dir() {
        // Wait for runtime to be fully ready
        std::this_thread::sleep_for(500ms);
 
-       success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+       success = clio_cte::core::WRP_CTE_CLIENT_INIT();
        if (!success) {
          throw std::runtime_error("Failed to initialize CTE client");
        }
@@ -253,7 +253,7 @@ static std::string chi_test_data_dir() {
      test_tags_.push_back(tag_name);
 
      // Use Tag wrapper class for easier blob creation
-     wrp_cte::core::Tag tag(tag_name);
+     clio_cte::core::Tag tag(tag_name);
 
      // Create test data buffer
      std::vector<char> test_data(kTestBlobSize, 'X');

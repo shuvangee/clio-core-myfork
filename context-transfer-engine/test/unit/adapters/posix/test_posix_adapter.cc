@@ -51,7 +51,7 @@
 #include <vector>
 
 #include "chimaera/chimaera.h"
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 
 using namespace std::chrono_literals;
 namespace stdfs = std::filesystem;
@@ -59,7 +59,7 @@ namespace stdfs = std::filesystem;
 // Test constants — paths use the clio:: prefix that opts in interception.
 const size_t kTestFileSize = 16 * 1024 * 1024; // 16MB
 const std::string kTestDir = "/tmp";
-const std::string kTestBackendFile = "/tmp/wrp_cte_posix_test.dat";
+const std::string kTestBackendFile = "/tmp/clio_cte_posix_test.dat";
 const std::string kTestFile = "clio::" + kTestBackendFile;
 
 /**
@@ -81,7 +81,7 @@ bool initializeRuntime() {
   INFO("✓ Chimaera runtime initialized");
 
   INFO("Initializing CTE runtime...");
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
     INFO("CTE initialization failed - continuing without CTE tracking");
     initialized = true;
     return true;
@@ -247,7 +247,7 @@ TEST_CASE("POSIX Adapter: clio:: prefix opts in interception",
           "[posix][adapter][prefix]") {
   REQUIRE(initializeRuntime());
 
-  const std::string backend = "/tmp/wrp_cte_prefix_test.dat";
+  const std::string backend = "/tmp/clio_cte_prefix_test.dat";
   const std::string clio = "clio::" + backend;
 
   // Start clean.
@@ -279,7 +279,7 @@ TEST_CASE("POSIX Adapter: clio:: opens write to the bare backend path",
   // Open via clio::, write, close. After flush the kernel should see a
   // file at the bare path (proves the prefix was stripped before
   // RealOpen reached the kernel).
-  const std::string backend = "/tmp/wrp_cte_strip_test.dat";
+  const std::string backend = "/tmp/clio_cte_strip_test.dat";
   const std::string clio = "clio::" + backend;
   stdfs::remove(backend);
 
@@ -291,7 +291,7 @@ TEST_CASE("POSIX Adapter: clio:: opens write to the bare backend path",
 
   // The backend file must exist on disk — *not* a literal "clio::..." file.
   REQUIRE(stdfs::exists(backend));
-  REQUIRE_FALSE(stdfs::exists(std::string("/tmp/") + "clio::wrp_cte_strip_test.dat"));
+  REQUIRE_FALSE(stdfs::exists(std::string("/tmp/") + "clio::clio_cte_strip_test.dat"));
   stdfs::remove(backend);
 }
 
@@ -306,7 +306,7 @@ TEST_CASE("POSIX Adapter: fstat returns full struct stat",
           "[posix][adapter][stat]") {
   REQUIRE(initializeRuntime());
 
-  const std::string backend = "/tmp/wrp_cte_fstat_test.dat";
+  const std::string backend = "/tmp/clio_cte_fstat_test.dat";
   const std::string clio = "clio::" + backend;
   stdfs::remove(backend);
 
@@ -348,7 +348,7 @@ TEST_CASE("POSIX Adapter: stat-by-path matches fstat-by-fd",
           "[posix][adapter][stat]") {
   REQUIRE(initializeRuntime());
 
-  const std::string backend = "/tmp/wrp_cte_statpath_test.dat";
+  const std::string backend = "/tmp/clio_cte_statpath_test.dat";
   const std::string clio = "clio::" + backend;
   stdfs::remove(backend);
 
@@ -385,7 +385,7 @@ TEST_CASE("POSIX Adapter: stat() on missing clio:: path returns ENOENT",
   struct stat st;
   errno = 0;
   // No prior open of this path, no backend file exists.
-  int result = stat("clio::/tmp/wrp_cte_does_not_exist.dat", &st);
+  int result = stat("clio::/tmp/clio_cte_does_not_exist.dat", &st);
   REQUIRE(result == -1);
   REQUIRE(errno == ENOENT);
 }
@@ -398,7 +398,7 @@ TEST_CASE("POSIX Adapter: seek + truncate + sync + unlink",
           "[posix][adapter][ops]") {
   REQUIRE(initializeRuntime());
 
-  const std::string backend = "/tmp/wrp_cte_ops_test.dat";
+  const std::string backend = "/tmp/clio_cte_ops_test.dat";
   const std::string clio = "clio::" + backend;
   stdfs::remove(backend);
 

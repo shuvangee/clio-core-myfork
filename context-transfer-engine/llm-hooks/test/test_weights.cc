@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
-#include "wrp_llm/weights/weight_manager.h"
-#include "wrp_llm/weights/ggml_iowarp_backend.h"
+#include "clio_llm/weights/weight_manager.h"
+#include "clio_llm/weights/ggml_iowarp_backend.h"
 
-using wrp_llm::weights::WeightManager;
+using clio_llm::weights::WeightManager;
 
 TEST_CASE("WeightManager initializes GpuVmm without CTE", "[weights][integration]") {
     WeightManager::Config cfg;

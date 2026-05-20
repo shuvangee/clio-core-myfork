@@ -77,7 +77,7 @@
 #include "basic_test.h"
 #include "clio_ctp/compress/compress_factory.h"
 #include "clio_ctp/compress/data_stats.h"
-#include "wrp_cte/compressor/models/distribution_classifier.h"
+#include "clio_cte/compressor/models/distribution_classifier.h"
 #include "clio_ctp/util/config_parse.h"
 #include "clio_ctp/util/logging.h"
 #include <iostream>
@@ -793,8 +793,8 @@ BenchmarkResult BenchmarkCompressor(
   result.block_entropy_mean = block_stats.entropy_mean;
 
   // Classify distribution using mathematical approach
-  auto dist_result = wrp_cte::compressor::DistributionClassifierFactory::Classify(
-      input_data.data(), num_elements, static_cast<wrp_cte::compressor::DataType>(dtype));
+  auto dist_result = clio_cte::compressor::DistributionClassifierFactory::Classify(
+      input_data.data(), num_elements, static_cast<clio_cte::compressor::DataType>(dtype));
   result.classified_skewness = dist_result.skewness;
   result.classified_kurtosis = dist_result.kurtosis;
 

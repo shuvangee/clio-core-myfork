@@ -15,7 +15,7 @@ function(add_cee_api_unit_test TEST_NAME TEST_SOURCE)
   # Link common dependencies
   target_link_libraries(${TEST_NAME}
     PRIVATE
-      wrp_cee_api
+      clio_cee_api
   )
 
   # Install test binary
@@ -48,7 +48,7 @@ add_cee_api_unit_test(test_context_destroy test_context_destroy.cc)
 add_executable(test_context_comprehensive test_context_comprehensive.cc)
 target_link_libraries(test_context_comprehensive
   PRIVATE
-    wrp_cee_api
+    clio_cee_api
 )
 install(TARGETS test_context_comprehensive DESTINATION bin/tests)
 
@@ -85,7 +85,7 @@ set_tests_properties(
 #------------------------------------------------------------------------------
 # Python Tests (if Python bindings are enabled)
 #------------------------------------------------------------------------------
-if(TARGET wrp_cee)
+if(TARGET clio_cee)
   # Copy Python test to build directory
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/test_context_interface.py
@@ -108,7 +108,7 @@ if(TARGET wrp_cee)
 
   # Install Python test
   install(FILES test_context_interface.py
-    DESTINATION share/wrp_cee/test
+    DESTINATION share/clio_cee/test
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   )
 
@@ -134,7 +134,7 @@ if(TARGET wrp_cee)
 
   # Install enhanced Python test
   install(FILES test_context_interface_enhanced.py
-    DESTINATION share/wrp_cee/test
+    DESTINATION share/clio_cee/test
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   )
 
@@ -159,7 +159,7 @@ if(TARGET wrp_cee)
   )
 
   install(FILES test_context_retrieve_roundtrip.py
-    DESTINATION share/wrp_cee/test
+    DESTINATION share/clio_cee/test
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   )
 

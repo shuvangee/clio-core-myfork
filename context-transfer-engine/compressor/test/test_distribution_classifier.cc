@@ -36,14 +36,14 @@
  * @brief Tests for mathematical distribution classifier
  */
 
-#include "wrp_cte/compressor/models/distribution_classifier.h"
-#include "wrp_cte/compressor/models/data_stats.h"
+#include "clio_cte/compressor/models/distribution_classifier.h"
+#include "clio_cte/compressor/models/data_stats.h"
 #include <catch2/catch_all.hpp>
 #include <iostream>
 #include <random>
 #include <cmath>
 
-using namespace wrp_cte::compressor;
+using namespace clio_cte::compressor;
 
 /**
  * Generate data from specific distributions for testing

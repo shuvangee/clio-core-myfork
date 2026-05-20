@@ -119,7 +119,7 @@ option(WRP_CORE_ENABLE_SYCL "Enable Intel GPU support via SYCL/oneAPI (icpx -fsy
 option(WRP_CORE_ENABLE_JARVIS "Enable Jarvis CI infrastructure installation" OFF)
 
 #------------------------------------------------------------------------------
-# HermesShm (context-transport-primitives) Options
+# ClioCtp (context-transport-primitives) Options
 #------------------------------------------------------------------------------
 option(CLIO_CTP_ENABLE_PTHREADS "Support spawning pthreads" OFF)
 option(CLIO_CTP_ENABLE_WINDOWS_THREADS "Support spawning windows threads" OFF)
@@ -1127,7 +1127,7 @@ if(WRP_CORE_ENABLE_TESTS)
     endforeach()
 endif()
 
-# IOWarp KV Cache + Weight Offload libraries (wrp_llm_kvcache, wrp_llm_weights).
+# IOWarp KV Cache + Weight Offload libraries (clio_llm_kvcache, clio_llm_weights).
 # These can be built independently of llama.cpp so they can be tested without
 # the full llama.cpp integration (which causes a CUDA platform conflict when
 # llama.cpp's project("llama.cpp" C CXX) resets the CUDA compiler state).
@@ -1165,27 +1165,27 @@ if(WRP_CORE_ENABLE_LLAMA)
         # patching here instead.
         if(TARGET server-context)
             target_compile_definitions(server-context PRIVATE IOWARP_LLM_KVCACHE)
-            target_link_libraries(server-context PRIVATE wrp_llm_kvcache)
+            target_link_libraries(server-context PRIVATE clio_llm_kvcache)
             message(STATUS "llm-hooks: patched server-context with IOWARP_LLM_KVCACHE")
         endif()
         if(TARGET llama)
             target_compile_definitions(llama PRIVATE IOWARP_LLM_KVCACHE)
-            target_link_libraries(llama PRIVATE wrp_llm_kvcache)
+            target_link_libraries(llama PRIVATE clio_llm_kvcache)
             message(STATUS "llm-hooks: patched llama with IOWARP_LLM_KVCACHE")
         endif()
 
-        # IOWarp weight offloading via GpuVmm — requires CUDA and wrp_llm_weights.
-        # wrp_llm_weights is only built when WRP_CORE_ENABLE_CUDA=ON (it depends
-        # on wrp_cte_uvm which needs CUDA driver API).
-        if(WRP_CORE_ENABLE_CUDA AND TARGET wrp_llm_weights)
+        # IOWarp weight offloading via GpuVmm — requires CUDA and clio_llm_weights.
+        # clio_llm_weights is only built when WRP_CORE_ENABLE_CUDA=ON (it depends
+        # on clio_cte_uvm which needs CUDA driver API).
+        if(WRP_CORE_ENABLE_CUDA AND TARGET clio_llm_weights)
             if(TARGET server-context)
                 target_compile_definitions(server-context PRIVATE IOWARP_LLM_WEIGHTS)
-                target_link_libraries(server-context PRIVATE wrp_llm_weights)
+                target_link_libraries(server-context PRIVATE clio_llm_weights)
                 message(STATUS "llm-hooks: patched server-context with IOWARP_LLM_WEIGHTS")
             endif()
             if(TARGET llama)
                 target_compile_definitions(llama PRIVATE IOWARP_LLM_WEIGHTS)
-                target_link_libraries(llama PRIVATE wrp_llm_weights)
+                target_link_libraries(llama PRIVATE clio_llm_weights)
                 message(STATUS "llm-hooks: patched llama with IOWARP_LLM_WEIGHTS")
             endif()
         endif()
@@ -1232,14 +1232,14 @@ message(STATUS "IOWarp Core unified package configuration:")
 message(STATUS "  Package name: iowarp-core")
 message(STATUS "  Install destination: lib/cmake/iowarp-core")
 message(STATUS "  Components included:")
-message(STATUS "    - HermesShm (context-transport-primitives)")
+message(STATUS "    - ClioCtp (context-transport-primitives)")
 message(STATUS "    - Chimaera (runtime)")
 message(STATUS "    - Core ChiMods: admin, bdev")
 if(WRP_CORE_ENABLE_CTE)
-    message(STATUS "    - CTE ChiMod: wrp_cte_core")
+    message(STATUS "    - CTE ChiMod: clio_cte_core")
 endif()
 if(WRP_CORE_ENABLE_CAE)
-    message(STATUS "    - CAE ChiMod: wrp_cae_core")
+    message(STATUS "    - CAE ChiMod: clio_cae_core")
 endif()
 
 #------------------------------------------------------------------------------
@@ -1281,21 +1281,21 @@ message(STATUS "")
 # it up at startup.
 
 # Shared libraries -> iowarp_core/lib/
-set(PIP_LIB_TARGETS hermes_shm_host chimaera_cxx)
+set(PIP_LIB_TARGETS clio_ctp_host chimaera_cxx)
 if(TARGET chimaera_admin_client)
   list(APPEND PIP_LIB_TARGETS chimaera_admin_client chimaera_admin_runtime)
 endif()
 if(TARGET chimaera_bdev_client)
   list(APPEND PIP_LIB_TARGETS chimaera_bdev_client chimaera_bdev_runtime)
 endif()
-if(WRP_CORE_ENABLE_CTE AND TARGET wrp_cte_core_client)
-  list(APPEND PIP_LIB_TARGETS wrp_cte_core_client wrp_cte_core_runtime)
+if(WRP_CORE_ENABLE_CTE AND TARGET clio_cte_core_client)
+  list(APPEND PIP_LIB_TARGETS clio_cte_core_client clio_cte_core_runtime)
 endif()
-if(WRP_CORE_ENABLE_CAE AND TARGET wrp_cae_core_client)
-  list(APPEND PIP_LIB_TARGETS wrp_cae_core_client wrp_cae_core_runtime)
+if(WRP_CORE_ENABLE_CAE AND TARGET clio_cae_core_client)
+  list(APPEND PIP_LIB_TARGETS clio_cae_core_client clio_cae_core_runtime)
 endif()
-if(WRP_CORE_ENABLE_CEE AND TARGET wrp_cee_api)
-  list(APPEND PIP_LIB_TARGETS wrp_cee_api)
+if(WRP_CORE_ENABLE_CEE AND TARGET clio_cee_api)
+  list(APPEND PIP_LIB_TARGETS clio_cee_api)
 endif()
 
 install(TARGETS ${PIP_LIB_TARGETS}
@@ -1340,13 +1340,13 @@ endif()
 
 # Python extensions -> iowarp_core/ext/
 if(WRP_CORE_ENABLE_PYTHON)
-  if(TARGET wrp_cte_core_ext)
-    install(TARGETS wrp_cte_core_ext
+  if(TARGET clio_cte_core_ext)
+    install(TARGETS clio_cte_core_ext
       COMPONENT pip_package
       LIBRARY DESTINATION ext)
   endif()
-  if(TARGET wrp_cee)
-    install(TARGETS wrp_cee
+  if(TARGET clio_cee)
+    install(TARGETS clio_cee
       COMPONENT pip_package
       LIBRARY DESTINATION ext)
   endif()
@@ -1366,7 +1366,7 @@ install(FILES context-runtime/config/chimaera_default.yaml
   COMPONENT pip_package
   DESTINATION data)
 
-# .pth file at site-packages root so "import wrp_cee" works without
+# .pth file at site-packages root so "import clio_cee" works without
 # explicitly importing iowarp_core first (triggers _setup() at startup).
 # DESTINATION ".." escapes wheel.install-dir (= iowarp_core/) by one level
 # so the file lands at platlib root.

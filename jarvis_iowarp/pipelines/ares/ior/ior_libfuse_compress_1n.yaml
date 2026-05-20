@@ -3,14 +3,14 @@
 # clio_cte so writes through the FUSE mount hit the compressor pool first.
 #
 # Pool layout:
-#   clio_compress (wrp_cte_compressor) at 512.0 — entrypoint targeted by
+#   clio_compress (clio_cte_compressor) at 512.0 — entrypoint targeted by
 #                                                 WRP_CTE_CLIENT_INIT
-#   clio_cte      (wrp_cte_core)       at 513.0 — downstream storage
+#   clio_cte      (clio_cte_core)       at 513.0 — downstream storage
 #
 # Stack:
 #   clio_runtime     -> chimaera daemon
 #   clio_cte         -> CTE storage tiers at pool 513.0
-#   clio_compress    -> wrp_cte_compressor at 512.0, next_pool_id=513.0,
+#   clio_compress    -> clio_cte_compressor at 512.0, next_pool_id=513.0,
 #                       snappy as the default static library
 #   clio_cte_libfuse -> mounts ${HOME}/libfuse_compress via clio_cte_fuse
 #   builtin.ior     -> POSIX writes through the mountpoint
@@ -29,7 +29,7 @@ pkgs:
 
   - pkg_type: jarvis_iowarp.clio_cte
     pkg_name: cte_core
-    pool_name: wrp_cte_core_storage
+    pool_name: clio_cte_core_storage
     pool_id: 513.0
     devices:
       - ["ram::cte_ram_tier1", "8GB", 1.0]
@@ -41,7 +41,7 @@ pkgs:
 
   - pkg_type: jarvis_iowarp.clio_compress
     pkg_name: cte_compress
-    pool_name: wrp_cte_compressor
+    pool_name: clio_cte_compressor
     pool_id: 512.0
     next_pool_id: 513.0
     pool_query: local

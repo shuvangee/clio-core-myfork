@@ -6,7 +6,7 @@ Tests full data round-trip: bundle -> query -> retrieve -> verify -> destroy.
 On main this test crashes with SIGABRT (double-free in ContextRetrieve).
 With the fix (removing manual DelTask loop), it passes.
 
-Requires a running IOWarp runtime with wrp_cte_core and wrp_cae_core modules.
+Requires a running IOWarp runtime with clio_cte_core and clio_cae_core modules.
 """
 
 import sys
@@ -20,7 +20,7 @@ sys.path.insert(0, "/usr/local/lib/python3.13/site-packages")
 
 def test_retrieve_roundtrip():
     """Put data into IOWarp, retrieve it, and verify content matches."""
-    import wrp_cee as cee
+    import clio_cee as cee
 
     ctx_interface = cee.ContextInterface()
     tag_name = "test_retrieve_roundtrip"

@@ -10,7 +10,7 @@
  * GPU vector unit test (CUDA / ROCm).
  *
  * 1. Bring up the Chimaera server + CTE core pool.
- * 2. Create a wrp_cte::gpu_vector::Vector<uint32_t> with 4 blocks,
+ * 2. Create a clio_cte::gpu_vector::Vector<uint32_t> with 4 blocks,
  *    4 pages per block, 4 KiB pages.
  * 3. Launch a write kernel that does v[i] = i*2 over a striped pattern
  *    that crosses page boundaries.
@@ -26,9 +26,9 @@
 #include <chimaera/bdev/bdev_client.h>
 #include <chimaera/chimaera.h>
 #include <chimaera/singletons.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
-#include <wrp_cte/gpu_vector/gpu_vector.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <clio_cte/gpu_vector/gpu_vector.h>
 
 #include <clio_ctp/util/gpu_api.h>
 
@@ -51,14 +51,14 @@ void EnsureInit() {
   if (g_initialized) return;
   std::fprintf(stderr, "[INIT] Starting Chimaera server (gpu_vector test)\n");
   REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer));
-  REQUIRE(wrp_cte::core::WRP_CTE_CLIENT_INIT());
+  REQUIRE(clio_cte::core::WRP_CTE_CLIENT_INIT());
   auto *cte_client = WRP_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
-  cte_client->Init(wrp_cte::core::kCtePoolId);
-  wrp_cte::core::CreateParams params;
+  cte_client->Init(clio_cte::core::kCtePoolId);
+  clio_cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(
-      chi::PoolQuery::Dynamic(), wrp_cte::core::kCtePoolName,
-      wrp_cte::core::kCtePoolId, params);
+      chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
+      clio_cte::core::kCtePoolId, params);
   create_task.Wait();
   REQUIRE(create_task->GetReturnCode() == 0);
   std::this_thread::sleep_for(50ms);
@@ -88,7 +88,7 @@ void EnsureInit() {
 
 }  // namespace
 
-namespace gv = wrp_cte::gpu_vector;
+namespace gv = clio_cte::gpu_vector;
 namespace dev = cte::gpu::dev;
 
 /** Write v[i] = i*2 for the first total elements. */

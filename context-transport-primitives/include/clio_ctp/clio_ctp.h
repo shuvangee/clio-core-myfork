@@ -34,7 +34,7 @@
 #ifndef CTP_SHM_INCLUDE_HSHM_SHM_HSHM_SHM_H_
 #define CTP_SHM_INCLUDE_HSHM_SHM_HSHM_SHM_H_
 
-// Comprehensive include for all hermes_shm headers
+// Comprehensive include for all clio_ctp headers
 // Since all headers now have proper compile-time guards, this is safe to
 // include
 

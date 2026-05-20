@@ -33,7 +33,7 @@
 
 #include <chimaera/chimaera.h>
 #include <clio_ctp/util/logging.h>
-#include <wrp_cae/core/factory/globus_file_assimilator.h>
+#include <clio_cae/core/factory/globus_file_assimilator.h>
 
 #include <chrono>
 #include <csignal>
@@ -48,14 +48,14 @@
 #include <sstream>
 #endif
 
-// Include wrp_cte headers after closing any wrp_cae namespace to avoid Method
+// Include clio_cte headers after closing any clio_cae namespace to avoid Method
 // namespace collision
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 
-namespace wrp_cae::core {
+namespace clio_cae::core {
 
 GlobusFileAssimilator::GlobusFileAssimilator(
-    std::shared_ptr<wrp_cte::core::Client> cte_client)
+    std::shared_ptr<clio_cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
 chi::TaskResume GlobusFileAssimilator::Schedule(const AssimilationCtx& ctx,
@@ -839,4 +839,4 @@ int GlobusFileAssimilator::DownloadFile(const std::string& endpoint_id,
 }
 #endif  // CAE_ENABLE_GLOBUS
 
-}  // namespace wrp_cae::core
+}  // namespace clio_cae::core

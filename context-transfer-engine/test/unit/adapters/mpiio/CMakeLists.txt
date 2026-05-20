@@ -17,9 +17,9 @@ add_executable(clio_cte_mpiio_unit_tests
 )
 
 target_link_libraries(clio_cte_mpiio_unit_tests
-    wrp_cte_mpiio
-    wrp_cte_fs_base
-    wrp_cte_core_client
+    clio_cte_mpiio
+    clio_cte_fs_base
+    clio_cte_core_client
     MPI::MPI_CXX
     ctp::cxx
     ctp::interceptor

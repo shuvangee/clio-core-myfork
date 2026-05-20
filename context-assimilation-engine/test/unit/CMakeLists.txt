@@ -57,8 +57,8 @@ function(add_cae_unit_test TEST_NAME TEST_SOURCE)
   # Link common dependencies
   target_link_libraries(${TEST_NAME}
     PRIVATE
-      wrp_cae_core_client
-      wrp_cte_core_client
+      clio_cae_core_client
+      clio_cte_core_client
       chimaera::cxx
       ctp::configure
       ${ARG_EXTRA_LIBS}
@@ -79,7 +79,7 @@ function(add_cae_unit_test TEST_NAME TEST_SOURCE)
 
   # Set test environment variables
   set_tests_properties(${TEST_NAME} PROPERTIES
-    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/wrp_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
     TIMEOUT 300  # 5 minute timeout
   )
 endfunction()
@@ -100,7 +100,7 @@ add_cae_unit_test(cae_binary_assim
 # Install test configuration
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/binary_assim/binary_assim_omni.yaml
-  DESTINATION share/wrp_cae/test/binary_assim
+  DESTINATION share/clio_cae/test/binary_assim
 )
 
 #------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ add_cae_unit_test(cae_range_assim
 
 # Set smaller file size for range test to speed up CI
 set_tests_properties(cae_range_assim PROPERTIES
-  ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/wrp_config.yaml;TEST_FILE_SIZE=10;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"  # 10MB instead of default
+  ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;TEST_FILE_SIZE=10;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"  # 10MB instead of default
 )
 
 #------------------------------------------------------------------------------
@@ -156,8 +156,8 @@ target_include_directories(test_cae_comprehensive
 
 target_link_libraries(test_cae_comprehensive
   PRIVATE
-    wrp_cae_core_client
-    wrp_cte_core_client
+    clio_cae_core_client
+    clio_cte_core_client
     chimaera::admin_runtime
     chimaera::bdev_runtime
     ctp::cxx
@@ -267,8 +267,8 @@ target_include_directories(test_export_data
 
 target_link_libraries(test_export_data
   PRIVATE
-    wrp_cae_core_client
-    wrp_cte_core_client
+    clio_cae_core_client
+    clio_cte_core_client
     chimaera::cxx
     ctp::configure
     ${CMAKE_THREAD_LIBS_INIT}
@@ -296,7 +296,7 @@ set_tests_properties(
   PROPERTIES
     TIMEOUT 300
     LABELS "coverage;export;msan_skip"
-    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/wrp_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
 )
 
 #------------------------------------------------------------------------------

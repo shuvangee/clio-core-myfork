@@ -1,5 +1,5 @@
 # Pipeline: MetaGEM workload, Apptainer + sbatch on Ares, 4 nodes,
-# writing through IOWarp's FUSE adapter mounted at ${HOME}/wrp_cte_metagem_4n
+# writing through IOWarp's FUSE adapter mounted at ${HOME}/clio_cte_metagem_4n
 # on each host (NFS-shared path, per-host FUSE namespace). Same pattern as
 # deepdrivemd_iowarp_libfuse_4n.yaml: clio_runtime / clio_cte / clio_cte_libfuse
 # run with deploy_mode: default (host bare-metal); only metagem itself runs
@@ -29,7 +29,7 @@ container_binds:
   # The dir must exist at instance-start (created by the pre_cmd below);
   # apptainer's --bind uses MS_SLAVE so the FUSE mount that clio_cte_libfuse
   # establishes on the host later still propagates into the container.
-  - ${HOME}/wrp_cte_metagem_4n:/mnt/clio_cte
+  - ${HOME}/clio_cte_metagem_4n:/mnt/clio_cte
 
 ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
 
@@ -57,8 +57,8 @@ scheduler:
     # FUSE bind source. NFS-shared so a head-node mkdir is visible to every
     # node; each node will mask it with its own clio_cte_fuse mount during
     # clio_cte_libfuse start.
-    - 'fusermount3 -u /home/llogan/wrp_cte_metagem_4n 2>/dev/null || umount -l /home/llogan/wrp_cte_metagem_4n 2>/dev/null || true'
-    - 'mkdir -p /home/llogan/wrp_cte_metagem_4n'
+    - 'fusermount3 -u /home/llogan/clio_cte_metagem_4n 2>/dev/null || umount -l /home/llogan/clio_cte_metagem_4n 2>/dev/null || true'
+    - 'mkdir -p /home/llogan/clio_cte_metagem_4n'
 
 pkgs:
   - pkg_type: jarvis_iowarp.clio_runtime
@@ -87,7 +87,7 @@ pkgs:
   - pkg_type: jarvis_iowarp.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
-    mountpoint: ${HOME}/wrp_cte_metagem_4n
+    mountpoint: ${HOME}/clio_cte_metagem_4n
     sleep: 2
     extra_fuse_args: "-f"
 

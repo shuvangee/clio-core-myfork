@@ -44,7 +44,7 @@
 #include "bench_common.h"
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 #include <clio_ctp/util/logging.h>
 
 #include <unistd.h>
@@ -59,7 +59,7 @@
 #include <vector>
 
 using namespace std::chrono;
-using wrp_bench::BenchArgs;
+using clio_bench::BenchArgs;
 
 namespace {
 
@@ -70,7 +70,7 @@ inline bool TimeUp(const steady_clock::time_point &start, double limit_s) {
 }
 
 /** blob index for op n: cycle within [0, keyspace) when bounded. */
-inline long KeyIndex(long n, wrp_bench::u64 keyspace) {
+inline long KeyIndex(long n, clio_bench::u64 keyspace) {
   return keyspace > 0 ? static_cast<long>(n % static_cast<long>(keyspace))
                       : n;
 }
@@ -102,7 +102,7 @@ class CTEBenchmark {
          a_.test_case, a_.threads, a_.depth);
     HLOG(kInfo, "I/O size: {}  io-count/thread: {}  max-total-blobs: {} "
                 "({}/thread)  time-limit: {}s",
-         wrp_bench::FormatSize(a_.io_size), a_.io_count, a_.max_total_blobs,
+         clio_bench::FormatSize(a_.io_size), a_.io_count, a_.max_total_blobs,
          per_thread_blobs_, a_.time_limit_s);
     HLOG(kInfo, "===========================");
   }
@@ -114,7 +114,7 @@ class CTEBenchmark {
   }
 
   void Worker(Mode mode, size_t tid, std::atomic<bool> &err,
-              std::vector<long long> &times, std::vector<wrp_bench::u64> &ops) {
+              std::vector<long long> &times, std::vector<clio_bench::u64> &ops) {
     auto *cte = WRP_CTE_CLIENT;
     auto put_shm = CHI_IPC->AllocateBuffer(a_.io_size);
     auto get_shm = CHI_IPC->AllocateBuffer(a_.io_size);
@@ -126,7 +126,7 @@ class CTEBenchmark {
     std::string tag_name = "tag_n" + node_id_ + "_t" + std::to_string(tid);
     auto tag_task = cte->AsyncGetOrCreateTag(tag_name);
     tag_task.Wait();
-    wrp_cte::core::TagId tag_id = tag_task->tag_id_;
+    clio_cte::core::TagId tag_id = tag_task->tag_id_;
     auto blob_name = [&](long k) {
       return "blob_t" + std::to_string(tid) + "_" + std::to_string(k);
     };
@@ -148,7 +148,7 @@ class CTEBenchmark {
 
     const bool timed = a_.time_limit_s > 0.0;
     const long target = timed ? std::numeric_limits<long>::max() : a_.io_count;
-    wrp_bench::u64 done = 0;
+    clio_bench::u64 done = 0;
     auto start = steady_clock::now();
 
     for (long i = 0; i < target; i += a_.depth) {
@@ -157,7 +157,7 @@ class CTEBenchmark {
       long batch = timed ? a_.depth : std::min<long>(a_.depth, target - i);
 
       if (mode == Mode::kPut || mode == Mode::kPutGet) {
-        std::vector<chi::Future<wrp_cte::core::PutBlobTask>> pts;
+        std::vector<chi::Future<clio_cte::core::PutBlobTask>> pts;
         pts.reserve(batch);
         for (long j = 0; j < batch; ++j) {
           pts.push_back(cte->AsyncPutBlob(
@@ -184,7 +184,7 @@ class CTEBenchmark {
           }
         }
       }
-      done += static_cast<wrp_bench::u64>(batch);
+      done += static_cast<clio_bench::u64>(batch);
     }
 
     times[tid] =
@@ -200,24 +200,24 @@ class CTEBenchmark {
     }
     std::vector<std::thread> threads;
     std::vector<long long> times(a_.threads);
-    std::vector<wrp_bench::u64> ops(a_.threads);
+    std::vector<clio_bench::u64> ops(a_.threads);
     std::atomic<bool> err{false};
     for (size_t i = 0; i < a_.threads; ++i) {
       threads.emplace_back(&CTEBenchmark::Worker, this, mode, i,
                            std::ref(err), std::ref(times), std::ref(ops));
     }
     for (auto &t : threads) t.join();
-    wrp_bench::PrintResults(a_.test_case, a_, times, ops);
+    clio_bench::PrintResults(a_.test_case, a_, times, ops);
     return !err.load();
   }
 
   BenchArgs a_;
   std::string node_id_;
-  wrp_bench::u64 per_thread_blobs_;  // a_.max_total_blobs / threads
+  clio_bench::u64 per_thread_blobs_;  // a_.max_total_blobs / threads
 };
 
 int main(int argc, char **argv) {
-  BenchArgs args = wrp_bench::ParseBenchArgs(argc, argv);
+  BenchArgs args = clio_bench::ParseBenchArgs(argc, argv);
   if (!args.ok) return 1;
 
   HLOG(kInfo, "Initializing Chimaera runtime...");
@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
     }
   } finalize_guard;
   std::this_thread::sleep_for(milliseconds(500));
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
     HLOG(kError, "Failed to initialize CTE client");
     return 1;
   }

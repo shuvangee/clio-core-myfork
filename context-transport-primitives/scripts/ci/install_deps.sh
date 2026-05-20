@@ -32,5 +32,5 @@ spack repo add clio-core/installers/spack
 # This will allow Spack to skip building some packages that are directly
 spack external find
 
-# Install hermes_shm (needed for dependencies)
+# Install clio_ctp (needed for dependencies)
 spack install cte-hermes-shm +compress +encrypt +elf +cereal +mpiio +vfd +mochi +boost +nocompile 

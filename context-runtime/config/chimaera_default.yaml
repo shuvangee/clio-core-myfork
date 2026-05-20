@@ -37,7 +37,7 @@ runtime:
 
 # -- Compose ------------------------------------------------------------------
 # Modules started automatically with the runtime.
-# Only chimaera_bdev is required. CTE (wrp_cte_core) and CAE (wrp_cae_core)
+# Only chimaera_bdev is required. CTE (clio_cte_core) and CAE (clio_cae_core)
 # are optional — remove their entries if you do not need them.
 compose:
 
@@ -62,7 +62,7 @@ compose:
   # === Context Transfer Engine (CTE) — optional ===
   # High-performance data buffering and transfer engine.
   # Remove this section if CTE is not needed.
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -102,7 +102,7 @@ compose:
   # === Context Assimilation Engine (CAE) — optional ===
   # Data ingestion and assimilation engine.
   # Remove this section if CAE is not needed.
-  - mod_name: wrp_cae_core
-    pool_name: wrp_cae_core_pool
+  - mod_name: clio_cae_core
+    pool_name: clio_cae_core_pool
     pool_query: local
     pool_id: "400.0"

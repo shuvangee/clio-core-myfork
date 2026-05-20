@@ -1,4 +1,4 @@
-#include "wrp_llm/kvcache/kvcache_manager.h"
+#include "clio_llm/kvcache/kvcache_manager.h"
 
 #include <algorithm>
 #include <chrono>
@@ -9,7 +9,7 @@
 #include <utility>
 
 // IOWarp CTE client API — Tag class wraps GetOrCreateTag + PutBlob + GetBlob.
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 
 // CUDA for D2H / H2D copies when kv_data is on-device.
 // Guarded so that the translation unit still compiles on CPU-only builds.
@@ -24,7 +24,7 @@
   } while (0)
 #endif
 
-namespace wrp_llm {
+namespace clio_llm {
 namespace kvcache {
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ struct KVCacheManager::Impl {
   bool ready = false;
 
   // High-level CTE tag handle.  Null until Init() succeeds.
-  std::unique_ptr<wrp_cte::core::Tag> tag;
+  std::unique_ptr<clio_cte::core::Tag> tag;
 
   // In-process index: hash → entry.
   // Protected by a mutex because llama.cpp may call us from worker threads.
@@ -126,13 +126,13 @@ bool KVCacheManager::Init() {
   // Initialize the global CTE client if not already done.
   // WRP_CTE_CLIENT_INIT is idempotent — safe to call multiple times.
   try {
-    if (!wrp_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+    if (!clio_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
       fprintf(stderr, "kvcache_manager: WRP_CTE_CLIENT_INIT() failed — "
                       "is the IOWarp runtime running?\n");
       return false;
     }
     // Open or create the KV cache tag (GetOrCreateTag is synchronous here).
-    impl_->tag = std::make_unique<wrp_cte::core::Tag>(cfg_.tag_name);
+    impl_->tag = std::make_unique<clio_cte::core::Tag>(cfg_.tag_name);
   } catch (const std::exception& e) {
     fprintf(stderr, "kvcache_manager: Init failed: %s\n", e.what());
     impl_->tag.reset();
@@ -321,4 +321,4 @@ void KVCacheManager::OnEvict(const std::vector<int32_t>& tokens,
 }
 
 }  // namespace kvcache
-}  // namespace wrp_llm
+}  // namespace clio_llm

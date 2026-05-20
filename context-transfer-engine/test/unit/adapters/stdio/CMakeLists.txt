@@ -10,10 +10,10 @@ add_executable(clio_cte_stdio_unit_tests
 )
 
 target_link_libraries(clio_cte_stdio_unit_tests
-    wrp_cte_stdio
-    wrp_cte_posix       # for shared PosixFs::IsFdTracked used by stdio
-    wrp_cte_fs_base
-    wrp_cte_core_client
+    clio_cte_stdio
+    clio_cte_posix       # for shared PosixFs::IsFdTracked used by stdio
+    clio_cte_fs_base
+    clio_cte_core_client
     ctp::cxx
     ctp::interceptor
     Catch2::Catch2WithMain

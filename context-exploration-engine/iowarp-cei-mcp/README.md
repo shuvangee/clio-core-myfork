@@ -42,7 +42,7 @@ The core Context Interface operations as defined in `test_bindings.py`:
 ## Prerequisites
 
 - Python 3.8 or higher
-- CTE Python bindings (`wrp_cte_core_ext`) must be built (see Building section)
+- CTE Python bindings (`clio_cte_core_ext`) must be built (see Building section)
 - PyYAML (for automatic config generation) - installed via requirements.txt
 - **Note**: CTE runtime must be initialized for all operations to work - use `initialize_cte_runtime` tool first
 
@@ -121,7 +121,7 @@ source ~/.bashrc
 ### Step 3: Verify
 
 ```bash
-python3 -c "import wrp_cte_core_ext as cte; print('✅ CTE bindings available')"
+python3 -c "import clio_cte_core_ext as cte; print('✅ CTE bindings available')"
 ```
 
 ## Important: CTE Runtime Initialization
@@ -210,7 +210,7 @@ asyncio.run(use_mcp())
 ### "CTE Python bindings not available"
 
 - Set `PYTHONPATH` to point to build directory: `export PYTHONPATH=/workspace/build/bin:$PYTHONPATH`
-- Verify bindings exist: `ls /workspace/build/bin/wrp_cte_core_ext*.so`
+- Verify bindings exist: `ls /workspace/build/bin/clio_cte_core_ext*.so`
 - Rebuild bindings if missing (see Building section)
 
 ### "Connection closed" errors in tests

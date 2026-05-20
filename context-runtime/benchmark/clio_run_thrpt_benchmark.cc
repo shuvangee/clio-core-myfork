@@ -78,7 +78,7 @@ struct BenchmarkConfig {
   std::string lane_policy =
       ""; // Lane mapping policy override (empty = use config)
   std::string output_dir =
-      "/tmp/wrp_benchmark"; // Output directory for benchmark files
+      "/tmp/clio_benchmark"; // Output directory for benchmark files
 };
 
 /**
@@ -136,7 +136,7 @@ bool ParseArgs(int argc, char **argv, BenchmarkConfig &config) {
       HIPRINT("  --max-file-size <size>  Maximum file size with suffix: k, m, g (default: 1g)");
       HIPRINT("  --io-size <size>        I/O size per operation with suffix: k, m, g (default: 4k)");
       HIPRINT("  --lane-policy <P>       Lane policy: map_by_pid_tid, round_robin, random (default: from config)");
-      HIPRINT("  --output-dir <dir>      Output directory for benchmark files (default: /tmp/wrp_benchmark)");
+      HIPRINT("  --output-dir <dir>      Output directory for benchmark files (default: /tmp/clio_benchmark)");
       HIPRINT("  --verbose, -v           Verbose output");
       HIPRINT("  --help, -h              Show this help");
       HIPRINT("");

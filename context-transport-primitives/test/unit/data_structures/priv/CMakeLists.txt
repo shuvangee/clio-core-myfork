@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 #------------------------------------------------------------------------------
 # Build Private Memory Data Structure Tests
@@ -6,16 +6,16 @@ project(hermes_shm)
 
 add_executable(test_priv_vector_exec
         test_priv_vector.cc)
-add_dependencies(test_priv_vector_exec hermes_shm_host)
+add_dependencies(test_priv_vector_exec clio_ctp_host)
 target_link_libraries(test_priv_vector_exec
-        hermes_shm_host
+        clio_ctp_host
         ctp::serialize)
 
 add_executable(test_priv_string_exec
         test_priv_string.cc)
-add_dependencies(test_priv_string_exec hermes_shm_host)
+add_dependencies(test_priv_string_exec clio_ctp_host)
 target_link_libraries(test_priv_string_exec
-        hermes_shm_host
+        clio_ctp_host
         ctp::serialize)
 
 #------------------------------------------------------------------------------

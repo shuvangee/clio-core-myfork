@@ -35,22 +35,22 @@
 #ifndef _WIN32
 #include <sys/stat.h>
 #endif
-#include <wrp_cae/core/factory/binary_file_assimilator.h>
+#include <clio_cae/core/factory/binary_file_assimilator.h>
 
 #include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <vector>
 
-// Include wrp_cte headers after closing any wrp_cae namespace to avoid Method
+// Include clio_cte headers after closing any clio_cae namespace to avoid Method
 // namespace collision
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
-namespace wrp_cae::core {
+namespace clio_cae::core {
 
 BinaryFileAssimilator::BinaryFileAssimilator(
-    std::shared_ptr<wrp_cte::core::Client> cte_client)
+    std::shared_ptr<clio_cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
 chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
@@ -95,7 +95,7 @@ chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
   HLOG(kDebug, "BinaryFileAssimilator: Getting or creating tag '{}'", tag_name);
   auto tag_task = cte_client_->AsyncGetOrCreateTag(tag_name);
   CHI_CO_AWAIT(tag_task);
-  wrp_cte::core::TagId tag_id = tag_task->tag_id_;
+  clio_cte::core::TagId tag_id = tag_task->tag_id_;
   if (tag_id.IsNull()) {
     HLOG(kError, "BinaryFileAssimilator: Failed to get or create tag '{}'",
          tag_name);
@@ -183,7 +183,7 @@ chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
   auto desc_task =
       cte_client_->AsyncPutBlob(tag_id, "description", 0, desc_size,
                                 desc_buffer.shm_.template Cast<void>(), 1.0f,
-                                wrp_cte::core::Context(), 0);
+                                clio_cte::core::Context(), 0);
   CHI_CO_AWAIT(desc_task);
 
   if (desc_task->return_code_ != 0) {
@@ -231,7 +231,7 @@ chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
   HLOG(kDebug, "BinaryFileAssimilator: Starting chunk processing");
   size_t chunk_idx = 0;
   size_t bytes_processed = 0;
-  std::vector<chi::Future<wrp_cte::core::PutBlobTask>> active_tasks;
+  std::vector<chi::Future<clio_cte::core::PutBlobTask>> active_tasks;
 
   while (bytes_processed < total_size) {
     // Submit tasks up to the parallel limit
@@ -304,7 +304,7 @@ chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
       auto task =
           cte_client_->AsyncPutBlob(tag_id, blob_name, 0, current_chunk_size,
                                     buffer_ptr.shm_.template Cast<void>(), 1.0f,
-                                    wrp_cte::core::Context(), 0);
+                                    clio_cte::core::Context(), 0);
 
       active_tasks.push_back(task);
 
@@ -388,4 +388,4 @@ size_t BinaryFileAssimilator::GetFileSize(const std::string& file_path) {
   return static_cast<size_t>(st.st_size);
 }
 
-}  // namespace wrp_cae::core
+}  // namespace clio_cae::core

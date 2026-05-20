@@ -1,6 +1,6 @@
 # Pipeline: Montage workload, Apptainer + sbatch on Ares, 4 nodes,
 # with IOWarp's FUSE adapter providing the CTE-backed mount under
-# ${HOME}/wrp_cte_montage_4n.
+# ${HOME}/clio_cte_montage_4n.
 #
 # Each of the 4 nodes runs the mosaic_replicates loop in parallel via
 # PsshExecInfo. Outputs are host-tagged (host-<name>/rep_NNN/) under the
@@ -20,8 +20,8 @@ container_binds:
   # bundled 2MASS J-band raw_images. Re-add the io_only bind to switch
   # back to the I/O proxy.
   - ${HOME}/jarvis-runs:${HOME}/jarvis-runs
-  - ${HOME}/wrp_cte_montage_4n:/mnt/clio_cte
-  - ${HOME}/wrp_cte_montage_4n:${HOME}/wrp_cte_montage_4n
+  - ${HOME}/clio_cte_montage_4n:/mnt/clio_cte
+  - ${HOME}/clio_cte_montage_4n:${HOME}/clio_cte_montage_4n
 
 ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
 
@@ -63,8 +63,8 @@ scheduler:
     # run on this batch node — fusermount3 returns ENOENT/Transport-not-
     # connected, then mkdir fails. Lazy-unmount handles the case where
     # fusermount3 itself can't reach the orphaned mount.
-    - 'fusermount3 -u /home/llogan/wrp_cte_montage_4n 2>/dev/null || umount -l /home/llogan/wrp_cte_montage_4n 2>/dev/null || true'
-    - 'mkdir -p /home/llogan/wrp_cte_montage_4n'
+    - 'fusermount3 -u /home/llogan/clio_cte_montage_4n 2>/dev/null || umount -l /home/llogan/clio_cte_montage_4n 2>/dev/null || true'
+    - 'mkdir -p /home/llogan/clio_cte_montage_4n'
 
 pkgs:
   - pkg_type: jarvis_iowarp.clio_runtime
@@ -93,7 +93,7 @@ pkgs:
   - pkg_type: jarvis_iowarp.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
-    mountpoint: ${HOME}/wrp_cte_montage_4n
+    mountpoint: ${HOME}/clio_cte_montage_4n
     sleep: 2
     extra_fuse_args: "-f"
 
@@ -109,4 +109,4 @@ pkgs:
     mosaic_replicates: 400
     parallel_reps: 2
     omp_threads: 4
-    out: ${HOME}/wrp_cte_montage_4n/montage
+    out: ${HOME}/clio_cte_montage_4n/montage

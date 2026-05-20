@@ -35,7 +35,7 @@ find_package(iowarp-core CONFIG REQUIRED)
 target_link_libraries(your_target PRIVATE
     chimaera::admin_client
     chimaera::bdev_client
-    wrp_cte::core_client
+    clio_cte::core_client
 )
 ```
 

@@ -50,7 +50,7 @@
 #include <cstdio>                 // snprintf, fprintf
 
 #include "chimaera/chimaera.h"
-#include "wrp_cte/core/content_transfer_engine.h"
+#include "clio_cte/core/content_transfer_engine.h"
 
 using namespace clio::cae::fuse;
 
@@ -77,7 +77,7 @@ static void *cte_fuse_init(struct fuse_conn_info *conn,
     fprintf(stderr, "ERROR: CHIMAERA_INIT failed\n");
     return nullptr;
   }
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   return nullptr;
 }
 

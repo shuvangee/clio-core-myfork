@@ -15,8 +15,8 @@ target_include_directories(test_fuse_adapter PRIVATE
 )
 
 target_link_libraries(test_fuse_adapter
-    wrp_cte_core_runtime
-    wrp_cte_core_client
+    clio_cte_core_runtime
+    clio_cte_core_client
     chimaera::admin_runtime
     chimaera::admin_client
     chimaera::bdev_runtime
@@ -83,8 +83,8 @@ target_include_directories(test_fuse_copy_workspace PRIVATE
 )
 
 target_link_libraries(test_fuse_copy_workspace
-    wrp_cte_core_runtime
-    wrp_cte_core_client
+    clio_cte_core_runtime
+    clio_cte_core_client
     chimaera::admin_runtime
     chimaera::admin_client
     chimaera::bdev_runtime

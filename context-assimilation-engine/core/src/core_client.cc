@@ -31,14 +31,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cae/core/constants.h>
-#include <wrp_cte/core/core_client.h>  // For WRP_CTE_CLIENT_INIT
+#include <clio_cae/core/constants.h>
+#include <clio_cte/core/core_client.h>  // For WRP_CTE_CLIENT_INIT
 
-// Must include wrp_cae core_client.h last to avoid circular dependency
-#include <wrp_cae/core/core_client.h>
+// Must include clio_cae core_client.h last to avoid circular dependency
+#include <clio_cae/core/core_client.h>
 
 // Global CAE client singleton definition
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(wrp_cae::core::Client, g_cae_client);
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cae::core::Client, g_cae_client);
 
 /**
  * Initialize CAE client singleton
@@ -58,22 +58,22 @@ bool WRP_CAE_CLIENT_INIT(const std::string &config_path,
   (void)config_path;
 
   // First, ensure CTE client is initialized (CAE depends on CTE)
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT(config_path, pool_query)) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT(config_path, pool_query)) {
     return false;
   }
 
   // Get or create the CAE client singleton
-  auto *cae_client = CTP_GET_GLOBAL_PTR_VAR(wrp_cae::core::Client, g_cae_client);
+  auto *cae_client = CTP_GET_GLOBAL_PTR_VAR(clio_cae::core::Client, g_cae_client);
   if (!cae_client) {
     return false;
   }
 
   // Create the CAE pool
-  wrp_cae::core::CreateParams params;
+  clio_cae::core::CreateParams params;
   auto create_task = cae_client->AsyncCreate(
       pool_query,
       "cae_client_pool",
-      wrp_cae::core::kCaePoolId,
+      clio_cae::core::kCaePoolId,
       params);
   create_task.Wait();
 

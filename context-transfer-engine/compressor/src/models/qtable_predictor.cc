@@ -36,7 +36,7 @@
  * @brief Implementation of Q-Table compression predictor
  */
 
-#include "wrp_cte/compressor/models/qtable_predictor.h"
+#include "clio_cte/compressor/models/qtable_predictor.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -48,7 +48,7 @@
 
 using json = nlohmann::json;
 
-namespace wrp_cte::compressor {
+namespace clio_cte::compressor {
 
 // ============================================================================
 // QState implementation
@@ -542,4 +542,4 @@ QValue QTablePredictor::GetPrediction(const QState& state) {
   return global_average_;
 }
 
-}  // namespace wrp_cte::compressor
+}  // namespace clio_cte::compressor

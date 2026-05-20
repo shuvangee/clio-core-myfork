@@ -15,35 +15,35 @@ message(STATUS "CTE UVM: Building GPU virtual memory manager (CUDA enabled)")
 # also gets the CUDA include paths (e.g., llama.cpp → weight_manager.h → gpu_vmm.h).
 find_package(CUDAToolkit REQUIRED)
 
-# Library: wrp_cte_uvm
+# Library: clio_cte_uvm
 # gpu_vmm.cc contains only host-side CUDA driver/runtime API calls — no
 # __global__ or __device__ functions. The .cc extension already implies
 # CXX language; compiling as CXX avoids any CUDA device compilation
 # (nvcc -dc / nvlink) and the resulting FATBIN/PTX that NVHPC 25.5
 # embeds with a PTX ISA version newer than what the Polaris CUDA driver
 # supports.
-add_library(wrp_cte_uvm SHARED src/gpu_vmm.cc)
-set_target_properties(wrp_cte_uvm PROPERTIES
+add_library(clio_cte_uvm SHARED src/gpu_vmm.cc)
+set_target_properties(clio_cte_uvm PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
-target_include_directories(wrp_cte_uvm PUBLIC
+target_include_directories(clio_cte_uvm PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-target_link_libraries(wrp_cte_uvm
+target_link_libraries(clio_cte_uvm
     PUBLIC
         CUDA::cuda_driver   # cuda.h + libcuda.so (driver API)
         CUDA::cudart        # cuda_runtime.h + libcudart.so (runtime API)
 )
-target_link_options(wrp_cte_uvm PRIVATE "-Wl,-soname,libwrp_cte_uvm.so")
+target_link_options(clio_cte_uvm PRIVATE "-Wl,-soname,libwrp_cte_uvm.so")
 
-install(TARGETS wrp_cte_uvm
+install(TARGETS clio_cte_uvm
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
 )
 
 # Install headers
-install(DIRECTORY include/wrp_cte/uvm
-    DESTINATION include/wrp_cte
+install(DIRECTORY include/clio_cte/uvm
+    DESTINATION include/clio_cte
     FILES_MATCHING PATTERN "*.h"
 )
 
@@ -72,7 +72,7 @@ if(WRP_CORE_ENABLE_TESTS)
     # nvcc may not forward CMake's BUILD_RPATH; add it explicitly via the linker.
     target_link_options(test_gpu_vmm PRIVATE
         "-Wl,-rpath,${CMAKE_BINARY_DIR}/bin")
-    target_link_libraries(test_gpu_vmm PRIVATE wrp_cte_uvm cuda)
+    target_link_libraries(test_gpu_vmm PRIVATE clio_cte_uvm cuda)
     add_test(NAME test_gpu_vmm COMMAND test_gpu_vmm)
     message(STATUS "CTE UVM: Test target 'test_gpu_vmm' added")
 endif()

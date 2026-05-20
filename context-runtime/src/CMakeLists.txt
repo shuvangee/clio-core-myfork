@@ -138,7 +138,7 @@ endif()
 
 # Set include directories as PUBLIC so they propagate to consumers
 # Use CMAKE_CURRENT_SOURCE_DIR/.. to get runtime directory (this is runtime/src)
-# Also include hermes_shm headers which are in context-transport-primitives/include
+# Also include clio_ctp headers which are in context-transport-primitives/include
 target_include_directories(${CHIMAERA_LIB_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../modules/admin/include>

@@ -1,8 +1,8 @@
 # CTE Configuration for FUSE adapter copy-workspace test
 # RAM-only storage — sized to hold /workspace source files
 compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte
+  - mod_name: clio_cte_core
+    pool_name: clio_cte
     pool_query: local
     pool_id: 512.0
 

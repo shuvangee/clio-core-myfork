@@ -59,12 +59,12 @@
 
 // Chimaera and CAE headers
 #include <chimaera/chimaera.h>
-#include <wrp_cae/core/core_client.h>
-#include <wrp_cae/core/constants.h>
-#include <wrp_cae/core/factory/assimilation_ctx.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/constants.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
 
 // CTE headers
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 
 // Logging
 #include <clio_ctp/util/logging.h>
@@ -105,14 +105,14 @@ bool GenerateTestFile(const std::string& file_path, size_t size_bytes) {
 /**
  * Test error case - should fail with specific error code
  */
-bool TestErrorCase(wrp_cae::core::Client& cae_client,
+bool TestErrorCase(clio_cae::core::Client& cae_client,
                    const std::string& test_name,
-                   const wrp_cae::core::AssimilationCtx& ctx,
+                   const clio_cae::core::AssimilationCtx& ctx,
                    bool should_fail = true) {
   HLOG(kInfo, "--- Testing: {} ---", test_name);
 
   // Call ParseOmni with vector containing single context
-  std::vector<wrp_cae::core::AssimilationCtx> contexts = {ctx};
+  std::vector<clio_cae::core::AssimilationCtx> contexts = {ctx};
   auto parse_task = cae_client.AsyncParseOmni(contexts);
   parse_task.Wait();
   // Use result_code_ (operation result) not GetReturnCode() (task completion status)
@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
 
     // Connect to CTE
     HLOG(kInfo, "[SETUP] Connecting to CTE...");
-    wrp_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::WRP_CTE_CLIENT_INIT();
 
     // Set up storage target for CTE
     HLOG(kInfo, "[SETUP] Registering storage target...");
@@ -222,13 +222,13 @@ int main(int argc, char* argv[]) {
 
     // Create CAE pool
     HLOG(kInfo, "[SETUP] Creating CAE pool...");
-    wrp_cae::core::Client cae_client;
-    wrp_cae::core::CreateParams params;
+    clio_cae::core::Client cae_client;
+    clio_cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
         chi::PoolQuery::Local(),
         "test_cae_error_pool",
-        wrp_cae::core::kCaePoolId,
+        clio_cae::core::kCaePoolId,
         params);
     create_task.Wait();
 
@@ -236,7 +236,7 @@ int main(int argc, char* argv[]) {
 
     // Test 1: Non-existent source file
     tests_total++;
-    wrp_cae::core::AssimilationCtx ctx1;
+    clio_cae::core::AssimilationCtx ctx1;
     ctx1.src = "file::" + kNonExistentFile;
     ctx1.dst = "iowarp::test_error_tag1";
     ctx1.format = "binary";
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
 
     // Test 2: Invalid source protocol
     tests_total++;
-    wrp_cae::core::AssimilationCtx ctx2;
+    clio_cae::core::AssimilationCtx ctx2;
     ctx2.src = "invalid_protocol::/tmp/somefile.bin";
     ctx2.dst = "iowarp::test_error_tag2";
     ctx2.format = "binary";
@@ -260,7 +260,7 @@ int main(int argc, char* argv[]) {
 
     // Test 3: Invalid destination protocol
     tests_total++;
-    wrp_cae::core::AssimilationCtx ctx3;
+    clio_cae::core::AssimilationCtx ctx3;
     ctx3.src = "file::" + kTestFileName;
     ctx3.dst = "invalid_protocol::test_tag";
     ctx3.format = "binary";
@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
 
     // Test 4: Out-of-range offset
     tests_total++;
-    wrp_cae::core::AssimilationCtx ctx4;
+    clio_cae::core::AssimilationCtx ctx4;
     ctx4.src = "file::" + kTestFileName;
     ctx4.dst = "iowarp::test_error_tag4";
     ctx4.format = "binary";
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
 
     // Test 5: Range size exceeds file
     tests_total++;
-    wrp_cae::core::AssimilationCtx ctx5;
+    clio_cae::core::AssimilationCtx ctx5;
     ctx5.src = "file::" + kTestFileName;
     ctx5.dst = "iowarp::test_error_tag5";
     ctx5.format = "binary";
@@ -300,7 +300,7 @@ int main(int argc, char* argv[]) {
 
     // Test 7: Valid case (control test - should succeed)
     tests_total++;
-    wrp_cae::core::AssimilationCtx ctx7;
+    clio_cae::core::AssimilationCtx ctx7;
     ctx7.src = "file::" + kTestFileName;
     ctx7.dst = "iowarp::test_error_tag7";
     ctx7.format = "binary";

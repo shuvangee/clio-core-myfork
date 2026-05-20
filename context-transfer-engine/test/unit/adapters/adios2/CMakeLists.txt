@@ -29,13 +29,13 @@ target_include_directories(test_adios2_adapter PRIVATE
 # Link against required libraries
 target_link_libraries(test_adios2_adapter
     iowarp_engine                # IOWarp ADIOS2 engine adapter
-    wrp_cte_core_runtime         # CTE core runtime library
-    wrp_cte_core_client          # CTE core client library
+    clio_cte_core_runtime         # CTE core runtime library
+    clio_cte_core_client          # CTE core client library
     chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
     chimaera::admin_client       # Admin module client
     chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
     chimaera::bdev_client        # Bdev client
-    ctp::cxx                    # HermesShm library
+    ctp::cxx                    # ClioCtp library
     adios2::adios2               # ADIOS2 library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )

@@ -30,20 +30,20 @@ vcpkg_cmake_install()
 
 # Fix CMake config paths
 vcpkg_cmake_config_fixup(PACKAGE_NAME iowarp-core CONFIG_PATH lib/cmake/iowarp-core)
-vcpkg_cmake_config_fixup(PACKAGE_NAME HermesShm CONFIG_PATH lib/cmake/HermesShm)
+vcpkg_cmake_config_fixup(PACKAGE_NAME ClioCtp CONFIG_PATH lib/cmake/ClioCtp)
 vcpkg_cmake_config_fixup(PACKAGE_NAME chimaera CONFIG_PATH lib/cmake/chimaera)
 vcpkg_cmake_config_fixup(PACKAGE_NAME chimaera_admin CONFIG_PATH lib/cmake/chimaera_admin)
 vcpkg_cmake_config_fixup(PACKAGE_NAME chimaera_bdev CONFIG_PATH lib/cmake/chimaera_bdev)
 
 # Handle optional ChiMod packages
-if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/wrp_cte_core")
-    vcpkg_cmake_config_fixup(PACKAGE_NAME wrp_cte_core CONFIG_PATH lib/cmake/wrp_cte_core)
+if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/clio_cte_core")
+    vcpkg_cmake_config_fixup(PACKAGE_NAME clio_cte_core CONFIG_PATH lib/cmake/clio_cte_core)
 endif()
-if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/wrp_cae_core")
-    vcpkg_cmake_config_fixup(PACKAGE_NAME wrp_cae_core CONFIG_PATH lib/cmake/wrp_cae_core)
+if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/clio_cae_core")
+    vcpkg_cmake_config_fixup(PACKAGE_NAME clio_cae_core CONFIG_PATH lib/cmake/clio_cae_core)
 endif()
-if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/wrp_cee_core")
-    vcpkg_cmake_config_fixup(PACKAGE_NAME wrp_cee_core CONFIG_PATH lib/cmake/wrp_cee_core)
+if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/clio_cee_core")
+    vcpkg_cmake_config_fixup(PACKAGE_NAME clio_cee_core CONFIG_PATH lib/cmake/clio_cee_core)
 endif()
 
 # Remove duplicate files from debug

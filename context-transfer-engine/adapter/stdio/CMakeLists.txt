@@ -7,18 +7,18 @@ include_directories(
 
 # Create the STDIO interceptor
 set(INTERCEPTOR_DEPS
-        ${Hermes_CLIENT_DEPS} wrp_cte_fs_base)
-add_library(wrp_cte_stdio SHARED
+        ${Hermes_CLIENT_DEPS} clio_cte_fs_base)
+add_library(clio_cte_stdio SHARED
         ${CMAKE_CURRENT_SOURCE_DIR}/stdio_api.cc)
-add_dependencies(wrp_cte_stdio ${INTERCEPTOR_DEPS})
-target_link_libraries(wrp_cte_stdio MPI::MPI_CXX stdc++fs ${libelf_LIBRARIES} ${INTERCEPTOR_DEPS})
+add_dependencies(clio_cte_stdio ${INTERCEPTOR_DEPS})
+target_link_libraries(clio_cte_stdio MPI::MPI_CXX stdc++fs ${libelf_LIBRARIES} ${INTERCEPTOR_DEPS})
 
 # -----------------------------------------------------------------------------
 # Add Target(s) to CMake Install
 # -----------------------------------------------------------------------------
 install(
         TARGETS
-        wrp_cte_stdio
+        clio_cte_stdio
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin

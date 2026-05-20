@@ -42,7 +42,7 @@
 #include <map>
 #include <sstream>
 
-namespace wrp_cte {
+namespace clio_cte {
 
 /**
  * Data pattern types for synthetic workload generation
@@ -632,6 +632,6 @@ class SyntheticDataGenerator {
   }
 };
 
-}  // namespace wrp_cte
+}  // namespace clio_cte
 
 #endif  // WRP_CTE_SYNTHETIC_DATA_GENERATOR_H_

@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 # Find Catch2 testing framework
 find_package(Catch2 3 REQUIRED)

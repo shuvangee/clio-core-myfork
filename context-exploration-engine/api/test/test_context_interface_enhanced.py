@@ -26,17 +26,17 @@ def test_module_imports():
     print("Test 1: Module Imports")
 
     try:
-        import wrp_cee as cee
-        print("  ✅ wrp_cee module imported successfully")
+        import clio_cee as cee
+        print("  ✅ clio_cee module imported successfully")
     except ImportError as e:
-        print(f"  ❌ Failed to import wrp_cee module: {e}")
+        print(f"  ❌ Failed to import clio_cee module: {e}")
         return False
 
     try:
-        import wrp_cte_core_ext as cte
-        print("  ✅ wrp_cte_core_ext module imported successfully")
+        import clio_cte_core_ext as cte
+        print("  ✅ clio_cte_core_ext module imported successfully")
     except ImportError as e:
-        print(f"  ❌ Failed to import wrp_cte_core_ext module: {e}")
+        print(f"  ❌ Failed to import clio_cte_core_ext module: {e}")
         return False
 
     return True
@@ -47,7 +47,7 @@ def test_assimilation_ctx_construction():
     print("\nTest 2: AssimilationCtx Construction")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         # Test default constructor
         ctx1 = cee.AssimilationCtx()
@@ -85,7 +85,7 @@ def test_assimilation_ctx_properties():
     print("\nTest 3: AssimilationCtx Properties")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx = cee.AssimilationCtx(
             src="file::/tmp/source.bin",
@@ -138,7 +138,7 @@ def test_assimilation_ctx_repr():
     print("\nTest 4: AssimilationCtx __repr__")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx = cee.AssimilationCtx(
             src="file::/test.bin",
@@ -166,7 +166,7 @@ def test_context_interface_construction():
     print("\nTest 5: ContextInterface Construction")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx_interface = cee.ContextInterface()
         print("  ✅ ContextInterface constructed successfully")
@@ -185,7 +185,7 @@ def test_context_bundle_empty():
     print("\nTest 6: ContextInterface.context_bundle (empty)")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx_interface = cee.ContextInterface()
 
@@ -206,7 +206,7 @@ def test_context_bundle_with_data():
     print("\nTest 7: ContextInterface.context_bundle (with data)")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         # Create a temporary test file
         with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.bin') as f:
@@ -249,7 +249,7 @@ def test_context_query():
     print("\nTest 8: ContextInterface.context_query")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx_interface = cee.ContextInterface()
 
@@ -274,7 +274,7 @@ def test_context_retrieve():
     print("\nTest 9: ContextInterface.context_retrieve")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx_interface = cee.ContextInterface()
 
@@ -305,7 +305,7 @@ def test_context_destroy():
     print("\nTest 10: ContextInterface.context_destroy")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx_interface = cee.ContextInterface()
 
@@ -330,7 +330,7 @@ def test_context_splice():
     print("\nTest 11: ContextInterface.context_splice (stub)")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         ctx_interface = cee.ContextInterface()
 
@@ -352,7 +352,7 @@ def test_python_workflow():
     print("\nTest 12: Full Python Workflow")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
         import time
 
         # Create temp file

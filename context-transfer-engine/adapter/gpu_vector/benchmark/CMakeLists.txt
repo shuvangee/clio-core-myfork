@@ -45,9 +45,9 @@ if(WRP_CORE_ENABLE_CUDA)
             chimaera_cxx_gpu
             chimaera_admin_client
             chimaera_bdev_client
-            wrp_cte_core_client
-            wrp_cte_core_runtime
-            wrp_cte::gpu_vector
+            clio_cte_core_client
+            clio_cte_core_runtime
+            clio_cte::gpu_vector
             ctp::cuda_cxx
             ${CMAKE_THREAD_LIBS_INIT}
     )
@@ -67,8 +67,8 @@ if(WRP_CORE_ENABLE_CUDA)
             chimaera_cxx
             chimaera_admin_client
             chimaera_bdev_client
-            wrp_cte_core_client
-            wrp_cte_core_runtime
+            clio_cte_core_client
+            clio_cte_core_runtime
             ctp::cuda_cxx
             ${CMAKE_THREAD_LIBS_INIT}
     )
@@ -88,8 +88,8 @@ if(WRP_CORE_ENABLE_CUDA)
             chimaera_cxx
             chimaera_admin_client
             chimaera_bdev_client
-            wrp_cte_core_client
-            wrp_cte_core_runtime
+            clio_cte_core_client
+            clio_cte_core_runtime
             ctp::cuda_cxx
             ${CMAKE_THREAD_LIBS_INIT}
     )
@@ -141,9 +141,9 @@ if(WRP_CORE_ENABLE_ROCM)
         chimaera_cxx_gpu
         chimaera_admin_client
         chimaera_bdev_client
-        wrp_cte_core_client
-        wrp_cte_core_runtime
-        wrp_cte::gpu_vector
+        clio_cte_core_client
+        clio_cte_core_runtime
+        clio_cte::gpu_vector
         ctp::rocm_cxx
         ${CMAKE_THREAD_LIBS_INIT}
     )
@@ -171,8 +171,8 @@ if(WRP_CORE_ENABLE_ROCM)
         chimaera_cxx
         chimaera_admin_client
         chimaera_bdev_client
-        wrp_cte_core_client
-        wrp_cte_core_runtime
+        clio_cte_core_client
+        clio_cte_core_runtime
         ctp::rocm_cxx
         ${CMAKE_THREAD_LIBS_INIT}
     )
@@ -200,8 +200,8 @@ if(WRP_CORE_ENABLE_ROCM)
         chimaera_cxx
         chimaera_admin_client
         chimaera_bdev_client
-        wrp_cte_core_client
-        wrp_cte_core_runtime
+        clio_cte_core_client
+        clio_cte_core_runtime
         ctp::rocm_cxx
         ${CMAKE_THREAD_LIBS_INIT}
     )

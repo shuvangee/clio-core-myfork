@@ -16,19 +16,19 @@ def test_module_imports():
 
     try:
         # Import the CEE API module (built by nanobind)
-        import wrp_cee as cee
-        print("  ✅ wrp_cee module imported successfully")
+        import clio_cee as cee
+        print("  ✅ clio_cee module imported successfully")
     except ImportError as e:
-        print(f"  ❌ Failed to import wrp_cee module: {e}")
+        print(f"  ❌ Failed to import clio_cee module: {e}")
         print("     Make sure WRP_CORE_ENABLE_PYTHON=ON and nanobind is installed")
         return False
 
     try:
         # Import CTE module for Tag and runtime initialization
-        import wrp_cte_core_ext as cte
-        print("  ✅ wrp_cte_core_ext module imported successfully")
+        import clio_cte_core_ext as cte
+        print("  ✅ clio_cte_core_ext module imported successfully")
     except ImportError as e:
-        print(f"  ❌ Failed to import wrp_cte_core_ext module: {e}")
+        print(f"  ❌ Failed to import clio_cte_core_ext module: {e}")
         print("     CTE Python bindings are required for runtime initialization")
         return False
 
@@ -40,7 +40,7 @@ def test_api_construction():
     print("\nTest 2: API Type Construction")
 
     try:
-        import wrp_cee as cee
+        import clio_cee as cee
 
         # Test ContextInterface construction
         ctx_interface = cee.ContextInterface()
@@ -67,7 +67,7 @@ def test_cte_types():
     print("\nTest 3: CTE Type Availability")
 
     try:
-        import wrp_cte_core_ext as cte
+        import clio_cte_core_ext as cte
 
         # Test that key types/enums are accessible
         _ = cte.ChimaeraMode.kClient

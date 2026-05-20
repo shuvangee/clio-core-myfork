@@ -1,36 +1,36 @@
 cmake_minimum_required(VERSION 3.20)
-project(wrp_cee_api VERSION 1.0.0)
+project(clio_cee_api VERSION 1.0.0)
 
 #------------------------------------------------------------------------------
 # Find Required Packages
 #------------------------------------------------------------------------------
 # All dependencies are provided by the unified build - no find_package needed
-# chimaera::cxx, wrp_cte_core_client, and wrp_cae_core_client are already available
+# chimaera::cxx, clio_cte_core_client, and clio_cae_core_client are already available
 
 #------------------------------------------------------------------------------
 # Context Interface Library
 #------------------------------------------------------------------------------
-add_library(wrp_cee_api SHARED
+add_library(clio_cee_api SHARED
   src/context_interface.cc
 )
 
-add_library(wrp_cee::api ALIAS wrp_cee_api)
+add_library(clio_cee::api ALIAS clio_cee_api)
 
-target_include_directories(wrp_cee_api
+target_include_directories(clio_cee_api
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(wrp_cee_api
+target_link_libraries(clio_cee_api
   PUBLIC
     chimaera::cxx
-    wrp_cte_core_client
-    wrp_cae_core_client
+    clio_cte_core_client
+    clio_cae_core_client
 )
 
 # Set library properties
-set_target_properties(wrp_cee_api PROPERTIES
+set_target_properties(clio_cee_api PROPERTIES
   VERSION ${PROJECT_VERSION}
   SOVERSION 1
   CXX_STANDARD 20
@@ -52,17 +52,17 @@ if(WRP_CORE_ENABLE_PYTHON)
     find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
 
     # Create Python module
-    nanobind_add_module(wrp_cee
+    nanobind_add_module(clio_cee
       src/python_bindings.cc
     )
 
-    target_link_libraries(wrp_cee
+    target_link_libraries(clio_cee
       PRIVATE
-        wrp_cee_api
+        clio_cee_api
     )
 
     # Install Python module to site-packages (PYTHON_SITE_PACKAGES set by root CMakeLists.txt)
-    install(TARGETS wrp_cee
+    install(TARGETS clio_cee
       LIBRARY DESTINATION "${PYTHON_SITE_PACKAGES}"
     )
     message(STATUS "CEE Python wrapper will be installed to: ${PYTHON_SITE_PACKAGES}")
@@ -74,8 +74,8 @@ endif()
 #------------------------------------------------------------------------------
 # Installation
 #------------------------------------------------------------------------------
-install(TARGETS wrp_cee_api
-  EXPORT wrp_cee_api_targets
+install(TARGETS clio_cee_api
+  EXPORT clio_cee_api_targets
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
@@ -91,44 +91,44 @@ install(DIRECTORY include/
 include(CMakePackageConfigHelpers)
 
 # Create the config file content
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/wrp_cee_api-config.cmake.in"
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/clio_cee_api-config.cmake.in"
 "@PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)
 
 # Find required dependencies
 find_dependency(chimaera REQUIRED)
-find_dependency(wrp_cte_core REQUIRED)
-find_dependency(wrp_cae_core REQUIRED)
+find_dependency(clio_cte_core REQUIRED)
+find_dependency(clio_cae_core REQUIRED)
 
 # Include the exported targets
-include(\"\${CMAKE_CURRENT_LIST_DIR}/wrp_cee_api_targets.cmake\")
+include(\"\${CMAKE_CURRENT_LIST_DIR}/clio_cee_api_targets.cmake\")
 
-check_required_components(wrp_cee_api)
+check_required_components(clio_cee_api)
 ")
 
 configure_package_config_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/wrp_cee_api-config.cmake.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/wrp_cee_api-config.cmake"
-  INSTALL_DESTINATION lib/cmake/wrp_cee_api
+  "${CMAKE_CURRENT_BINARY_DIR}/clio_cee_api-config.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/clio_cee_api-config.cmake"
+  INSTALL_DESTINATION lib/cmake/clio_cee_api
 )
 
 write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/wrp_cee_api-config-version.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/clio_cee_api-config-version.cmake"
   VERSION ${PROJECT_VERSION}
   COMPATIBILITY AnyNewerVersion
 )
 
-install(EXPORT wrp_cee_api_targets
-  FILE wrp_cee_api_targets.cmake
-  NAMESPACE wrp_cee::
-  DESTINATION lib/cmake/wrp_cee_api
+install(EXPORT clio_cee_api_targets
+  FILE clio_cee_api_targets.cmake
+  NAMESPACE clio_cee::
+  DESTINATION lib/cmake/clio_cee_api
 )
 
 install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/wrp_cee_api-config.cmake"
-  "${CMAKE_CURRENT_BINARY_DIR}/wrp_cee_api-config-version.cmake"
-  DESTINATION lib/cmake/wrp_cee_api
+  "${CMAKE_CURRENT_BINARY_DIR}/clio_cee_api-config.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/clio_cee_api-config-version.cmake"
+  DESTINATION lib/cmake/clio_cee_api
 )
 
 #------------------------------------------------------------------------------

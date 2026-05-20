@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.10)
 add_executable(test_restart test_restart.cc)
 
 target_link_libraries(test_restart
-    wrp_cte_core_runtime
-    wrp_cte_core_client
+    clio_cte_core_runtime
+    clio_cte_core_client
     chimaera::admin_runtime
     chimaera::admin_client
     chimaera::bdev_runtime

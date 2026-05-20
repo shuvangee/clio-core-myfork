@@ -1,11 +1,11 @@
 #include "simple_test.h"
-#include <wrp_cte/core/core_config.h>
-#include <wrp_cte/core/core_dpe.h>
+#include <clio_cte/core/core_config.h>
+#include <clio_cte/core/core_dpe.h>
 #include <fstream>
 #include <cstdlib>
 #include <filesystem>
 
-using namespace wrp_cte::core;
+using namespace clio_cte::core;
 
 // Helper function to create a temporary file path
 std::string GetTempFile(const std::string& name) {

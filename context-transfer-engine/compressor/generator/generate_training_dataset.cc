@@ -59,7 +59,7 @@
 #include <random>
 #include <algorithm>
 
-#include "wrp_cte/compressor/models/data_stats.h"
+#include "clio_cte/compressor/models/data_stats.h"
 #include <clio_ctp/util/logging.h>
 
 // Compression libraries
@@ -72,7 +72,7 @@
 #endif
 #endif
 
-using namespace wrp_cte::compressor;
+using namespace clio_cte::compressor;
 
 // Bin fill mode: how to generate values within each bin
 enum class BinFillMode {

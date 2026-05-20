@@ -26,7 +26,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 BIN_DIR="${BIN_DIR:-${REPO_ROOT}/build/bin}"
 
 # Runtime configuration (includes compose section for CTE + CAE pools)
-RUNTIME_CONF="${RUNTIME_CONF:-${SCRIPT_DIR}/wrp_runtime_conf.yaml}"
+RUNTIME_CONF="${RUNTIME_CONF:-${SCRIPT_DIR}/clio_runtime_conf.yaml}"
 
 # OMNI file (override with OMNI_FILE env var)
 OMNI_FILE="${OMNI_FILE:-${SCRIPT_DIR}/matsci_globus_omni.yaml}"

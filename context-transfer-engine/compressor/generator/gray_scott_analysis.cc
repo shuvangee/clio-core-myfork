@@ -68,7 +68,7 @@
 
 #include <clio_ctp/util/logging.h>
 
-// Compression headers (from hermes_shm)
+// Compression headers (from context-transport-primitives)
 #include "clio_ctp/compress/compress.h"
 #include "clio_ctp/compress/lossless_modes.h"
 #include "clio_ctp/compress/blosc.h"
@@ -79,7 +79,7 @@
 #endif
 
 // Data statistics
-#include "wrp_cte/compressor/models/data_stats.h"
+#include "clio_cte/compressor/models/data_stats.h"
 
 // Library ID mapping (consistent with training data generator)
 enum class CompressionLibrary : int {
@@ -169,11 +169,11 @@ CompressionResult BenchmarkCompressor(
   if (num_elements == 0) return result;
 
   // Calculate data statistics using data_stats.h
-  result.shannon_entropy = wrp_cte::compressor::DataStatistics<double>::CalculateShannonEntropy(
+  result.shannon_entropy = clio_cte::compressor::DataStatistics<double>::CalculateShannonEntropy(
       data.data(), num_elements);
-  result.mad = wrp_cte::compressor::DataStatistics<double>::CalculateMAD(
+  result.mad = clio_cte::compressor::DataStatistics<double>::CalculateMAD(
       data.data(), num_elements);
-  result.second_derivative = wrp_cte::compressor::DataStatistics<double>::CalculateSecondDerivative(
+  result.second_derivative = clio_cte::compressor::DataStatistics<double>::CalculateSecondDerivative(
       data.data(), num_elements);
 
   // Allocate buffers
@@ -228,7 +228,7 @@ CompressionResult BenchmarkCompressor(
   result.decompress_time_ms = (cpu_end - cpu_start) / 1e6;  // ns to ms
 
   // Calculate PSNR for quality assessment
-  result.psnr = wrp_cte::compressor::DataStatistics<double>::CalculatePSNR(
+  result.psnr = clio_cte::compressor::DataStatistics<double>::CalculatePSNR(
       data.data(), decompressed_data.data(), num_elements);
 
   result.success = true;

@@ -23,7 +23,7 @@ def _exec_iowarp_bin(name):
     """
     bin_path = None
     lib_dir = None
-    for _extmod in ("wrp_cte_core_ext", "wrp_cee"):
+    for _extmod in ("clio_cte_core_ext", "clio_cee"):
         try:
             _m = importlib.import_module(_extmod)
             _sp = os.path.dirname(os.path.abspath(_m.__file__))

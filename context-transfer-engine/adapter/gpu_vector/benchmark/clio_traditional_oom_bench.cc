@@ -30,8 +30,8 @@
 #include <chimaera/chimaera.h>
 #include <chimaera/types.h>
 #include <clio_ctp/util/gpu_api.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 #include <algorithm>
 #include <chrono>
@@ -129,16 +129,16 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
     std::fprintf(stderr, "[INIT] CHIMAERA_INIT failed\n");
     std::exit(2);
   }
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
     std::fprintf(stderr, "[INIT] WRP_CTE_CLIENT_INIT failed\n");
     std::exit(2);
   }
   auto *cte_client = WRP_CTE_CLIENT;
-  cte_client->Init(wrp_cte::core::kCtePoolId);
-  wrp_cte::core::CreateParams params;
+  cte_client->Init(clio_cte::core::kCtePoolId);
+  clio_cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(
-      chi::PoolQuery::Dynamic(), wrp_cte::core::kCtePoolName,
-      wrp_cte::core::kCtePoolId, params);
+      chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
+      clio_cte::core::kCtePoolId, params);
   create_task.Wait();
   if (create_task->GetReturnCode() != 0) {
     std::fprintf(stderr, "[INIT] CTE pool create failed rc=%u\n",
@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
                    tag_fut->GetReturnCode());
       return 2;
     }
-    wrp_cte::core::TagId tag_id = tag_fut->tag_id_;
+    clio_cte::core::TagId tag_id = tag_fut->tag_id_;
 
     // ---- Write phase: per-page synchronous fill -> D2H -> PutBlob ----
     auto t0 = clock::now();

@@ -150,7 +150,7 @@ pkgs:
     poll_period_ms: 5000
     # pool_query: local + Pssh-fanning the compose to every node means
     # each node's `chimaera compose` talks to its local admin container
-    # and creates wrp_cte_core there with the proper storage config.
+    # and creates clio_cte_core there with the proper storage config.
     # No broadcast routing or cross-node admin propagation required.
     pool_query: "local"
 

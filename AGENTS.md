@@ -523,15 +523,15 @@ find_package(iowarp-core REQUIRED)
 #     - chimaera::bdev_client, chimaera::bdev_runtime
 #
 #   Optional ChiMods (if enabled at build time):
-#     - wrp_cte::core_client, wrp_cte::core_runtime (if WRP_CORE_ENABLE_CTE=ON)
-#     - wrp_cae::core_client, wrp_cae::core_runtime (if WRP_CORE_ENABLE_CAE=ON)
+#     - clio_cte::core_client, clio_cte::core_runtime (if WRP_CORE_ENABLE_CTE=ON)
+#     - clio_cae::core_client, clio_cae::core_runtime (if WRP_CORE_ENABLE_CAE=ON)
 
 # Then link to the ChiMod libraries you need
 target_link_libraries(your_target
   chimaera::admin_client     # Admin ChiMod (always available)
   chimaera::bdev_client      # Block device ChiMod (always available)
-  wrp_cte::core_client       # CTE ChiMod (if enabled)
-  wrp_cae::core_client       # CAE ChiMod (if enabled)
+  clio_cte::core_client       # CTE ChiMod (if enabled)
+  clio_cae::core_client       # CAE ChiMod (if enabled)
 )
 # Dependencies are automatically included by ChiMod libraries
 # No need to manually link ctp::cxx or chimaera::cxx
@@ -540,17 +540,17 @@ target_link_libraries(your_target
 **Alternative (Manual):**
 If you need finer control, you can still find packages individually:
 ```cmake
-find_package(HermesShm REQUIRED)        # Provides ctp::* targets
+find_package(ClioCtp REQUIRED)        # Provides ctp::* targets
 find_package(chimaera REQUIRED)         # Provides chimaera::cxx
 find_package(chimaera_admin REQUIRED)   # Provides admin ChiMod
 find_package(chimaera_bdev REQUIRED)    # Provides bdev ChiMod
-find_package(wrp_cte_core REQUIRED)     # Provides CTE ChiMod (if enabled)
-find_package(wrp_cae_core REQUIRED)     # Provides CAE ChiMod (if enabled)
+find_package(clio_cte_core REQUIRED)     # Provides CTE ChiMod (if enabled)
+find_package(clio_cae_core REQUIRED)     # Provides CAE ChiMod (if enabled)
 ```
 
 ### HSHM Modular Dependency Targets
 
-HSHM (HermesShm/context-transport-primitives) provides modular INTERFACE library targets for optional dependencies. Each target includes only the specific dependency it represents, along with the associated compile definitions.
+HSHM (ClioCtp/context-transport-primitives) provides modular INTERFACE library targets for optional dependencies. Each target includes only the specific dependency it represents, along with the associated compile definitions.
 
 **Available Modular Targets:**
 
@@ -636,7 +636,7 @@ HSHM (HermesShm/context-transport-primitives) provides modular INTERFACE library
 ```cmake
 # External application needing configuration and serialization
 target_link_libraries(my_app
-  wrp_cte::core_client      # Provides ctp::cxx automatically
+  clio_cte::core_client      # Provides ctp::cxx automatically
   ctp::configure           # For YAML config parsing
   ctp::serialize           # For object serialization
 )
@@ -954,9 +954,9 @@ python -m build --wheel
 ```
 
 **What Gets Bundled:**
-- All IOWarp libraries (libchimaera_cxx.so, libhermes_shm_host.so, ChiMod libraries)
+- All IOWarp libraries (libchimaera_cxx.so, libclio_ctp_host.so, ChiMod libraries)
 - Dependencies from install.sh (Boost, HDF5, ZeroMQ, yaml-cpp, etc.)
-- Command-line tools (wrp_cte, clio_cae_omni, chimaera, etc.)
+- Command-line tools (clio_cte, clio_cae_omni, chimaera, etc.)
 - Headers and CMake configuration files
 - Conda dependencies (if building in a Conda environment)
 

@@ -152,15 +152,15 @@ The `CMakeLists.txt` in this directory demonstrates the **proper MODULE_DEVELOPM
    find_package(chimaera_admin REQUIRED)        # Admin ChiMod
    
    # Find CTE Core ChiMod package
-   find_package(wrp_cte_core REQUIRED)          # CTE Core ChiMod
+   find_package(clio_cte_core REQUIRED)          # CTE Core ChiMod
    ```
 
 2. **Library Linking** (Modern Target Names):
    ```cmake
    target_link_libraries(your_app
        # CTE Core ChiMod libraries (recommended aliases)
-       wrp_cte::core_client                     # CTE Core client
-       wrp_cte::core_runtime                    # CTE Core runtime (optional)
+       clio_cte::core_client                     # CTE Core client
+       clio_cte::core_runtime                    # CTE Core runtime (optional)
        
        # Framework dependencies automatically included
        # chimaera::cxx                          # NOT needed - auto-included
@@ -169,9 +169,9 @@ The `CMakeLists.txt` in this directory demonstrates the **proper MODULE_DEVELOPM
    ```
 
 3. **Target Naming System**:
-   - **Package Names**: `wrp_cte_core` (for `find_package()`)
-   - **Target Aliases**: `wrp_cte::core_client`, `wrp_cte::core_runtime` (recommended)
-   - **Actual Targets**: `wrp_cte_core_client`, `wrp_cte_core_runtime`
+   - **Package Names**: `clio_cte_core` (for `find_package()`)
+   - **Target Aliases**: `clio_cte::core_client`, `clio_cte::core_runtime` (recommended)
+   - **Actual Targets**: `clio_cte_core_client`, `clio_cte_core_runtime`
 
 4. **Automatic Dependencies**:
    - ChiMod targets automatically include `chimaera::cxx` framework

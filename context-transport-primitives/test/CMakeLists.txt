@@ -1,3 +1,3 @@
-project(hermes_shm)
+project(clio_ctp)
 
 add_subdirectory(unit)

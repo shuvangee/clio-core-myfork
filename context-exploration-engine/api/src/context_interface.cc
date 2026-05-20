@@ -31,10 +31,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cee/api/context_interface.h>
-#include <wrp_cae/core/core_client.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cae/core/constants.h>
+#include <clio_cee/api/context_interface.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cae/core/constants.h>
 #include <chimaera/chimaera.h>
 #include <iostream>
 #include <clio_ctp/util/logging.h>
@@ -87,7 +87,7 @@ ContextInterface::~ContextInterface() {
 }
 
 int ContextInterface::ContextBundle(
-    const std::vector<wrp_cae::core::AssimilationCtx> &bundle) {
+    const std::vector<clio_cae::core::AssimilationCtx> &bundle) {
   if (!EnsureInitialized()) {
     HLOG(kError, "ContextInterface failed to initialize");
     return 1;
@@ -100,7 +100,7 @@ int ContextInterface::ContextBundle(
 
   try {
     // Connect to CAE core container using the standard pool ID
-    wrp_cae::core::Client cae_client(wrp_cae::core::kCaePoolId);
+    clio_cae::core::Client cae_client(clio_cae::core::kCaePoolId);
 
     // Call AsyncParseOmni with vector of contexts and wait for completion
     auto task = cae_client.AsyncParseOmni(bundle);
@@ -229,7 +229,7 @@ std::vector<std::string> ContextInterface::ContextRetrieve(
       size_t batch_count = batch_end - batch_start;
 
       // Schedule AsyncGetBlob operations for this batch
-      std::vector<chi::Future<wrp_cte::core::GetBlobTask>> tasks;
+      std::vector<chi::Future<clio_cte::core::GetBlobTask>> tasks;
       tasks.reserve(batch_count);
 
       for (size_t i = batch_start; i < batch_end; ++i) {
@@ -238,7 +238,7 @@ std::vector<std::string> ContextInterface::ContextRetrieve(
         // Get or create tag to get tag_id
         auto tag_task = cte_client->AsyncGetOrCreateTag(tag_name);
         tag_task.Wait();
-        wrp_cte::core::TagId tag_id = tag_task->tag_id_;
+        clio_cte::core::TagId tag_id = tag_task->tag_id_;
         if (tag_id.IsNull()) {
           HLOG(kWarning, "Failed to get tag '{}', skipping blob", tag_name);
           continue;

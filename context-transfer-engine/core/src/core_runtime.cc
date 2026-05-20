@@ -32,9 +32,9 @@
  */
 
 #include <chimaera/admin/admin_client.h>
-#include <wrp_cte/core/core_config.h>
-#include <wrp_cte/core/core_dpe.h>
-#include <wrp_cte/core/core_runtime.h>
+#include <clio_cte/core/core_config.h>
+#include <clio_cte/core/core_dpe.h>
+#include <clio_cte/core/core_runtime.h>
 
 #include <algorithm>
 #include <chrono>
@@ -60,7 +60,7 @@
 #include "clio_ctp/util/logging.h"
 #include "clio_ctp/util/timer.h"
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 // Bring chi namespace items into scope for CHI_CUR_WORKER macro
 using chi::chi_cur_worker_key_;
@@ -210,7 +210,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   // Register targets across this container's `neighborhood` window.
   //
   // The prior buggy loop used `target_query = DirectHash(i)` where
-  // `i` was the loop iterator alone — every wrp_cte_core container
+  // `i` was the loop iterator alone — every clio_cte_core container
   // on every node registered targets to the same bdev containers
   // (0, 1, ..., neighborhood-1) — and HashBlobToContainer-distributed
   // PutBlobs all funnelled into bdev container 0 (since neighborhood=1
@@ -220,11 +220,11 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   //
   // The intended pattern is a sliding window around the current
   // container: target_query = DirectHash((container_id_ + i) %
-  // num_nodes). So wrp_cte_core container 0 registers neighborhood
+  // num_nodes). So clio_cte_core container 0 registers neighborhood
   // targets at bdev containers 0..neighborhood-1, container 1 at
-  // 1..neighborhood, etc. With neighborhood=1 each wrp_cte_core
+  // 1..neighborhood, etc. With neighborhood=1 each clio_cte_core
   // container registers exactly one target — its own local bdev —
-  // and HashBlobToContainer spreads blobs across the N wrp_cte_core
+  // and HashBlobToContainer spreads blobs across the N clio_cte_core
   // containers, keeping the write path node-local. Higher neighborhood
   // values give replication breadth without collapsing onto one node.
   if (!storage_devices_.empty()) {
@@ -419,7 +419,7 @@ chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
 }
 
 chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
-  using namespace wrp_cte::core;
+  using namespace clio_cte::core;
   switch (task->method_) {
     // Methods that route locally
     case Method::kRegisterTarget:
@@ -3661,7 +3661,7 @@ void Runtime::GpuCacheOnDelTag(const TagId &tag_id) {
   GpuCacheRemoveTag(gpu_cache_, tag_id.major_, tag_id.minor_);
 }
 
-}  // namespace wrp_cte::core
+}  // namespace clio_cte::core
 
 // Define ChiMod entry points using CHI_TASK_CC macro
-CHI_TASK_CC(wrp_cte::core::Runtime)
+CHI_TASK_CC(clio_cte::core::Runtime)

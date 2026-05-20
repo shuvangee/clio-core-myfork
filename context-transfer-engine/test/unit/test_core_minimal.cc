@@ -37,8 +37,8 @@
 #include <memory>
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 #include <chimaera/bdev/bdev_tasks.h>
 
 namespace fs = std::filesystem;
@@ -71,7 +71,7 @@ public:
   static constexpr chi::QueueId kCTETestQueueId = chi::QueueId(1);
   static constexpr chi::u64 kTestTargetSize = 10 * 1024 * 1024;  // 10MB
   
-  std::unique_ptr<wrp_cte::core::Client> core_client_;
+  std::unique_ptr<clio_cte::core::Client> core_client_;
   std::string test_storage_path_;
   chi::PoolId core_pool_id_;
   
@@ -90,7 +90,7 @@ public:
     core_pool_id_ = chi::PoolId(42, 0);  // Using fixed ID for testing (major=42, minor=0)
     
     // Create CTE core client
-    core_client_ = std::make_unique<wrp_cte::core::Client>(core_pool_id_);
+    core_client_ = std::make_unique<clio_cte::core::Client>(core_pool_id_);
   }
   
   ~CTECoreTestFixture() {
@@ -147,10 +147,10 @@ TEST_CASE("Create CTE Core Pool", "[cte][core][pool]") {
   
   SECTION("CreateParams validation") {
     // Test default CreateParams structure
-    wrp_cte::core::CreateParams default_params;
-    REQUIRE(std::string(wrp_cte::core::CreateParams::chimod_lib_name) == "wrp_cte_core");
+    clio_cte::core::CreateParams default_params;
+    REQUIRE(std::string(clio_cte::core::CreateParams::chimod_lib_name) == "clio_cte_core");
 
-    INFO("ChiMod library name: " << wrp_cte::core::CreateParams::chimod_lib_name);
+    INFO("ChiMod library name: " << clio_cte::core::CreateParams::chimod_lib_name);
   }
   
   SECTION("Pool query validation") {

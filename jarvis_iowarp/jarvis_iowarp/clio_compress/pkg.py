@@ -1,14 +1,14 @@
 """
 IOWarp transparent compression service for the CTE stack.
 
-Generates a chimaera-compose YAML that places the wrp_cte_compressor
+Generates a chimaera-compose YAML that places the clio_cte_compressor
 module at the configured ``pool_id`` (default 512.0 — the CTE entrypoint
 that adapters target via WRP_CTE_CLIENT_INIT) and points it at the
-downstream wrp_cte_core via ``next_pool_id`` (default 513.0). Pairs
+downstream clio_cte_core via ``next_pool_id`` (default 513.0). Pairs
 naturally with jarvis_iowarp.clio_cte configured at 513.0.
 
 This package only configures the pipeline-side compose entry. The
-underlying chimod (wrp_cte_compressor) is built and installed as part of
+underlying chimod (clio_cte_compressor) is built and installed as part of
 context-transfer-engine; clio_runtime loads it at daemon start.
 """
 from jarvis_cd.core.pkg import Service
@@ -36,7 +36,7 @@ class ClioCompress(Service):
                 'name': 'pool_name',
                 'msg': 'Name of the compressor pool',
                 'type': str,
-                'default': 'wrp_cte_compressor',
+                'default': 'clio_cte_compressor',
             },
             {
                 'name': 'pool_id',
@@ -48,7 +48,7 @@ class ClioCompress(Service):
             },
             {
                 'name': 'next_pool_id',
-                'msg': ('Pool ID of the downstream module (the wrp_cte_core '
+                'msg': ('Pool ID of the downstream module (the clio_cte_core '
                         'pool that the compressor forwards compressed '
                         'blobs to)'),
                 'type': float,
@@ -166,8 +166,8 @@ class ClioCompress(Service):
         self.log("Configuring transparent compression service (clio_compress)...")
 
         compose_entry = {
-            'mod_name': 'wrp_cte_compressor',
-            'pool_name': self.config.get('pool_name', 'wrp_cte_compressor'),
+            'mod_name': 'clio_cte_compressor',
+            'pool_name': self.config.get('pool_name', 'clio_cte_compressor'),
             'pool_query': self.config.get('pool_query', 'local'),
             'pool_id': self._format_pool_id(self.config.get('pool_id', 512.0)),
             'next_pool_id': self._format_pool_id(

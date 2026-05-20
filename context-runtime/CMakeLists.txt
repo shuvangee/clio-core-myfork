@@ -33,14 +33,14 @@ endif()
 #------------------------------------------------------------------------------
 # Verify that required dependencies were found by ChimaeraCommon.cmake
 # Check for both package and target availability (supports both installed and subdirectory modes)
-if(NOT HermesShm_FOUND AND NOT TARGET cxx AND NOT TARGET ctp::cxx)
+if(NOT ClioCtp_FOUND AND NOT TARGET cxx AND NOT TARGET ctp::cxx)
   message(FATAL_ERROR "Hermes SHM (HSHM) not found")
 endif()
 
-if(HermesShm_FOUND)
-  message(STATUS "found hermes_shm at ${HermesShm_PREFIX}")
+if(ClioCtp_FOUND)
+  message(STATUS "found clio_ctp at ${ClioCtp_PREFIX}")
 else()
-  message(STATUS "using hermes_shm as subdirectory (target: cxx)")
+  message(STATUS "using clio_ctp as subdirectory (target: cxx)")
 endif()
 
 # Note: ZeroMQ support disabled for stub implementation
@@ -50,7 +50,7 @@ endif()
 #------------------------------------------------------------------------------
 # Include directories
 include_directories(${CHIMAERA_ROOT}/include)
-include_directories(${HermesShm_INCLUDE_DIRS})
+include_directories(${ClioCtp_INCLUDE_DIRS})
 
 # Output directories are set by root CMakeLists.txt
 

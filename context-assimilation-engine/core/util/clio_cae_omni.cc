@@ -32,17 +32,17 @@
  */
 
 /**
- * wrp_cae_ingest - Ingest OMNI file for CAE processing
+ * clio_cae_ingest - Ingest OMNI file for CAE processing
  *
  * This utility reads an OMNI YAML file and calls ParseOmni to schedule
- * assimilation tasks. Usage: wrp_cae_ingest <omni_file_path>
+ * assimilation tasks. Usage: clio_cae_ingest <omni_file_path>
  */
 
 #include <clio_ctp/util/config_parse.h>
 #include <clio_ctp/util/logging.h>
-#include <wrp_cae/core/constants.h>
-#include <wrp_cae/core/core_client.h>
-#include <wrp_cae/core/factory/assimilation_ctx.h>
+#include <clio_cae/core/constants.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
 #include <yaml-cpp/yaml.h>
 
 #include <string>
@@ -51,7 +51,7 @@
 /**
  * Load OMNI configuration file and produce vector of AssimilationCtx
  */
-std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(
+std::vector<clio_cae::core::AssimilationCtx> LoadOmni(
     const std::string& omni_path) {
   HLOG(kInfo, "Loading OMNI file: {}", omni_path);
 
@@ -73,7 +73,7 @@ std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(
     throw std::runtime_error("OMNI 'transfers' must be a sequence/array");
   }
 
-  std::vector<wrp_cae::core::AssimilationCtx> contexts;
+  std::vector<clio_cae::core::AssimilationCtx> contexts;
   contexts.reserve(transfers.size());
 
   // Parse each transfer entry
@@ -94,7 +94,7 @@ std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(
                                " missing required 'format' field");
     }
 
-    wrp_cae::core::AssimilationCtx ctx;
+    clio_cae::core::AssimilationCtx ctx;
     ctx.src = transfer["src"].as<std::string>();
     ctx.dst = transfer["dst"].as<std::string>();
     ctx.format = transfer["format"].as<std::string>();
@@ -204,11 +204,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Load OMNI file and parse transfers
-    std::vector<wrp_cae::core::AssimilationCtx> contexts =
+    std::vector<clio_cae::core::AssimilationCtx> contexts =
         LoadOmni(omni_file_path);
 
     // Connect to CAE core container using the standard pool ID
-    wrp_cae::core::Client client(wrp_cae::core::kCaePoolId);
+    clio_cae::core::Client client(clio_cae::core::kCaePoolId);
 
     HLOG(kInfo, "Calling ParseOmni...");
 

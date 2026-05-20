@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
-#include "wrp_llm/kvcache/kvcache_manager.h"
+#include "clio_llm/kvcache/kvcache_manager.h"
 
-using wrp_llm::kvcache::KVCacheManager;
+using clio_llm::kvcache::KVCacheManager;
 
 // ---------------------------------------------------------------------------
 // Hash utility tests (no CTE required)

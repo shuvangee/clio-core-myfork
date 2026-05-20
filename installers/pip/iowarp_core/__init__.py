@@ -5,8 +5,8 @@ extensions can be loaded without system-wide installation.
 
 Usage::
 
-    import wrp_cee as cee          # Context Exploration Engine
-    import wrp_cte_core_ext        # Context Transfer Engine
+    import clio_cee as cee          # Context Exploration Engine
+    import clio_cte_core_ext        # Context Transfer Engine
 """
 
 import ctypes
@@ -29,7 +29,7 @@ _DATA_DIR = os.path.join(_PACKAGE_DIR, "data")
 
 # Extension modules that live in ext/ and can be imported via
 # "from iowarp_core import <name>".
-_EXT_MODULES = {"wrp_cee", "wrp_cte_core_ext", "chimaera_runtime_ext"}
+_EXT_MODULES = {"clio_cee", "clio_cte_core_ext", "chimaera_runtime_ext"}
 
 
 def _setup():
@@ -48,9 +48,9 @@ def _setup():
         # must explicitly load each library for the current process.
         # Python loads extension modules with RTLD_LOCAL by default, which
         # hides symbols from transitive dependencies and breaks nanobind
-        # modules like wrp_cee that depend on multiple IOWarp libraries.
+        # modules like clio_cee that depend on multiple IOWarp libraries.
         for _lib_name in [
-            "libhermes_shm_host.so",
+            "libclio_ctp_host.so",
             "libchimaera_cxx.so",
             "libchimaera_admin_client.so",
             "libchimaera_admin_runtime.so",
@@ -87,7 +87,7 @@ def _setup():
 _setup()
 
 
-# PEP 562: "from iowarp_core import wrp_cee" lazily loads the extension.
+# PEP 562: "from iowarp_core import clio_cee" lazily loads the extension.
 def __getattr__(name):
     if name in _EXT_MODULES:
         return importlib.import_module(name)
@@ -123,7 +123,7 @@ def cte_available():
     """Check if the Context Transfer Engine extension is available."""
     if os.path.isdir(_EXT_DIR):
         for f in os.listdir(_EXT_DIR):
-            if f.startswith("wrp_cte_core_ext") and f.endswith(".so"):
+            if f.startswith("clio_cte_core_ext") and f.endswith(".so"):
                 return True
     return False
 
@@ -132,6 +132,6 @@ def cee_available():
     """Check if the Context Exploration Engine extension is available."""
     if os.path.isdir(_EXT_DIR):
         for f in os.listdir(_EXT_DIR):
-            if f.startswith("wrp_cee") and f.endswith(".so"):
+            if f.startswith("clio_cee") and f.endswith(".so"):
                 return True
     return False

@@ -36,14 +36,14 @@
  * @brief Unit tests for LinearRegressionTable predictor
  */
 
-#include "wrp_cte/compressor/models/linreg_table_predictor.h"
+#include "clio_cte/compressor/models/linreg_table_predictor.h"
 #include <catch2/catch_all.hpp>
 #include <iostream>
 #include <cmath>
 #include <fstream>
 #include <sstream>
 
-using namespace wrp_cte::compressor;
+using namespace clio_cte::compressor;
 
 /**
  * @brief Create a temporary model file for testing

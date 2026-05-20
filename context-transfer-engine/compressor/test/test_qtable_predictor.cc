@@ -36,14 +36,14 @@
  * @brief Unit tests for Q-Table compression predictor
  */
 
-#include "wrp_cte/compressor/models/qtable_predictor.h"
+#include "clio_cte/compressor/models/qtable_predictor.h"
 #include "../../../context-runtime/test/simple_test.h"
 #include "clio_ctp/util/logging.h"
 #include <iostream>
 #include <chrono>
 #include <vector>
 
-using namespace wrp_cte::compressor;
+using namespace clio_cte::compressor;
 
 TEST_CASE("QTablePredictor - Train and Predict", "[compression][qtable][basic]") {
   HLOG(kInfo, "");

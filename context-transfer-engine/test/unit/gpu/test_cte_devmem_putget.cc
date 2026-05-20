@@ -49,8 +49,8 @@
 #include <chimaera/singletons.h>
 #include <chimaera/types.h>
 #include <clio_ctp/util/gpu_api.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 #include <chrono>
 #include <cstdio>
@@ -61,7 +61,7 @@
 
 using namespace std::chrono_literals;
 
-namespace cte = wrp_cte::core;
+namespace cte = clio_cte::core;
 using ChimaeraInit = chi::ChimaeraMode;
 
 namespace {

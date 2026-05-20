@@ -45,12 +45,12 @@
  */
 
 #include "simple_test.h"
-#include <wrp_cee/api/context_interface.h>
-#include <wrp_cae/core/core_client.h>
-#include <wrp_cae/core/core_tasks.h>
-#include <wrp_cae/core/constants.h>
-#include <wrp_cae/core/factory/assimilation_ctx.h>
-#include <wrp_cte/core/core_client.h>
+#include <clio_cee/api/context_interface.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/core_tasks.h>
+#include <clio_cae/core/constants.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
+#include <clio_cte/core/core_client.h>
 #include <chimaera/bdev/bdev_tasks.h>
 #include <chimaera/chimaera.h>
 #include <fstream>
@@ -86,21 +86,21 @@ public:
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       // Initialize CTE client
-      success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
       if (!success) {
         throw std::runtime_error("WRP_CTE_CLIENT_INIT failed");
       }
 
       // Set pool ID on global CTE client
       auto *cte_client = WRP_CTE_CLIENT;
-      cte_client->Init(wrp_cte::core::kCtePoolId);
+      cte_client->Init(clio_cte::core::kCtePoolId);
 
       // Create CTE core pool
-      wrp_cte::core::CreateParams cte_params;
+      clio_cte::core::CreateParams cte_params;
       auto cte_create = cte_client->AsyncCreate(
           chi::PoolQuery::Dynamic(),
-          wrp_cte::core::kCtePoolName,
-          wrp_cte::core::kCtePoolId,
+          clio_cte::core::kCtePoolName,
+          clio_cte::core::kCtePoolId,
           cte_params);
       cte_create.Wait();
 
@@ -123,12 +123,12 @@ public:
       WRP_CAE_CLIENT_INIT();
 
       // Create CAE pool
-      wrp_cae::core::Client cae_client;
-      wrp_cae::core::CreateParams cae_params;
+      clio_cae::core::Client cae_client;
+      clio_cae::core::CreateParams cae_params;
       auto cae_create = cae_client.AsyncCreate(
           chi::PoolQuery::Local(),
           "test_cae_pool",
-          wrp_cae::core::kCaePoolId,
+          clio_cae::core::kCaePoolId,
           cae_params);
       cae_create.Wait();
 
@@ -202,8 +202,8 @@ TEST_CASE("CEE - ContextRetrieve Basic", "[cee][retrieve][basic]") {
   std::string src_url = "file::" + fixture.test_binary_file_;
   std::string dst_url = "iowarp::cee_retrieve_test";
 
-  wrp_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   int result = ctx_interface.ContextBundle(bundle);
   REQUIRE(result == 0);
@@ -252,8 +252,8 @@ TEST_CASE("CEE - ContextRetrieve With Small Buffer", "[cee][retrieve][buffer]") 
   std::string src_url = "file::" + fixture.test_binary_file_;
   std::string dst_url = "iowarp::cee_small_buffer_test";
 
-  wrp_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   ctx_interface.ContextBundle(bundle);
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -280,8 +280,8 @@ TEST_CASE("CEE - ContextRetrieve With Custom Batch Size", "[cee][retrieve][batch
   std::string src_url = "file::" + fixture.test_binary_file_;
   std::string dst_url = "iowarp::cee_batch_test";
 
-  wrp_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   ctx_interface.ContextBundle(bundle);
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -307,8 +307,8 @@ TEST_CASE("CEE - ContextRetrieve With Max Results Limit", "[cee][retrieve][limit
   std::string src_url = "file::" + fixture.test_binary_file_;
   std::string dst_url = "iowarp::cee_limit_test";
 
-  wrp_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, dst_url, "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   ctx_interface.ContextBundle(bundle);
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -333,7 +333,7 @@ TEST_CASE("CEE - ContextBundle Multiple Files", "[cee][bundle][multi]") {
   // Create multiple file contexts
   std::string src_url = "file::" + fixture.test_binary_file_;
 
-  std::vector<wrp_cae::core::AssimilationCtx> bundle;
+  std::vector<clio_cae::core::AssimilationCtx> bundle;
   bundle.emplace_back(src_url, "iowarp::cee_multi_1", "binary");
   bundle.emplace_back(src_url, "iowarp::cee_multi_2", "binary");
   bundle.emplace_back(src_url, "iowarp::cee_multi_3", "binary");
@@ -352,7 +352,7 @@ TEST_CASE("CEE - ContextBundle With Range", "[cee][bundle][range]") {
   std::string src_url = "file::" + fixture.test_binary_file_;
 
   // Bundle with range (partial file)
-  wrp_cae::core::AssimilationCtx ctx(
+  clio_cae::core::AssimilationCtx ctx(
       src_url,
       "iowarp::cee_range_test",
       "binary",
@@ -360,7 +360,7 @@ TEST_CASE("CEE - ContextBundle With Range", "[cee][bundle][range]") {
       0,       // offset
       1024);   // size (first 1KB only)
 
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   int result = ctx_interface.ContextBundle(bundle);
   REQUIRE(result == 0);
@@ -373,12 +373,12 @@ TEST_CASE("CEE - ContextBundle Invalid Source", "[cee][bundle][error]") {
   ContextInterface ctx_interface;
 
   // Try to bundle non-existent file
-  wrp_cae::core::AssimilationCtx ctx(
+  clio_cae::core::AssimilationCtx ctx(
       "file::/nonexistent/file.bin",
       "iowarp::cee_invalid_test",
       "binary");
 
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   // Should handle gracefully (may succeed with scheduling but fail later)
   int result = ctx_interface.ContextBundle(bundle);
@@ -397,8 +397,8 @@ TEST_CASE("CEE - ContextQuery With Regex Patterns", "[cee][query][regex]") {
 
   // Bundle test data
   std::string src_url = "file::" + fixture.test_binary_file_;
-  wrp_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_regex_test", "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_regex_test", "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
   ctx_interface.ContextBundle(bundle);
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -422,8 +422,8 @@ TEST_CASE("CEE - ContextQuery With Max Results", "[cee][query][limit]") {
 
   // Bundle test data
   std::string src_url = "file::" + fixture.test_binary_file_;
-  wrp_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_query_limit", "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_query_limit", "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
   ctx_interface.ContextBundle(bundle);
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -447,7 +447,7 @@ TEST_CASE("CEE - ContextDestroy Multiple Contexts", "[cee][destroy][multi]") {
 
   // Bundle multiple contexts
   std::string src_url = "file::" + fixture.test_binary_file_;
-  std::vector<wrp_cae::core::AssimilationCtx> bundle;
+  std::vector<clio_cae::core::AssimilationCtx> bundle;
   bundle.emplace_back(src_url, "iowarp::cee_destroy_1", "binary");
   bundle.emplace_back(src_url, "iowarp::cee_destroy_2", "binary");
   bundle.emplace_back(src_url, "iowarp::cee_destroy_3", "binary");
@@ -471,8 +471,8 @@ TEST_CASE("CEE - ContextDestroy Partial Failure", "[cee][destroy][partial]") {
 
   // Bundle one context
   std::string src_url = "file::" + fixture.test_binary_file_;
-  wrp_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_destroy_partial", "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_destroy_partial", "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
   ctx_interface.ContextBundle(bundle);
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -516,8 +516,8 @@ TEST_CASE("CEE - Full Workflow Bundle-Query-Retrieve-Destroy", "[cee][integratio
 
   // Step 1: Bundle
   std::string src_url = "file::" + fixture.test_binary_file_;
-  wrp_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_workflow", "binary");
-  std::vector<wrp_cae::core::AssimilationCtx> bundle = {ctx};
+  clio_cae::core::AssimilationCtx ctx(src_url, "iowarp::cee_workflow", "binary");
+  std::vector<clio_cae::core::AssimilationCtx> bundle = {ctx};
 
   int bundle_result = ctx_interface.ContextBundle(bundle);
   REQUIRE(bundle_result == 0);

@@ -40,8 +40,8 @@
 #include <future>
 #include <limits>
 
-#include "wrp_cte/core/core_client.h"
-#include "wrp_cte/core/core_tasks.h"
+#include "clio_cte/core/core_client.h"
+#include "clio_cte/core/core_tasks.h"
 #include "adapter/adapter_types.h"
 #include "adapter/mapper/balanced_mapper.h"
 #include "clio_ctp/types/bitfield.h"
@@ -144,7 +144,7 @@ struct FsIoOptions {
 
 /** The get task — holds a chi::Future returned by Client::AsyncGetBlob. */
 struct GetBlobAsyncTask {
-  chi::Future<wrp_cte::core::GetBlobTask> task_;
+  chi::Future<clio_cte::core::GetBlobTask> task_;
   char *orig_data_;
   size_t orig_size_;
 };
@@ -155,7 +155,7 @@ struct GetBlobAsyncTask {
  * sides hold chi::Future objects; the Future owns the underlying task
  * and cleans up on destruction, so callers just need .Wait() to drain. */
 struct FsAsyncTask {
-  std::vector<chi::Future<wrp_cte::core::PutBlobTask>> put_tasks_;
+  std::vector<chi::Future<clio_cte::core::PutBlobTask>> put_tasks_;
   std::vector<GetBlobAsyncTask> get_tasks_;
   IoStatus io_status_;
   FsIoOptions opts_;
@@ -240,7 +240,7 @@ struct AdapterStat {
   MPI_Comm comm_;  /**< Communicator for the file.*/
   bool atomicity_; /**< Consistency semantics for data-access */
 
-  wrp_cte::core::TagId tag_id_; /**< tag associated with the file */
+  clio_cte::core::TagId tag_id_; /**< tag associated with the file */
   /** Page size used for file */
   size_t page_size_;
 
@@ -250,7 +250,7 @@ struct AdapterStat {
    * without waiting. The first I/O op that needs tag_id_ waits on this
    * future (via AwaitPendingOpen) and clears the flag.
    */
-  chi::Future<wrp_cte::core::GetOrCreateTagTask<wrp_cte::core::CreateParams>>
+  chi::Future<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>
       pending_open_fut_;
   bool open_pending_ = false;
 

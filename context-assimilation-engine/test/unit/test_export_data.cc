@@ -52,11 +52,11 @@
 
 #include "simple_test.h"
 
-#include <wrp_cae/core/core_client.h>
-#include <wrp_cae/core/core_tasks.h>
-#include <wrp_cae/core/constants.h>
-#include <wrp_cae/core/factory/assimilation_ctx.h>
-#include <wrp_cte/core/core_client.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/core_tasks.h>
+#include <clio_cae/core/constants.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
+#include <clio_cte/core/core_client.h>
 #include <chimaera/chimaera.h>
 #include <chimaera/admin/admin_client.h>
 #include <chimaera/bdev/bdev_client.h>
@@ -73,7 +73,7 @@
 #include <hdf5.h>
 #endif
 
-using namespace wrp_cae::core;
+using namespace clio_cae::core;
 
 // ---------------------------------------------------------------------------
 // Test fixture
@@ -92,24 +92,24 @@ class ExportDataFixture {
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     // Step 2: CTE client + pool
-    ok = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+    ok = clio_cte::core::WRP_CTE_CLIENT_INIT();
     if (!ok) throw std::runtime_error("WRP_CTE_CLIENT_INIT failed");
     auto *cte = WRP_CTE_CLIENT;
-    cte->Init(wrp_cte::core::kCtePoolId);
+    cte->Init(clio_cte::core::kCtePoolId);
 
-    wrp_cte::core::CreateParams cte_params;
+    clio_cte::core::CreateParams cte_params;
     auto cte_fut = cte->AsyncCreate(chi::PoolQuery::Dynamic(),
-                                    wrp_cte::core::kCtePoolName,
-                                    wrp_cte::core::kCtePoolId, cte_params);
+                                    clio_cte::core::kCtePoolName,
+                                    clio_cte::core::kCtePoolId, cte_params);
     cte_fut.Wait();
 
     // Step 3: CAE client + pool
     WRP_CAE_CLIENT_INIT();
-    wrp_cae::core::Client cae_client;
-    wrp_cae::core::CreateParams cae_params;
+    clio_cae::core::Client cae_client;
+    clio_cae::core::CreateParams cae_params;
     auto cae_fut = cae_client.AsyncCreate(chi::PoolQuery::Local(),
                                           "test_cae_pool",
-                                          wrp_cae::core::kCaePoolId, cae_params);
+                                          clio_cae::core::kCaePoolId, cae_params);
     cae_fut.Wait();
 
     g_initialized = true;
@@ -119,7 +119,7 @@ class ExportDataFixture {
    * Put a blob with known data into CTE and return the tag ID.
    * Caller must ensure chimaera is initialised (fixture ctor handles this).
    */
-  wrp_cte::core::TagId PutBlob(const std::string &tag_name,
+  clio_cte::core::TagId PutBlob(const std::string &tag_name,
                                 const std::string &blob_name,
                                 const std::vector<uint8_t> &data) {
     auto *cte = WRP_CTE_CLIENT;
@@ -167,7 +167,7 @@ TEST_CASE("ExportData - Task emplace constructor", "[cae][export][task]") {
 
   auto *ipc = CHI_IPC;
   chi::TaskId tid = chi::CreateTaskId();
-  auto task = ipc->NewTask<ExportDataTask>(tid, wrp_cae::core::kCaePoolId,
+  auto task = ipc->NewTask<ExportDataTask>(tid, clio_cae::core::kCaePoolId,
                                            chi::PoolQuery::Local(),
                                            "my_tag", "/tmp/out.bin", "binary");
 
@@ -187,7 +187,7 @@ TEST_CASE("ExportData - Task Copy", "[cae][export][task]") {
 
   auto *ipc = CHI_IPC;
   auto src = ipc->NewTask<ExportDataTask>(chi::CreateTaskId(),
-                                          wrp_cae::core::kCaePoolId,
+                                          clio_cae::core::kCaePoolId,
                                           chi::PoolQuery::Local(),
                                           "tag_copy", "/tmp/copy.bin", "binary");
   src->bytes_exported_ = 42;
@@ -214,14 +214,14 @@ TEST_CASE("ExportData - Task Aggregate", "[cae][export][task]") {
 
   auto *ipc = CHI_IPC;
   auto orig = ipc->NewTask<ExportDataTask>(chi::CreateTaskId(),
-                                           wrp_cae::core::kCaePoolId,
+                                           clio_cae::core::kCaePoolId,
                                            chi::PoolQuery::Local(),
                                            "tag_agg", "/tmp/agg.bin", "binary");
   orig->bytes_exported_ = 100;
   orig->result_code_ = 1;
 
   auto replica = ipc->NewTask<ExportDataTask>(chi::CreateTaskId(),
-                                              wrp_cae::core::kCaePoolId,
+                                              clio_cae::core::kCaePoolId,
                                               chi::PoolQuery::Local(),
                                               "tag_agg", "/tmp/agg.bin", "binary");
   replica->bytes_exported_ = 200;
@@ -243,7 +243,7 @@ TEST_CASE("ExportData - Task SerializeIn roundtrip", "[cae][export][task]") {
 
   auto *ipc = CHI_IPC;
   auto task = ipc->NewTask<ExportDataTask>(chi::CreateTaskId(),
-                                           wrp_cae::core::kCaePoolId,
+                                           clio_cae::core::kCaePoolId,
                                            chi::PoolQuery::Local(),
                                            "ser_tag", "/tmp/ser.bin", "binary");
 
@@ -312,7 +312,7 @@ TEST_CASE("ExportData - Empty tag returns success with 0 bytes",
   ExportDataFixture f;
 
   // Tag does not exist yet; GetOrCreateTag will create it with no blobs.
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData("export_empty_tag_xyz_001",
                                  "/tmp/cae_export_empty.bin", "binary");
   fut.Wait();
@@ -337,7 +337,7 @@ TEST_CASE("ExportData - Binary export roundtrip", "[cae][export][runtime][binary
   f.PutBlob(tag_name, "blob_b", data_b);
 
   // Export to binary
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData(tag_name, out_path, "binary");
   fut.Wait();
 
@@ -386,7 +386,7 @@ TEST_CASE("ExportData - Binary bad output path returns -2",
   const std::string tag_name = "export_bad_path_tag";
   f.PutBlob(tag_name, "blob_x", {1, 2, 3});
 
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData(tag_name,
                                  "/nonexistent_dir_xyz_cae/out.bin", "binary");
   fut.Wait();
@@ -408,7 +408,7 @@ TEST_CASE("ExportData - HDF5 export roundtrip", "[cae][export][runtime][hdf5]") 
   f.PutBlob(tag_name, "ds1", data1);
   f.PutBlob(tag_name, "ds2", data2);
 
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData(tag_name, out_path, "hdf5");
   fut.Wait();
 
@@ -433,7 +433,7 @@ TEST_CASE("ExportData - HDF5 bad output path returns -2",
   const std::string tag_name = "export_hdf5_bad_path_tag";
   f.PutBlob(tag_name, "blob_y", {1, 2, 3});
 
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData(tag_name,
                                  "/nonexistent_dir_xyz_cae/out.h5", "hdf5");
   fut.Wait();
@@ -451,7 +451,7 @@ TEST_CASE("ExportData - HDF5 not compiled returns -3",
   const std::string tag_name = "export_hdf5_nocompile_tag";
   f.PutBlob(tag_name, "blob_z", {1, 2, 3});
 
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData(tag_name, "/tmp/no_hdf5_test.h5", "hdf5");
   fut.Wait();
 
@@ -483,11 +483,11 @@ TEST_CASE("ParseOmni - Task emplace constructor", "[cae][export][task]") {
   ExportDataFixture f;
 
   auto *ipc = CHI_IPC;
-  std::vector<wrp_cae::core::AssimilationCtx> contexts;
+  std::vector<clio_cae::core::AssimilationCtx> contexts;
   contexts.emplace_back("file::/tmp/a.bin", "iowarp::tag_a", "binary");
 
   auto task = ipc->NewTask<ParseOmniTask>(chi::CreateTaskId(),
-                                          wrp_cae::core::kCaePoolId,
+                                          clio_cae::core::kCaePoolId,
                                           chi::PoolQuery::Local(),
                                           contexts);
   REQUIRE(!task->serialized_ctx_.str().empty());
@@ -503,11 +503,11 @@ TEST_CASE("ParseOmni - Task Copy", "[cae][export][task]") {
   ExportDataFixture f;
 
   auto *ipc = CHI_IPC;
-  std::vector<wrp_cae::core::AssimilationCtx> contexts;
+  std::vector<clio_cae::core::AssimilationCtx> contexts;
   contexts.emplace_back("file::/tmp/b.bin", "iowarp::tag_b", "binary");
 
   auto src = ipc->NewTask<ParseOmniTask>(chi::CreateTaskId(),
-                                         wrp_cae::core::kCaePoolId,
+                                         clio_cae::core::kCaePoolId,
                                          chi::PoolQuery::Local(),
                                          contexts);
   src->num_tasks_scheduled_ = 3;
@@ -531,17 +531,17 @@ TEST_CASE("ParseOmni - Task Aggregate", "[cae][export][task]") {
   ExportDataFixture f;
 
   auto *ipc = CHI_IPC;
-  std::vector<wrp_cae::core::AssimilationCtx> ctxs;
+  std::vector<clio_cae::core::AssimilationCtx> ctxs;
   ctxs.emplace_back("file::/tmp/c.bin", "iowarp::tag_c", "binary");
 
   auto orig = ipc->NewTask<ParseOmniTask>(chi::CreateTaskId(),
-                                          wrp_cae::core::kCaePoolId,
+                                          clio_cae::core::kCaePoolId,
                                           chi::PoolQuery::Local(), ctxs);
   orig->num_tasks_scheduled_ = 1;
   orig->result_code_ = 0;
 
   auto rep = ipc->NewTask<ParseOmniTask>(chi::CreateTaskId(),
-                                         wrp_cae::core::kCaePoolId,
+                                         clio_cae::core::kCaePoolId,
                                          chi::PoolQuery::Local(), ctxs);
   rep->num_tasks_scheduled_ = 5;
   rep->result_code_ = 9;
@@ -560,11 +560,11 @@ TEST_CASE("ParseOmni - Task SerializeIn roundtrip", "[cae][export][task]") {
   ExportDataFixture f;
 
   auto *ipc = CHI_IPC;
-  std::vector<wrp_cae::core::AssimilationCtx> ctxs;
+  std::vector<clio_cae::core::AssimilationCtx> ctxs;
   ctxs.emplace_back("file::/tmp/d.bin", "iowarp::ser_tag", "binary");
 
   auto task = ipc->NewTask<ParseOmniTask>(chi::CreateTaskId(),
-                                          wrp_cae::core::kCaePoolId,
+                                          clio_cae::core::kCaePoolId,
                                           chi::PoolQuery::Local(), ctxs);
   const std::string ser_data = task->serialized_ctx_.str();
 
@@ -645,7 +645,7 @@ TEST_CASE("ProcessHdf5Dataset - Task emplace constructor",
 
   auto *ipc = CHI_IPC;
   auto task = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                    wrp_cae::core::kCaePoolId,
+                                                    clio_cae::core::kCaePoolId,
                                                     chi::PoolQuery::Local(),
                                                     "/tmp/test.h5",
                                                     "/dataset/path",
@@ -665,7 +665,7 @@ TEST_CASE("ProcessHdf5Dataset - Task Copy", "[cae][export][task]") {
 
   auto *ipc = CHI_IPC;
   auto src = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                   wrp_cae::core::kCaePoolId,
+                                                   clio_cae::core::kCaePoolId,
                                                    chi::PoolQuery::Local(),
                                                    "/h5/file.h5",
                                                    "/ds",
@@ -693,14 +693,14 @@ TEST_CASE("ProcessHdf5Dataset - Task Aggregate keeps first error",
 
   auto *ipc = CHI_IPC;
   auto orig = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                    wrp_cae::core::kCaePoolId,
+                                                    clio_cae::core::kCaePoolId,
                                                     chi::PoolQuery::Local(),
                                                     "/f1.h5", "/d1", "p1");
   orig->result_code_ = -1;
   orig->error_message_ = chi::priv::string("first_err", CTP_MALLOC);
 
   auto rep = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                   wrp_cae::core::kCaePoolId,
+                                                   clio_cae::core::kCaePoolId,
                                                    chi::PoolQuery::Local(),
                                                    "/f2.h5", "/d2", "p2");
   rep->result_code_ = -2;
@@ -723,13 +723,13 @@ TEST_CASE("ProcessHdf5Dataset - Task Aggregate adopts replica error",
 
   auto *ipc = CHI_IPC;
   auto orig = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                    wrp_cae::core::kCaePoolId,
+                                                    clio_cae::core::kCaePoolId,
                                                     chi::PoolQuery::Local(),
                                                     "/f3.h5", "/d3", "p3");
   orig->result_code_ = 0;  // success so far
 
   auto rep = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                   wrp_cae::core::kCaePoolId,
+                                                   clio_cae::core::kCaePoolId,
                                                    chi::PoolQuery::Local(),
                                                    "/f4.h5", "/d4", "p4");
   rep->result_code_ = -3;
@@ -752,7 +752,7 @@ TEST_CASE("ProcessHdf5Dataset - Task SerializeIn roundtrip",
 
   auto *ipc = CHI_IPC;
   auto task = ipc->NewTask<ProcessHdf5DatasetTask>(chi::CreateTaskId(),
-                                                    wrp_cae::core::kCaePoolId,
+                                                    clio_cae::core::kCaePoolId,
                                                     chi::PoolQuery::Local(),
                                                     "/ser/file.h5",
                                                     "/ser/dataset",
@@ -823,7 +823,7 @@ TEST_CASE("ExportData - Unknown format falls through to binary",
   std::vector<uint8_t> data = {0xAA, 0xBB, 0xCC};
   f.PutBlob(tag_name, "blob_unk", data);
 
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   // "csv" is neither "hdf5" nor "binary" → falls to binary else-branch
   auto fut = cae.AsyncExportData(tag_name, out_path, "csv");
   fut.Wait();
@@ -852,7 +852,7 @@ TEST_CASE("ExportData - Binary export with multiple large blobs",
   f.PutBlob(tag_name, "mb2", d2);
   f.PutBlob(tag_name, "mb3", d3);
 
-  wrp_cae::core::Client cae(wrp_cae::core::kCaePoolId);
+  clio_cae::core::Client cae(clio_cae::core::kCaePoolId);
   auto fut = cae.AsyncExportData(tag_name, out_path, "binary");
   fut.Wait();
 

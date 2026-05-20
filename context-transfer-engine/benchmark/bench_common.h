@@ -68,7 +68,7 @@
 #include <string>
 #include <vector>
 
-namespace wrp_bench {
+namespace clio_bench {
 
 using u64 = std::uint64_t;
 
@@ -256,6 +256,6 @@ inline void PrintResults(const std::string &label, const BenchArgs &a,
   HLOG(kInfo, "===========================");
 }
 
-}  // namespace wrp_bench
+}  // namespace clio_bench
 
 #endif  // WRP_BENCH_COMMON_H_

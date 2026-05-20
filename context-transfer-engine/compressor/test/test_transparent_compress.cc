@@ -23,9 +23,9 @@
 #include <chrono>
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
-#include <wrp_cte/core/content_transfer_engine.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <clio_cte/core/content_transfer_engine.h>
 
 using namespace std::chrono_literals;
 namespace fs = std::filesystem;
@@ -53,7 +53,7 @@ static void EnsureInit() {
   // Point the global CTE client at the entrypoint pool (512.0 = compressor).
   // Don't call WRP_CTE_CLIENT_INIT — compose already created everything.
   auto *cte_client = WRP_CTE_CLIENT;
-  cte_client->Init(wrp_cte::core::kCtePoolId);
+  cte_client->Init(clio_cte::core::kCtePoolId);
 }
 
 TEST_CASE("Transparent PutBlob through compressor",
@@ -79,7 +79,7 @@ TEST_CASE("Transparent PutBlob through compressor",
   hipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
 
   // PutBlob — this should go through the compressor (512.0) transparently
-  wrp_cte::core::Context ctx;
+  clio_cte::core::Context ctx;
 #if CTP_ENABLE_COMPRESS
   ctx.dynamic_compress_ = 1;  // Enable static compression
   ctx.compress_lib_ = 4;      // LZ4

@@ -43,7 +43,7 @@
  * - INIT_CHIMAERA: If set to "1", initializes Chimaera runtime
  */
 
-#include <wrp_cee/api/context_interface.h>
+#include <clio_cee/api/context_interface.h>
 #include <chimaera/chimaera.h>
 #include <iostream>
 #include <cassert>

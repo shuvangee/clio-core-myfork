@@ -32,16 +32,16 @@
  */
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/content_transfer_engine.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_config.h>
+#include <clio_cte/core/content_transfer_engine.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_config.h>
 #include <string>
 
 // Define global pointer variable in source file (outside namespace)
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(wrp_cte::core::ContentTransferEngine,
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cte::core::ContentTransferEngine,
                               g_cte_manager);
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
   // Check for race conditions - if already initialized or initializing
@@ -73,8 +73,8 @@ bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
 
   // Create CTE Core container using constants from core_tasks.h and specified pool_query
   auto create_task = cte_client->AsyncCreate(pool_query,
-                                              wrp_cte::core::kCtePoolName,
-                                              wrp_cte::core::kCtePoolId,
+                                              clio_cte::core::kCtePoolName,
+                                              clio_cte::core::kCtePoolId,
                                               params);
   create_task.Wait();
 
@@ -82,7 +82,7 @@ bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
   chi::u32 return_code = create_task->GetReturnCode();
   if (return_code != 0) {
     HLOG(kError, "CTE ClientInit: Failed to create CTE pool '{}' with return code: {}",
-          wrp_cte::core::kCtePoolName, return_code);
+          clio_cte::core::kCtePoolName, return_code);
     is_initializing_ = false;
     return false;
   }
@@ -128,4 +128,4 @@ std::vector<std::pair<std::string, std::string>> ContentTransferEngine::BlobQuer
   return results;
 }
 
-} // namespace wrp_cte::core
+} // namespace clio_cte::core

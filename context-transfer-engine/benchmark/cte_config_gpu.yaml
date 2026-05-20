@@ -27,7 +27,7 @@ compose:
     capacity: "512MB"
 
   # CTE pool with GPU storage tiers
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: 512.0

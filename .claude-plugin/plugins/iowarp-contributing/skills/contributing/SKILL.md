@@ -133,7 +133,7 @@ Every C/C++ source file (.h, .hpp, .cc, .cpp) MUST have the BSD 3-Clause license
 | Constants | kPascalCase | `kAdminPoolId`, `kCtePoolName` |
 | Macros | UPPER_SNAKE | `CTP_IS_GPU`, `CHI_IPC` |
 | CMake targets | namespace::component | `chimaera::admin_client` |
-| ChiMod names | lowercase underscore | `wrp_cte_core`, `chimaera_admin` |
+| ChiMod names | lowercase underscore | `clio_cte_core`, `chimaera_admin` |
 
 ---
 
@@ -155,13 +155,13 @@ clio-core/
 │   ├── config/                     # Default YAML configs
 │   └── test/                       # Unit + integration tests
 │
-├── context-transfer-engine/        # I/O buffering engine (wrp_cte:: namespace)
+├── context-transfer-engine/        # I/O buffering engine (clio_cte:: namespace)
 │   ├── core/                       # CTE ChiMod
 │   ├── adapter/                    # I/O pathway adapters
 │   ├── compressor/                 # Compression ChiMod
 │   └── config/                     # CTE configurations
 │
-├── context-assimilation-engine/    # Data ingestion (wrp_cae:: namespace)
+├── context-assimilation-engine/    # Data ingestion (clio_cae:: namespace)
 │   ├── core/                       # CAE ChiMod
 │   └── data/                       # OMNI format definitions
 │

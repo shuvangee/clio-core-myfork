@@ -17,7 +17,7 @@ services:
 
         # Mount shared CTE configuration
         # volumes:
-        #    - ./wrp_conf.yaml:/etc/iowarp/wrp_conf.yaml:ro
+        #    - ./clio_conf.yaml:/etc/iowarp/clio_conf.yaml:ro
 
         # Note: ports section not needed with network_mode: host
         # The container uses the host's network directly, so ports 9413 and 9414

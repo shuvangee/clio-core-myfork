@@ -9,7 +9,7 @@ services:
     # Use host network so both containers can communicate via 127.0.0.1
     network_mode: host
     environment:
-      - CHI_SERVER_CONF=/etc/iowarp/wrp_conf.yaml
+      - CHI_SERVER_CONF=/etc/iowarp/clio_conf.yaml
     # Share IPC namespace so CAE can connect to runtime
     ipc: host
     mem_limit: 16g
@@ -33,7 +33,7 @@ services:
       dockerfile: /workspace/docker/test_external/cae.Dockerfile
     container_name: cae-external
     environment:
-      - CHI_SERVER_CONF=/etc/iowarp/wrp_conf.yaml
+      - CHI_SERVER_CONF=/etc/iowarp/clio_conf.yaml
     # Share IPC namespace with host for Chimaera communication
     ipc: host
     # Use host network so both containers can communicate via 127.0.0.1

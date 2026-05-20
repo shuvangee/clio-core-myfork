@@ -31,7 +31,7 @@ services:
     environment:
       - NODE_ID=1
       - NODE_IP=172.21.0.10
-      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/wrp_conf.yaml
+      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/clio_conf.yaml
       - CONTAINER_HOSTFILE=/workspace/context-runtime/test/integration/distributed/hostfile
       - CHI_WITH_RUNTIME=0
       - CHI_NUM_CONTAINERS=4
@@ -67,7 +67,7 @@ services:
     environment:
       - NODE_ID=2
       - NODE_IP=172.21.0.11
-      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/wrp_conf.yaml
+      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/clio_conf.yaml
       - CONTAINER_HOSTFILE=/workspace/context-runtime/test/integration/distributed/hostfile
       - CHI_WITH_RUNTIME=0
       - CHI_NUM_CONTAINERS=4
@@ -100,7 +100,7 @@ services:
     environment:
       - NODE_ID=3
       - NODE_IP=172.21.0.12
-      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/wrp_conf.yaml
+      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/clio_conf.yaml
       - CONTAINER_HOSTFILE=/workspace/context-runtime/test/integration/distributed/hostfile
       - CHI_WITH_RUNTIME=0
       - CHI_NUM_CONTAINERS=4
@@ -133,7 +133,7 @@ services:
     environment:
       - NODE_ID=4
       - NODE_IP=172.21.0.13
-      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/wrp_conf.yaml
+      - CHI_SERVER_CONF=/workspace/context-runtime/test/integration/distributed/clio_conf.yaml
       - CONTAINER_HOSTFILE=/workspace/context-runtime/test/integration/distributed/hostfile
       - CHI_WITH_RUNTIME=0
       - CHI_NUM_CONTAINERS=4

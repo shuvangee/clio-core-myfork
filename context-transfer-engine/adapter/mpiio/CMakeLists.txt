@@ -49,11 +49,11 @@ else()
 endif()
 
 set(INTERCEPTOR_DEPS
-        ${Hermes_CLIENT_DEPS} wrp_cte_fs_base)
-add_library(wrp_cte_mpiio SHARED
+        ${Hermes_CLIENT_DEPS} clio_cte_fs_base)
+add_library(clio_cte_mpiio SHARED
         ${CMAKE_CURRENT_SOURCE_DIR}/mpiio_api.cc)
-add_dependencies(wrp_cte_mpiio ${INTERCEPTOR_DEPS})
-target_link_libraries(wrp_cte_mpiio
+add_dependencies(clio_cte_mpiio ${INTERCEPTOR_DEPS})
+target_link_libraries(clio_cte_mpiio
         MPI::MPI_CXX stdc++fs ${libelf_LIBRARIES} dl ${INTERCEPTOR_DEPS})
 
 # -----------------------------------------------------------------------------
@@ -61,7 +61,7 @@ target_link_libraries(wrp_cte_mpiio
 # -----------------------------------------------------------------------------
 install(
         TARGETS
-        wrp_cte_mpiio
+        clio_cte_mpiio
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin

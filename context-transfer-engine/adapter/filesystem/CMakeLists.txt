@@ -1,5 +1,5 @@
 # Create the metadata manager singleton + FS base class
-add_library(wrp_cte_fs_base SHARED
+add_library(clio_cte_fs_base SHARED
         filesystem.cc
         filesystem.h
         filesystem_io_client.h
@@ -7,15 +7,15 @@ add_library(wrp_cte_fs_base SHARED
 
 # Local includes for adapter headers
 # Note: bdev headers come transitively via chimaera_bdev_client
-# Note: core headers come transitively via wrp_cte_core_client
-target_include_directories(wrp_cte_fs_base PRIVATE
+# Note: core headers come transitively via clio_cte_core_client
+target_include_directories(clio_cte_fs_base PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}       # For local headers
   ${WRP_CTE_ROOT}                   # For adapter/adapter_types.h include path
 )
 
-target_link_libraries(wrp_cte_fs_base
+target_link_libraries(clio_cte_fs_base
         MPI::MPI_CXX
-        wrp_cte_core_client      # Provides core and bdev headers transitively
+        clio_cte_core_client      # Provides core and bdev headers transitively
         ctp::cxx
         ctp::interceptor)       # Provides ELF support for posix_api.h
 
@@ -24,7 +24,7 @@ target_link_libraries(wrp_cte_fs_base
 # -----------------------------------------------------------------------------
 install(
         TARGETS
-        wrp_cte_fs_base
+        clio_cte_fs_base
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin

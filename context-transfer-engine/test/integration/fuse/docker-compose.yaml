@@ -28,7 +28,7 @@ services:
       - /tmp:mode=1777
       - /mnt:mode=1777
     environment:
-      - CHI_SERVER_CONF=/workspace/context-transfer-engine/test/integration/fuse/wrp_config.yaml
+      - CHI_SERVER_CONF=/workspace/context-transfer-engine/test/integration/fuse/clio_config.yaml
       - PATH=/workspace/build/bin:/usr/local/bin:/usr/bin:/bin
       - LD_LIBRARY_PATH=/workspace/build/bin:$LD_LIBRARY_PATH
     mem_limit: 4g

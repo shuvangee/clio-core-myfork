@@ -10,7 +10,7 @@ target_link_libraries(clio_run_thrpt_benchmark
   chimaera::bdev_client           # BDev client for I/O operations
   chimaera::MOD_NAME_client       # MOD_NAME template module
   chimaera::admin_client          # Admin client for container creation
-  ctp::cxx                       # HermesShm shared memory framework
+  ctp::cxx                       # ClioCtp shared memory framework
 )
 
 # Install benchmark executable

@@ -29,18 +29,18 @@ class ClioCte(Service):
             {
                 'name': 'pool_name',
                 'msg': ('Name of the CTE pool. MUST match the C++ client\'s '
-                        'kCtePoolName constant ("wrp_cte_core") — that\'s '
+                        'kCtePoolName constant ("clio_cte_core") — that\'s '
                         'the name the FUSE / GPU adapters use when they '
                         'do AsyncCreate during ClientInit. If compose '
                         'registers a different name (e.g. "clio_cte"), the '
                         'client\'s AsyncCreate then *also* tries to create '
-                        'pool "wrp_cte_core" at the same pool_id; on '
+                        'pool "clio_cte_core" at the same pool_id; on '
                         'multi-node the cross-node admin propagation of '
                         'that second create races with the first, leaving '
                         'the remote container half-initialized and FUSE '
                         'callbacks wedged.'),
                 'type': str,
-                'default': 'wrp_cte_core'
+                'default': 'clio_cte_core'
             },
             {
                 'name': 'pool_id',
@@ -350,8 +350,8 @@ class ClioCte(Service):
             })
 
         compose_list = [{
-            'mod_name': 'wrp_cte_core',
-            'pool_name': self.config.get('pool_name', 'wrp_cte_core'),
+            'mod_name': 'clio_cte_core',
+            'pool_name': self.config.get('pool_name', 'clio_cte_core'),
             'pool_query': self.config.get('pool_query', 'local'),
             'pool_id': self.config.get('pool_id', 512.0),
             'targets': {
@@ -372,8 +372,8 @@ class ClioCte(Service):
         iowarp_compress = self.config.get('iowarp_compress', 'none').lower()
         if iowarp_compress not in ['none', 'off', '']:
             compose_list.append({
-                'mod_name': 'wrp_cte_compressor',
-                'pool_name': 'wrp_cte_compressor',
+                'mod_name': 'clio_cte_compressor',
+                'pool_name': 'clio_cte_compressor',
                 'pool_query': self.config.get('pool_query', 'local'),
                 'pool_id': self.config.get('pool_id', 512.0) + 1
             })

@@ -40,20 +40,20 @@ cmake -DCMAKE_BUILD_TYPE=Release -DWRP_CORE_ENABLE_HDF5=ON ..
 ### 1. Start the Chimaera runtime with CTE and CAE
 
 ```bash
-export CHI_SERVER_CONF=/path/to/wrp_config.yaml
+export CHI_SERVER_CONF=/path/to/clio_config.yaml
 chimaera runtime start
 ```
 
 An example configuration deploying both CTE and CAE is provided in
-`config/wrp_config_example.yaml`:
+`config/clio_config_example.yaml`:
 
 ```yaml
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
-  - mod_name: wrp_cae_core
+  - mod_name: clio_cae_core
     pool_name: cae_main
     pool_query: local
     pool_id: "400.0"
@@ -124,8 +124,8 @@ test/
 | Component | Pool ID | Module Name    |
 |-----------|---------|----------------|
 | Admin     | 1.0     | chimaera_admin |
-| CTE Core  | 512.0   | wrp_cte_core   |
-| CAE Core  | 400.0   | wrp_cae_core   |
+| CTE Core  | 512.0   | clio_cte_core   |
+| CAE Core  | 400.0   | clio_cae_core   |
 
 ## License
 

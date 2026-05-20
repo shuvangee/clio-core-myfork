@@ -39,7 +39,7 @@ bool mpiio_intercepted = true;
 // pre-CTE adapter; nothing in this translation unit references the
 // hermes:: API any more, so they were dropped to unbreak the build.
 
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 #include "clio_ctp/util/singleton.h"
 #include "mpiio_fs_api.h"
 
@@ -65,7 +65,7 @@ extern "C" {
  */
 int WRP_CTE_DECL(MPI_Init)(int *argc, char ***argv) {
   HLOG(kDebug, "MPI Init intercepted.");
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   auto real_api = WRP_CTE_MPIIO_API;
   return real_api->MPI_Init(argc, argv);
 }

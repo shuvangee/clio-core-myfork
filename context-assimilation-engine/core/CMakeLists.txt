@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
-project(wrp_cae_core VERSION 1.0.0)
+project(clio_cae_core VERSION 1.0.0)
 
 #------------------------------------------------------------------------------
 # ChiMod utilities and dependencies
 #------------------------------------------------------------------------------
 # ChiMod utilities are now provided by IowarpCoreCommon.cmake in /workspace/cmake
 # All find_package calls are handled by root CMakeLists.txt
-# Targets chimaera::cxx, wrp_cte::core_client, etc. are already available
+# Targets chimaera::cxx, clio_cte::core_client, etc. are already available
 
-# All required packages (chimaera, wrp_cte_core, yaml-cpp) are already found
+# All required packages (chimaera, clio_cte_core, yaml-cpp) are already found
 # by IowarpCoreCommon.cmake in the root CMakeLists.txt
 
 #------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ add_chimod_client(
   SOURCES
     src/core_client.cc
   LINK_LIBRARIES
-    wrp_cte_core_client
+    clio_cte_core_client
 )
 
 #------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ set(RUNTIME_SOURCES
 )
 
 set(RUNTIME_LINK_LIBRARIES
-  wrp_cte_core_client
+  clio_cte_core_client
 )
 
 # Conditionally add HDF5 assimilator if enabled
@@ -104,7 +104,7 @@ add_chimod_runtime(
 
 # Add HDF5 include directories to runtime if enabled
 if(HDF5_ENABLED)
-  target_include_directories(wrp_cae_core_runtime PRIVATE ${HDF5_INCLUDE_DIRS})
+  target_include_directories(clio_cae_core_runtime PRIVATE ${HDF5_INCLUDE_DIRS})
 endif()
 
 #------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ endif()
 add_executable(clio_cae_omni util/clio_cae_omni.cc)
 target_link_libraries(clio_cae_omni
   PRIVATE
-    wrp_cae_core_client
+    clio_cae_core_client
     chimaera::cxx
     ctp::configure
 )
@@ -133,8 +133,8 @@ if(BUILD_TESTING)
 
   # Install common test configuration
   install(FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/../test/unit/wrp_config.yaml
+    ${CMAKE_CURRENT_SOURCE_DIR}/../test/unit/clio_config.yaml
     ${CMAKE_CURRENT_SOURCE_DIR}/../test/unit/README.md
-    DESTINATION share/wrp_cae/test
+    DESTINATION share/clio_cae/test
   )
 endif()

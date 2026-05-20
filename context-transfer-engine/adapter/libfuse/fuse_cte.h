@@ -51,8 +51,8 @@
 #include <unistd.h>
 #include <vector>
 
-#include "wrp_cte/core/core_client.h"
-#include "wrp_cte/core/core_tasks.h"
+#include "clio_cte/core/core_client.h"
+#include "clio_cte/core/core_tasks.h"
 
 namespace clio::cae::fuse {
 
@@ -78,7 +78,7 @@ static constexpr size_t kMaxInFlightWrites = 8;
  * race with the in-flight handler.
  */
 struct PendingWrite {
-  chi::Future<wrp_cte::core::PutBlobTask> task;
+  chi::Future<clio_cte::core::PutBlobTask> task;
   hipc::FullPtr<char> shm_buf;
 };
 
@@ -97,7 +97,7 @@ struct PendingWrite {
 
 /** Per-open-file handle stored in fuse_file_info::fh */
 struct FuseFileHandle {
-  wrp_cte::core::TagId tag_id;
+  clio_cte::core::TagId tag_id;
   std::string path;
   int flags;
   /** Async PutBlob queue — back-pressured inside cte_fuse_write itself,
@@ -119,7 +119,7 @@ struct FuseFileHandle {
 // aggregation path on send_map_, which is where the 4n×256m hang lived.
 
 /** Query CTE for the authoritative tag size */
-static inline size_t CteGetTagSize(const wrp_cte::core::TagId &tag_id) {
+static inline size_t CteGetTagSize(const clio_cte::core::TagId &tag_id) {
   auto *cte_client = WRP_CTE_CLIENT;
   auto task = cte_client->AsyncGetTagSize(tag_id, chi::PoolQuery::Local());
   task.Wait();
@@ -135,15 +135,15 @@ static inline void CteDelTag(const std::string &tag_name) {
 }
 
 /** Get or create a CTE tag, returning its TagId. Returns null id on failure. */
-static inline wrp_cte::core::TagId CteGetOrCreateTag(const std::string &name) {
+static inline clio_cte::core::TagId CteGetOrCreateTag(const std::string &name) {
   auto *cte_client = WRP_CTE_CLIENT;
   // pool_query=Local overrides ScheduleTask's default DirectHash routing for
   // new tags — without it the tag is hashed to a peer node and a subsequent
   // CteTagExists(Local) from the same FUSE adapter won't find it.
   auto task = cte_client->AsyncGetOrCreateTag(
-      name, wrp_cte::core::TagId::GetNull(), chi::PoolQuery::Local());
+      name, clio_cte::core::TagId::GetNull(), chi::PoolQuery::Local());
   task.Wait();
-  if (task->GetReturnCode() != 0) return wrp_cte::core::TagId::GetNull();
+  if (task->GetReturnCode() != 0) return clio_cte::core::TagId::GetNull();
   return task->tag_id_;
 }
 
@@ -287,7 +287,7 @@ static inline bool CteDirExists(const std::string &dir_path) {
  * Kept for callers that need a return code per-page. The async path used
  * by cte_fuse_write goes through CtePutBlobAsync below.
  */
-static inline bool CtePutBlob(const wrp_cte::core::TagId &tag_id,
+static inline bool CtePutBlob(const clio_cte::core::TagId &tag_id,
                               const std::string &blob_name, const char *data,
                               size_t data_size, size_t blob_off) {
   auto *ipc_manager = CHI_IPC;
@@ -298,7 +298,7 @@ static inline bool CtePutBlob(const wrp_cte::core::TagId &tag_id,
   hipc::ShmPtr<> shm_ptr(shm_buf.shm_);
   auto task = cte_client->AsyncPutBlob(
       tag_id, blob_name, blob_off, data_size, shm_ptr,
-      /*score*/ -1.0f, wrp_cte::core::Context(), /*flags*/ 0u,
+      /*score*/ -1.0f, clio_cte::core::Context(), /*flags*/ 0u,
       chi::PoolQuery::Local());
   task.Wait();
   ipc_manager->FreeBuffer(shm_buf);
@@ -333,7 +333,7 @@ static inline bool CtePutBlobAsync(struct FuseFileHandle *handle,
   hipc::ShmPtr<> shm_ptr(shm_buf.shm_);
   auto task = cte_client->AsyncPutBlob(
       handle->tag_id, blob_name, blob_off, data_size, shm_ptr,
-      /*score*/ -1.0f, wrp_cte::core::Context(), /*flags*/ 0u,
+      /*score*/ -1.0f, clio_cte::core::Context(), /*flags*/ 0u,
       chi::PoolQuery::Local());
 
   std::lock_guard<std::mutex> lk(handle->pending_mu);
@@ -398,7 +398,7 @@ static inline int DrainPendingWrites(struct FuseFileHandle *handle) {
 /**
  * Page-based GetBlob: allocate SHM, async get, wait, copy out, free.
  */
-static inline bool CteGetBlob(const wrp_cte::core::TagId &tag_id,
+static inline bool CteGetBlob(const clio_cte::core::TagId &tag_id,
                               const std::string &blob_name, char *data,
                               size_t data_size, size_t blob_off) {
   auto *ipc_manager = CHI_IPC;

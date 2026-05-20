@@ -90,11 +90,11 @@ check_prerequisites() {
     fi
     print_success "hostfile found"
 
-    if [ ! -f "wrp_config.yaml" ]; then
-        print_error "wrp_config.yaml not found"
+    if [ ! -f "clio_config.yaml" ]; then
+        print_error "clio_config.yaml not found"
         exit 1
     fi
-    print_success "wrp_config.yaml found"
+    print_success "clio_config.yaml found"
 }
 
 # Function to clean up previous runs

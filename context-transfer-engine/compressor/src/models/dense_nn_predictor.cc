@@ -36,14 +36,14 @@
  * @brief Implementation of Dense Neural Network compression predictor using MiniDNN
  */
 
-#include "wrp_cte/compressor/models/dense_nn_predictor.h"
+#include "clio_cte/compressor/models/dense_nn_predictor.h"
 #include <fstream>
 #include <chrono>
 #include <filesystem>
 #include <cmath>
 #include <nlohmann/json.hpp>
 
-namespace wrp_cte::compressor {
+namespace clio_cte::compressor {
 
 namespace fs = std::filesystem;
 using json = nlohmann::ordered_json;
@@ -912,4 +912,4 @@ void DenseNNPredictor::ClearExperiences() {
   experience_count_ = 0;
 }
 
-}  // namespace wrp_cte::compressor
+}  // namespace clio_cte::compressor

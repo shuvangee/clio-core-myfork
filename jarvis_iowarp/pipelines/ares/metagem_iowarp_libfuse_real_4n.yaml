@@ -21,7 +21,7 @@ container_image: metagem_apptainer_test
 container_binds:
   - ${HOME}/jarvis-bench-cache/metagem-stage:/tmp/metagem-cache:ro
   - ${HOME}/jarvis-runs:${HOME}/jarvis-runs
-  - ${HOME}/wrp_cte_metagem_real_4n:/mnt/clio_cte
+  - ${HOME}/clio_cte_metagem_real_4n:/mnt/clio_cte
 
 ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
 
@@ -46,8 +46,8 @@ scheduler:
     - 'source /etc/profile.d/lmod.sh 2>/dev/null || source /etc/profile.d/modules.sh'
     - 'module load gcc/11.4.0/openmpi/5.0.5-x2kvx5l'
     - 'mkdir -p /home/llogan/iowarp_prte_tmp'
-    - 'fusermount3 -u /home/llogan/wrp_cte_metagem_real_4n 2>/dev/null || umount -l /home/llogan/wrp_cte_metagem_real_4n 2>/dev/null || true'
-    - 'mkdir -p /home/llogan/wrp_cte_metagem_real_4n'
+    - 'fusermount3 -u /home/llogan/clio_cte_metagem_real_4n 2>/dev/null || umount -l /home/llogan/clio_cte_metagem_real_4n 2>/dev/null || true'
+    - 'mkdir -p /home/llogan/clio_cte_metagem_real_4n'
 
 pkgs:
   - pkg_type: jarvis_iowarp.clio_runtime
@@ -76,7 +76,7 @@ pkgs:
   - pkg_type: jarvis_iowarp.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
-    mountpoint: ${HOME}/wrp_cte_metagem_real_4n
+    mountpoint: ${HOME}/clio_cte_metagem_real_4n
     sleep: 2
     extra_fuse_args: "-f"
 

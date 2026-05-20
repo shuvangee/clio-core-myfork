@@ -27,7 +27,7 @@ target_include_directories(clio_cte_fuse PRIVATE
 target_link_directories(clio_cte_fuse PRIVATE ${FUSE3_LIBRARY_DIRS})
 target_link_libraries(clio_cte_fuse
     ${FUSE3_LIBRARIES}
-    wrp_cte_core_client
+    clio_cte_core_client
     ctp::cxx)
 
 install(TARGETS clio_cte_fuse

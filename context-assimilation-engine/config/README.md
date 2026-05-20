@@ -4,7 +4,7 @@ This directory contains example configuration files for deploying the Context As
 
 ## Configuration Files
 
-### wrp_config_example.yaml
+### clio_config_example.yaml
 
 Complete example showing how to configure both CTE and CAE ChiMods together in a unified runtime configuration.
 
@@ -12,16 +12,16 @@ Complete example showing how to configure both CTE and CAE ChiMods together in a
 
 ### Pool Constants
 
-The CAE pool uses these constants (defined in `wrp_cae/core/constants.h`):
+The CAE pool uses these constants (defined in `clio_cae/core/constants.h`):
 - **Pool ID**: `400.0` (kCaePoolId)
 - **Pool Name**: User-defined (e.g., "cae_main")
-- **Module Name**: `wrp_cae_core`
+- **Module Name**: `clio_cae_core`
 
 ### Configuration Parameters
 
 ```yaml
 compose:
-  - mod_name: wrp_cae_core      # CAE Core ChiMod library name
+  - mod_name: clio_cae_core      # CAE Core ChiMod library name
     pool_name: cae_main          # User-defined pool name
     pool_query: local            # Pool query type (local, broadcast, dynamic)
     pool_id: "400.0"             # CAE pool ID (must match kCaePoolId)
@@ -29,7 +29,7 @@ compose:
 
 ### Parameters Explanation
 
-- **mod_name**: Must be `wrp_cae_core` (the CAE Core ChiMod library)
+- **mod_name**: Must be `clio_cae_core` (the CAE Core ChiMod library)
 - **pool_name**: User-defined name for the CAE pool
 - **pool_query**:
   - `local`: Create pool only on local node
@@ -44,7 +44,7 @@ compose:
 chimaera runtime start
 
 # Deploy CAE using the configuration file
-chimaera compose /path/to/wrp_config_example.yaml
+chimaera compose /path/to/clio_config_example.yaml
 
 # Now CAE is available for use
 clio_cae_omni /path/to/omni_file.yaml
@@ -57,21 +57,21 @@ CAE typically works alongside CTE (Context Transfer Engine) to enable data assim
 1. **CTE** provides distributed storage and data management
 2. **CAE** assimilates data from external sources into CTE
 
-See `wrp_config_example.yaml` for a complete configuration showing both ChiMods working together.
+See `clio_config_example.yaml` for a complete configuration showing both ChiMods working together.
 
 ## Pool ID Reference
 
 | Component | Pool ID | Constant Name | Module Name |
 |-----------|---------|---------------|-------------|
 | Admin     | 1.0     | kAdminPoolId  | chimaera_admin |
-| CTE Core  | 512.0   | kCtePoolId    | wrp_cte_core |
-| CAE Core  | 400.0   | kCaePoolId    | wrp_cae_core |
+| CTE Core  | 512.0   | kCtePoolId    | clio_cte_core |
+| CAE Core  | 400.0   | kCaePoolId    | clio_cae_core |
 
 ## Example Workflow
 
 ```bash
 # 1. Start runtime
-export CHI_SERVER_CONF=/path/to/wrp_config_example.yaml
+export CHI_SERVER_CONF=/path/to/clio_config_example.yaml
 chimaera runtime start &
 
 # 2. Deploy CTE and CAE

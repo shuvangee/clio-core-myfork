@@ -13,13 +13,13 @@ The ContextInterface provides a high-level API for context exploration and manag
 ### C++ Interface
 
 ```cpp
-#include <wrp_cee/api/context_interface.h>
+#include <clio_cee/api/context_interface.h>
 
 namespace iowarp {
 class ContextInterface {
 public:
   // Bundle a group of related objects together and assimilate them
-  int ContextBundle(const std::vector<wrp_cae::core::AssimilationCtx> &bundle);
+  int ContextBundle(const std::vector<clio_cae::core::AssimilationCtx> &bundle);
 
   // Retrieve the identities of objects matching tag and blob patterns
   std::vector<std::string> ContextQuery(const std::string &tag_re,
@@ -48,7 +48,7 @@ public:
 
 Wraps the CAE `ParseOmni` functionality to bundle and assimilate a group of related objects.
 
-**Underlying API**: `wrp_cae::core::Client::ParseOmni()`
+**Underlying API**: `clio_cae::core::Client::ParseOmni()`
 
 **Parameters**:
 - `bundle`: Vector of `AssimilationCtx` objects defining source, destination, format, and other metadata
@@ -61,8 +61,8 @@ Wraps the CAE `ParseOmni` functionality to bundle and assimilate a group of rela
 ```cpp
 iowarp::ContextInterface ctx;
 
-std::vector<wrp_cae::core::AssimilationCtx> bundle;
-wrp_cae::core::AssimilationCtx ctx1;
+std::vector<clio_cae::core::AssimilationCtx> bundle;
+clio_cae::core::AssimilationCtx ctx1;
 ctx1.src = "file::/path/to/data.bin";
 ctx1.dst = "iowarp::my_tag";
 ctx1.format = "binary";
@@ -80,7 +80,7 @@ if (result == 0) {
 
 Queries the CTE system for blobs matching specified regex patterns.
 
-**Underlying API**: `wrp_cte::core::Client::BlobQuery()`
+**Underlying API**: `clio_cte::core::Client::BlobQuery()`
 
 **Parameters**:
 - `tag_re`: Tag regex pattern to match
@@ -107,7 +107,7 @@ for (const auto& blob_name : results) {
 
 Destroys contexts by deleting their corresponding tags from the CTE system.
 
-**Underlying API**: `wrp_cte::core::Client::DelTag()` (called for each context name)
+**Underlying API**: `clio_cte::core::Client::DelTag()` (called for each context name)
 
 **Parameters**:
 - `context_names`: Vector of context names to destroy
@@ -147,7 +147,7 @@ Placeholder for future implementation. Currently returns error code `1`.
 ## AssimilationCtx Structure
 
 ```cpp
-namespace wrp_cae::core {
+namespace clio_cae::core {
 struct AssimilationCtx {
   std::string src;         // Source URL (e.g., file::/path/to/file)
   std::string dst;         // Destination URL (e.g., iowarp::tag_name)
@@ -165,17 +165,17 @@ struct AssimilationCtx {
 
 Python bindings are available when nanobind is installed and enabled during build.
 
-**Module**: `wrp_cee`
+**Module**: `clio_cee`
 
 **Example**:
 ```python
-import wrp_cee
+import clio_cee
 
 # Create interface
-ctx = wrp_cee.ContextInterface()
+ctx = clio_cee.ContextInterface()
 
 # Create an assimilation context
-assim_ctx = wrp_cee.AssimilationCtx(
+assim_ctx = clio_cee.AssimilationCtx(
     src="file::/data/input.bin",
     dst="iowarp::my_dataset",
     format="binary"
@@ -201,7 +201,7 @@ ctx.context_destroy(["old_context"])
 cmake --preset=debug
 
 # Build the library
-cmake --build build --target wrp_cee_api
+cmake --build build --target clio_cee_api
 
 # Library output: build/bin/libwrp_cee_api.so.1.0.0
 ```
@@ -213,7 +213,7 @@ Python bindings require nanobind to be installed:
 ```bash
 pip install nanobind
 cmake --preset=debug
-cmake --build build --target wrp_cee
+cmake --build build --target clio_cee
 ```
 
 If nanobind is not found, the build will skip Python bindings with a warning.
@@ -235,7 +235,7 @@ cmake --build build --target test_context_bundle test_context_query test_context
 # Terminal 1: Start the Chimaera runtime
 cd build
 LD_LIBRARY_PATH=/workspace/build/bin:$LD_LIBRARY_PATH \
-WRP_CTE_CONF=/workspace/context-assimilation-engine/test/unit/wrp_config.yaml \
+WRP_CTE_CONF=/workspace/context-assimilation-engine/test/unit/clio_config.yaml \
 ./bin/chimaera runtime start
 
 # Wait for message: "Successfully started local server at 127.0.0.1:9129"
@@ -287,8 +287,8 @@ api/
 ├── CMakeLists.txt                          # Build configuration
 ├── README.md                               # This file
 ├── cmake/
-│   └── wrp_cee_api-config.cmake.in        # Package config template
-├── include/wrp_cee/api/
+│   └── clio_cee_api-config.cmake.in        # Package config template
+├── include/clio_cee/api/
 │   └── context_interface.h                # Public API header
 ├── src/
 │   ├── context_interface.cc               # C++ implementation
@@ -304,8 +304,8 @@ api/
 
 **Required**:
 - Chimaera runtime (chimaera::cxx)
-- Context Transfer Engine (wrp_cte_core_client)
-- Context Assimilation Engine (wrp_cae_core_client)
+- Context Transfer Engine (clio_cte_core_client)
+- Context Assimilation Engine (clio_cae_core_client)
 
 **Optional**:
 - nanobind (for Python bindings)
@@ -316,13 +316,13 @@ To use the ContextInterface in external projects:
 
 ```cmake
 # Find the package
-find_package(wrp_cee_api REQUIRED)
+find_package(clio_cee_api REQUIRED)
 
 # Link against your target
 add_executable(my_app main.cc)
 target_link_libraries(my_app
   PRIVATE
-    wrp_cee::api
+    clio_cee::api
 )
 ```
 

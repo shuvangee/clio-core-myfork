@@ -7,12 +7,12 @@
  * Changes should be made to the autogen tool or the YAML configuration.
  */
 
-#include "wrp_cte/core/core_runtime.h"
-#include "wrp_cte/core/autogen/core_methods.h"
+#include "clio_cte/core/core_runtime.h"
+#include "clio_cte/core/autogen/core_methods.h"
 #include <chimaera/chimaera.h>
 #include <chimaera/task.h>  // For TaskResume coroutine return type
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 //==============================================================================
 // Container Virtual API Implementations
@@ -1410,4 +1410,4 @@ void Runtime::DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) {
   }
 }
 
-} // namespace wrp_cte::core
+} // namespace clio_cte::core

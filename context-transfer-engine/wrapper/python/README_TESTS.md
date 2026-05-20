@@ -80,7 +80,7 @@ Each `CteTelemetry` entry contains:
 ### Example Usage
 
 ```python
-import wrp_cte_core_ext as cte
+import clio_cte_core_ext as cte
 
 # Initialize runtime
 cte.chimaera_init(cte.ChimaeraMode.kClient, True)
@@ -120,8 +120,8 @@ Both tests require a valid CTE configuration file (YAML format). Example minimal
 
 ```yaml
 compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte
+  - mod_name: clio_cte_core
+    pool_name: clio_cte
     pool_query: local
     pool_id: 512.0
 
@@ -176,9 +176,9 @@ pytest test_cte_telemetry.py -v
 
 ### Module Import Errors
 
-If you see `ImportError: No module named 'wrp_cte_core_ext'`:
+If you see `ImportError: No module named 'clio_cte_core_ext'`:
 
-1. Ensure Python bindings are built: `cmake --build /workspace/build --target wrp_cte_core_ext`
+1. Ensure Python bindings are built: `cmake --build /workspace/build --target clio_cte_core_ext`
 2. Add build directory to PYTHONPATH: `export PYTHONPATH=/workspace/build/bin:$PYTHONPATH`
 3. Check library dependencies: `export LD_LIBRARY_PATH=/workspace/build/bin:$LD_LIBRARY_PATH`
 

@@ -1,24 +1,24 @@
 # Create the POSIX interceptor
-add_library(wrp_cte_posix SHARED
+add_library(clio_cte_posix SHARED
         ${CMAKE_CURRENT_SOURCE_DIR}/posix_api.cc)
 
 # Local includes for adapter headers
-# Note: bdev headers come transitively via wrp_cte_core_client
-# Note: core headers come transitively via wrp_cte_core_client
-target_include_directories(wrp_cte_posix PRIVATE
+# Note: bdev headers come transitively via clio_cte_core_client
+# Note: core headers come transitively via clio_cte_core_client
+target_include_directories(clio_cte_posix PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}       # For local headers
   ${WRP_CTE_ROOT}                   # For adapter/adapter_types.h include path
 )
 
-add_dependencies(wrp_cte_posix wrp_cte_fs_base)
-target_link_libraries(wrp_cte_posix
+add_dependencies(clio_cte_posix clio_cte_fs_base)
+target_link_libraries(clio_cte_posix
         MPI::MPI_CXX
         stdc++fs
-        wrp_cte_fs_base          # Provides filesystem headers
-        wrp_cte_core_client      # Provides core and bdev headers transitively
+        clio_cte_fs_base          # Provides filesystem headers
+        clio_cte_core_client      # Provides core and bdev headers transitively
         ctp::cxx
         ctp::interceptor)       # Provides ELF support and CTP_ENABLE_ELF definition
-set_target_properties(wrp_cte_posix PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(clio_cte_posix PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 # -----------------------------------------------------------------------------
@@ -26,7 +26,7 @@ set_target_properties(wrp_cte_posix PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # -----------------------------------------------------------------------------
 install(
         TARGETS
-        wrp_cte_posix
+        clio_cte_posix
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin

@@ -38,7 +38,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace hermes_shm {
+namespace ctp {
 
 class NonlinearLeastSquares {
  private:
@@ -291,6 +291,6 @@ class NonlinearLeastSquares {
   }
 };
 
-}  // namespace hermes_shm
+}  // namespace ctp
 
 #endif  // HERMES_SHM_NONLINEAR_LEAST_SQUARES_H_

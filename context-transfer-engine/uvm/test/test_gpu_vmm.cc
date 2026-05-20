@@ -31,7 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "wrp_cte/uvm/gpu_vmm.h"
+#include "clio_cte/uvm/gpu_vmm.h"
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -41,7 +41,7 @@
 #include <cstring>
 #include <vector>
 
-using namespace wrp_cte::uvm;
+using namespace clio_cte::uvm;
 
 /** Kernel to write a specific value to every int in a GPU memory region */
 __global__ void writeKernel(int *ptr, int value, size_t count) {

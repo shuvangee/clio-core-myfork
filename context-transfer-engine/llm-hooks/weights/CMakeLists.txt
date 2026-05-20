@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-# wrp_llm_weights — Model weight offloading library (FlexGen-style demand paging).
+# clio_llm_weights — Model weight offloading library (FlexGen-style demand paging).
 # Requires CUDA + llama.cpp (ggml target) — only built when LLAMA_SERVER=ON.
 
 # CUDAToolkit provides CUDA::cudart / CUDA::cuda_driver imported targets and
@@ -12,9 +12,9 @@ set(WEIGHTS_SOURCES
     src/ggml_iowarp_backend.cc
 )
 
-add_library(wrp_llm_weights SHARED ${WEIGHTS_SOURCES})
+add_library(clio_llm_weights SHARED ${WEIGHTS_SOURCES})
 
-target_include_directories(wrp_llm_weights
+target_include_directories(clio_llm_weights
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -25,17 +25,17 @@ target_include_directories(wrp_llm_weights
         ${CMAKE_SOURCE_DIR}/external/llama.cpp/include
 )
 
-target_link_libraries(wrp_llm_weights
+target_link_libraries(clio_llm_weights
     PUBLIC
-        wrp_cte_core_client
-        wrp_cte_uvm          # brings in wrp_cte/uvm/gpu_vmm.h include path + GpuVmm symbols
+        clio_cte_core_client
+        clio_cte_uvm          # brings in clio_cte/uvm/gpu_vmm.h include path + GpuVmm symbols
     PRIVATE
         ggml
         CUDA::cudart         # CUDA runtime headers (cuda_runtime.h, cuda.h)
         CUDA::cuda_driver    # CUDA driver API (cuMemAddressReserve etc.)
 )
 
-install(TARGETS wrp_llm_weights
+install(TARGETS clio_llm_weights
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )

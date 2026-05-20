@@ -1,12 +1,12 @@
-project(hermes_shm_external_test)
+project(clio_ctp_external_test)
 
 # ------------------------------------------------------------------------------
 # External libraries
 # ------------------------------------------------------------------------------
-# Use unified IOWarp Core package which includes HermesShm
+# Use unified IOWarp Core package which includes ClioCtp
 find_package(iowarp-core CONFIG REQUIRED)
 message(STATUS "found IowarpCore at ${IowarpCore_DIR}")
-message(STATUS "  HermesShm (context-transport-primitives) included in IowarpCore")
+message(STATUS "  ClioCtp (context-transport-primitives) included in IowarpCore")
 
 # ------------------------------------------------------------------------------
 # Build

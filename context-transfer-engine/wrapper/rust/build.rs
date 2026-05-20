@@ -41,10 +41,10 @@ fn main() {
     println!("cargo:rustc-link-search=native=/home/iowarp/miniconda3/lib");
 
     // Direct dependency
-    println!("cargo:rustc-link-lib=dylib=wrp_cte_core_client");
+    println!("cargo:rustc-link-lib=dylib=clio_cte_core_client");
     // Transitive deps (needed for test binary linking)
     println!("cargo:rustc-link-lib=dylib=chimaera_cxx");
-    println!("cargo:rustc-link-lib=dylib=hermes_shm_host");
+    println!("cargo:rustc-link-lib=dylib=clio_ctp_host");
     println!("cargo:rustc-link-lib=dylib=zmq");
 
     println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/local/lib");

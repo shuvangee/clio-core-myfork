@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 add_library(test_interceptor_lib_stat STATIC test_lib.cc)
 add_library(test_interceptor_my_lib_stat STATIC test_my_lib.cc)

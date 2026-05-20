@@ -38,7 +38,7 @@ bool stdio_intercepted = true;
 #include <limits.h>
 #include <sys/file.h>
 
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 #include <cstdio>
 
 #include "stdio_fs_api.h"
@@ -62,7 +62,7 @@ extern "C" {
  */
 
 FILE *WRP_CTE_DECL(fopen)(const char *path, const char *mode) {
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   auto real_api = WRP_CTE_STDIO_API;
   auto fs_api = WRP_CTE_STDIO_FS;
   if (fs_api->IsPathTracked(path)) {
@@ -76,7 +76,7 @@ FILE *WRP_CTE_DECL(fopen)(const char *path, const char *mode) {
 }
 
 FILE *WRP_CTE_DECL(fopen64)(const char *path, const char *mode) {
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   auto real_api = WRP_CTE_STDIO_API;
   auto fs_api = WRP_CTE_STDIO_FS;
   if (fs_api->IsPathTracked(path)) {
@@ -90,7 +90,7 @@ FILE *WRP_CTE_DECL(fopen64)(const char *path, const char *mode) {
 }
 
 FILE *WRP_CTE_DECL(fdopen)(int fd, const char *mode) {
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   auto real_api = WRP_CTE_STDIO_API;
   auto fs_api = WRP_CTE_STDIO_FS;
   std::shared_ptr<AdapterStat> stat;
@@ -103,7 +103,7 @@ FILE *WRP_CTE_DECL(fdopen)(int fd, const char *mode) {
 }
 
 FILE *WRP_CTE_DECL(freopen)(const char *path, const char *mode, FILE *stream) {
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   auto real_api = WRP_CTE_STDIO_API;
   auto fs_api = WRP_CTE_STDIO_FS;
   if (fs_api->IsFpTracked(stream)) {
@@ -115,7 +115,7 @@ FILE *WRP_CTE_DECL(freopen)(const char *path, const char *mode, FILE *stream) {
 
 FILE *WRP_CTE_DECL(freopen64)(const char *path, const char *mode,
                               FILE *stream) {
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   auto real_api = WRP_CTE_STDIO_API;
   auto fs_api = WRP_CTE_STDIO_FS;
   if (fs_api->IsFpTracked(stream)) {

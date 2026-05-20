@@ -11,9 +11,9 @@ add_executable(clio_cte_posix_unit_tests
 )
 
 target_link_libraries(clio_cte_posix_unit_tests
-    wrp_cte_posix
-    wrp_cte_fs_base
-    wrp_cte_core_client
+    clio_cte_posix
+    clio_cte_fs_base
+    clio_cte_core_client
     ctp::cxx
     ctp::interceptor
     Catch2::Catch2WithMain

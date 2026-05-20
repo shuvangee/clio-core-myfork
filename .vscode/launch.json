@@ -190,7 +190,7 @@
                 },
                 {
                     "name": "CHI_SERVER_CONF",
-                    "value": "/workspace/context-exploration-engine/api/demo/wrp_conf.yaml"
+                    "value": "/workspace/context-exploration-engine/api/demo/clio_conf.yaml"
                 }
             ],
             "externalConsole": false,
@@ -240,7 +240,7 @@
                 },
                 {
                     "name": "CHI_SERVER_CONF",
-                    "value": "/workspace/context-assimilation-engine/test/unit/wrp_config.yaml"
+                    "value": "/workspace/context-assimilation-engine/test/unit/clio_config.yaml"
                 }
             ],
             "externalConsole": false,

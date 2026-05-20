@@ -5,7 +5,7 @@ project(external_chimod_test)
 set(CMAKE_CXX_STANDARD_20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Unified IOWarp Core package - includes HermesShm, Chimaera, and build utilities
+# Unified IOWarp Core package - includes ClioCtp, Chimaera, and build utilities
 find_package(iowarp-core REQUIRED)
 # This automatically provides:
 #   - All ctp::* modular targets (ctp::cxx, ctp::configure, ctp::serialize, etc.)

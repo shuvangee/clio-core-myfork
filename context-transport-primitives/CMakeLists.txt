@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(hermes_shm LANGUAGES C CXX)
+project(clio_ctp LANGUAGES C CXX)
 include(CTest)
 # CMAKE_CXX_STANDARD is set by root CMakeLists.txt
 
@@ -46,7 +46,7 @@ endif()
 # ------------------------------------------------------------------------------
 # Setup CMake Environment
 # ------------------------------------------------------------------------------
-set(CLIO_CTP_EXPORTED_TARGETS "HermesShm")
+set(CLIO_CTP_EXPORTED_TARGETS "ClioCtp")
 # Output directories are set by root CMakeLists.txt
 
 # ------------------------------------------------------------------------------
@@ -256,11 +256,11 @@ function(hshm_target_compile_definitions target)
     )
 
     # Add CUDA/ROCM definitions for GPU targets only.
-    # Host targets (hermes_shm_host, cxx) do NOT propagate CTP_ENABLE_CUDA
+    # Host targets (clio_ctp_host, cxx) do NOT propagate CTP_ENABLE_CUDA
     # to avoid conflicts when a consumer links both host and GPU libraries.
     # Undefined CTP_ENABLE_CUDA evaluates to 0 in #if directives, which is
     # the correct behavior for host-only consumers.
-    if(NOT (target STREQUAL "hermes_shm_host" OR target STREQUAL "cxx"))
+    if(NOT (target STREQUAL "clio_ctp_host" OR target STREQUAL "cxx"))
         list(APPEND common_definitions
             CTP_ENABLE_CUDA=$<BOOL:${WRP_CORE_ENABLE_CUDA}>
             CTP_ENABLE_ROCM=$<BOOL:${WRP_CORE_ENABLE_ROCM}>
@@ -297,7 +297,7 @@ if(NOT IS_HSHM_MAIN)
 endif()
 
 # ------------------------------------------------------------------------------
-# Build hermes_shm source libraries (must be before ctp::compress so that
+# Build clio_ctp source libraries (must be before ctp::compress so that
 # qtable_predictor and dense_nn_predictor targets are available)
 # ------------------------------------------------------------------------------
 add_subdirectory(src)
@@ -486,7 +486,7 @@ install(DIRECTORY include/ DESTINATION include)
 install(EXPORT ${CLIO_CTP_EXPORTED_TARGETS}
     FILE ${CLIO_CTP_EXPORTED_TARGETS}CoreConfig.cmake
     NAMESPACE ctp::
-    DESTINATION lib/cmake/HermesShm
+    DESTINATION lib/cmake/ClioCtp
 )
 
 if(WRP_CORE_ENABLE_JARVIS)

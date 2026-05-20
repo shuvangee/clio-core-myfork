@@ -1,4 +1,4 @@
-#include "wrp_llm/weights/ggml_iowarp_backend.h"
+#include "clio_llm/weights/ggml_iowarp_backend.h"
 
 // ggml internal vtable headers (part of llama.cpp)
 #include "ggml-backend-impl.h"
@@ -23,7 +23,7 @@
 // WeightManager that owns its memory.
 // ---------------------------------------------------------------------------
 struct ggml_iowarp_buffer_context {
-    wrp_llm::weights::WeightManager* mgr;
+    clio_llm::weights::WeightManager* mgr;
     // The base CUDA virtual address returned by GpuVmm.
     char*  base;
     size_t allocated;  // bytes handed out so far (bump allocator)
@@ -39,7 +39,7 @@ static const char* ggml_iowarp_buft_get_name(ggml_backend_buffer_type_t) {
 
 static ggml_backend_buffer_t ggml_iowarp_buft_alloc_buffer(
         ggml_backend_buffer_type_t buft, size_t size) {
-    auto* mgr        = reinterpret_cast<wrp_llm::weights::WeightManager*>(buft->context);
+    auto* mgr        = reinterpret_cast<clio_llm::weights::WeightManager*>(buft->context);
     char* base       = reinterpret_cast<char*>(mgr->BaseAddress());
     size_t page      = mgr->PageSize();
     size_t aligned_sz = (size + page - 1) & ~(page - 1);
@@ -114,7 +114,7 @@ static size_t ggml_iowarp_buft_get_alignment(ggml_backend_buffer_type_t) {
 }
 
 static size_t ggml_iowarp_buft_get_max_size(ggml_backend_buffer_type_t buft) {
-    auto* mgr = reinterpret_cast<wrp_llm::weights::WeightManager*>(buft->context);
+    auto* mgr = reinterpret_cast<clio_llm::weights::WeightManager*>(buft->context);
     return mgr->Vmm().getPageSize() * mgr->Vmm().getTotalPages();
 }
 
@@ -137,7 +137,7 @@ static const ggml_backend_buffer_type_i k_iowarp_buft_iface = {
 // Public API — ggml_backend_iowarp_buffer_type()
 // ---------------------------------------------------------------------------
 ggml_backend_buffer_type_t ggml_backend_iowarp_buffer_type(
-        wrp_llm::weights::WeightManager* weight_mgr) {
+        clio_llm::weights::WeightManager* weight_mgr) {
     // One static buffer type per process.  buft.device is patched once by
     // ggml_backend_iowarp_init() — it must remain valid for the program
     // lifetime (the device is a static singleton, not freed per-context).
@@ -153,7 +153,7 @@ ggml_backend_buffer_type_t ggml_backend_iowarp_buffer_type(
 // ---------------------------------------------------------------------------
 
 struct IOWarpDevCtx {
-    wrp_llm::weights::WeightManager* mgr;
+    clio_llm::weights::WeightManager* mgr;
     ggml_backend_dev_t               cuda_dev;    // global CUDA device (stable)
     ggml_backend_buffer_type_t       iowarp_buft; // our custom GpuVmm buft
 };
@@ -204,7 +204,7 @@ struct ActivationPingPong {
 
 // Per-context backend context.
 struct IOWarpCtx {
-    wrp_llm::weights::WeightManager* mgr;
+    clio_llm::weights::WeightManager* mgr;
     ggml_backend_t                   cuda_be;       // per-context CUDA compute stream
     ActivationOffloadCtx             act_offload_;  // Phase 2a: host-side persistence
     ActivationPingPong               act_pp_;       // Phase 2b: ping-pong GPU bufs
@@ -777,7 +777,7 @@ static ggml_guid k_iowarp_guid = {
 // ---------------------------------------------------------------------------
 
 ggml_backend_t ggml_backend_iowarp_init(
-        wrp_llm::weights::WeightManager* weight_mgr) {
+        clio_llm::weights::WeightManager* weight_mgr) {
     // Create a per-context CUDA backend for actual CUDA kernel execution.
     ggml_backend_t cuda_be = ggml_backend_cuda_init(0);
     if (!cuda_be) {
@@ -839,7 +839,7 @@ static int iowarp_extract_layer(const char* name) {
 }
 
 void ggml_backend_iowarp_auto_register_layers(
-        wrp_llm::weights::WeightManager* mgr,
+        clio_llm::weights::WeightManager* mgr,
         struct ggml_context*             ctx) {
     if (!mgr || !ctx) return;
 

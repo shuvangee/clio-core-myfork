@@ -28,9 +28,9 @@
    chimaera.h alone). Without this include the linker leaves the
    templated symbols undefined in our .so. */
 #include <clio_ctp/lightbeam/transport_factory_impl.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
-#include <wrp_cte/core/content_transfer_engine.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <clio_cte/core/content_transfer_engine.h>
 
 /* ========================================================================
  * Internal state structures
@@ -51,7 +51,7 @@ struct iowarp_obj_t {
 
 struct iowarp_file_t {
   iowarp_obj_t obj;
-  wrp_cte::core::TagId tag_id;
+  clio_cte::core::TagId tag_id;
   std::string file_name;
   size_t chunk_size;
 };
@@ -61,7 +61,7 @@ struct iowarp_dataset_t {
   iowarp_file_t *file;
   std::string dataset_path;
   /* Pending async writes flushed on close */
-  std::vector<chi::Future<wrp_cte::core::PutBlobTask>> pending_puts;
+  std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_puts;
   std::vector<hipc::FullPtr<char>> pending_buffers;
 };
 
@@ -69,7 +69,7 @@ struct iowarp_dataset_t {
  * Helper: Get CTE client
  * ======================================================================== */
 
-static wrp_cte::core::Client *get_cte_client() {
+static clio_cte::core::Client *get_cte_client() {
   return WRP_CTE_CLIENT;
 }
 
@@ -382,7 +382,7 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
 
       auto future = cte_client->AsyncPutBlob(
           dataset->file->tag_id, blob_name, offset, this_size,
-          blob_data, -1.0f, wrp_cte::core::Context(), 0);
+          blob_data, -1.0f, clio_cte::core::Context(), 0);
 
       dataset->pending_puts.push_back(std::move(future));
       dataset->pending_buffers.push_back(std::move(buffer));
@@ -445,7 +445,7 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
     char *dst = static_cast<char *>(buf[d]);
 
     /* Submit async GetBlob for each chunk */
-    std::vector<chi::Future<wrp_cte::core::GetBlobTask>> futures;
+    std::vector<chi::Future<clio_cte::core::GetBlobTask>> futures;
     std::vector<hipc::FullPtr<char>> buffers;
 
     for (size_t i = 0; i < num_chunks; ++i) {

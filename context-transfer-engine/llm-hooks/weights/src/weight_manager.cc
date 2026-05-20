@@ -1,9 +1,9 @@
-#include "wrp_llm/weights/weight_manager.h"
+#include "clio_llm/weights/weight_manager.h"
 
 #include <algorithm>
 #include <cstdio>
 
-namespace wrp_llm {
+namespace clio_llm {
 namespace weights {
 
 WeightManager::WeightManager() : cfg_(Config{}) {}
@@ -15,7 +15,7 @@ WeightManager::~WeightManager() { Shutdown(); }
 bool WeightManager::Init() {
   if (ready_) return true;
 
-  wrp_cte::uvm::GpuVmmConfig vmm_cfg;
+  clio_cte::uvm::GpuVmmConfig vmm_cfg;
   vmm_cfg.va_size_bytes  = cfg_.va_size_bytes;
   vmm_cfg.page_size      = cfg_.page_size;
   vmm_cfg.device         = cfg_.device;
@@ -85,7 +85,7 @@ size_t WeightManager::PageSize() const { return cfg_.page_size; }
 
 bool WeightManager::IsReady() const { return ready_; }
 
-wrp_cte::uvm::GpuVirtualMemoryManager& WeightManager::Vmm() { return vmm_; }
+clio_cte::uvm::GpuVirtualMemoryManager& WeightManager::Vmm() { return vmm_; }
 
 }  // namespace weights
-}  // namespace wrp_llm
+}  // namespace clio_llm

@@ -60,13 +60,13 @@ if ! kill -0 "$RUNTIME_PID" 2>/dev/null; then
 fi
 ok "Chimaera runtime started (PID $RUNTIME_PID)"
 
-# --- Compose the CTE pool (separate step, mirrors jarvis wrp_cte) -----------
+# --- Compose the CTE pool (separate step, mirrors jarvis clio_cte) -----------
 
 info "Running chimaera compose for the CTE pool..."
 if ! chimaera compose "$SCRIPT_DIR/cte_compose.yaml"; then
     die "chimaera compose failed -- check that the runtime is reachable"
 fi
-ok "CTE pool composed (wrp_cte_core)"
+ok "CTE pool composed (clio_cte_core)"
 
 # --- Start FUSE daemon -------------------------------------------------------
 

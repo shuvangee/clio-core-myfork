@@ -19,13 +19,13 @@
 #include <vector>
 
 #include "chimaera/chimaera.h"
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 
 namespace stdfs = std::filesystem;
 
 namespace {
 constexpr size_t kSmall = 4096;
-const std::string kBackend = "/tmp/wrp_cte_stdio_test.dat";
+const std::string kBackend = "/tmp/clio_cte_stdio_test.dat";
 const std::string kClio = "clio::" + kBackend;
 
 bool initializeRuntime() {
@@ -37,7 +37,7 @@ bool initializeRuntime() {
     initialized = true;
     return true;
   }
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
     INFO("CTE init failed; tests proceed without CTE tracking");
     initialized = true;
     return true;
@@ -111,7 +111,7 @@ TEST_CASE("STDIO Adapter: fseek + ftell + rewind + fflush",
 TEST_CASE("STDIO Adapter: clio:: prefix is required for interception",
           "[stdio][adapter][prefix]") {
   REQUIRE(initializeRuntime());
-  const std::string backend = "/tmp/wrp_cte_stdio_prefix.dat";
+  const std::string backend = "/tmp/clio_cte_stdio_prefix.dat";
   stdfs::remove(backend);
 
   SECTION("bare path goes to libc, fd is small") {
@@ -137,7 +137,7 @@ TEST_CASE("STDIO Adapter: fopen of missing clio:: file with mode \"r\" fails",
           "[stdio][adapter][errors]") {
   REQUIRE(initializeRuntime());
   errno = 0;
-  FILE *fp = fopen("clio::/tmp/wrp_cte_stdio_missing.dat", "r");
+  FILE *fp = fopen("clio::/tmp/clio_cte_stdio_missing.dat", "r");
   REQUIRE(fp == nullptr);
   REQUIRE(errno != 0);
 }

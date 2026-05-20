@@ -829,7 +829,7 @@ endfunction()
 #   INCLUDE_DIRECTORIES - Additional include directories
 #
 # Automatic Cross-Namespace Dependencies (Unified Builds):
-#   For non-chimaera namespaces (e.g., wrp_cte, wrp_cae), this function automatically
+#   For non-chimaera namespaces (e.g., clio_cte, clio_cae), this function automatically
 #   links chimaera admin and bdev client libraries if they are available as targets.
 #   This enables wrp_* ChiMods to use chimaera ChiMod headers and functionality without
 #   explicit dependency declarations in their CMakeLists.txt files.
@@ -888,18 +888,18 @@ function(add_chimod_client)
     target_link_directories(${TARGET_NAME} PUBLIC ${ARG_LINK_DIRECTORIES})
   endif()
 
-  # Link libraries - use chimaera::cxx for internal builds, hermes_shm::cxx for external
+  # Link libraries - use chimaera::cxx for internal builds, ctp::cxx for external
   set(CORE_LIB "")
   if(TARGET chimaera::cxx)
     set(CORE_LIB chimaera::cxx)
-  elseif(TARGET hermes_shm::cxx)
-    set(CORE_LIB hermes_shm::cxx)
-  elseif(TARGET HermesShm::cxx)
-    set(CORE_LIB HermesShm::cxx)
+  elseif(TARGET ctp::cxx)
+    set(CORE_LIB ctp::cxx)
+  elseif(TARGET ClioCtp::cxx)
+    set(CORE_LIB ClioCtp::cxx)
   elseif(TARGET cxx)
     set(CORE_LIB cxx)
   else()
-    message(FATAL_ERROR "Neither chimaera::cxx, hermes_shm::cxx, HermesShm::cxx nor cxx target found")
+    message(FATAL_ERROR "Neither chimaera::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
   endif()
 
   # Automatically add chimaera ChiMod dependencies in unified builds
@@ -979,7 +979,7 @@ endfunction()
 #   INCLUDE_DIRECTORIES - Additional include directories
 #
 # Automatic Cross-Namespace Dependencies (Unified Builds):
-#   For non-chimaera namespaces (e.g., wrp_cte, wrp_cae), this function automatically
+#   For non-chimaera namespaces (e.g., clio_cte, clio_cae), this function automatically
 #   links chimaera admin and bdev runtime libraries if they are available as targets.
 #   This enables wrp_* ChiMods to use chimaera ChiMod headers and functionality without
 #   explicit dependency declarations in their CMakeLists.txt files.
@@ -1042,18 +1042,18 @@ function(add_chimod_runtime)
     target_link_directories(${TARGET_NAME} PUBLIC ${ARG_LINK_DIRECTORIES})
   endif()
 
-  # Link libraries - use hermes_shm::cxx for internal builds, chimaera::cxx for external
+  # Link libraries - use ctp::cxx for internal builds, chimaera::cxx for external
   set(CORE_LIB "")
   if(TARGET chimaera::cxx)
     set(CORE_LIB chimaera::cxx)
-  elseif(TARGET hermes_shm::cxx)
-    set(CORE_LIB hermes_shm::cxx)
-  elseif(TARGET HermesShm::cxx)
-    set(CORE_LIB HermesShm::cxx)
+  elseif(TARGET ctp::cxx)
+    set(CORE_LIB ctp::cxx)
+  elseif(TARGET ClioCtp::cxx)
+    set(CORE_LIB ClioCtp::cxx)
   elseif(TARGET cxx)
     set(CORE_LIB cxx)
   else()
-    message(FATAL_ERROR "Neither chimaera::cxx, hermes_shm::cxx, HermesShm::cxx nor cxx target found")
+    message(FATAL_ERROR "Neither chimaera::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
   endif()
 
   # Runtime-specific link libraries

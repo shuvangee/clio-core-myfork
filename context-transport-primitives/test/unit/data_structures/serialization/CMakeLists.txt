@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 #------------------------------------------------------------------------------
 # Build Serialization Tests
@@ -6,9 +6,9 @@ project(hermes_shm)
 
 add_executable(test_local_serialize_exec
         test_local_serialize.cc)
-add_dependencies(test_local_serialize_exec hermes_shm_host)
+add_dependencies(test_local_serialize_exec clio_ctp_host)
 target_link_libraries(test_local_serialize_exec
-        hermes_shm_host
+        clio_ctp_host
         ctp::serialize)
 
 #------------------------------------------------------------------------------

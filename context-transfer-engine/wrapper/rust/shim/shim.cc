@@ -1,5 +1,5 @@
 #include <chimaera/bdev/bdev_client.h>
-#include <wrp_cte/core/content_transfer_engine.h>
+#include <clio_cte/core/content_transfer_engine.h>
 
 // cxx-generated header: defines CteTagId shared struct
 #include "wrp-cte-rs/src/lib.rs.h"
@@ -10,7 +10,7 @@ bool cte_init(rust::Str config_path) {
   std::string path(config_path.data(), config_path.size());
   bool ok = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
   if (!ok) return false;
-  return wrp_cte::core::WRP_CTE_CLIENT_INIT(path);
+  return clio_cte::core::WRP_CTE_CLIENT_INIT(path);
 }
 
 std::unique_ptr<CteTag> tag_new(rust::Str tag_name) {
@@ -19,7 +19,7 @@ std::unique_ptr<CteTag> tag_new(rust::Str tag_name) {
 }
 
 std::unique_ptr<CteTag> tag_from_id(uint32_t major, uint32_t minor) {
-  wrp_cte::core::TagId tid(major, minor);
+  clio_cte::core::TagId tid(major, minor);
   return std::make_unique<CteTag>(tid);
 }
 

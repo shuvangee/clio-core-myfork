@@ -77,15 +77,15 @@
 #include <chimaera/chimaera.h>
 #include <clio_ctp/util/logging.h>
 #include <clio_ctp/util/config_parse.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/compressor/compressor_client.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/compressor/compressor_client.h>
 
 #include "synthetic_data_generator.h"
 
 // Use the pattern types from the header
-using PatternType = wrp_cte::PatternType;
-using PatternSpec = wrp_cte::PatternSpec;
-using DataGenerator = wrp_cte::SyntheticDataGenerator;
+using PatternType = clio_cte::PatternType;
+using PatternSpec = clio_cte::PatternSpec;
+using DataGenerator = clio_cte::SyntheticDataGenerator;
 
 // Configuration structure
 struct WorkloadConfig {
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
   }
 
   // Initialize CTE client (assumes Chimaera runtime is already running)
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
     if (rank == 0) {
       HLOG(kError, "Failed to initialize CTE client. Make sure chimaera runtime is started.");
     }
@@ -272,16 +272,16 @@ int main(int argc, char** argv) {
   }
 
   // Get the global CTE client
-  (void)wrp_cte::core::g_cte_client;  // Client is accessed via Tag class
+  (void)clio_cte::core::g_cte_client;  // Client is accessed via Tag class
 
   // Create compressor client if compression is enabled
-  std::unique_ptr<wrp_cte::compressor::Client> compressor_client;
+  std::unique_ptr<clio_cte::compressor::Client> compressor_client;
 
   if (config.compress_option != "none") {
-    compressor_client = std::make_unique<wrp_cte::compressor::Client>();
+    compressor_client = std::make_unique<clio_cte::compressor::Client>();
     auto create_task = compressor_client->AsyncCreate(
         chi::PoolQuery::Local(),
-        "wrp_cte_compressor",
+        "clio_cte_compressor",
         chi::PoolId(513, 0));
     create_task.Wait();
     if (create_task->GetReturnCode() == 0) {
@@ -299,7 +299,7 @@ int main(int argc, char** argv) {
 
   // Create tag for this workload
   std::string tag_name = "synthetic_workload_" + std::to_string(rank);
-  wrp_cte::core::Tag tag(tag_name);
+  clio_cte::core::Tag tag(tag_name);
 
   // Timing statistics
   std::vector<double> compute_times;
@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
   bool use_dynamic = (compress_lib == -1);
 
   // Pending async operations from previous iteration
-  std::vector<chi::Future<wrp_cte::core::PutBlobTask>> pending_futures;
+  std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_futures;
   std::vector<hipc::FullPtr<char>> pending_buffers;  // Keep SHM buffers alive
 
   // Start end-to-end wall clock timer
@@ -350,7 +350,7 @@ int main(int argc, char** argv) {
     auto io_start = std::chrono::steady_clock::now();
 
     // Create context for compression
-    wrp_cte::core::Context context;
+    clio_cte::core::Context context;
     context.dynamic_compress_ = use_dynamic ? 2 : (compress_lib > 0 ? 1 : 0);
     context.compress_lib_ = use_dynamic ? 0 : compress_lib;
     context.compress_preset_ = 2;  // Balanced

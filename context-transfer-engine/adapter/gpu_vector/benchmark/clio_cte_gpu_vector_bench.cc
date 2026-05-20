@@ -47,9 +47,9 @@
 #include <chimaera/singletons.h>
 #include <chimaera/types.h>
 #include <clio_ctp/util/gpu_api.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
-#include <wrp_cte/gpu_vector/gpu_vector.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <clio_cte/gpu_vector/gpu_vector.h>
 
 #include <algorithm>
 #include <chrono>
@@ -63,7 +63,7 @@
 
 using namespace std::chrono_literals;
 
-namespace gv = wrp_cte::gpu_vector;
+namespace gv = clio_cte::gpu_vector;
 namespace dev = cte::gpu::dev;
 
 namespace {
@@ -174,16 +174,16 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
     std::fprintf(stderr, "[INIT] CHIMAERA_INIT failed\n");
     std::exit(2);
   }
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
     std::fprintf(stderr, "[INIT] WRP_CTE_CLIENT_INIT failed\n");
     std::exit(2);
   }
   auto *cte_client = WRP_CTE_CLIENT;
-  cte_client->Init(wrp_cte::core::kCtePoolId);
-  wrp_cte::core::CreateParams params;
+  cte_client->Init(clio_cte::core::kCtePoolId);
+  clio_cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(
-      chi::PoolQuery::Dynamic(), wrp_cte::core::kCtePoolName,
-      wrp_cte::core::kCtePoolId, params);
+      chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
+      clio_cte::core::kCtePoolId, params);
   create_task.Wait();
   if (create_task->GetReturnCode() != 0) {
     std::fprintf(stderr, "[INIT] CTE pool create failed rc=%u\n",

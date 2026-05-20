@@ -41,8 +41,8 @@
 using namespace std::chrono_literals;
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 #include <chimaera/bdev/bdev_client.h>
 #include <chimaera/bdev/bdev_tasks.h>
 #include <chimaera/admin/admin_tasks.h>
@@ -76,7 +76,7 @@ public:
   static constexpr chi::u64 kTestTargetSize = 1024 * 1024 * 10;  // 10MB test target
   static constexpr chi::u32 kTestWorkerCount = 2;
   
-  std::unique_ptr<wrp_cte::core::Client> core_client_;
+  std::unique_ptr<clio_cte::core::Client> core_client_;
   std::string test_storage_path_;
   chi::PoolId core_pool_id_;
 
@@ -105,7 +105,7 @@ public:
     INFO("Generated pool ID: " << core_pool_id_.ToU64());
     
     // Create and initialize core client with the generated pool ID
-    core_client_ = std::make_unique<wrp_cte::core::Client>(core_pool_id_);
+    core_client_ = std::make_unique<clio_cte::core::Client>(core_pool_id_);
     INFO("CTE Core client created successfully");
     
     INFO("=== CTE Core Test Environment Ready ===");
@@ -208,10 +208,10 @@ TEST_CASE("CTE Core Client Creation", "[cte][core][client][creation]") {
 TEST_CASE("CTE CreateParams Configuration", "[cte][core][params]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("Default CreateParams") {
-    wrp_cte::core::CreateParams params;
+    clio_cte::core::CreateParams params;
 
     // Check default values
-    REQUIRE(std::string(wrp_cte::core::CreateParams::chimod_lib_name) == "wrp_cte_core");
+    REQUIRE(std::string(clio_cte::core::CreateParams::chimod_lib_name) == "clio_cte_core");
 
     INFO("Default CreateParams validated successfully");
   }
@@ -222,8 +222,8 @@ TEST_CASE("CTE CreateParams Configuration", "[cte][core][params]") {
     // This test validates that the constructor signature is correct and compiles properly.
 
     // Test that we can construct parameters with default values
-    wrp_cte::core::CreateParams params_default;
-    REQUIRE(std::string(wrp_cte::core::CreateParams::chimod_lib_name) == "wrp_cte_core");
+    clio_cte::core::CreateParams params_default;
+    REQUIRE(std::string(clio_cte::core::CreateParams::chimod_lib_name) == "clio_cte_core");
 
     // The allocator-based constructor would be tested in integration tests
     // where the full Chimaera runtime is properly initialized

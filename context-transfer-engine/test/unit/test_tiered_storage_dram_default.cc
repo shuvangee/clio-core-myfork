@@ -63,8 +63,8 @@
 
 #include <chimaera/chimaera.h>
 #include <chimaera/bdev/bdev_tasks.h>  // chimaera::bdev::DefaultRamCapacityBytes
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 #include <chrono>
 #include <cstdio>
@@ -117,7 +117,7 @@ class DramDefaultTieringFixture {
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
@@ -153,8 +153,8 @@ runtime:
   max_sleep: 50000
 
 compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte
+  - mod_name: clio_cte_core
+    pool_name: clio_cte
     pool_query: local
     pool_id: 512.0
 
@@ -243,7 +243,7 @@ TEST_CASE("DramDefault - Put 96MB into 0g RAM tier",
   auto *cte_client = WRP_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
-  wrp_cte::core::Tag tag("dram_default_tag");
+  clio_cte::core::Tag tag("dram_default_tag");
 
   auto shm_buffer = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm_buffer.IsNull());
@@ -289,8 +289,8 @@ TEST_CASE("DramDefault - Reorganize down to file then up to 0g RAM",
   auto *cte_client = WRP_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
-  wrp_cte::core::Tag tag("dram_default_tag");
-  wrp_cte::core::TagId tag_id = tag.GetTagId();
+  clio_cte::core::Tag tag("dram_default_tag");
+  clio_cte::core::TagId tag_id = tag.GetTagId();
 
   // Down to slow (bounded 64MB file) tier.
   int down_ok = 0;
@@ -325,7 +325,7 @@ TEST_CASE("DramDefault - Verify integrity after migration",
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  wrp_cte::core::Tag tag("dram_default_tag");
+  clio_cte::core::Tag tag("dram_default_tag");
 
   auto read_buffer = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!read_buffer.IsNull());
@@ -362,8 +362,8 @@ TEST_CASE("DramDefault - Cleanup", "[tiered][dram-default][cleanup]") {
   auto *cte_client = WRP_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
-  wrp_cte::core::Tag tag("dram_default_tag");
-  wrp_cte::core::TagId tag_id = tag.GetTagId();
+  clio_cte::core::Tag tag("dram_default_tag");
+  clio_cte::core::TagId tag_id = tag.GetTagId();
 
   for (int i = 0; i < kNumBlobs; ++i) {
     std::string blob_name = "blob_" + std::to_string(i);

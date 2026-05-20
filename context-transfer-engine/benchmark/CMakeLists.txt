@@ -8,7 +8,7 @@ add_executable(clio_cte_bench
 
 # Link required libraries (MPI no longer required - uses worker threads instead)
 target_link_libraries(clio_cte_bench
-  wrp_cte::core_client
+  clio_cte::core_client
   chimaera::cxx
 )
 
@@ -29,7 +29,7 @@ if(WRP_CORE_ENABLE_MPI)
 
   # Link required libraries including MPI
   target_link_libraries(clio_cte_score_bench
-    wrp_cte::core_client
+    clio_cte::core_client
     chimaera::cxx
     MPI::MPI_CXX
   )

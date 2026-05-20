@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 #------------------------------------------------------------------------------
 # Build IPC Data Structure Tests
@@ -6,51 +6,51 @@ project(hermes_shm)
 
 add_executable(test_slist_pre_exec
         test_slist_pre.cc)
-add_dependencies(test_slist_pre_exec hermes_shm_host)
+add_dependencies(test_slist_pre_exec clio_ctp_host)
 target_link_libraries(test_slist_pre_exec
-        hermes_shm_host Catch2::Catch2WithMain)
+        clio_ctp_host Catch2::Catch2WithMain)
 
 add_executable(test_rb_tree_pre_exec
         test_rb_tree_pre.cc)
-add_dependencies(test_rb_tree_pre_exec hermes_shm_host)
+add_dependencies(test_rb_tree_pre_exec clio_ctp_host)
 target_link_libraries(test_rb_tree_pre_exec
-        hermes_shm_host Catch2::Catch2WithMain)
+        clio_ctp_host Catch2::Catch2WithMain)
 
 add_executable(test_vector_exec
         vector.cc)
-add_dependencies(test_vector_exec hermes_shm_host)
+add_dependencies(test_vector_exec clio_ctp_host)
 target_link_libraries(test_vector_exec
-        hermes_shm_host)
+        clio_ctp_host)
 
 add_executable(test_ring_buffer_exec
         test_ring_buffer.cc)
-add_dependencies(test_ring_buffer_exec hermes_shm_host)
+add_dependencies(test_ring_buffer_exec clio_ctp_host)
 target_link_libraries(test_ring_buffer_exec
-        hermes_shm_host)
+        clio_ctp_host)
 
 add_executable(test_ring_buffer_spsc_exec
         test_ring_buffer_spsc.cc)
-add_dependencies(test_ring_buffer_spsc_exec hermes_shm_host)
+add_dependencies(test_ring_buffer_spsc_exec clio_ctp_host)
 target_link_libraries(test_ring_buffer_spsc_exec
-        hermes_shm_host)
+        clio_ctp_host)
 
 add_executable(test_ring_buffer_ext_exec
         test_ring_buffer_ext.cc)
-add_dependencies(test_ring_buffer_ext_exec hermes_shm_host)
+add_dependencies(test_ring_buffer_ext_exec clio_ctp_host)
 target_link_libraries(test_ring_buffer_ext_exec
-        hermes_shm_host)
+        clio_ctp_host)
 
 add_executable(test_ring_buffer_mpsc_exec
         test_ring_buffer_mpsc.cc)
-add_dependencies(test_ring_buffer_mpsc_exec hermes_shm_host)
+add_dependencies(test_ring_buffer_mpsc_exec clio_ctp_host)
 target_link_libraries(test_ring_buffer_mpsc_exec
-        hermes_shm_host)
+        clio_ctp_host)
 
 add_executable(test_multi_ring_buffer_exec
         test_multi_ring_buffer.cc)
-add_dependencies(test_multi_ring_buffer_exec hermes_shm_host)
+add_dependencies(test_multi_ring_buffer_exec clio_ctp_host)
 target_link_libraries(test_multi_ring_buffer_exec
-        hermes_shm_host)
+        clio_ctp_host)
 
 #------------------------------------------------------------------------------
 # Test Cases

@@ -31,22 +31,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cae/core/factory/assimilator_factory.h>
-#include <wrp_cae/core/factory/binary_file_assimilator.h>
+#include <clio_cae/core/factory/assimilator_factory.h>
+#include <clio_cae/core/factory/binary_file_assimilator.h>
 #ifdef WRP_CAE_ENABLE_HDF5
-#include <wrp_cae/core/factory/hdf5_file_assimilator.h>
+#include <clio_cae/core/factory/hdf5_file_assimilator.h>
 #endif
 #ifdef CAE_ENABLE_GLOBUS
-#include <wrp_cae/core/factory/globus_file_assimilator.h>
+#include <clio_cae/core/factory/globus_file_assimilator.h>
 #endif
 #include <chimaera/chimaera.h>
 
 #include <memory>
 
-namespace wrp_cae::core {
+namespace clio_cae::core {
 
 AssimilatorFactory::AssimilatorFactory(
-    std::shared_ptr<wrp_cte::core::Client> cte_client)
+    std::shared_ptr<clio_cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
 std::unique_ptr<BaseAssimilator> AssimilatorFactory::Get(
@@ -131,4 +131,4 @@ std::string AssimilatorFactory::GetUrlProtocol(const std::string& url) {
   return "";
 }
 
-}  // namespace wrp_cae::core
+}  // namespace clio_cae::core

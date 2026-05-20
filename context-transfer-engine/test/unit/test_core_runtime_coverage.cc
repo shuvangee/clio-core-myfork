@@ -39,15 +39,15 @@
  */
 
 #include "simple_test.h"
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 #include <chimaera/chimaera.h>
 #include <chimaera/admin/admin_client.h>
 #include <chimaera/bdev/bdev_client.h>
 #include <chimaera/bdev/bdev_tasks.h>
 #include <clio_ctp/util/logging.h>
 
-using namespace wrp_cte::core;
+using namespace clio_cte::core;
 
 static std::string chi_test_data_dir() {
   const char *d = std::getenv("CHI_TEST_DATA_DIR");
@@ -79,21 +79,21 @@ public:
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       // Step 2: Initialize CTE client subsystem (CRITICAL!)
-      success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
       if (!success) {
         throw std::runtime_error("WRP_CTE_CLIENT_INIT failed");
       }
 
       // Step 3: Set pool ID on global client
       auto *cte_client = WRP_CTE_CLIENT;
-      cte_client->Init(wrp_cte::core::kCtePoolId);
+      cte_client->Init(clio_cte::core::kCtePoolId);
 
       // Step 4: Create CTE core pool
-      wrp_cte::core::CreateParams params;
+      clio_cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
           chi::PoolQuery::Dynamic(),
-          wrp_cte::core::kCtePoolName,
-          wrp_cte::core::kCtePoolId,
+          clio_cte::core::kCtePoolName,
+          clio_cte::core::kCtePoolId,
           params);
       create_task.Wait();
 

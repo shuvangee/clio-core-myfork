@@ -22,9 +22,9 @@ import tempfile
 
 # Import the CEE API module
 try:
-    import wrp_cee as cee
+    import clio_cee as cee
 except ImportError as e:
-    print(f"ERROR: Failed to import wrp_cee module: {e}")
+    print(f"ERROR: Failed to import clio_cee module: {e}")
     print("Make sure WRP_CORE_ENABLE_PYTHON=ON and the module is built/installed")
     sys.exit(1)
 

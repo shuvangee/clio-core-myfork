@@ -54,8 +54,8 @@
  */
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -94,7 +94,7 @@ class BlockReuseFixture {
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
@@ -121,8 +121,8 @@ runtime:
   max_sleep: 50000
 
 compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte
+  - mod_name: clio_cte_core
+    pool_name: clio_cte
     pool_query: local
     pool_id: 512.0
 
@@ -160,8 +160,8 @@ TEST_CASE("BlockReuse - Put(1MB)+Del(1MB) frees back to its partition",
   auto *cte = WRP_CTE_CLIENT;
   REQUIRE(cte != nullptr);
 
-  wrp_cte::core::Tag tag("block_reuse_tag");
-  wrp_cte::core::TagId tag_id = tag.GetTagId();
+  clio_cte::core::Tag tag("block_reuse_tag");
+  clio_cte::core::TagId tag_id = tag.GetTagId();
 
   auto shm = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm.IsNull());

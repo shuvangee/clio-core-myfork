@@ -31,13 +31,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cte/core/core_dpe.h>
+#include <clio_cte/core/core_dpe.h>
 #include <algorithm>
 #include <iostream>
 #include <chrono>
 #include "clio_ctp/util/logging.h"
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 // Static member definition for round-robin counter
 std::atomic<chi::u32> RoundRobinDpe::round_robin_counter_(0);
@@ -278,4 +278,4 @@ std::unique_ptr<DataPlacementEngine> DpeFactory::CreateDpe(const std::string& dp
   return CreateDpe(StringToDpeType(dpe_str));
 }
 
-} // namespace wrp_cte::core
+} // namespace clio_cte::core

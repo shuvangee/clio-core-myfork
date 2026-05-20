@@ -90,7 +90,7 @@ pkgs:
     poll_period_ms: 5000
     pool_query: "local"
     # No compressor: iowarp_compress stays at its 'none' default so
-    # wrp_cte_core is the pool-512.0 entrypoint with no shim in front.
+    # clio_cte_core is the pool-512.0 entrypoint with no shim in front.
 
   - pkg_type: builtin.ior
     pkg_name: ior

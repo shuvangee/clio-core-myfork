@@ -65,7 +65,7 @@ pkgs:
     poll_period_ms: 5000
     # Pssh fans the compose to every node, each compose hits its local
     # admin via pool_query: local; both nodes end up with a properly-
-    # configured wrp_cte_core container.
+    # configured clio_cte_core container.
     pool_query: "local"
 
   - pkg_type: jarvis_iowarp.clio_cte_bench

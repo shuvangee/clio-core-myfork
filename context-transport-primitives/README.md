@@ -36,20 +36,20 @@ make -j8
 
 ## CMake Integration
 
-HermesShm provides modular CMake targets for flexible dependency management. Link only what you need.
+ClioCtp provides modular CMake targets for flexible dependency management. Link only what you need.
 
 ### Core Library (CPU-Only)
 ```cmake
-find_package(HermesShm CONFIG REQUIRED)
+find_package(ClioCtp CONFIG REQUIRED)
 target_link_libraries(your_target ctp::cxx)
 ```
 
 ### Modular Dependency Targets
 
-HermesShm provides fine-grained modular targets for optional dependencies:
+ClioCtp provides fine-grained modular targets for optional dependencies:
 
 ```cmake
-find_package(HermesShm CONFIG REQUIRED)
+find_package(ClioCtp CONFIG REQUIRED)
 
 target_link_libraries(your_target
   ctp::cxx              # Core library (required)
@@ -75,13 +75,13 @@ target_link_libraries(your_target
 
 **CUDA Version:**
 ```cmake
-find_package(HermesShm CONFIG REQUIRED)
+find_package(ClioCtp CONFIG REQUIRED)
 target_link_libraries(your_target ctp::cudacxx)
 ```
 
 **ROCm Version:**
 ```cmake
-find_package(HermesShm CONFIG REQUIRED)
+find_package(ClioCtp CONFIG REQUIRED)
 target_link_libraries(your_target ctp::rocmcxx_gpu)
 ```
 

@@ -36,14 +36,14 @@
  * @brief Implementation of XGBoost-based compression predictor
  */
 
-#include "wrp_cte/compressor/models/xgboost_predictor.h"
+#include "clio_cte/compressor/models/xgboost_predictor.h"
 #include <fstream>
 #include <sstream>
 #include <chrono>
 #include <cstring>
 #include <filesystem>
 
-namespace wrp_cte::compressor {
+namespace clio_cte::compressor {
 
 namespace fs = std::filesystem;
 
@@ -674,4 +674,4 @@ void XGBoostPredictor::ClearExperiences() {
   experience_count_ = 0;
 }
 
-}  // namespace wrp_cte::compressor
+}  // namespace clio_cte::compressor

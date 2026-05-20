@@ -32,14 +32,14 @@
  */
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/content_transfer_engine.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_config.h>
+#include <clio_cte/core/content_transfer_engine.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_config.h>
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 // Define global pointer variable for CTE client in source file
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(wrp_cte::core::Client, g_cte_client);
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cte::core::Client, g_cte_client);
 
 bool WRP_CTE_CLIENT_INIT(const std::string &config_path,
                          const chi::PoolQuery &pool_query) {
@@ -51,7 +51,7 @@ bool WRP_CTE_CLIENT_INIT(const std::string &config_path,
 
   // Allocate the global client object if not already allocated
   if (g_cte_client == nullptr) {
-    g_cte_client = new wrp_cte::core::Client();
+    g_cte_client = new clio_cte::core::Client();
   }
 
   // config_path is no longer used - configuration now provided via chimaera compose
@@ -67,4 +67,4 @@ bool WRP_CTE_CLIENT_INIT(const std::string &config_path,
   return result;
 }
 
-} // namespace wrp_cte::core
+} // namespace clio_cte::core

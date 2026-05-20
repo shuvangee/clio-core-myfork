@@ -55,9 +55,9 @@
 #include "chimaera/chimaera.h"
 #include "filesystem_io_client.h"
 #include "filesystem_mdm.h"
-#include "wrp_cte/core/content_transfer_engine.h"
-#include "wrp_cte/core/core_client.h"
-#include "wrp_cte/core/core_tasks.h"
+#include "clio_cte/core/content_transfer_engine.h"
+#include "clio_cte/core/core_client.h"
+#include "clio_cte/core/core_tasks.h"
 
 namespace clio::cae {
 
@@ -143,7 +143,7 @@ class PendingCloses {
     return inst;
   }
 
-  void Push(chi::Future<wrp_cte::core::DelTagTask> &&fut) {
+  void Push(chi::Future<clio_cte::core::DelTagTask> &&fut) {
     std::lock_guard<std::mutex> lock(mu_);
     closes_.emplace_back(std::move(fut));
   }
@@ -171,7 +171,7 @@ class PendingCloses {
  private:
   PendingCloses() = default;
   std::mutex mu_;
-  std::vector<chi::Future<wrp_cte::core::DelTagTask>> closes_;
+  std::vector<chi::Future<clio_cte::core::DelTagTask>> closes_;
 };
 
 /** The type of seek to perform */
@@ -190,7 +190,7 @@ public:
 public:
   /** Constructor */
   explicit Filesystem(AdapterType type) : type_(type) {
-    wrp_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::WRP_CTE_CLIENT_INIT();
   }
 
   /**
@@ -239,7 +239,7 @@ public:
       auto *cte_client = WRP_CTE_CLIENT;
       stat.pending_open_fut_ = cte_client->AsyncGetOrCreateTag(stat.path_);
       stat.open_pending_ = true;
-      stat.tag_id_ = wrp_cte::core::TagId();  // sentinel; filled on first wait
+      stat.tag_id_ = clio_cte::core::TagId();  // sentinel; filled on first wait
 
       if (stat.hflags_.Any(WRP_CTE_FS_TRUNC)) {
         stat.file_size_ = 0;
@@ -410,7 +410,7 @@ public:
       const char *data_ptr = static_cast<const char *>(ptr);
       bool ok = true;
 
-      wrp_cte::core::Tag file_tag(stat.tag_id_);
+      clio_cte::core::Tag file_tag(stat.tag_id_);
 
       // Shrink ring to the number of pages actually needed (avoids
       // allocating 16 MiB of SHM for a 1-page write).
@@ -422,7 +422,7 @@ public:
 
       struct Slot {
         hipc::FullPtr<char> shm;
-        chi::Future<wrp_cte::core::PutBlobTask> fut;
+        chi::Future<clio_cte::core::PutBlobTask> fut;
         bool in_flight = false;
       };
       auto *ipc_manager = CHI_IPC;
@@ -529,7 +529,7 @@ public:
     double __wr_mbs = (__wr_ns > 0) ? (total_size * 1e3 / __wr_ns) : 0.0;
     HLOG(kInfo, "[Filesystem::Write] {} elapsed={:.2f}ms ({:.1f} MB/s)",
          __wr_label, __wr_ms, __wr_mbs);
-    wrp_cte::core::FlushPutBlobTiming(__wr_label);
+    clio_cte::core::FlushPutBlobTiming(__wr_label);
     stat.UpdateTime();
     io_status.size_ = total_size;
     UpdateIoStatus(opts, io_status);
@@ -624,7 +624,7 @@ public:
     char *data_ptr = static_cast<char *>(ptr);
 
     // Create Tag object from stored TagId
-    wrp_cte::core::Tag file_tag(stat.tag_id_);
+    clio_cte::core::Tag file_tag(stat.tag_id_);
 
     while (bytes_read < total_size) {
       // Calculate current page index and offset within page
@@ -773,7 +773,7 @@ public:
     // Resolve a pending async open before issuing the CTE size RPC.
     AwaitPendingOpen(stat);
     if (stat.adapter_mode_ != AdapterMode::kBypass) {
-      // wrp_cte_core dropped the synchronous GetTagSize wrapper; the
+      // clio_cte_core dropped the synchronous GetTagSize wrapper; the
       // current API is AsyncGetTagSize + Future.Wait(), with the result
       // surfacing on the task's tag_size_ field via the Future's
       // task_ptr_.
@@ -976,7 +976,7 @@ public:
   FsAsyncTask *
   AWrite(File &f, bool &stat_exists, const void *ptr, size_t total_size,
          size_t req_id,
-         std::vector<hipc::FullPtr<wrp_cte::core::PutBlobTask>> &tasks,
+         std::vector<hipc::FullPtr<clio_cte::core::PutBlobTask>> &tasks,
          IoStatus &io_status, FsIoOptions opts) {
     auto mdm = WRP_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);

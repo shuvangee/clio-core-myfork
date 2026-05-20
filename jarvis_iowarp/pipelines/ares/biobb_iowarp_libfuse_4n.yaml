@@ -1,12 +1,12 @@
 # Pipeline: BioExcel MD Setup workload, Apptainer + sbatch on Ares, 4 nodes,
 # with IOWarp's FUSE adapter providing the CTE-backed mount under
-# ${HOME}/wrp_cte_biobb_4n.
+# ${HOME}/clio_cte_biobb_4n.
 #
 # Stack on each of the 4 SLURM-allocated nodes:
 #   clio_runtime     — chimaera daemon (baremetal on host)
 #   clio_cte         — CTE storage tier (25 GB RAM per node)
 #   clio_cte_libfuse — clio_cte_fuse mounts the CTE pool at the host path
-#                     ${HOME}/wrp_cte_biobb_4n
+#                     ${HOME}/clio_cte_biobb_4n
 #   biobb_wf_md_setup — runs INSIDE the prebuilt biobb_wf_md_setup_apptainer_test
 #                       SIF; the FUSE mountpoint is bind-mounted into the
 #                       container so workload writes flow through the FUSE
@@ -28,8 +28,8 @@ container_binds:
   # bundled 1AKI lysozyme. Re-add the io_only bind to switch back to the
   # I/O proxy.
   - ${HOME}/jarvis-runs:${HOME}/jarvis-runs
-  - ${HOME}/wrp_cte_biobb_4n:/mnt/clio_cte
-  - ${HOME}/wrp_cte_biobb_4n:${HOME}/wrp_cte_biobb_4n
+  - ${HOME}/clio_cte_biobb_4n:/mnt/clio_cte
+  - ${HOME}/clio_cte_biobb_4n:${HOME}/clio_cte_biobb_4n
   # biobb_md_extend.sh chains real EM + production NVT mdrun after the
   # setup-only /opt/run_batch.sh, decoupling trajectory data volume from
   # compute step count via nstxout-compressed. Triggered when md_steps>0.
@@ -83,7 +83,7 @@ scheduler:
     # The FUSE mountpoint must exist BEFORE jarvis pre-starts the global
     # apptainer instance (which happens at the very top of `ppl run`,
     # before any package's start() runs). Without this dir present,
-    # apptainer's `--bind ${HOME}/wrp_cte_biobb_4n:/mnt/clio_cte` fails with
+    # apptainer's `--bind ${HOME}/clio_cte_biobb_4n:/mnt/clio_cte` fails with
     # "mount source ... doesn't exist" and the instance start aborts;
     # subsequent biobb `apptainer exec --instance` then errors with
     # "no instance found". The dir is on NFS, so creating it on the batch
@@ -91,8 +91,8 @@ scheduler:
     # Clean any stale FUSE mount from a previously-cancelled run on this
     # batch node — without this, mkdir errors with "Transport endpoint is
     # not connected" and the batch script aborts before it can launch.
-    - 'fusermount3 -u /home/llogan/wrp_cte_biobb_4n 2>/dev/null || umount -l /home/llogan/wrp_cte_biobb_4n 2>/dev/null || true'
-    - 'mkdir -p /home/llogan/wrp_cte_biobb_4n'
+    - 'fusermount3 -u /home/llogan/clio_cte_biobb_4n 2>/dev/null || umount -l /home/llogan/clio_cte_biobb_4n 2>/dev/null || true'
+    - 'mkdir -p /home/llogan/clio_cte_biobb_4n'
 
 pkgs:
   - pkg_type: jarvis_iowarp.clio_runtime
@@ -121,14 +121,14 @@ pkgs:
     iowarp_compress: none
     # pool_query: local + Pssh-fanning the compose to every node means each
     # node's `chimaera compose` talks to its local admin container and
-    # creates wrp_cte_core there with the proper storage config. No
+    # creates clio_cte_core there with the proper storage config. No
     # broadcast routing or cross-node admin propagation required.
     pool_query: "local"
 
   - pkg_type: jarvis_iowarp.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
-    mountpoint: ${HOME}/wrp_cte_biobb_4n
+    mountpoint: ${HOME}/clio_cte_biobb_4n
     sleep: 2
     extra_fuse_args: "-f"
 
@@ -152,4 +152,4 @@ pkgs:
     # density independently.
     md_steps: 1000
     md_nstxout: 2
-    out: ${HOME}/wrp_cte_biobb_4n/biobb_wf_md_setup
+    out: ${HOME}/clio_cte_biobb_4n/biobb_wf_md_setup

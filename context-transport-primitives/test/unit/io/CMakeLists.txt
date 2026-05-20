@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 #------------------------------------------------------------------------------
 # Build Tests
@@ -13,9 +13,9 @@ add_executable(test_async_io_exec
 # Link Dependencies
 #------------------------------------------------------------------------------
 
-add_dependencies(test_async_io_exec hermes_shm_host)
+add_dependencies(test_async_io_exec clio_ctp_host)
 target_link_libraries(test_async_io_exec
-        hermes_shm_host ctp::aio Catch2::Catch2)
+        clio_ctp_host ctp::aio Catch2::Catch2)
 
 if(WRP_CORE_ENABLE_NIXL)
   target_link_libraries(test_async_io_exec ctp::nixl)

@@ -7,7 +7,7 @@
 # Usage:  bash run.sh
 
 x-common-env: &common-env
-  CHI_SERVER_CONF: /workspace/context-runtime/test/integration/interactive/wrp_conf.yaml
+  CHI_SERVER_CONF: /workspace/context-runtime/test/integration/interactive/clio_conf.yaml
   CONTAINER_HOSTFILE: /workspace/context-runtime/test/integration/interactive/hostfile
   CHI_WITH_RUNTIME: "0"
   CHI_NUM_CONTAINERS: "8"

@@ -36,7 +36,7 @@
  * @brief Implementation of linear regression table predictor
  */
 
-#include "wrp_cte/compressor/models/linreg_table_predictor.h"
+#include "clio_cte/compressor/models/linreg_table_predictor.h"
 
 #include <fstream>
 #include <sstream>
@@ -117,7 +117,7 @@ size_t FindJsonKey(const std::string& s, const std::string& key, size_t start = 
 
 }  // anonymous namespace
 
-namespace wrp_cte::compressor {
+namespace clio_cte::compressor {
 
 LinRegTablePredictor::LinRegTablePredictor()
     : config_(), ready_(false) {
@@ -651,4 +651,4 @@ std::vector<std::string> LinRegTablePredictor::GetDistributions() const {
   return std::vector<std::string>(dists.begin(), dists.end());
 }
 
-}  // namespace wrp_cte::compressor
+}  // namespace clio_cte::compressor

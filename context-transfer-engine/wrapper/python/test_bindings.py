@@ -25,7 +25,7 @@ Usage:
 
 Example Usage in Your Code:
 ---------------------------
-    import wrp_cte_core_ext as cte
+    import clio_cte_core_ext as cte
 
     # 1. Initialize runtime (if not already done externally)
     cte.chimaera_init(cte.ChimaeraMode.kClient, True)
@@ -94,7 +94,7 @@ def setup_environment_paths():
     """
     try:
         # Try to find the module's location
-        import wrp_cte_core_ext as cte
+        import clio_cte_core_ext as cte
         module_file = cte.__file__ if hasattr(cte, '__file__') else None
         
         if module_file:
@@ -192,7 +192,7 @@ def generate_test_config():
     temp_dir = tempfile.gettempdir()
 
     # Create clean hostfile
-    clean_hostfile = os.path.join(temp_dir, "wrp_bindings_test_hostfile")
+    clean_hostfile = os.path.join(temp_dir, "clio_bindings_test_hostfile")
     with open(clean_hostfile, 'w') as f:
         f.write("localhost\n")
 
@@ -228,7 +228,7 @@ def generate_test_config():
     }
 
     # Write config
-    config_path = os.path.join(temp_dir, "wrp_bindings_test_conf.yaml")
+    config_path = os.path.join(temp_dir, "clio_bindings_test_conf.yaml")
     with open(config_path, 'w') as f:
         yaml.dump(config, f)
 
@@ -895,7 +895,7 @@ def main():
 
         # Import module first (needed for runtime init)
         try:
-            import wrp_cte_core_ext as cte
+            import clio_cte_core_ext as cte
         except ImportError as e:
             print(f"❌ Cannot import module for runtime init: {e}")
             return 1
@@ -920,7 +920,7 @@ def main():
     
     # Import module
     try:
-        import wrp_cte_core_ext as cte
+        import clio_cte_core_ext as cte
     except ImportError as e:
         print(f"❌ Cannot import module: {e}")
         return 1

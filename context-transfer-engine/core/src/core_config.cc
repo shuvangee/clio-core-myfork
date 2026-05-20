@@ -31,7 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cte/core/core_config.h>
+#include <clio_cte/core/core_config.h>
 #include <chimaera/bdev/bdev_tasks.h>
 #include <yaml-cpp/yaml.h>
 #include <fstream>
@@ -41,7 +41,7 @@
 #include <cstdio>
 #include "clio_ctp/util/logging.h"
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 // Config class implementation
 bool Config::LoadFromFile(const std::string &config_file_path) {
@@ -644,4 +644,4 @@ std::string Config::FormatSizeBytes(chi::u64 size_bytes) const {
   }
 }
 
-}  // namespace wrp_cte::core
+}  // namespace clio_cte::core

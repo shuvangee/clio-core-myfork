@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 # ------------------------------------------------------------------------------
 # Build Tests
@@ -7,9 +7,9 @@ add_executable(test_solvers_exec
         ${TEST_MAIN}/main.cc
         test_init.cc
         test_nonlinear_least_squares.cc)
-add_dependencies(test_solvers_exec hermes_shm_host)
+add_dependencies(test_solvers_exec clio_ctp_host)
 target_link_libraries(test_solvers_exec
-        hermes_shm_host Catch2::Catch2)
+        clio_ctp_host Catch2::Catch2)
 
 # ------------------------------------------------------------------------------
 # Test Cases

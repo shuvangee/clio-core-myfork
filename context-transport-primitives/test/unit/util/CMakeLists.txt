@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 #------------------------------------------------------------------------------
 # Build Tests
@@ -7,18 +7,18 @@ add_executable(test_config_parse_exec
         ${TEST_MAIN}/main.cc
         test_init.cc
         test_config_parse.cc)
-add_dependencies(test_config_parse_exec hermes_shm_host)
+add_dependencies(test_config_parse_exec clio_ctp_host)
 target_link_libraries(test_config_parse_exec
-        hermes_shm_host
+        clio_ctp_host
         Catch2::Catch2)
 
 add_executable(test_numbers_exec
         ${TEST_MAIN}/main.cc
         test_init.cc
         test_numbers.cc)
-add_dependencies(test_numbers_exec hermes_shm_host)
+add_dependencies(test_numbers_exec clio_ctp_host)
 target_link_libraries(test_numbers_exec
-        hermes_shm_host
+        clio_ctp_host
         Catch2::Catch2)
 
 #------------------------------------------------------------------------------

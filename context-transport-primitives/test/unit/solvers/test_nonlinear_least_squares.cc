@@ -33,7 +33,7 @@
 
 #include "test_init.h"
 
-using hermes_shm::NonlinearLeastSquares;
+using ctp::NonlinearLeastSquares;
 
 // Test cost function: simple quadratic y = ax^2 + bx + c
 void quadratic_cost_function(const std::vector<double>& params,

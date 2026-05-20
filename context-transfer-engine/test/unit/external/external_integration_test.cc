@@ -17,9 +17,9 @@
 #include <clio_ctp/util/logging.h>
 
 // CTE Core includes
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
-#include <wrp_cte/core/content_transfer_engine.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <clio_cte/core/content_transfer_engine.h>
 #include <chimaera/chimaera.h>
 
 // HSHM includes
@@ -33,7 +33,7 @@ namespace {
 
 class ExternalCteTest {
 private:
-    std::unique_ptr<wrp_cte::core::Client> cte_client_;
+    std::unique_ptr<clio_cte::core::Client> cte_client_;
     bool initialized_;
 
 public:
@@ -58,7 +58,7 @@ public:
 
             // Step 2: Initialize CTE subsystem
             HLOG(kInfo, "2. Initializing CTE subsystem...");
-            bool cte_init = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+            bool cte_init = clio_cte::core::WRP_CTE_CLIENT_INIT();
             if (!cte_init) {
                 HLOG(kError, "Failed to initialize CTE subsystem");
                 return false;
@@ -73,17 +73,17 @@ public:
             }
 
             // Create our own client instance for testing
-            cte_client_ = std::make_unique<wrp_cte::core::Client>();
+            cte_client_ = std::make_unique<clio_cte::core::Client>();
 
             // Step 5: Create CTE container
             HLOG(kInfo, "5. Creating CTE container...");
-            wrp_cte::core::CreateParams create_params;
+            clio_cte::core::CreateParams create_params;
 
             try{
                 // Use CTE Core constants from core_tasks.h
                 cte_client_->Create(hipc::MemContext(), chi::PoolQuery::Dynamic(),
-                                   wrp_cte::core::kCtePoolName,
-                                   wrp_cte::core::kCtePoolId, create_params);
+                                   clio_cte::core::kCtePoolName,
+                                   clio_cte::core::kCtePoolId, create_params);
                 HLOG(kInfo, "CTE container created successfully");
             } catch (const std::exception& e) {
                 HLOG(kError, "Failed to create CTE container: {}", e.what());
@@ -189,10 +189,10 @@ private:
             memcpy(shared_data.ptr_, test_data.data(), kTestDataSize);
 
             // Create or get tag
-            wrp_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
+            clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
                 hipc::MemContext(),
                 kTestTagName,
-                wrp_cte::core::TagId::GetNull()
+                clio_cte::core::TagId::GetNull()
             );
 
             HLOG(kSuccess, "Tag created/retrieved with ID: {}", tag_id);
@@ -228,10 +228,10 @@ private:
 
         try {
             // Get the tag ID first
-            wrp_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
+            clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
                 hipc::MemContext(),
                 kTestTagName,
-                wrp_cte::core::TagId::GetNull()
+                clio_cte::core::TagId::GetNull()
             );
 
             // Allocate buffer for reading
@@ -287,7 +287,7 @@ private:
 
         try {
             // Poll telemetry log
-            std::vector<wrp_cte::core::CteTelemetry> telemetry =
+            std::vector<clio_cte::core::CteTelemetry> telemetry =
                 cte_client_->PollTelemetryLog(hipc::MemContext(), 0);
 
             HLOG(kSuccess, "Retrieved {} telemetry entries", telemetry.size());
@@ -335,10 +335,10 @@ private:
 
         try {
             // Get the tag ID first
-            wrp_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
+            clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
                 hipc::MemContext(),
                 kTestTagName,
-                wrp_cte::core::TagId::GetNull()
+                clio_cte::core::TagId::GetNull()
             );
 
             size_t tag_size = cte_client_->GetTagSize(hipc::MemContext(), tag_id);
@@ -366,10 +366,10 @@ private:
 
         try {
             // Get the tag ID
-            wrp_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
+            clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
                 hipc::MemContext(),
                 kTestTagName,
-                wrp_cte::core::TagId::GetNull()
+                clio_cte::core::TagId::GetNull()
             );
 
             // Delete the blob

@@ -42,8 +42,8 @@
  */
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 #include <chrono>
 #include <cstdio>
@@ -108,7 +108,7 @@ class TieredStorageStressFixture {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Initialize CTE client
-    success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
     REQUIRE(success);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -150,8 +150,8 @@ runtime:
   max_sleep: 50000
 
 compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte
+  - mod_name: clio_cte_core
+    pool_name: clio_cte
     pool_query: local
     pool_id: 512.0
 
@@ -221,7 +221,7 @@ TEST_CASE("TieredStorage - Put 128MB with 64MB DRAM", "[tiered][stress][put]") {
 
   // Create a tag for our test blobs
   std::string tag_name = "stress_test_tag";
-  wrp_cte::core::Tag tag(tag_name);
+  clio_cte::core::Tag tag(tag_name);
 
   INFO("Putting " << kNumBlobs << " blobs (" << (kTotalDataSize / (1024 * 1024))
                   << " MB total) with only 64MB DRAM available");
@@ -283,8 +283,8 @@ TEST_CASE("TieredStorage - ReorganizeBlob to score 0",
 
   // Get the tag we created in the previous test
   std::string tag_name = "stress_test_tag";
-  wrp_cte::core::Tag tag(tag_name);
-  wrp_cte::core::TagId tag_id = tag.GetTagId();
+  clio_cte::core::Tag tag(tag_name);
+  clio_cte::core::TagId tag_id = tag.GetTagId();
 
   INFO("Reorganizing all " << kNumBlobs << " blobs to score 0.0 (DRAM tier)");
   INFO("Note: Only 64MB DRAM available for 128MB of data");
@@ -330,7 +330,7 @@ TEST_CASE("TieredStorage - Verify data integrity",
 
   // Get the tag
   std::string tag_name = "stress_test_tag";
-  wrp_cte::core::Tag tag(tag_name);
+  clio_cte::core::Tag tag(tag_name);
 
   INFO("Verifying data integrity for all " << kNumBlobs << " blobs");
 
@@ -381,8 +381,8 @@ TEST_CASE("TieredStorage - Cleanup", "[tiered][stress][cleanup]") {
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "stress_test_tag";
-  wrp_cte::core::Tag tag(tag_name);
-  wrp_cte::core::TagId tag_id = tag.GetTagId();
+  clio_cte::core::Tag tag(tag_name);
+  clio_cte::core::TagId tag_id = tag.GetTagId();
 
   INFO("Cleaning up all blobs");
 

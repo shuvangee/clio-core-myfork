@@ -10,7 +10,7 @@
  * i.e. node 0 writes into bdev container 1 (on node 1), node 1 into
  * container 2, ... node N-1 into container 0 — a perfect ring of
  * cross-node forwards. No local short-circuit, no FUSE plumbing, no
- * blob hashing through wrp_cte_core. Pure stress of:
+ * blob hashing through clio_cte_core. Pure stress of:
  *   client::AsyncWrite  ->  net_queue  ->  SendIn  ->  ZMQ DEALER
  *   ZMQ ROUTER  ->  RecvIn  ->  worker dispatch  ->  bdev WriteToRam
  *   bdev returns  ->  SendOut  ->  ROUTER -> client wake

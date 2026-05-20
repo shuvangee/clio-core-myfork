@@ -19,13 +19,13 @@
 #include <vector>
 
 #include "chimaera/chimaera.h"
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 
 namespace stdfs = std::filesystem;
 
 namespace {
 constexpr int kPayload = 16 * 1024;  // 16 KiB
-const std::string kBackend = "/tmp/wrp_cte_mpiio_test.dat";
+const std::string kBackend = "/tmp/clio_cte_mpiio_test.dat";
 const std::string kClio = "clio::" + kBackend;
 
 bool initializeRuntime() {
@@ -37,7 +37,7 @@ bool initializeRuntime() {
     initialized = true;
     return true;
   }
-  if (!wrp_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
     INFO("CTE init failed; tests proceed without CTE tracking");
     initialized = true;
     return true;
@@ -110,7 +110,7 @@ TEST_CASE("MPI-IO Adapter: explicit-offset (read_at/write_at) ops",
 TEST_CASE("MPI-IO Adapter: bare path is not intercepted",
           "[mpiio][adapter][prefix]") {
   REQUIRE(initializeRuntime());
-  const std::string backend = "/tmp/wrp_cte_mpiio_bare.dat";
+  const std::string backend = "/tmp/clio_cte_mpiio_bare.dat";
   stdfs::remove(backend);
 
   // No clio:: prefix → MPI-IO call goes straight to the underlying

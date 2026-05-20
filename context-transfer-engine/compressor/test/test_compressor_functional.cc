@@ -53,13 +53,13 @@
 #include <random>
 
 #include <chimaera/chimaera.h>
-#include <wrp_cte/compressor/compressor_client.h>
-#include <wrp_cte/compressor/compressor_tasks.h>
-#include <wrp_cte/compressor/compressor_runtime.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/compressor/compressor_client.h>
+#include <clio_cte/compressor/compressor_tasks.h>
+#include <clio_cte/compressor/compressor_runtime.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
-using namespace wrp_cte::compressor;
+using namespace clio_cte::compressor;
 
 namespace {
 
@@ -140,9 +140,9 @@ void CleanupChimaera() {
  */
 chi::PoolId CreateCorePool() {
   chi::PoolId core_pool_id = chi::PoolId(1, 1);
-  wrp_cte::core::Client core_client;
+  clio_cte::core::Client core_client;
 
-  wrp_cte::core::CreateParams core_params;
+  clio_cte::core::CreateParams core_params;
   auto create_task = core_client.AsyncCreate(
       chi::PoolQuery::Local(),
       "test_core_pool",
@@ -175,9 +175,9 @@ chi::PoolId CreateCompressorPool() {
 struct CTETestFixture {
   chi::PoolId core_pool_id_;
   chi::PoolId compressor_pool_id_;
-  wrp_cte::core::Client core_client_;
+  clio_cte::core::Client core_client_;
   Client compressor_client_;
-  wrp_cte::core::TagId tag_id_;
+  clio_cte::core::TagId tag_id_;
 
   CTETestFixture() {
     InitializeChimaera();

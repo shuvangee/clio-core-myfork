@@ -23,7 +23,7 @@ Chimaera provides:
 - **Advanced Synchronization**: CoMutex and CoRwLock for coroutine-aware synchronization
 - **Distributed Computing**: Seamless scaling from single node to cluster deployments
 - **Storage Integration**: Built-in support for block devices, file systems, and custom storage backends
-- **Memory Management**: Shared memory IPC with HermesShm for optimal performance
+- **Memory Management**: Shared memory IPC with ClioCtp for optimal performance
 
 ## Key Features
 
@@ -70,7 +70,7 @@ Chimaera follows a modular semi-microkernel design:
 - **Runtime Process**: Central coordinator managing resources and ChiMods
 - **ChiMods**: Dynamically loaded modules providing specialized functionality
 - **Client Libraries**: Lightweight interfaces for application integration
-- **Shared Memory IPC**: High-performance inter-process communication via HermesShm
+- **Shared Memory IPC**: High-performance inter-process communication via ClioCtp
 
 ## Getting Started
 

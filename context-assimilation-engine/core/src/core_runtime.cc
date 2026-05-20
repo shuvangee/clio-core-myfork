@@ -31,27 +31,27 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cae/core/core_runtime.h>
-#include <wrp_cae/core/factory/assimilation_ctx.h>
-#include <wrp_cae/core/factory/assimilator_factory.h>
+#include <clio_cae/core/core_runtime.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
+#include <clio_cae/core/factory/assimilator_factory.h>
 #ifdef WRP_CAE_ENABLE_HDF5
 #include <hdf5.h>
-#include <wrp_cae/core/factory/hdf5_file_assimilator.h>
+#include <clio_cae/core/factory/hdf5_file_assimilator.h>
 #endif
 
 #include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <fstream>
 #include <vector>
 
-// Include wrp_cte headers before opening namespace to avoid Method namespace
+// Include clio_cte headers before opening namespace to avoid Method namespace
 // collision
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 // Define ChiMod entry points using CHI_TASK_CC macro
-CHI_TASK_CC(wrp_cae::core::Runtime)
+CHI_TASK_CC(clio_cae::core::Runtime)
 
-namespace wrp_cae::core {
+namespace clio_cae::core {
 
 chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
@@ -74,7 +74,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext&
 
   // Initialize CTE client using the CTE pool ID
   cte_client_ =
-      std::make_shared<wrp_cte::core::Client>(wrp_cte::core::kCtePoolId);
+      std::make_shared<clio_cte::core::Client>(clio_cte::core::kCtePoolId);
 
   // Additional container-specific initialization logic here
   HLOG(kInfo, "Core container created and initialized for pool: {} (ID: {})",
@@ -198,7 +198,7 @@ chi::TaskResume Runtime::ProcessHdf5Dataset(
   }
 
   // Create assimilator and process the dataset
-  wrp_cae::core::Hdf5FileAssimilator assimilator(cte_client_);
+  clio_cae::core::Hdf5FileAssimilator assimilator(cte_client_);
   int result = 0;
   CHI_CO_AWAIT(assimilator.ProcessDataset(file_id, task->dataset_path_.str(),
                                       task->tag_prefix_.str(), result));
@@ -369,4 +369,4 @@ chi::TaskResume Runtime::ExportData(hipc::FullPtr<ExportDataTask> task,
   CHI_TASK_BODY_END
 }
 
-}  // namespace wrp_cae::core
+}  // namespace clio_cae::core

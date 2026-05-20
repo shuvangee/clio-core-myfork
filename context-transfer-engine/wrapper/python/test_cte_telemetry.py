@@ -6,7 +6,7 @@ This test module specifically focuses on testing the PollTelemetryLog
 functionality of the CTE Python bindings.
 
 Requirements:
-- wrp_cte_core_ext module (Python bindings)
+- clio_cte_core_ext module (Python bindings)
 - Chimaera runtime initialized with CHI_WITH_RUNTIME=1
 - CHI_SERVER_CONF environment variable set to config file
 - pytest (optional, for test framework mode)
@@ -48,7 +48,7 @@ except ImportError:
     pytest = DummyPytest()
 
 try:
-    import wrp_cte_core_ext as cte
+    import clio_cte_core_ext as cte
     HAS_CTE_MODULE = True
 except ImportError:
     HAS_CTE_MODULE = False
@@ -61,7 +61,7 @@ except ImportError:
 def cte_module():
     """Fixture to ensure CTE module is available"""
     if not HAS_CTE_MODULE:
-        pytest.skip("wrp_cte_core_ext module not available")
+        pytest.skip("clio_cte_core_ext module not available")
     return cte
 
 
@@ -318,7 +318,7 @@ def main():
     print()
 
     if not HAS_CTE_MODULE:
-        print("❌ wrp_cte_core_ext module not available")
+        print("❌ clio_cte_core_ext module not available")
         return 1
 
     # Initialize runtime

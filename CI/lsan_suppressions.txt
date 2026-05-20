@@ -119,7 +119,7 @@ leak:new_chimod
 leak:bdev/src/bdev_runtime.cc
 
 # ---------------------------------------------------------------------------
-# CTE core module: internal hash-map allocations in wrp_cte::core::Create()
+# CTE core module: internal hash-map allocations in clio_cte::core::Create()
 # The CTE Create coroutine initialises several unordered_map_ll instances
 # (blob map, tag map, blob-name map) in context-transfer-engine/core/
 # src/core_runtime.cc. These are runtime-lifetime objects that the server
@@ -128,8 +128,8 @@ leak:bdev/src/bdev_runtime.cc
 leak:context-transfer-engine/core/src/core_runtime.cc
 
 # ---------------------------------------------------------------------------
-# CAE core module: shared_ptr<CTE::Client> allocated in wrp_cae::core::Create()
-# The CAE Create coroutine allocates a shared_ptr to a wrp_cte::core::Client
+# CAE core module: shared_ptr<CTE::Client> allocated in clio_cae::core::Create()
+# The CAE Create coroutine allocates a shared_ptr to a clio_cte::core::Client
 # object (for accessing the CTE service). This shared_ptr control block is
 # allocated in context-assimilation-engine/core/src/core_runtime.cc and
 # persists for the module's lifetime.
@@ -157,7 +157,7 @@ leak:chi::LocalLoadTaskArchive::bulk
 
 # ---------------------------------------------------------------------------
 # CTE core module: coroutine frame allocation in autogen Run dispatch
-# wrp_cte::core::Runtime::Run() is a C++20 coroutine. Each task invocation
+# clio_cte::core::Runtime::Run() is a C++20 coroutine. Each task invocation
 # allocates a coroutine frame (~1640 bytes) at the first co_await. If the
 # chimaera server shuts down while a CTE Run coroutine is suspended
 # (task still in-flight), the frame is never resumed and thus never freed.
@@ -168,7 +168,7 @@ leak:context-transfer-engine/core/src/autogen/core_lib_exec.cc
 
 # ---------------------------------------------------------------------------
 # CAE core module: coroutine frame / DefineModel allocations in autogen Init
-# wrp_cae::core::Runtime::Init() in context-assimilation-engine/core/src/
+# clio_cae::core::Runtime::Init() in context-assimilation-engine/core/src/
 # autogen/core_lib_exec.cc calls DefineModel() (and other Init-time methods)
 # through the Container vtable. When the vtable entry for DefineModel resolves
 # to the copy compiled into libchimaera_bdev_runtime.so (dynamic-linker

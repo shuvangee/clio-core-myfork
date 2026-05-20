@@ -22,7 +22,7 @@ compose:
     bdev_type: ram
     capacity: "512MB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: 512.0

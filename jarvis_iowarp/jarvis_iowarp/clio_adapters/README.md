@@ -201,7 +201,7 @@ The interceptor modifies the execution environment in the following ways:
 2. **HDF5 VFD** (when enabled): Configures HDF5 plugin path
    ```
    HDF5_PLUGIN_PATH=/path/to/lib
-   HDF5_DRIVER=wrp_cte_vfd
+   HDF5_DRIVER=clio_cte_vfd
    ```
 
 3. **WRP_CTE_ROOT**: Set to CTE installation directory for all adapters
@@ -221,7 +221,7 @@ Multiple adapters can be used simultaneously. They are added to `LD_PRELOAD` in 
 
 ### Library Not Found
 
-If you get an error like "Could not find wrp_cte_posix library":
+If you get an error like "Could not find clio_cte_posix library":
 
 1. Ensure CTE is built with the adapter enabled:
    ```bash
@@ -258,7 +258,7 @@ If MPI-IO adapter is not found:
 
 If HDF5 applications don't use the VFD:
 1. Check `HDF5_PLUGIN_PATH` is set correctly
-2. Verify `HDF5_DRIVER=wrp_cte_vfd`
+2. Verify `HDF5_DRIVER=clio_cte_vfd`
 3. Ensure HDF5 is built with plugin support
 
 ## Build Requirements

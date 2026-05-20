@@ -11,9 +11,9 @@
 #include <memory>
 
 // CAE Core includes
-#include <wrp_cae/core/core_client.h>
-#include <wrp_cae/core/core_tasks.h>
-#include <wrp_cae/core/constants.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/core_tasks.h>
+#include <clio_cae/core/constants.h>
 #include <chimaera/chimaera.h>
 
 // HSHM includes
@@ -24,7 +24,7 @@
 
 class ExternalCaeTest {
 private:
-    std::unique_ptr<wrp_cae::core::Client> cae_client_;
+    std::unique_ptr<clio_cae::core::Client> cae_client_;
     bool initialized_;
 
 public:
@@ -49,16 +49,16 @@ public:
 
             // Step 2: Create CAE client instance
             HLOG(kInfo, "2. Creating CAE client instance...");
-            cae_client_ = std::make_unique<wrp_cae::core::Client>();
+            cae_client_ = std::make_unique<clio_cae::core::Client>();
 
             // Step 3: Create CAE container
             HLOG(kInfo, "3. Creating CAE container...");
-            wrp_cae::core::CreateParams create_params;
+            clio_cae::core::CreateParams create_params;
 
             try {
                 cae_client_->Create(hipc::MemContext(), chi::PoolQuery::Dynamic(),
                                    "cae_test_pool",
-                                   wrp_cae::core::kCaePoolId, create_params);
+                                   clio_cae::core::kCaePoolId, create_params);
                 HLOG(kSuccess, "CAE container created successfully");
             } catch (const std::exception& e) {
                 HLOG(kError, "Failed to create CAE container: {}", e.what());

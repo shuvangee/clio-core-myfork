@@ -65,7 +65,7 @@
 #include <vector>
 
 using namespace std::chrono;
-using wrp_bench::BenchArgs;
+using clio_bench::BenchArgs;
 
 namespace {
 
@@ -74,7 +74,7 @@ inline bool TimeUp(const steady_clock::time_point &start, double limit_s) {
   return duration<double>(steady_clock::now() - start).count() >= limit_s;
 }
 
-inline long KeyIndex(long n, wrp_bench::u64 keyspace) {
+inline long KeyIndex(long n, clio_bench::u64 keyspace) {
   return keyspace > 0 ? static_cast<long>(n % static_cast<long>(keyspace))
                       : n;
 }
@@ -116,7 +116,7 @@ class RedisBenchmark {
          a_.depth);
     HLOG(kInfo, "I/O size: {}  io-count/thread: {}  max-total-blobs: {} "
                 "({}/thread)  time-limit: {}s",
-         wrp_bench::FormatSize(a_.io_size), a_.io_count, a_.max_total_blobs,
+         clio_bench::FormatSize(a_.io_size), a_.io_count, a_.max_total_blobs,
          per_thread_blobs_, a_.time_limit_s);
     HLOG(kInfo, "===========================");
   }
@@ -154,7 +154,7 @@ class RedisBenchmark {
   }
 
   void Worker(Mode mode, size_t tid, std::atomic<bool> &err,
-              std::vector<long long> &times, std::vector<wrp_bench::u64> &ops) {
+              std::vector<long long> &times, std::vector<clio_bench::u64> &ops) {
     RedisConn conn(host_, port_);
     if (!conn.ok()) {
       HLOG(kError, "[t{}] redis connect failed: {}", tid,
@@ -183,7 +183,7 @@ class RedisBenchmark {
 
     const bool timed = a_.time_limit_s > 0.0;
     const long target = timed ? std::numeric_limits<long>::max() : a_.io_count;
-    wrp_bench::u64 done = 0;
+    clio_bench::u64 done = 0;
     auto start = steady_clock::now();
 
     for (long i = 0; i < target; i += a_.depth) {
@@ -207,7 +207,7 @@ class RedisBenchmark {
           err.store(true, std::memory_order_relaxed);
         }
       }
-      done += static_cast<wrp_bench::u64>(batch);
+      done += static_cast<clio_bench::u64>(batch);
     }
 
     times[tid] =
@@ -221,25 +221,25 @@ class RedisBenchmark {
     }
     std::vector<std::thread> threads;
     std::vector<long long> times(a_.threads);
-    std::vector<wrp_bench::u64> ops(a_.threads);
+    std::vector<clio_bench::u64> ops(a_.threads);
     std::atomic<bool> err{false};
     for (size_t i = 0; i < a_.threads; ++i) {
       threads.emplace_back(&RedisBenchmark::Worker, this, mode, i,
                            std::ref(err), std::ref(times), std::ref(ops));
     }
     for (auto &t : threads) t.join();
-    wrp_bench::PrintResults(a_.test_case, a_, times, ops);
+    clio_bench::PrintResults(a_.test_case, a_, times, ops);
     return !err.load();
   }
 
   BenchArgs a_;
   std::string host_;
   int port_;
-  wrp_bench::u64 per_thread_blobs_;  // a_.max_total_blobs / threads
+  clio_bench::u64 per_thread_blobs_;  // a_.max_total_blobs / threads
 };
 
 int main(int argc, char **argv) {
-  BenchArgs args = wrp_bench::ParseBenchArgs(argc, argv);
+  BenchArgs args = clio_bench::ParseBenchArgs(argc, argv);
   if (!args.ok) return 1;
 
   const char *h = std::getenv("REDIS_HOST");

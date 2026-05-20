@@ -77,7 +77,7 @@ pip install iowarp-core
 ```
 
 The wheel includes the Chimaera runtime, the `chimaera` CLI, the CTE,
-CAE, and CEE engines, and the `wrp_cee` Python bindings. A default
+CAE, and CEE engines, and the `clio_cee` Python bindings. A default
 configuration is seeded at `~/.chimaera/chimaera.yaml` on first import.
 
 Newer extensions and advanced/accelerated features are not in the
@@ -213,7 +213,7 @@ Here we show an example of how to use the context exploration engine to
 bundle and retrieve data.
 
 ```python
-import wrp_cee as cee
+import clio_cee as cee
 
 # Create ContextInterface (handles runtime initialization internally)
 ctx_interface = cee.ContextInterface()
@@ -252,7 +252,7 @@ ctx_interface.context_destroy(["my_dataset"])
 Here is an example of the context transfer engine's C++ API.
 
 ```cpp
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 #include <chimaera/chimaera.h>
 
 int main() {
@@ -261,14 +261,14 @@ int main() {
   if (!success) return 1;
 
   // 2. Initialize CTE subsystem
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
 
   // 3. Create CTE client
-  wrp_cte::core::Client cte_client;
-  wrp_cte::core::CreateParams params;
+  clio_cte::core::Client cte_client;
+  clio_cte::core::CreateParams params;
   cte_client.Create(chi::PoolQuery::Dynamic(),
-                    wrp_cte::core::kCtePoolName,
-                    wrp_cte::core::kCtePoolId, params);
+                    clio_cte::core::kCtePoolName,
+                    clio_cte::core::kCtePoolId, params);
 
   // 4. Register a storage target (100MB file-based)
   cte_client.RegisterTarget("/tmp/cte_storage",
@@ -276,8 +276,8 @@ int main() {
                             100 * 1024 * 1024);
 
   // 5. Create a tag (container for blobs)
-  wrp_cte::core::TagId tag_id = cte_client.GetOrCreateTag(
-      "my_tag", wrp_cte::core::TagId::GetNull());
+  clio_cte::core::TagId tag_id = cte_client.GetOrCreateTag(
+      "my_tag", clio_cte::core::TagId::GetNull());
 
   // 6. Store blob data
   std::vector<char> data(4096, 'A');
@@ -310,11 +310,11 @@ int main() {
 
 **Build and Link:**
 ```cmake
-# Unified package includes everything - HermesShm, Chimaera, and all ChiMods
+# Unified package includes everything - ClioCtp, Chimaera, and all ChiMods
 find_package(iowarp-core REQUIRED)
 
 target_link_libraries(my_app
-  wrp_cte::core_client    # CTE client (for the example above)
+  clio_cte::core_client    # CTE client (for the example above)
   chimaera::admin_client  # Admin ChiMod (always available)
   chimaera::bdev_client   # Block device ChiMod (always available)
 )
@@ -332,8 +332,8 @@ target_link_libraries(my_app
 - `chimaera::bdev_client`, `chimaera::bdev_runtime`
 
 *Optional ChiMods (if enabled at build time):*
-- `wrp_cte::core_client`, `wrp_cte::core_runtime` (Context Transfer Engine)
-- `wrp_cae::core_client`, `wrp_cae::core_runtime` (Context Assimilation Engine)
+- `clio_cte::core_client`, `clio_cte::core_runtime` (Context Transfer Engine)
+- `clio_cae::core_client`, `clio_cae::core_runtime` (Context Assimilation Engine)
 
 ## Testing
 
@@ -373,7 +373,7 @@ clio_run_thrpt_benchmark [options]
 | `--max-file-size <size>` | 1g | Maximum file size (supports k, m, g suffixes) |
 | `--io-size <size>` | 4k | I/O size per operation |
 | `--lane-policy <P>` | (from config) | Lane policy: map_by_pid_tid, round_robin, random |
-| `--output-dir <dir>` | /tmp/wrp_benchmark | Output directory for files |
+| `--output-dir <dir>` | /tmp/clio_benchmark | Output directory for files |
 | `--verbose, -v` | false | Enable verbose output |
 
 **Test Cases:**

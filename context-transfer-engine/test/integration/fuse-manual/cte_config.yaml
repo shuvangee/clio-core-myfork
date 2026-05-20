@@ -8,7 +8,7 @@
 #   3. clio_cte_fuse <mountpoint> -f
 #
 # Doing compose separately exercises the same admin-pool CreatePool path that
-# `wrp_cte` jarvis package uses, so any cross-node propagation bug shows up
+# `clio_cte` jarvis package uses, so any cross-node propagation bug shows up
 # the same way in both flows.
 
 runtime:

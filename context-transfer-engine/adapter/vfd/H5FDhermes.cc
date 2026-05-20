@@ -58,7 +58,7 @@
 #include "H5FDhermes.h" /* Hermes file driver     */
 #include "H5PLextern.h"
 #include "adapter/posix/posix_fs_api.h"
-#include "wrp_cte/core/core_client.h"
+#include "clio_cte/core/core_client.h"
 #include <clio_ctp/util/logging.h>
 
 /**
@@ -245,7 +245,7 @@ static herr_t H5FD__hermes_term(void) {
  */
 static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr) {
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
   H5FD_hermes_t *file = NULL; /* hermes VFD info          */
   int fd = -1;
   int o_flags = 0;
@@ -539,7 +539,7 @@ const void *H5PLget_plugin_info(void) { return &H5FD_hermes_g; }
 /** Initialize Hermes */
 /*static __attribute__((constructor(101))) void init_hermes_in_vfd(void) {
   std::cout << "IN VFD" << std::endl;
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::WRP_CTE_CLIENT_INIT();
 }*/
 
 } // extern C

@@ -42,7 +42,7 @@ CEE is built as part of the IOWarp Core unified build system:
 cmake --preset=debug -DWRP_CORE_ENABLE_CEE=ON
 
 # Build CEE API and tests
-cmake --build build --target wrp_cee_api -j$(nproc)
+cmake --build build --target clio_cee_api -j$(nproc)
 cmake --build build --target test_context_bundle -j$(nproc)
 ```
 
@@ -93,7 +93,7 @@ INIT_CHIMAERA=1 ./bin/test_context_destroy
 
 ### Test Configuration
 
-Tests use [api/test/wrp_config.yaml](api/test/wrp_config.yaml) for runtime configuration:
+Tests use [api/test/clio_config.yaml](api/test/clio_config.yaml) for runtime configuration:
 - 4 worker threads (sched + slow)
 - 2GB main segment, 1GB client/runtime segments
 - RAM-based storage (4GB capacity)
@@ -104,15 +104,15 @@ Tests use [api/test/wrp_config.yaml](api/test/wrp_config.yaml) for runtime confi
 ### C++ API
 
 ```cpp
-#include <wrp_cee/api/context_interface.h>
-#include <wrp_cae/core/factory/assimilation_ctx.h>
+#include <clio_cee/api/context_interface.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
 
 // Initialize
 iowarp::ContextInterface ctx_interface;
 
 // Bundle a file
-std::vector<wrp_cae::core::AssimilationCtx> bundle;
-wrp_cae::core::AssimilationCtx ctx;
+std::vector<clio_cae::core::AssimilationCtx> bundle;
+clio_cae::core::AssimilationCtx ctx;
 ctx.src = "file::/path/to/data.bin";
 ctx.dst = "iowarp::my_dataset";
 ctx.format = "binary";
@@ -133,7 +133,7 @@ ctx_interface.ContextDestroy(contexts);
 ### Python API
 
 ```python
-from wrp_cee import ContextInterface, AssimilationCtx
+from clio_cee import ContextInterface, AssimilationCtx
 
 # Initialize
 ctx = ContextInterface()

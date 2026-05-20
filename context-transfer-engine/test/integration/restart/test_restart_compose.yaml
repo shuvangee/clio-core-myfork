@@ -5,7 +5,7 @@ runtime:
   conf_dir: /tmp/chimaera_restart_test
 
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_restart_test
     pool_query: local
     pool_id: "512.0"

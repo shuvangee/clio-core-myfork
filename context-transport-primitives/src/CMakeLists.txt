@@ -1,4 +1,4 @@
-project(hermes_shm)
+project(clio_ctp)
 
 # -----------------------------------------------------------------------------
 # Build HSHM
@@ -21,34 +21,34 @@ else()
 endif()
 
 # Create library with system_info.cc
-add_library(hermes_shm_host ${SRC_FILES})
+add_library(clio_ctp_host ${SRC_FILES})
 
 #------------------------------------------------------------------------------
 # Note: Compression Predictor Libraries (XGBoost, Dense NN, Q-Table, LinReg)
 # have been moved to the compressor chimod in context-transfer-engine/compressor
 #------------------------------------------------------------------------------
 
-target_link_libraries(hermes_shm_host PUBLIC
+target_link_libraries(clio_ctp_host PUBLIC
     ${REAL_TIME_FLAGS}
     configure
     thread_all
 )
 if(WIN32)
-    target_link_libraries(hermes_shm_host PUBLIC ws2_32)
+    target_link_libraries(clio_ctp_host PUBLIC ws2_32)
 endif()
-target_include_directories(hermes_shm_host PUBLIC
+target_include_directories(clio_ctp_host PUBLIC
     $<BUILD_INTERFACE:${CLIO_CTP_ROOT}/include>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-hshm_target_compile_definitions(hermes_shm_host)
-target_precompile_headers(hermes_shm_host PRIVATE
+hshm_target_compile_definitions(clio_ctp_host)
+target_precompile_headers(clio_ctp_host PRIVATE
     <string> <vector> <memory> <unordered_map>
     <functional> <algorithm> <cstdint> <cstring> <iostream>
 )
-list(APPEND CLIO_CTP_LIBS hermes_shm_host)
+list(APPEND CLIO_CTP_LIBS clio_ctp_host)
 add_library(cxx INTERFACE)
-target_link_libraries(cxx INTERFACE hermes_shm_host)
+target_link_libraries(cxx INTERFACE clio_ctp_host)
 target_include_directories(cxx INTERFACE
     $<BUILD_INTERFACE:${CLIO_CTP_ROOT}/include>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
@@ -65,22 +65,22 @@ list(APPEND CLIO_CTP_LIBS cxx)
 
 # BUILD HSHM FOR CUDA ONLY
 if(WRP_CORE_ENABLE_CUDA)
-    add_cuda_library(hermes_shm_cuda SHARED TRUE ${SRC_FILES}
+    add_cuda_library(clio_ctp_cuda SHARED TRUE ${SRC_FILES}
       INCLUDE_DIRS
         ${CLIO_CTP_ROOT}/include
         ${PROJECT_BINARY_DIR}/include
     )
-    target_include_directories(hermes_shm_cuda PUBLIC
+    target_include_directories(clio_ctp_cuda PUBLIC
         $<BUILD_INTERFACE:${CLIO_CTP_ROOT}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:include>
     )
-    target_link_libraries(hermes_shm_cuda PUBLIC host_deps)
-    target_compile_definitions(hermes_shm_cuda PUBLIC CTP_ENABLE_CUDA=1)
-    hshm_target_compile_definitions(hermes_shm_cuda)
-    list(APPEND CLIO_CTP_LIBS hermes_shm_cuda)
+    target_link_libraries(clio_ctp_cuda PUBLIC host_deps)
+    target_compile_definitions(clio_ctp_cuda PUBLIC CTP_ENABLE_CUDA=1)
+    hshm_target_compile_definitions(clio_ctp_cuda)
+    list(APPEND CLIO_CTP_LIBS clio_ctp_cuda)
     add_library(cudacxx INTERFACE)
-    target_link_libraries(cudacxx INTERFACE hermes_shm_cuda)
+    target_link_libraries(cudacxx INTERFACE clio_ctp_cuda)
     target_include_directories(cudacxx INTERFACE
         $<BUILD_INTERFACE:${CLIO_CTP_ROOT}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
@@ -92,27 +92,27 @@ if(WRP_CORE_ENABLE_CUDA)
     list(APPEND CLIO_CTP_LIBS cudacxx)
 
     # GPU Linker library (CUDA driver API for runtime device code linking)
-    add_library(hermes_shm_gpu_linker gpu_linker.cc)
-    target_link_libraries(hermes_shm_gpu_linker PUBLIC hermes_shm_host cuda)
-    target_compile_definitions(hermes_shm_gpu_linker PUBLIC CTP_ENABLE_CUDA=1)
-    hshm_target_compile_definitions(hermes_shm_gpu_linker)
+    add_library(clio_ctp_gpu_linker gpu_linker.cc)
+    target_link_libraries(clio_ctp_gpu_linker PUBLIC clio_ctp_host cuda)
+    target_compile_definitions(clio_ctp_gpu_linker PUBLIC CTP_ENABLE_CUDA=1)
+    hshm_target_compile_definitions(clio_ctp_gpu_linker)
     if(CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES)
-      target_include_directories(hermes_shm_gpu_linker PUBLIC
+      target_include_directories(clio_ctp_gpu_linker PUBLIC
           ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
     endif()
-    list(APPEND CLIO_CTP_LIBS hermes_shm_gpu_linker)
-    add_library(ctp::gpu_linker ALIAS hermes_shm_gpu_linker)
+    list(APPEND CLIO_CTP_LIBS clio_ctp_gpu_linker)
+    add_library(ctp::gpu_linker ALIAS clio_ctp_gpu_linker)
 endif()
 
 # BUILD HSHM FOR ROCM ONLY
 if(WRP_CORE_ENABLE_ROCM)
-    add_rocm_gpu_library(hermes_shm_rocm_gpu SHARED TRUE ${SRC_FILES})
-    target_link_libraries(hermes_shm_rocm_gpu PUBLIC host_deps)
-    target_compile_definitions(hermes_shm_rocm_gpu PUBLIC CTP_ENABLE_ROCM=1)
-    hshm_target_compile_definitions(hermes_shm_rocm_gpu)
-    list(APPEND CLIO_CTP_LIBS hermes_shm_rocm_gpu)
+    add_rocm_gpu_library(clio_ctp_rocm_gpu SHARED TRUE ${SRC_FILES})
+    target_link_libraries(clio_ctp_rocm_gpu PUBLIC host_deps)
+    target_compile_definitions(clio_ctp_rocm_gpu PUBLIC CTP_ENABLE_ROCM=1)
+    hshm_target_compile_definitions(clio_ctp_rocm_gpu)
+    list(APPEND CLIO_CTP_LIBS clio_ctp_rocm_gpu)
     add_library(rocmcxx_gpu INTERFACE)
-    target_link_libraries(rocmcxx_gpu INTERFACE hermes_shm_rocm_gpu)
+    target_link_libraries(rocmcxx_gpu INTERFACE clio_ctp_rocm_gpu)
     target_include_directories(rocmcxx_gpu INTERFACE
         $<BUILD_INTERFACE:${CLIO_CTP_ROOT}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
@@ -123,13 +123,13 @@ if(WRP_CORE_ENABLE_ROCM)
     add_library(ctp::rocm_cxx ALIAS rocmcxx_gpu)
     list(APPEND CLIO_CTP_LIBS rocmcxx_gpu)
 
-    add_rocm_host_library(hermes_shm_rocm_host TRUE ${SRC_FILES})
-    target_link_libraries(hermes_shm_rocm_host PUBLIC host_deps)
-    target_compile_definitions(hermes_shm_rocm_host PUBLIC CTP_ENABLE_ROCM=1)
-    hshm_target_compile_definitions(hermes_shm_rocm_host)
-    list(APPEND CLIO_CTP_LIBS hermes_shm_rocm_host)
+    add_rocm_host_library(clio_ctp_rocm_host TRUE ${SRC_FILES})
+    target_link_libraries(clio_ctp_rocm_host PUBLIC host_deps)
+    target_compile_definitions(clio_ctp_rocm_host PUBLIC CTP_ENABLE_ROCM=1)
+    hshm_target_compile_definitions(clio_ctp_rocm_host)
+    list(APPEND CLIO_CTP_LIBS clio_ctp_rocm_host)
     add_library(rocmcxx_host INTERFACE)
-    target_link_libraries(rocmcxx_host INTERFACE hermes_shm_rocm_host)
+    target_link_libraries(rocmcxx_host INTERFACE clio_ctp_rocm_host)
     target_include_directories(rocmcxx_host INTERFACE
         $<BUILD_INTERFACE:${CLIO_CTP_ROOT}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>

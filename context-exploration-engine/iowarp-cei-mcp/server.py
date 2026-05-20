@@ -22,7 +22,7 @@ Runtime Management:
 - get_client_status: Get CTE client initialization status
 - get_cte_types: Get available CTE types and operations
 
-Note: This wraps the wrp_cte_core_ext Python bindings.
+Note: This wraps the clio_cte_core_ext Python bindings.
 """
 import sys
 import os
@@ -71,8 +71,8 @@ def _find_cte_bindings():
         if not search_path.exists():
             continue
         
-        # Look for wrp_cte_core_ext.so or wrp_cte_core_ext*.so
-        for pattern in ["wrp_cte_core_ext.so", "wrp_cte_core_ext*.so"]:
+        # Look for clio_cte_core_ext.so or clio_cte_core_ext*.so
+        for pattern in ["clio_cte_core_ext.so", "clio_cte_core_ext*.so"]:
             matches = list(search_path.glob(pattern))
             if matches:
                 # Add directory to Python path
@@ -87,13 +87,13 @@ _found_bindings = _find_cte_bindings()
 
 # Try to import CTE Python bindings
 try:
-    import wrp_cte_core_ext as cte
+    import clio_cte_core_ext as cte
     CTE_AVAILABLE = True
 except ImportError as e:
     if _found_bindings:
         print(f"Warning: Found bindings directory but still could not import: {e}", file=sys.stderr)
     else:
-        print(f"Warning: Could not import wrp_cte_core_ext: {e}", file=sys.stderr)
+        print(f"Warning: Could not import clio_cte_core_ext: {e}", file=sys.stderr)
         print("Note: CTE Python bindings must be built and available in Python path", file=sys.stderr)
         print(f"      Searched in: {[str(p) for p in _find_cte_bindings.__code__.co_consts if isinstance(p, str)][:5]}", file=sys.stderr)
         print(f"      Try: export PYTHONPATH=/workspace/build/bin:$PYTHONPATH", file=sys.stderr)
@@ -243,7 +243,7 @@ def get_client_status() -> str:
     if not CTE_AVAILABLE:
         return json.dumps({
             'available': False,
-            'error': 'CTE Python bindings (wrp_cte_core_ext) not available',
+            'error': 'CTE Python bindings (clio_cte_core_ext) not available',
             'message': 'CTE Python bindings must be built and available in Python path'
         }, indent=2)
     
@@ -282,7 +282,7 @@ def tag_query(tag_regex: str, max_tags: int = 0) -> str:
             'tags': [],
             'count': 0,
             'error': 'CTE Python bindings not available',
-            'message': 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+            'message': 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         }, indent=2)
     
     if not _ensure_initialized():
@@ -354,7 +354,7 @@ def blob_query(tag_regex: str, blob_regex: str, max_blobs: int = 0) -> str:
             'blobs': [],
             'count': 0,
             'error': 'CTE Python bindings not available',
-            'message': 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+            'message': 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         }, indent=2)
     
     if not _ensure_initialized():
@@ -425,7 +425,7 @@ def poll_telemetry_log(minimum_logical_time: int = 0) -> str:
             'entries': [],
             'count': 0,
             'error': 'CTE Python bindings not available',
-            'message': 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+            'message': 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         }, indent=2)
     
     if not _ensure_initialized():
@@ -510,7 +510,7 @@ def reorganize_blob(tag_id_major: int, tag_id_minor: int, blob_name: str, new_sc
             'result_code': -1,
             'success': False,
             'error': 'CTE Python bindings not available',
-            'message': 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+            'message': 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         }, indent=2)
     
     if not _ensure_initialized():
@@ -587,7 +587,7 @@ def initialize_cte_runtime() -> str:
         return json.dumps({
             'success': False,
             'error': 'CTE Python bindings not available',
-            'message': 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+            'message': 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         }, indent=2)
     
     global _runtime_initialized
@@ -909,7 +909,7 @@ def put_blob(tag_name: str, blob_name: str, data: str, offset: int = 0) -> str:
             'offset': offset,
             'success': False,
             'error': 'CTE Python bindings not available',
-            'message': 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+            'message': 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         }, indent=2)
     
     if not _ensure_initialized():
@@ -1245,7 +1245,7 @@ def get_cte_types() -> str:
     
     if not CTE_AVAILABLE:
         result['error'] = 'CTE Python bindings not available'
-        result['message'] = 'CTE Python bindings (wrp_cte_core_ext) must be built and available'
+        result['message'] = 'CTE Python bindings (clio_cte_core_ext) must be built and available'
         return json.dumps(result, indent=2)
     
     try:

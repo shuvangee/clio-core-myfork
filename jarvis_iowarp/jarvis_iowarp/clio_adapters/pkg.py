@@ -93,36 +93,36 @@ class ClioAdapters(Interceptor):
         has_one = False
 
         if self.config['posix']:
-            lib = self._find_adapter_lib('wrp_cte_posix')
+            lib = self._find_adapter_lib('clio_cte_posix')
             if lib is None:
-                raise Exception('Could not find wrp_cte_posix library')
+                raise Exception('Could not find clio_cte_posix library')
             self.env['WRP_CTE_POSIX'] = lib
             self.env['WRP_CTE_ROOT'] = str(pathlib.Path(lib).parent.parent)
             self.log(f'Found libwrp_cte_posix.so at {lib}')
             has_one = True
 
         if self.config['mpiio']:
-            lib = self._find_adapter_lib('wrp_cte_mpiio')
+            lib = self._find_adapter_lib('clio_cte_mpiio')
             if lib is None:
-                raise Exception('Could not find wrp_cte_mpiio library')
+                raise Exception('Could not find clio_cte_mpiio library')
             self.env['WRP_CTE_MPIIO'] = lib
             self.env['WRP_CTE_ROOT'] = str(pathlib.Path(lib).parent.parent)
             self.log(f'Found libwrp_cte_mpiio.so at {lib}')
             has_one = True
 
         if self.config['stdio']:
-            lib = self._find_adapter_lib('wrp_cte_stdio')
+            lib = self._find_adapter_lib('clio_cte_stdio')
             if lib is None:
-                raise Exception('Could not find wrp_cte_stdio library')
+                raise Exception('Could not find clio_cte_stdio library')
             self.env['WRP_CTE_STDIO'] = lib
             self.env['WRP_CTE_ROOT'] = str(pathlib.Path(lib).parent.parent)
             self.log(f'Found libwrp_cte_stdio.so at {lib}')
             has_one = True
 
         if self.config['vfd']:
-            lib = self._find_adapter_lib('wrp_cte_vfd')
+            lib = self._find_adapter_lib('clio_cte_vfd')
             if lib is None:
-                raise Exception('Could not find wrp_cte_vfd library')
+                raise Exception('Could not find clio_cte_vfd library')
             self.env['WRP_CTE_VFD'] = lib
             self.env['WRP_CTE_ROOT'] = str(pathlib.Path(lib).parent.parent)
             self.log(f'Found libwrp_cte_vfd.so at {lib}')
@@ -138,9 +138,9 @@ class ClioAdapters(Interceptor):
             has_one = True
 
         if self.config['nvidia_gds']:
-            lib = self._find_adapter_lib('wrp_cte_nvidia_gds')
+            lib = self._find_adapter_lib('clio_cte_nvidia_gds')
             if lib is None:
-                raise Exception('Could not find wrp_cte_nvidia_gds library')
+                raise Exception('Could not find clio_cte_nvidia_gds library')
             self.env['WRP_CTE_NVIDIA_GDS'] = lib
             self.env['WRP_CTE_ROOT'] = str(pathlib.Path(lib).parent.parent)
             self.log(f'Found libwrp_cte_nvidia_gds.so at {lib}')
@@ -181,7 +181,7 @@ class ClioAdapters(Interceptor):
         if self.config['vfd']:
             plugin_dir = str(pathlib.Path(self.env['WRP_CTE_VFD']).parent)
             self.setenv('HDF5_PLUGIN_PATH', plugin_dir)
-            self.setenv('HDF5_DRIVER', 'wrp_cte_vfd')
+            self.setenv('HDF5_DRIVER', 'clio_cte_vfd')
             self.log(f"Configured HDF5 VFD plugin path: {plugin_dir}")
 
         if self.config['vol']:

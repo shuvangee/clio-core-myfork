@@ -26,8 +26,8 @@ find_package(iowarp-core CONFIG REQUIRED)
 #     - chimaera::bdev_client, chimaera::bdev_runtime
 #
 #   Optional ChiMods (if enabled at build time):
-#     - wrp_cte::core_client, wrp_cte::core_runtime (CTE - included if WRP_CORE_ENABLE_CTE=ON)
-#     - wrp_cae::core_client, wrp_cae::core_runtime (CAE - included if WRP_CORE_ENABLE_CAE=ON)
+#     - clio_cte::core_client, clio_cte::core_runtime (CTE - included if WRP_CORE_ENABLE_CTE=ON)
+#     - clio_cae::core_client, clio_cae::core_runtime (CAE - included if WRP_CORE_ENABLE_CAE=ON)
 
 # Find additional system dependencies
 find_package(PkgConfig REQUIRED)
@@ -41,9 +41,9 @@ add_executable(cte_external_test
 # Link against CTE Core libraries using modern CMake target naming
 # These targets are created by the add_chimod_both() function in the core ChiMod
 target_link_libraries(cte_external_test
-    # CTE Core ChiMod libraries (from find_package(wrp_cte_core))
-    wrp_cte::core_client                 # CTE Core client library
-    wrp_cte::core_runtime                # CTE Core runtime library (if needed)
+    # CTE Core ChiMod libraries (from find_package(clio_cte_core))
+    clio_cte::core_client                 # CTE Core client library
+    clio_cte::core_runtime                # CTE Core runtime library (if needed)
     
     # Core Chimaera framework (automatically included by ChiMod libraries)
     # chimaera::cxx                      # NOT needed - automatically included
@@ -77,11 +77,11 @@ message(STATUS "External Developer Notes:")
 message(STATUS "  This test demonstrates proper external linking to IOWarp libraries.")
 message(STATUS "  Required package: iowarp-core (single unified package)")
 message(STATUS "  iowarp-core automatically provides:")
-message(STATUS "    - HermesShm: All ctp::* modular targets")
+message(STATUS "    - ClioCtp: All ctp::* modular targets")
 message(STATUS "    - Chimaera: chimaera::cxx and build utilities")
 message(STATUS "    - Core ChiMods: admin, bdev (always available)")
 message(STATUS "    - Optional ChiMods: CTE, CAE (if enabled at build time)")
 message(STATUS "  Main targets used in this test:")
-message(STATUS "    - wrp_cte::core_client (CTE ChiMod client)")
-message(STATUS "    - wrp_cte::core_runtime (CTE ChiMod runtime)")
+message(STATUS "    - clio_cte::core_client (CTE ChiMod client)")
+message(STATUS "    - clio_cte::core_runtime (CTE ChiMod runtime)")
 message(STATUS "")

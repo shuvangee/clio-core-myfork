@@ -5,18 +5,18 @@
 #include <string>
 #include <vector>
 
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 #include "rust/cxx.h"
 
 namespace cte_ffi {
 
-// CteTag wraps wrp_cte::core::Tag. Mutable inner allows cxx to pass
+// CteTag wraps clio_cte::core::Tag. Mutable inner allows cxx to pass
 // const CteTag& while Tag methods remain non-const.
 struct CteTag {
-  mutable wrp_cte::core::Tag inner;
+  mutable clio_cte::core::Tag inner;
 
   explicit CteTag(const std::string &name) : inner(name) {}
-  explicit CteTag(const wrp_cte::core::TagId &id) : inner(id) {}
+  explicit CteTag(const clio_cte::core::TagId &id) : inner(id) {}
 };
 
 // Forward-declared: defined by cxx-generated code (shared struct)

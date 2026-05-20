@@ -2,16 +2,16 @@
 # CTE compose definition for the manual test. Loaded by:
 #     chimaera compose cte_compose.yaml
 # after `chimaera runtime start` brings up the daemon with the (compose-less)
-# chimaera_config.yaml. Mirrors the jarvis `wrp_cte` package output exactly:
-#   - mod_name / pool_name = wrp_cte_core (the kCtePoolName hard-coded in the
+# chimaera_config.yaml. Mirrors the jarvis `clio_cte` package output exactly:
+#   - mod_name / pool_name = clio_cte_core (the kCtePoolName hard-coded in the
 #     C++ client; mismatch causes a second AsyncCreate that races and wedges
 #     the pool on multi-node).
 #   - pool_id 512.0 (== jarvis default)
 #   - one RAM tier, neighborhood=1, poll_period_ms=5000, dpe=max_bw.
 
 compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte_core
+  - mod_name: clio_cte_core
+    pool_name: clio_cte_core
     pool_query: local
     pool_id: "512.0"
 

@@ -25,18 +25,18 @@ set(HDF5_HERMES_VFD_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/H5FDhermes.h
   ${CMAKE_CURRENT_SOURCE_DIR}/H5FDhermes.cc)
 
-add_library(wrp_cte_hdf5_vfd SHARED ${HDF5_HERMES_VFD_SRCS})
-target_include_directories(wrp_cte_hdf5_vfd
+add_library(clio_cte_hdf5_vfd SHARED ${HDF5_HERMES_VFD_SRCS})
+target_include_directories(clio_cte_hdf5_vfd
   SYSTEM PUBLIC ${HDF5_HERMES_VFD_EXT_INCLUDE_DEPENDENCIES}
 )
-add_dependencies(wrp_cte_hdf5_vfd
-  ${Hermes_CLIENT_DEPS} wrp_cte_fs_base)
-target_link_libraries(wrp_cte_hdf5_vfd
-  ${Hermes_CLIENT_DEPS} wrp_cte_fs_base
+add_dependencies(clio_cte_hdf5_vfd
+  ${Hermes_CLIENT_DEPS} clio_cte_fs_base)
+target_link_libraries(clio_cte_hdf5_vfd
+  ${Hermes_CLIENT_DEPS} clio_cte_fs_base
   MPI::MPI_CXX
   ${HDF5_HERMES_VFD_EXT_LIB_DEPENDENCIES})
 
-set(HDF5_HERMES_VFD_EXPORTED_LIBS wrp_cte_hdf5_vfd ${HDF5_HERMES_VFD_EXPORTED_LIBS} PARENT_SCOPE)
+set(HDF5_HERMES_VFD_EXPORTED_LIBS clio_cte_hdf5_vfd ${HDF5_HERMES_VFD_EXPORTED_LIBS} PARENT_SCOPE)
 
 # -----------------------------------------------------------------------------
 # Specify project header files to be installed
@@ -61,7 +61,7 @@ install(
 # -----------------------------------------------------------------------------
 install(
   TARGETS
-  wrp_cte_hdf5_vfd
+  clio_cte_hdf5_vfd
   LIBRARY DESTINATION lib/${HERMES_VFD_DIR_NAME}
   ARCHIVE DESTINATION lib/${HERMES_VFD_DIR_NAME}
   RUNTIME DESTINATION bin

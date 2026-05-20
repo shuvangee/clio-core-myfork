@@ -31,14 +31,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 #include <clio_ctp/util/logging.h>
 #include <atomic>
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
 
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 // Aggregate timing for Tag::PutBlob(const char*) — broken down into the
 // four steps that path performs per call (alloc shm, memcpy, sync RPC,
@@ -265,4 +265,4 @@ void Tag::ReorganizeBlob(const std::string &blob_name, float new_score) {
   }
 }
 
-} // namespace wrp_cte::core
+} // namespace clio_cte::core

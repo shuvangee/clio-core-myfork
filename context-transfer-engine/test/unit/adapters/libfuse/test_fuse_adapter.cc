@@ -43,8 +43,8 @@
 
 #include <chimaera/chimaera.h>
 #include <chimaera/bdev/bdev_client.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 #include <algorithm>
 #include <chrono>
@@ -86,17 +86,17 @@ class FuseAdapterTestFixture {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
       REQUIRE(success);
 
       auto *cte_client = WRP_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
-      cte_client->Init(wrp_cte::core::kCtePoolId);
+      cte_client->Init(clio_cte::core::kCtePoolId);
 
-      wrp_cte::core::CreateParams params;
+      clio_cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
-          chi::PoolQuery::Dynamic(), wrp_cte::core::kCtePoolName,
-          wrp_cte::core::kCtePoolId, params);
+          chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
+          clio_cte::core::kCtePoolId, params);
       create_task.Wait();
       REQUIRE(create_task->GetReturnCode() == 0);
 

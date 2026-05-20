@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(wrp_cte_compressor)
+project(clio_cte_compressor)
 
 #------------------------------------------------------------------------------
 # Build compressor chimod
@@ -40,10 +40,10 @@ add_chimod_runtime(
 
 # Link optional dependencies if available
 if(Eigen3_FOUND)
-    target_link_libraries(wrp_cte_compressor_runtime PRIVATE Eigen3::Eigen)
+    target_link_libraries(clio_cte_compressor_runtime PRIVATE Eigen3::Eigen)
 endif()
 if(xgboost_FOUND)
-    target_link_libraries(wrp_cte_compressor_runtime PRIVATE xgboost::xgboost)
+    target_link_libraries(clio_cte_compressor_runtime PRIVATE xgboost::xgboost)
 endif()
 
 add_chimod_client(
@@ -52,9 +52,9 @@ add_chimod_client(
 )
 
 # Add core include directory for Context struct
-target_include_directories(wrp_cte_compressor_runtime PRIVATE
+target_include_directories(clio_cte_compressor_runtime PRIVATE
     ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include)
-target_include_directories(wrp_cte_compressor_client PRIVATE
+target_include_directories(clio_cte_compressor_client PRIVATE
     ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include)
 
 #------------------------------------------------------------------------------

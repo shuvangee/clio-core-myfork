@@ -5,8 +5,8 @@
 #   - real_workflow: true   -> /opt/run_metagem.sh (snakemake + fastp on
 #                              the bundled toy FASTQ data). Compressible
 #                              data, unlike the dd /dev/urandom proxy.
-#   - clio_compress inserted -> wrp_cte_compressor at pool 512.0 sits in
-#                              front of wrp_cte_core (moved to 513.0).
+#   - clio_compress inserted -> clio_cte_compressor at pool 512.0 sits in
+#                              front of clio_cte_core (moved to 513.0).
 #                              Adapters' WRP_CTE_CLIENT_INIT defaults to
 #                              pool 512.0, so PutBlob/GetBlob land on the
 #                              compressor first; it forwards (optionally
@@ -26,8 +26,8 @@
 #
 # Pool / port layout:
 #   admin                              -> chimaera_admin (1.0)
-#   wrp_cte_compressor (entrypoint)    -> 512.0
-#   wrp_cte_core_storage  (downstream) -> 513.0
+#   clio_cte_compressor (entrypoint)    -> 512.0
+#   clio_cte_core_storage  (downstream) -> 513.0
 #   FUSE adapter -> WRP_CTE_CLIENT_INIT -> 512.0
 #
 # All other deploy semantics match metagem_iowarp_libfuse_4n.yaml:
@@ -43,7 +43,7 @@ container_image: metagem_apptainer_test
 container_binds:
   - ${HOME}/jarvis-bench-cache/metagem-stage:/tmp/metagem-cache:ro
   - ${HOME}/jarvis-runs:${HOME}/jarvis-runs
-  - ${HOME}/wrp_cte_metagem_compress_real_4n:/mnt/clio_cte
+  - ${HOME}/clio_cte_metagem_compress_real_4n:/mnt/clio_cte
 
 ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
 
@@ -71,8 +71,8 @@ scheduler:
     - 'source /etc/profile.d/lmod.sh 2>/dev/null || source /etc/profile.d/modules.sh'
     - 'module load gcc/11.4.0/openmpi/5.0.5-x2kvx5l'
     - 'mkdir -p /home/llogan/iowarp_prte_tmp'
-    - 'fusermount3 -u /home/llogan/wrp_cte_metagem_compress_real_4n 2>/dev/null || umount -l /home/llogan/wrp_cte_metagem_compress_real_4n 2>/dev/null || true'
-    - 'mkdir -p /home/llogan/wrp_cte_metagem_compress_real_4n'
+    - 'fusermount3 -u /home/llogan/clio_cte_metagem_compress_real_4n 2>/dev/null || umount -l /home/llogan/clio_cte_metagem_compress_real_4n 2>/dev/null || true'
+    - 'mkdir -p /home/llogan/clio_cte_metagem_compress_real_4n'
 
 pkgs:
   - pkg_type: jarvis_iowarp.clio_runtime
@@ -90,8 +90,8 @@ pkgs:
     pkg_name: cte_core
     deploy_mode: default
     # Moved downstream of the compressor; adapter entrypoint stays 512.0,
-    # which now belongs to wrp_cte_compressor.
-    pool_name: wrp_cte_core_storage
+    # which now belongs to clio_cte_compressor.
+    pool_name: clio_cte_core_storage
     pool_id: 513.0
     devices:
       - ["ram::cte_ram_tier1", "25GB", 1.0]
@@ -105,7 +105,7 @@ pkgs:
   - pkg_type: jarvis_iowarp.clio_compress
     pkg_name: cte_compress
     deploy_mode: default
-    pool_name: wrp_cte_compressor
+    pool_name: clio_cte_compressor
     pool_id: 512.0
     next_pool_id: 513.0
     pool_query: "local"
@@ -121,7 +121,7 @@ pkgs:
   - pkg_type: jarvis_iowarp.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
-    mountpoint: ${HOME}/wrp_cte_metagem_compress_real_4n
+    mountpoint: ${HOME}/clio_cte_metagem_compress_real_4n
     sleep: 2
     extra_fuse_args: "-f"
 
