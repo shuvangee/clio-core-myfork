@@ -193,6 +193,34 @@ jobs:
             echo "=== CLI test ==="
             chimaera --help
 
+            echo "=== Benchmark binaries: --help smoke test ==="
+            # NOTE: This entire docker invocation is wrapped in bash -c
+            # (single quotes), so comments here must not contain apostrophes
+            # or they prematurely terminate the outer string and the
+            # remaining commands run in the runner shell instead of docker.
+            # See PR #430 followup for the original miss.
+            #
+            # Purpose: catch load-time crashes (missing NEEDED libs, ABI
+            # mismatches, RPATH bugs from repair_wheel.sh) on benchmark
+            # binaries that the import / ldd checks above do not exercise.
+            # See issue #429 for the regression this guards against.
+            #
+            # wrp_cte_bench prints --help via its logging framework at
+            # ERROR level. wrp_run_thrpt_benchmark prints to stdout and
+            # exits 1. The point of this block is to fail the job on
+            # SIGSEGV / exit >= 128, not on the benchmarks own --help
+            # exit codes.
+            for bench in wrp_cte_bench wrp_run_thrpt_benchmark; do
+              echo "--- $bench --help ---"
+              "$bench" --help || rc=$?
+              rc=${rc:-0}
+              if [ "$rc" -ge 128 ]; then
+                echo "FAIL: $bench --help died with signal (exit $rc)"
+                exit 1
+              fi
+              unset rc
+            done
+
             echo "=== Symbol resolution check ==="
             LIB_DIR=$(python -c "import iowarp_core; print(iowarp_core.get_lib_dir())")
             export LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
