@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(iowarp-core VERSION 1.5.1 LANGUAGES C CXX)
+project(iowarp-core VERSION 1.5.3 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
 # Project Options
@@ -1271,7 +1271,14 @@ message(STATUS "")
 #------------------------------------------------------------------------------
 # Pip Package Component
 #------------------------------------------------------------------------------
-set(PIP_PKG_DIR "iowarp_core")
+# All COMPONENT pip_package installs land under iowarp_core/ inside the wheel
+# via scikit-build-core's wheel.install-dir setting (see installers/pip/
+# pyproject.toml).  That means the DESTINATIONs below are package-relative:
+# "lib" -> iowarp_core/lib, "bin" -> iowarp_core/bin, etc.
+#
+# Exception: the .pth file uses DESTINATION ".." to land at site-packages
+# root (one level above the iowarp_core/ package directory) so Python picks
+# it up at startup.
 
 # Shared libraries -> iowarp_core/lib/
 set(PIP_LIB_TARGETS hermes_shm_host chimaera_cxx)
@@ -1293,16 +1300,16 @@ endif()
 
 install(TARGETS ${PIP_LIB_TARGETS}
   COMPONENT pip_package
-  LIBRARY DESTINATION ${PIP_PKG_DIR}/lib
-  ARCHIVE DESTINATION ${PIP_PKG_DIR}/lib
-  RUNTIME DESTINATION ${PIP_PKG_DIR}/bin
-  PUBLIC_HEADER DESTINATION ${PIP_PKG_DIR}/include/chimaera)
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  PUBLIC_HEADER DESTINATION include/chimaera)
 
 # CLI binary -> iowarp_core/bin/
 if(TARGET chimaera)
   install(TARGETS chimaera
     COMPONENT pip_package
-    RUNTIME DESTINATION ${PIP_PKG_DIR}/bin)
+    RUNTIME DESTINATION bin)
   # Also install to PYTHON_SITE_PACKAGES/iowarp_core/bin/ so that
   # `sudo make install` keeps the binary in sync with the Python package,
   # matching how chimaera_runtime_ext.so is installed directly to site-packages.
@@ -1317,17 +1324,17 @@ if(WRP_CORE_ENABLE_PYTHON)
   if(TARGET wrp_cte_core_ext)
     install(TARGETS wrp_cte_core_ext
       COMPONENT pip_package
-      LIBRARY DESTINATION ${PIP_PKG_DIR}/ext)
+      LIBRARY DESTINATION ext)
   endif()
   if(TARGET wrp_cee)
     install(TARGETS wrp_cee
       COMPONENT pip_package
-      LIBRARY DESTINATION ${PIP_PKG_DIR}/ext)
+      LIBRARY DESTINATION ext)
   endif()
   # Context Visualizer -> iowarp_core/visualizer/
   install(DIRECTORY context-visualizer/context_visualizer/
     COMPONENT pip_package
-    DESTINATION ${PIP_PKG_DIR}/visualizer
+    DESTINATION visualizer
     FILES_MATCHING
       PATTERN "*.py"
       PATTERN "*.html"
@@ -1338,13 +1345,15 @@ endif()
 # Default config -> iowarp_core/data/
 install(FILES context-runtime/config/chimaera_default.yaml
   COMPONENT pip_package
-  DESTINATION ${PIP_PKG_DIR}/data)
+  DESTINATION data)
 
 # .pth file at site-packages root so "import wrp_cee" works without
 # explicitly importing iowarp_core first (triggers _setup() at startup).
+# DESTINATION ".." escapes wheel.install-dir (= iowarp_core/) by one level
+# so the file lands at platlib root.
 install(FILES installers/pip/iowarp_core.pth
   COMPONENT pip_package
-  DESTINATION .)
+  DESTINATION ..)
 
 #------------------------------------------------------------------------------
 # CPack Configuration
