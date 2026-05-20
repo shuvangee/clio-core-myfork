@@ -36,7 +36,7 @@
 
 #include <string>
 
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 struct MyStruct {
   std::string string_;

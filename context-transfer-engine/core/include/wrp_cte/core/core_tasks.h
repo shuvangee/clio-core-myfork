@@ -44,11 +44,11 @@
 // Include bdev client for TargetInfo
 #include <chimaera/bdev/bdev_client.h>
 // Include mutex for BlobInfo prealloc_lock_
-#include <hermes_shm/thread/lock/mutex.h>
+#include <clio_ctp/thread/lock/mutex.h>
 #if CTP_IS_HOST
 #include <yaml-cpp/yaml.h>
 
-#include <hermes_shm/data_structures/serialization/global_serialize.h>
+#include <clio_ctp/data_structures/serialization/global_serialize.h>
 #include <chrono>
 #endif
 

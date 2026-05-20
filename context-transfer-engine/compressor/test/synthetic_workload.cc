@@ -75,8 +75,8 @@
 #include <ctime>
 
 #include <chimaera/chimaera.h>
-#include <hermes_shm/util/logging.h>
-#include <hermes_shm/util/config_parse.h>
+#include <clio_ctp/util/logging.h>
+#include <clio_ctp/util/config_parse.h>
 #include <wrp_cte/core/core_client.h>
 #include <wrp_cte/compressor/compressor_client.h>
 

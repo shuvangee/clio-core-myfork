@@ -17,7 +17,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 
 // Include Chimaera headers
 #include <chimaera/chimaera.h>
@@ -11423,7 +11423,7 @@ TEST_CASE("Autogen - CTE GetOrCreateTagTask methods", "[autogen][cte][methods][G
 // SystemInfo coverage tests
 // ============================================================================
 
-#include <hermes_shm/introspect/system_info.h>
+#include <clio_ctp/introspect/system_info.h>
 
 TEST_CASE("Autogen - SystemInfo basic functions", "[autogen][systeminfo][basic]") {
   SECTION("GetCpuCount") {
@@ -11635,7 +11635,7 @@ TEST_CASE("Autogen - SystemInfo SharedLibrary", "[autogen][systeminfo][sharedlib
 // ConfigParse coverage tests
 // ============================================================================
 
-#include <hermes_shm/util/config_parse.h>
+#include <clio_ctp/util/config_parse.h>
 
 TEST_CASE("Autogen - ConfigParse ParseHostNameString", "[autogen][configparse][hostname]") {
   SECTION("Simple hostname no brackets") {

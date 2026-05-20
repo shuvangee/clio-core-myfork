@@ -33,9 +33,9 @@
 
 #include <arpa/inet.h>
 #if CTP_ENABLE_THALLIUM
-#include <hermes_shm/lightbeam/thallium_transport.h>
+#include <clio_ctp/lightbeam/thallium_transport.h>
 #endif
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 #ifndef _WIN32
 #include <ifaddrs.h>
 #include <net/if.h>

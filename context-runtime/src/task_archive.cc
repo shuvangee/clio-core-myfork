@@ -38,7 +38,7 @@
 
 #include "chimaera/task_archives.h"
 #include "chimaera/ipc_manager.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/logging.h"
 
 namespace chi {
 

@@ -123,7 +123,7 @@ Whenever you build a new function, always create a docstring for it. It should d
 
 ### GPU Compiler Macro Rule
 
-**NEVER** use raw GPU compiler-detection macros (`__CUDACC__`, `__HIPCC__`, `__HIP__`, `__CUDA_ARCH__`, `__HIP_DEVICE_COMPILE__`) anywhere except `context-transport-primitives/include/hermes_shm/constants/macros.h`. We do not want code paths to compile just because a GPU compiler is being used — we need the explicit CMake build flags (`CTP_ENABLE_CUDA`, `CTP_ENABLE_ROCM`) to be set as well.
+**NEVER** use raw GPU compiler-detection macros (`__CUDACC__`, `__HIPCC__`, `__HIP__`, `__CUDA_ARCH__`, `__HIP_DEVICE_COMPILE__`) anywhere except `context-transport-primitives/include/clio_ctp/constants/macros.h`. We do not want code paths to compile just because a GPU compiler is being used — we need the explicit CMake build flags (`CTP_ENABLE_CUDA`, `CTP_ENABLE_ROCM`) to be set as well.
 
 **Use these macros instead:**
 - `CTP_IS_GPU` — true when compiling device code (replaces `__CUDA_ARCH__` / `__HIP_DEVICE_COMPILE__`)

@@ -51,7 +51,7 @@
 
 #include "bench_common.h"
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 #include <hiredis/hiredis.h>
 
 #include <algorithm>

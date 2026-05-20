@@ -34,7 +34,7 @@
 #ifndef WRP_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
 #define WRP_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
 
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 #include <chimaera/chimaera.h>
 
 namespace wrp_cte::core {

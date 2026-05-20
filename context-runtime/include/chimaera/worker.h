@@ -49,9 +49,9 @@
 #include "chimaera/task.h"
 #include "chimaera/types.h"
 #include "chimaera/scheduler/scheduler.h"
-#include "hermes_shm/lightbeam/event_manager.h"
-#include "hermes_shm/lightbeam/transport_factory_impl.h"
-#include "hermes_shm/memory/allocator/malloc_allocator.h"
+#include "clio_ctp/lightbeam/event_manager.h"
+#include "clio_ctp/lightbeam/transport_factory_impl.h"
+#include "clio_ctp/memory/allocator/malloc_allocator.h"
 
 namespace chi {
 

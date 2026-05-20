@@ -39,7 +39,7 @@
 #include <cstdlib>
 #include <cctype>
 #include <cstdio>
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/logging.h"
 
 namespace wrp_cte::core {
 

@@ -36,7 +36,7 @@
  * @brief Implementation of XGBoost-based compression predictor
  */
 
-#include "hermes_shm/compress/dynamic/compression/xgboost_predictor.h"
+#include "clio_ctp/compress/dynamic/compression/xgboost_predictor.h"
 #include <fstream>
 #include <sstream>
 #include <chrono>

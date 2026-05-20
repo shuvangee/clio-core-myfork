@@ -47,7 +47,7 @@
 
 #include <iostream>
 #include <memory>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 #include <chimaera/chimaera.h>
 #include <chimaera/simple_mod/simple_mod_client.h>
 #include <chimaera/admin/admin_client.h>

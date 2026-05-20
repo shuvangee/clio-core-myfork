@@ -40,7 +40,7 @@
 
 #include <catch2/catch_all.hpp>
 
-#include <hermes_shm/lightbeam/shm_transport.h>
+#include <clio_ctp/lightbeam/shm_transport.h>
 
 #include <chrono>
 #include <cstring>

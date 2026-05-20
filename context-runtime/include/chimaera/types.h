@@ -42,10 +42,10 @@
 #include <vector>
 
 // Main HSHM include
-#include <hermes_shm/hermes_shm.h>
-#include <hermes_shm/memory/allocator/malloc_allocator.h>
-#include <hermes_shm/memory/allocator/thread_allocator.h>
-#include <hermes_shm/memory/allocator/round_robin_allocator.h>
+#include <clio_ctp/clio_ctp.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
+#include <clio_ctp/memory/allocator/thread_allocator.h>
+#include <clio_ctp/memory/allocator/round_robin_allocator.h>
 
 /**
  * Core type definitions for Chimaera distributed task execution framework
@@ -434,7 +434,7 @@ struct AddressHash {
                         ///< instantly; SendOut, ClientSend, and
                         ///< IpcManager::SendRuntime are skipped.
 
-// Bulk transfer flags are defined in hermes_shm/lightbeam/lightbeam.h:
+// Bulk transfer flags are defined in clio_ctp/lightbeam/lightbeam.h:
 // - BULK_EXPOSE: Bulk is exposed (sender exposes for reading)
 // - BULK_XFER: Bulk is exposed for writing (receiver)
 

@@ -1,4 +1,4 @@
-#include "hermes_shm/util/gpu_api.h"
+#include "clio_ctp/util/gpu_api.h"
 
 CTP_GPU_KERNEL static void TestKernel(int x) { printf("ASFASDFAS: %d\n", x); }
 

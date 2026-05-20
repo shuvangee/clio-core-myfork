@@ -36,7 +36,7 @@
 
 #include "abstract_mapper.h"
 #include "balanced_mapper.h"
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 namespace clio::cae {
 /**

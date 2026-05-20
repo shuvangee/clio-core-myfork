@@ -39,7 +39,7 @@
 #include <wrp_cae/core/autogen/core_methods.h>
 #include <wrp_cae/core/factory/assimilation_ctx.h>
 
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <vector>
 
 namespace wrp_cae::core {

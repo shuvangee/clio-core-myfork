@@ -36,10 +36,10 @@
 
 #include <chimaera/chimaera.h>
 #include <chimaera/config_manager.h>
-#include <hermes_shm/memory/allocator/malloc_allocator.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
 #if CTP_IS_HOST
 #include <yaml-cpp/yaml.h>
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <unordered_map>
 #endif
 #include <cstring>

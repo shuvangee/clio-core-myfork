@@ -52,7 +52,7 @@
 
 // Include Chimaera headers
 #include <chimaera/chimaera.h>
-#include <hermes_shm/memory/allocator/malloc_allocator.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <chimaera/container.h>
 #include <chimaera/ipc_manager.h>
 #include <chimaera/module_manager.h>

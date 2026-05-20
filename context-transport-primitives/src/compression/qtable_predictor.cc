@@ -36,7 +36,7 @@
  * @brief Implementation of Q-Table compression predictor
  */
 
-#include "hermes_shm/compress/dynamic/compression/qtable_predictor.h"
+#include "clio_ctp/compress/dynamic/compression/qtable_predictor.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>

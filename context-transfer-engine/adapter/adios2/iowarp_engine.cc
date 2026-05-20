@@ -41,7 +41,7 @@
 #include <string>
 #include <unistd.h>
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 namespace coeus {
 

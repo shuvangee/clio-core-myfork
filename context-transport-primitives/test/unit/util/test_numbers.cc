@@ -32,7 +32,7 @@
  */
 
 #include "basic_test.h"
-#include "hermes_shm/types/numbers.h"
+#include "clio_ctp/types/numbers.h"
 
 //------------------------------------------------------------------------------
 // BitWidth Tests

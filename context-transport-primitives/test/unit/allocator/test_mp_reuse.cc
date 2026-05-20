@@ -4,9 +4,9 @@
 // repeat (Allocate -> Free) tightly. With reuse, the heap should never grow.
 #include <catch2/catch_test_macros.hpp>
 #include "allocator_test.h"
-#include "hermes_shm/memory/backend/posix_mmap.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
-#include "hermes_shm/memory/allocator/mp_allocator.h"
+#include "clio_ctp/memory/backend/posix_mmap.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/allocator/mp_allocator.h"
 #include <pthread.h>
 #include <sys/mman.h>
 #include <sys/wait.h>

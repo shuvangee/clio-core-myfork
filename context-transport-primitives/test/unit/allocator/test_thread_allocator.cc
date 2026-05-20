@@ -36,8 +36,8 @@
 #include <vector>
 #include <cstring>
 #include <atomic>
-#include "hermes_shm/memory/allocator/thread_allocator.h"
-#include "hermes_shm/memory/backend/posix_mmap.h"
+#include "clio_ctp/memory/allocator/thread_allocator.h"
+#include "clio_ctp/memory/backend/posix_mmap.h"
 
 using hipc::PartitionedAllocator;
 

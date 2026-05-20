@@ -21,8 +21,8 @@
 #include "chimaera/config_manager.h"
 #include "chimaera/device_memcpy.h"
 #include "chimaera/singletons.h"
-#include "hermes_shm/util/gpu_api.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/gpu_api.h"
+#include "clio_ctp/util/logging.h"
 
 #include <sycl/sycl.hpp>
 

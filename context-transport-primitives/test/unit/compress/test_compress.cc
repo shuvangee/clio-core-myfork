@@ -32,7 +32,7 @@
  */
 
 #include "basic_test.h"
-#include "hermes_shm/compress/compress_factory.h"
+#include "clio_ctp/compress/compress_factory.h"
 #include <utility>
 
 TEST_CASE("TestCompress") {

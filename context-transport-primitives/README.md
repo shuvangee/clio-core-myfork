@@ -99,7 +99,7 @@ ctest -VV -R test_mpsc_ring_buffer_mpi
 
 ## Project Structure
 
-- `include/hermes_shm/` - Public API headers organized by functional modules
+- `include/clio_ctp/` - Public API headers organized by functional modules
   - `data_structures/` - Shared memory compatible data structures
     - `ipc/` - IPC-safe containers (vector, list, unordered_map, ring queues, etc.)
     - `internal/` - Internal implementation details

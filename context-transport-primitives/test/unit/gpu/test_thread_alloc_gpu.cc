@@ -41,9 +41,9 @@
 
 #include <catch2/catch_all.hpp>
 
-#include "hermes_shm/memory/allocator/thread_allocator.h"
-#include "hermes_shm/memory/backend/gpu_shm_mmap.h"
-#include "hermes_shm/util/gpu_api.h"
+#include "clio_ctp/memory/allocator/thread_allocator.h"
+#include "clio_ctp/memory/backend/gpu_shm_mmap.h"
+#include "clio_ctp/util/gpu_api.h"
 
 using hipc::PartitionedAllocator;
 using ctp::ipc::GpuShmMmap;

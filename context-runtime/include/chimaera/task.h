@@ -50,14 +50,14 @@ using pid_t = int;
 
 #include "chimaera/pool_query.h"
 #include "chimaera/types.h"
-#include "hermes_shm/data_structures/ipc/shm_container.h"
-#include "hermes_shm/data_structures/ipc/vector.h"
-#include "hermes_shm/lightbeam/shm_transport.h"
-#include "hermes_shm/memory/allocator/allocator.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/data_structures/ipc/shm_container.h"
+#include "clio_ctp/data_structures/ipc/vector.h"
+#include "clio_ctp/lightbeam/shm_transport.h"
+#include "clio_ctp/memory/allocator/allocator.h"
+#include "clio_ctp/util/logging.h"
 
 // Include GlobalSerialize for architecture-portable serialization
-#include <hermes_shm/data_structures/serialization/global_serialize.h>
+#include <clio_ctp/data_structures/serialization/global_serialize.h>
 
 // Forward declare chi::priv::string for cereal support
 namespace ctp::priv {

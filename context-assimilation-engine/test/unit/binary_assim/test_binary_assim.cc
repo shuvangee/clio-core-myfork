@@ -71,7 +71,7 @@
 #include <yaml-cpp/yaml.h>
 
 // Logging
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Test configuration
 constexpr size_t kDefaultFileSizeMB = 256;

@@ -38,7 +38,7 @@
 
 #include "wrp_cte/compressor/models/qtable_predictor.h"
 #include "../../../context-runtime/test/simple_test.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/logging.h"
 #include <iostream>
 #include <chrono>
 #include <vector>

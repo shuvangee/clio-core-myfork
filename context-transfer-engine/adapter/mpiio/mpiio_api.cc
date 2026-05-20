@@ -40,7 +40,7 @@ bool mpiio_intercepted = true;
 // hermes:: API any more, so they were dropped to unbreak the build.
 
 #include "wrp_cte/core/core_client.h"
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 #include "mpiio_fs_api.h"
 
 // #define WRP_CTE_DISABLE_MPIIO

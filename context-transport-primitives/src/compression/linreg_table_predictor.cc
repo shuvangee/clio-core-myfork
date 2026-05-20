@@ -36,7 +36,7 @@
  * @brief Implementation of linear regression table predictor
  */
 
-#include "hermes_shm/compress/dynamic/compression/linreg_table_predictor.h"
+#include "clio_ctp/compress/dynamic/compression/linreg_table_predictor.h"
 
 #include <fstream>
 #include <sstream>

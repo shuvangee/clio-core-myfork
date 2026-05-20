@@ -32,7 +32,7 @@
  */
 
 #include "basic_test.h"
-// All hermes_shm headers are now included via hermes_shm.h in basic_test.h
+// All clio_ctp headers are now included via clio_ctp.h in basic_test.h
 
 template <typename AtomicT>
 class AtomicTest {

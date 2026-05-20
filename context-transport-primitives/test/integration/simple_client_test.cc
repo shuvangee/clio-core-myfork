@@ -31,15 +31,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "hermes_shm/lightbeam/lightbeam.h"
-#include "hermes_shm/util/timer.h"
+#include "clio_ctp/lightbeam/lightbeam.h"
+#include "clio_ctp/util/timer.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <string>
 #include <cstring>
 #include <cereal/types/string.hpp>
-#include "hermes_shm/lightbeam/thallium/client.h"
+#include "clio_ctp/lightbeam/thallium/client.h"
 
 void print_usage(const char* program_name) {
     std::cout << "Usage: " << program_name << " <ip_address> <protocol>" << std::endl;

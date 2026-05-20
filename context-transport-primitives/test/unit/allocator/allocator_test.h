@@ -40,7 +40,7 @@
 #include <chrono>
 #include <atomic>
 #include <cstring>
-#include "hermes_shm/memory/allocator/allocator.h"
+#include "clio_ctp/memory/allocator/allocator.h"
 
 namespace ctp::testing {
 

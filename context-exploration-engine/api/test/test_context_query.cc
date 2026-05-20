@@ -49,7 +49,7 @@
 #include <cassert>
 #include <cstring>
 #include <set>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 /**
  * Test that context_query can be called and returns a vector

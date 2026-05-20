@@ -32,7 +32,7 @@
  */
 
 #include "../../../context-runtime/test/simple_test.h"
-#include "hermes_shm/data_structures/priv/vector.h"
+#include "clio_ctp/data_structures/priv/vector.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -987,7 +987,7 @@ TEST_CASE("Vector: SVO reserve within SVO_SIZE is no-op", "[priv_vector][svo]") 
 // Serialization Tests (GlobalSerialize)
 // ============================================================================
 
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 
 // Define a simple struct with serialization for testing
 struct Point {
@@ -1182,7 +1182,7 @@ TEST_CASE("Vector: serialize struct type", "[priv_vector][serialization]") {
 // LocalSerialize Tests
 // ============================================================================
 
-#include "hermes_shm/data_structures/serialization/local_serialize.h"
+#include "clio_ctp/data_structures/serialization/local_serialize.h"
 
 TEST_CASE("Vector: LocalSerialize integer vector", "[priv_vector][local_serialize]") {
   vector<int, SimpleHeapAllocator> original(&g_allocator);

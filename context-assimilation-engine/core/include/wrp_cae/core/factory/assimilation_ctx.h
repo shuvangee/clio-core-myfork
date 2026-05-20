@@ -36,7 +36,7 @@
 
 #include <string>
 #include <vector>
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 
 namespace wrp_cae::core {
 

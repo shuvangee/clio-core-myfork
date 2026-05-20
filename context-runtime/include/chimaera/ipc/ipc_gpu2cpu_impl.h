@@ -9,7 +9,7 @@
 #define CHIMAERA_INCLUDE_CHIMAERA_IPC_GPU2CPU_IMPL_H_
 
 #include "chimaera/ipc/ipc_gpu2cpu.h"
-#include "hermes_shm/util/gpu_intrinsics.h"
+#include "clio_ctp/util/gpu_intrinsics.h"
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
 

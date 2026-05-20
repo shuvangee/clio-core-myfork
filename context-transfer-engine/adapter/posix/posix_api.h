@@ -41,8 +41,8 @@
 #include <iostream>
 #include <string>
 
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/real_api.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/real_api.h"
 #include "adapter/adapter_constants.h"
 
 #ifndef O_TMPFILE
@@ -279,7 +279,7 @@ class PosixApi : public RealApi {
 }  // namespace clio::cae
 
 // Global pointer-based singleton
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 namespace clio::cae {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(PosixApi, g_posix_api);

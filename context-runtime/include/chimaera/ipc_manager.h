@@ -45,9 +45,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "hermes_shm/data_structures/priv/array_vector.h"
-#include "hermes_shm/memory/allocator/round_robin_allocator.h"
-#include "hermes_shm/util/gpu_intrinsics.h"
+#include "clio_ctp/data_structures/priv/array_vector.h"
+#include "clio_ctp/memory/allocator/round_robin_allocator.h"
+#include "clio_ctp/util/gpu_intrinsics.h"
 #include "chimaera/chimaera_manager.h"
 #include "chimaera/corwlock.h"
 #include "chimaera/scheduler/scheduler.h"
@@ -59,18 +59,18 @@
 #include "chimaera/ipc/ipc_cpu2cpu.h"
 #include "chimaera/ipc/ipc_cpu2cpu_zmq.h"
 #include "chimaera/ipc/ipc_gpu2cpu.h"
-#include "hermes_shm/data_structures/serialization/serialize_common.h"
-#include "hermes_shm/lightbeam/transport_factory_impl.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/data_structures/serialization/serialize_common.h"
+#include "clio_ctp/lightbeam/transport_factory_impl.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 #include "chimaera/gpu/gpu_info.h"
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
 #include "chimaera/gpu/gpu_ipc_manager.h"
 #endif
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-#include "hermes_shm/memory/allocator/arena_allocator.h"
-#include "hermes_shm/memory/backend/gpu_malloc.h"
-#include "hermes_shm/memory/backend/gpu_shm_mmap.h"
+#include "clio_ctp/memory/allocator/arena_allocator.h"
+#include "clio_ctp/memory/backend/gpu_malloc.h"
+#include "clio_ctp/memory/backend/gpu_shm_mmap.h"
 #if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
 #endif

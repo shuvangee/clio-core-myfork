@@ -62,7 +62,7 @@
 #include <chimaera/bdev/bdev_client.h>
 #include <chimaera/bdev/bdev_tasks.h>
 
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <fstream>
 #include <thread>
 #include <cstring>

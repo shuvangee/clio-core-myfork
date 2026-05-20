@@ -44,7 +44,7 @@
 #include <hdf5.h>
 #include <stdio.h>
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 #define H5FD_WRP_CTE_NAME  "hdf5_hermes_vfd"
 #define H5FD_WRP_CTE_VALUE ((H5FD_class_value_t)(3200))

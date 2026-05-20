@@ -35,9 +35,9 @@
 #include <vector>
 #include <algorithm>
 #include <functional>
-#include "hermes_shm/data_structures/ipc/rb_tree_pre.h"
-#include "hermes_shm/memory/backend/malloc_backend.h"
-#include "hermes_shm/memory/allocator/arena_allocator.h"
+#include "clio_ctp/data_structures/ipc/rb_tree_pre.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
+#include "clio_ctp/memory/allocator/arena_allocator.h"
 
 using namespace ctp::ipc;
 

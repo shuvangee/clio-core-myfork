@@ -35,7 +35,7 @@
 #define WRPCTE_CORE_CONFIG_H_
 
 #include <chimaera/chimaera.h>
-#include <hermes_shm/util/config_parse.h>
+#include <clio_ctp/util/config_parse.h>
 #include <yaml-cpp/yaml.h>
 
 #include <string>

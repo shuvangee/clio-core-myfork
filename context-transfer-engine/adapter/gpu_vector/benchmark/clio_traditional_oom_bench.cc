@@ -29,7 +29,7 @@
 #include <chimaera/bdev/bdev_client.h>
 #include <chimaera/chimaera.h>
 #include <chimaera/types.h>
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_ctp/util/gpu_api.h>
 #include <wrp_cte/core/core_client.h>
 #include <wrp_cte/core/core_tasks.h>
 

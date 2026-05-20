@@ -27,7 +27,7 @@
    when AsyncPutBlob template-instantiates here (it doesn't fire from
    chimaera.h alone). Without this include the linker leaves the
    templated symbols undefined in our .so. */
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 #include <wrp_cte/core/core_client.h>
 #include <wrp_cte/core/core_tasks.h>
 #include <wrp_cte/core/content_transfer_engine.h>

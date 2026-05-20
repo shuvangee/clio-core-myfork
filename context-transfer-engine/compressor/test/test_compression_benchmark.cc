@@ -75,11 +75,11 @@
  */
 
 #include "basic_test.h"
-#include "hermes_shm/compress/compress_factory.h"
-#include "hermes_shm/compress/data_stats.h"
+#include "clio_ctp/compress/compress_factory.h"
+#include "clio_ctp/compress/data_stats.h"
 #include "wrp_cte/compressor/models/distribution_classifier.h"
-#include "hermes_shm/util/config_parse.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/config_parse.h"
+#include "clio_ctp/util/logging.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>
@@ -121,12 +121,12 @@ inline double GetCpuTimeNs() {
 #endif
 
 #if CTP_ENABLE_COMPRESS
-#include "hermes_shm/compress/lossless_modes.h"
+#include "clio_ctp/compress/lossless_modes.h"
 #endif
 
 #if CTP_ENABLE_COMPRESS && CTP_ENABLE_LIBPRESSIO
-#include "hermes_shm/compress/libpressio.h"
-#include "hermes_shm/compress/libpressio_modes.h"
+#include "clio_ctp/compress/libpressio.h"
+#include "clio_ctp/compress/libpressio_modes.h"
 #endif
 
 // Bin configuration for binned distribution generator

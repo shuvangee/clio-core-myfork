@@ -59,7 +59,7 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 #include "chimaera/chimaera.h"
 #include "chimaera/ipc_manager.h"

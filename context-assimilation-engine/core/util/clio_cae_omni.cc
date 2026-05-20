@@ -38,8 +38,8 @@
  * assimilation tasks. Usage: wrp_cae_ingest <omni_file_path>
  */
 
-#include <hermes_shm/util/config_parse.h>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/config_parse.h>
+#include <clio_ctp/util/logging.h>
 #include <wrp_cae/core/constants.h>
 #include <wrp_cae/core/core_client.h>
 #include <wrp_cae/core/factory/assimilation_ctx.h>

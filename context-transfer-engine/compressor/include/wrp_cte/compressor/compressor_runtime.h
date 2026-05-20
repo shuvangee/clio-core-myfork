@@ -38,8 +38,8 @@
 #include <atomic>
 #include <chimaera/chimaera.h>
 #include <chimaera/corwlock.h>
-#include <hermes_shm/data_structures/ipc/ring_buffer.h>
-#include <hermes_shm/introspect/system_info.h>
+#include <clio_ctp/data_structures/ipc/ring_buffer.h>
+#include <clio_ctp/introspect/system_info.h>
 #include <memory>
 #include <unordered_map>
 #include <vector>

@@ -52,8 +52,8 @@
 #include <thread>
 #include <chrono>
 
-#include "hermes_shm/memory/allocator/buddy_allocator.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 #include "allocator_test.h"
 
 using namespace ctp::ipc;

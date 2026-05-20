@@ -32,10 +32,10 @@
  */
 
 #include "basic_test.h"
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/timer.h"
-#include "hermes_shm/util/timer_mpi.h"
-#include "hermes_shm/util/timer_thread.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/timer.h"
+#include "clio_ctp/util/timer_mpi.h"
+#include "clio_ctp/util/timer_thread.h"
 
 #ifdef CTP_ENABLE_MPI
 #include <mpi.h>

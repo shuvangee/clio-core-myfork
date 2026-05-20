@@ -51,7 +51,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #endif
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 #include <zmq.h>
 
 #include <algorithm>
@@ -75,7 +75,7 @@
 #include "chimaera/task_archives.h"
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_ctp/util/gpu_api.h>
 #endif
 
 // Global pointer variable definition for IPC manager singleton

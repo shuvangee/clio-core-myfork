@@ -43,8 +43,8 @@
 
 #include <catch2/catch_all.hpp>
 
-#include "hermes_shm/memory/allocator/round_robin_allocator.h"
-#include "hermes_shm/util/gpu_api.h"
+#include "clio_ctp/memory/allocator/round_robin_allocator.h"
+#include "clio_ctp/util/gpu_api.h"
 
 using hipc::RoundRobinAllocator;
 

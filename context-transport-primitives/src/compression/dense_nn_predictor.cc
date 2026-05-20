@@ -36,7 +36,7 @@
  * @brief Implementation of Dense Neural Network compression predictor using MiniDNN
  */
 
-#include "hermes_shm/compress/dynamic/compression/dense_nn_predictor.h"
+#include "clio_ctp/compress/dynamic/compression/dense_nn_predictor.h"
 #include <fstream>
 #include <chrono>
 #include <filesystem>

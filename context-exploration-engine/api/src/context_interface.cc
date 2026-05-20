@@ -37,7 +37,7 @@
 #include <wrp_cae/core/constants.h>
 #include <chimaera/chimaera.h>
 #include <iostream>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 namespace iowarp {
 

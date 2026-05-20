@@ -32,7 +32,7 @@
  */
 
 #include <chimaera/chimaera.h>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 #include <wrp_cae/core/factory/globus_file_assimilator.h>
 
 #include <chrono>

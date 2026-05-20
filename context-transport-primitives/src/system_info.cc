@@ -34,7 +34,7 @@
 #define CTP_COMPILING_DLL
 #define __HSHM_IS_COMPILING__
 
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 
 #include <climits>
 #ifdef __linux__
@@ -48,7 +48,7 @@
 #include <cstdlib>
 #include <string>
 
-#include "hermes_shm/constants/macros.h"
+#include "clio_ctp/constants/macros.h"
 // MSan: inform sanitizer that mmap-backed memory is initialized by the kernel
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)

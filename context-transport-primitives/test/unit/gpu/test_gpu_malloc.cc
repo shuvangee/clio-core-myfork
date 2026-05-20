@@ -33,11 +33,11 @@
 
 #include <catch2/catch_all.hpp>
 
-#include "hermes_shm/data_structures/ipc/ring_buffer.h"
-#include "hermes_shm/memory/allocator/arena_allocator.h"
-#include "hermes_shm/memory/allocator/buddy_allocator.h"
-#include "hermes_shm/memory/backend/gpu_malloc.h"
-#include "hermes_shm/util/gpu_api.h"
+#include "clio_ctp/data_structures/ipc/ring_buffer.h"
+#include "clio_ctp/memory/allocator/arena_allocator.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/gpu_malloc.h"
+#include "clio_ctp/util/gpu_api.h"
 
 using ctp::ipc::ArenaAllocator;
 using ctp::ipc::GpuMalloc;

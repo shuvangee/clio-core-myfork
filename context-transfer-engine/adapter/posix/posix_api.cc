@@ -44,8 +44,8 @@ bool posix_intercepted = true;
 
 #include "chimaera/chimaera.h"
 #include "adapter/filesystem/filesystem.h"
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/singleton.h"
 #include "posix_fs_api.h"
 
 namespace clio::cae {

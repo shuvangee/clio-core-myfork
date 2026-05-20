@@ -39,7 +39,7 @@
 #include <wrp_cae/core/factory/hdf5_file_assimilator.h>
 #endif
 
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <fstream>
 #include <vector>
 

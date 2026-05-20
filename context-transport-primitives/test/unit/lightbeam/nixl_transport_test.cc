@@ -39,7 +39,7 @@
  *   2. DRAM→FILE (CPU→storage) transfer via dst_fd in LbmContext
  */
 
-#include <hermes_shm/lightbeam/nixl_transport.h>
+#include <clio_ctp/lightbeam/nixl_transport.h>
 
 #include <cassert>
 #include <cstring>

@@ -48,7 +48,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 #include "chimaera/MOD_NAME/MOD_NAME_client.h"
 #include "chimaera/admin/admin_client.h"

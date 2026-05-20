@@ -14,7 +14,7 @@
 #include <thread>
 
 // Logging
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // CTE Core includes
 #include <wrp_cte/core/core_client.h>
@@ -23,7 +23,7 @@
 #include <chimaera/chimaera.h>
 
 // HSHM includes
-#include <hermes_shm/util/singleton.h>
+#include <clio_ctp/util/singleton.h>
 
 namespace {
     constexpr size_t kTestDataSize = 1024;  // 1KB test data

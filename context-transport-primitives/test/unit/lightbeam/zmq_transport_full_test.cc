@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <hermes_shm/lightbeam/zmq_transport.h>
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/zmq_transport.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 
 #include <cassert>
 #include <chrono>

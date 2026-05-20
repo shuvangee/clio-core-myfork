@@ -39,10 +39,10 @@
 #include <chimaera/chimaera.h>
 #include <chimaera/container.h>
 #include <chimaera/pool_manager.h>
-#include <hermes_shm/data_structures/ipc/ring_buffer.h>
-#include <hermes_shm/data_structures/priv/unordered_map_ll.h>
-#include <hermes_shm/introspect/system_info.h>
-#include <hermes_shm/memory/allocator/malloc_allocator.h>
+#include <clio_ctp/data_structures/ipc/ring_buffer.h>
+#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
+#include <clio_ctp/introspect/system_info.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
 
 #include <atomic>
 #include <deque>

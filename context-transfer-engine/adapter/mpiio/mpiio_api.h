@@ -39,11 +39,11 @@
 #include <iostream>
 #include <string>
 
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/logging.h"
 #ifdef WRP_CTE_MPICH
 #include <mpio.h>
 #endif
-#include "hermes_shm/util/real_api.h"
+#include "clio_ctp/util/real_api.h"
 
 #ifndef MPI_MODE_TRUNCATE
 #define MPI_MODE_TRUNCATE 0
@@ -254,7 +254,7 @@ class MpiioApi : public RealApi {
 };
 }  // namespace clio::cae
 
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 /** Simplify access to the stateless MpiioFs Singleton */
 #define WRP_CTE_MPIIO_API \

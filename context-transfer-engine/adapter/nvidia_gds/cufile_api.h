@@ -56,9 +56,9 @@
 #include <iostream>
 #include <string>
 
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/real_api.h"
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/real_api.h"
+#include "clio_ctp/util/singleton.h"
 
 extern "C" {
 typedef CUfileError_t (*cuFileHandleRegister_t)(CUfileHandle_t *,
@@ -155,7 +155,7 @@ class CuFileApi : public RealApi {
 
 }  // namespace clio::cae
 
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 // Singleton macros
 #define WRP_CTE_CUFILE_API \

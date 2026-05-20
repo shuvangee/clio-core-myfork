@@ -37,7 +37,7 @@
 
 #if (CTP_ENABLE_CUDA || CTP_ENABLE_ROCM) && !CTP_ENABLE_SYCL
 
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_ctp/util/gpu_api.h>
 
 #if CTP_ENABLE_CUDA
 #include <cuda_runtime.h>

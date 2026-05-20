@@ -55,7 +55,7 @@
 #include <vector>
 
 #include <yaml-cpp/yaml.h>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 #include "chimaera_commands.h"
 
@@ -837,7 +837,7 @@ class ChiModGenerator {
     oss << "\n";
     oss << "#include \"chimaera/gpu/container.h\"\n";
     oss << "#include \"chimaera/types.h\"\n";
-    oss << "#include \"hermes_shm/util/gpu_api.h\"\n";
+    oss << "#include \"clio_ctp/util/gpu_api.h\"\n";
     oss << "#include <cstring>\n";
     oss << "\n";
     oss << "#if CTP_ENABLE_SYCL\n";

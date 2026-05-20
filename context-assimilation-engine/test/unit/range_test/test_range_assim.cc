@@ -62,7 +62,7 @@
 #include <wrp_cte/core/core_client.h>
 
 // Logging
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Test configuration
 constexpr size_t kTestFileSizeMB = 10;  // 10MB for range testing

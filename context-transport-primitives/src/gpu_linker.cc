@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "hermes_shm/util/gpu_linker.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/util/gpu_linker.h"
+#include "clio_ctp/util/logging.h"
 
 #if CTP_ENABLE_CUDA
 #include <cuda.h>

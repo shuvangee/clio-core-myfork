@@ -47,11 +47,11 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Include Chimaera headers
 #include <chimaera/chimaera.h>
-#include <hermes_shm/memory/allocator/malloc_allocator.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <chimaera/container.h>
 #include <chimaera/pool_query.h>
 #include <chimaera/singletons.h>
@@ -63,7 +63,7 @@
 #include <chimaera/admin/admin_tasks.h>
 
 // Include GlobalSerialize for serialization
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 
 using namespace chi;
 

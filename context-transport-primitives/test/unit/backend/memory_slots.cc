@@ -36,7 +36,7 @@
 #include <iostream>
 
 #include "basic_test.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
 using ctp::ipc::PosixShmMmap;
 

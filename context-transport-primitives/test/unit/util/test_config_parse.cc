@@ -32,7 +32,7 @@
  */
 
 #include "basic_test.h"
-#include "hermes_shm/util/config_parse.h"
+#include "clio_ctp/util/config_parse.h"
 
 #include <fstream>
 #include <cstdlib>

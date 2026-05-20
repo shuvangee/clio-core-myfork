@@ -59,7 +59,7 @@
 #ifndef WRP_BENCH_COMMON_H_
 #define WRP_BENCH_COMMON_H_
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 #include <algorithm>
 #include <cctype>

@@ -44,7 +44,7 @@
 #include <chimaera/module_manager.h>
 #include <chimaera/pool_manager.h>
 #include <chimaera/task_archives.h>
-#include <hermes_shm/memory/allocator/malloc_allocator.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
 
 #include <iostream>
 

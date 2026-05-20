@@ -32,7 +32,7 @@
  */
 
 #include "../../../context-runtime/test/simple_test.h"
-#include "hermes_shm/memory/allocator/malloc_allocator.h"
+#include "clio_ctp/memory/allocator/malloc_allocator.h"
 #include <iostream>
 
 using namespace ctp::ipc;

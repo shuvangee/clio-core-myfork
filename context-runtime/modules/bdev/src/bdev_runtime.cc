@@ -37,8 +37,8 @@
 #include <chimaera/work_orchestrator.h>
 #include <chimaera/worker.h>
 
-#include <hermes_shm/introspect/system_info.h>
-#include <hermes_shm/serialize/msgpack_wrapper.h>
+#include <clio_ctp/introspect/system_info.h>
+#include <clio_ctp/serialize/msgpack_wrapper.h>
 
 #include <algorithm>
 #include <cmath>
@@ -47,7 +47,7 @@
 #include <limits>
 #include <thread>
 
-#include "hermes_shm/util/timer.h"
+#include "clio_ctp/util/timer.h"
 
 namespace chimaera::bdev {
 

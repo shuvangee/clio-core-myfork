@@ -34,7 +34,7 @@
 #ifndef CHIMAERA_INCLUDE_CHIMAERA_CORWLOCK_H_
 #define CHIMAERA_INCLUDE_CHIMAERA_CORWLOCK_H_
 
-#include <hermes_shm/thread/lock/rwlock.h>
+#include <clio_ctp/thread/lock/rwlock.h>
 #include "chimaera/types.h"
 
 namespace chi {

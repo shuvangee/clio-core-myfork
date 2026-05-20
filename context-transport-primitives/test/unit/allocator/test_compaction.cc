@@ -36,8 +36,8 @@
 #include <vector>
 // buddy_allocator.h must be included before malloc_backend.h to ensure the
 // correct include order for memory_backend.h (avoid circular include issue).
-#include "hermes_shm/memory/allocator/buddy_allocator.h"
-#include "hermes_shm/memory/backend/malloc_backend.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
 
 using hipc::BuddyAllocator;
 using hipc::ForwardingTable;

@@ -45,7 +45,7 @@
 #include <chimaera/admin/admin_client.h>
 #include <chimaera/bdev/bdev_client.h>
 #include <chimaera/bdev/bdev_tasks.h>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 using namespace wrp_cte::core;
 

@@ -30,7 +30,7 @@
 #include <wrp_cte/core/core_tasks.h>
 #include <wrp_cte/gpu_vector/gpu_vector.h>
 
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_ctp/util/gpu_api.h>
 
 #include <chrono>
 #include <cstdio>

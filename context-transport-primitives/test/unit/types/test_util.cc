@@ -34,14 +34,14 @@
 #define CTP_COMPILING_DLL
 
 #include "basic_test.h"
-#include "hermes_shm/data_structures/internal/shm_archive.h"
-#include "hermes_shm/thread/thread_model_manager.h"
-#include "hermes_shm/util/auto_trace.h"
-#include "hermes_shm/util/config_parse.h"
-#include "hermes_shm/util/formatter.h"
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/singleton.h"
-#include "hermes_shm/util/type_switch.h"
+#include "clio_ctp/data_structures/internal/shm_archive.h"
+#include "clio_ctp/thread/thread_model_manager.h"
+#include "clio_ctp/util/auto_trace.h"
+#include "clio_ctp/util/config_parse.h"
+#include "clio_ctp/util/formatter.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/singleton.h"
+#include "clio_ctp/util/type_switch.h"
 
 TEST_CASE("TypeSwitch") {
   typedef ctp::type_switch<int, int, std::string, std::string, size_t,

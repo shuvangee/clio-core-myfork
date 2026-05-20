@@ -69,8 +69,8 @@
 #include <sys/times.h>
 #endif
 
-#include <hermes_shm/compress/compress_factory.h>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/compress/compress_factory.h>
+#include <clio_ctp/util/logging.h>
 
 using namespace std::chrono;
 

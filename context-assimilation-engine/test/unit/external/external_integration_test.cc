@@ -17,10 +17,10 @@
 #include <chimaera/chimaera.h>
 
 // HSHM includes
-#include <hermes_shm/util/singleton.h>
+#include <clio_ctp/util/singleton.h>
 
 // Logging
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 class ExternalCaeTest {
 private:

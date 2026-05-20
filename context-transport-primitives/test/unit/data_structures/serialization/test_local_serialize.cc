@@ -32,7 +32,7 @@
  */
 
 #include "../../../../../context-runtime/test/simple_test.h"
-#include "hermes_shm/data_structures/serialization/local_serialize.h"
+#include "clio_ctp/data_structures/serialization/local_serialize.h"
 #include <string>
 #include <vector>
 #include <list>

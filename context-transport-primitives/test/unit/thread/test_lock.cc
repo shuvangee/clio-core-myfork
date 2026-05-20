@@ -32,7 +32,7 @@
  */
 
 #include "basic_test.h"
-#include "hermes_shm/thread/lock.h"
+#include "clio_ctp/thread/lock.h"
 #include "omp.h"
 
 using ctp::Mutex;

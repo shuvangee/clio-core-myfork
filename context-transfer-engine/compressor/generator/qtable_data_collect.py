@@ -4,7 +4,7 @@ QTable training-data collector.
 
 Walks a workflow output directory, reads files in chunks of multiple
 sizes, runs every available compressor at three presets (low / med /
-high == FAST / BALANCED / BEST in hermes_shm/compress), and writes a
+high == FAST / BALANCED / BEST in clio_ctp/compress), and writes a
 CSV with everything the qtable predictor and lossy-quality analyses
 need.
 

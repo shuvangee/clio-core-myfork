@@ -36,7 +36,7 @@
 
 #include <chimaera/chimaera.h>
 #include <chimaera/config_manager.h>
-#include <hermes_shm/introspect/system_info.h>
+#include <clio_ctp/introspect/system_info.h>
 #include <yaml-cpp/yaml.h>
 
 #include "autogen/bdev_methods.h"

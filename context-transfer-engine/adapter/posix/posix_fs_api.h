@@ -311,7 +311,7 @@ public:
 } // namespace clio::cae
 
 // Global pointer-based singleton
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 namespace clio::cae {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(PosixFs, g_posix_fs);

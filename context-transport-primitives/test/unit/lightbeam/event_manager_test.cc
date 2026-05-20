@@ -31,9 +31,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <hermes_shm/lightbeam/event_manager.h>
-#include <hermes_shm/lightbeam/socket_transport.h>
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/event_manager.h>
+#include <clio_ctp/lightbeam/socket_transport.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 
 #include <cassert>
 #include <chrono>
@@ -316,7 +316,7 @@ void TestSocketTransportWithEM() {
 }
 
 #if CTP_ENABLE_ZMQ
-#include <hermes_shm/lightbeam/zmq_transport.h>
+#include <clio_ctp/lightbeam/zmq_transport.h>
 
 void TestZmqTransportWithEM() {
   std::cout << "\n==== Testing ZmqTransport With EventManager ====\n";

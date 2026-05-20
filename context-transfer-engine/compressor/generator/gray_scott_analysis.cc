@@ -66,16 +66,16 @@
 #include <cmath>
 #include <memory>
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Compression headers (from hermes_shm)
-#include "hermes_shm/compress/compress.h"
-#include "hermes_shm/compress/lossless_modes.h"
-#include "hermes_shm/compress/blosc.h"
-#include "hermes_shm/compress/snappy.h"
+#include "clio_ctp/compress/compress.h"
+#include "clio_ctp/compress/lossless_modes.h"
+#include "clio_ctp/compress/blosc.h"
+#include "clio_ctp/compress/snappy.h"
 
 #if CTP_ENABLE_COMPRESS && CTP_ENABLE_LIBPRESSIO
-#include "hermes_shm/compress/libpressio_modes.h"
+#include "clio_ctp/compress/libpressio_modes.h"
 #endif
 
 // Data statistics

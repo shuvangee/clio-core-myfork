@@ -66,11 +66,11 @@
 #include <cstring>
 #include <iomanip>
 
-#include "hermes_shm/memory/allocator/mp_allocator.h"
-#include "hermes_shm/memory/allocator/buddy_allocator.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
-#include "hermes_shm/memory/backend/malloc_backend.h"
-#include "hermes_shm/util/config_parse.h"
+#include "clio_ctp/memory/allocator/mp_allocator.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
+#include "clio_ctp/util/config_parse.h"
 
 namespace bench {
 

@@ -56,9 +56,9 @@
 #include <vector>
 
 #include "chimaera/worker.h"
-#include "hermes_shm/util/gpu_api.h"
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/timer.h"
+#include "clio_ctp/util/gpu_api.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/timer.h"
 
 namespace wrp_cte::core {
 

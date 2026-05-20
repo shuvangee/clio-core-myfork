@@ -32,8 +32,8 @@
  */
 
 #include "../../../context-runtime/test/simple_test.h"
-#include "hermes_shm/data_structures/priv/string.h"
-#include "hermes_shm/data_structures/priv/vector.h"
+#include "clio_ctp/data_structures/priv/string.h"
+#include "clio_ctp/data_structures/priv/vector.h"
 #include <string>
 #include <memory>
 
@@ -627,7 +627,7 @@ TEST_CASE("String: single character string", "[priv_string]") {
 // Serialization Tests (GlobalSerialize)
 // ============================================================================
 
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 
 TEST_CASE("String: serialize small SSO string", "[priv_string][serialization]") {
   basic_string<char, SimpleHeapAllocator> original("hello", &g_allocator);
@@ -748,7 +748,7 @@ TEST_CASE("String: serialize exactly SSO size boundary", "[priv_string][serializ
 // LocalSerialize Tests
 // ============================================================================
 
-#include "hermes_shm/data_structures/serialization/local_serialize.h"
+#include "clio_ctp/data_structures/serialization/local_serialize.h"
 
 TEST_CASE("String: LocalSerialize small SSO string", "[priv_string][local_serialize]") {
   basic_string<char, SimpleHeapAllocator> original("hello", &g_allocator);

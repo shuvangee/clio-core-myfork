@@ -39,10 +39,10 @@
 #include <vector>
 
 // Include LocalSerialize for serialization
-#include <hermes_shm/data_structures/priv/vector.h>
-#include <hermes_shm/data_structures/priv/wrap_vector.h>
-#include <hermes_shm/data_structures/serialization/local_serialize.h>
-#include <hermes_shm/lightbeam/lightbeam.h>
+#include <clio_ctp/data_structures/priv/vector.h>
+#include <clio_ctp/data_structures/priv/wrap_vector.h>
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <clio_ctp/lightbeam/lightbeam.h>
 
 #include "chimaera/types.h"
 

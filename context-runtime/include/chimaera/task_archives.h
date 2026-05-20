@@ -41,10 +41,10 @@
 #include <vector>
 
 // Include GlobalSerialize for architecture-portable serialization
-#include <hermes_shm/data_structures/serialization/global_serialize.h>
+#include <clio_ctp/data_structures/serialization/global_serialize.h>
 
 // Include Lightbeam for networking
-#include <hermes_shm/lightbeam/lightbeam.h>
+#include <clio_ctp/lightbeam/lightbeam.h>
 
 #include "chimaera/types.h"
 

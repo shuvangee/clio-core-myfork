@@ -44,8 +44,8 @@
 #include "wrp_cte/core/core_tasks.h"
 #include "adapter/adapter_types.h"
 #include "adapter/mapper/balanced_mapper.h"
-#include "hermes_shm/types/bitfield.h"
-#include "hermes_shm/thread/lock.h"
+#include "clio_ctp/types/bitfield.h"
+#include "clio_ctp/thread/lock.h"
 
 namespace stdfs = std::filesystem;
 

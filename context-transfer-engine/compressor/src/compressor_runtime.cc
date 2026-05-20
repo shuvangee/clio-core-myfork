@@ -34,7 +34,7 @@
 // Copyright 2024 IOWarp contributors
 #include <wrp_cte/compressor/compressor_runtime.h>
 
-#include <hermes_shm/serialize/msgpack_wrapper.h>
+#include <clio_ctp/serialize/msgpack_wrapper.h>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -50,9 +50,9 @@
 
 #include "chimaera/work_orchestrator.h"
 #include "chimaera/worker.h"
-#include "hermes_shm/compress/compress_factory.h"
-#include "hermes_shm/compress/data_stats.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/compress/compress_factory.h"
+#include "clio_ctp/compress/data_stats.h"
+#include "clio_ctp/util/logging.h"
 
 namespace wrp_cte::compressor {
 

@@ -47,11 +47,11 @@
 
 #include <catch2/catch_all.hpp>
 
-#include "hermes_shm/data_structures/priv/vector.h"
-#include "hermes_shm/data_structures/serialization/local_serialize.h"
-#include "hermes_shm/memory/allocator/arena_allocator.h"
-#include "hermes_shm/memory/backend/gpu_shm_mmap.h"
-#include "hermes_shm/util/gpu_api.h"
+#include "clio_ctp/data_structures/priv/vector.h"
+#include "clio_ctp/data_structures/serialization/local_serialize.h"
+#include "clio_ctp/memory/allocator/arena_allocator.h"
+#include "clio_ctp/memory/backend/gpu_shm_mmap.h"
+#include "clio_ctp/util/gpu_api.h"
 
 using ctp::ipc::ArenaAllocator;
 using ctp::ipc::GpuShmMmap;

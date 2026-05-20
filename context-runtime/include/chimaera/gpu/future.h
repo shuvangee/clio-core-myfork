@@ -35,7 +35,7 @@
 #define CHIMAERA_INCLUDE_CHIMAERA_GPU_FUTURE_H_
 
 #include "chimaera/types.h"
-#include "hermes_shm/memory/allocator/allocator.h"
+#include "clio_ctp/memory/allocator/allocator.h"
 
 namespace chi {
 // Forward-declared so gpu::Future::operator chi::Future<>() can resolve

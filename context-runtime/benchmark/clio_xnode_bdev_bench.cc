@@ -28,7 +28,7 @@
 #include <thread>
 #include <vector>
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 #include <mpi.h>
 
 #include "chimaera/admin/admin_client.h"

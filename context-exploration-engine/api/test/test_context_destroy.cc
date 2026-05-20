@@ -48,7 +48,7 @@
 #include <iostream>
 #include <cassert>
 #include <cstring>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 /**
  * Test that context_destroy can handle empty context list

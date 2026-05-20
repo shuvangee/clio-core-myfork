@@ -49,7 +49,7 @@
 #include <iostream>
 #include <string>
 
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 #include <chimaera/chimaera.h>
 #include <chimaera/admin/admin_client.h>
 #include <wrp_cte/core/core_client.h>

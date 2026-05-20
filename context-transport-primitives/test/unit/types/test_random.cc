@@ -34,8 +34,8 @@
 //
 // Created by llogan on 28/10/24.
 //
-#include <hermes_shm/util/logging.h>
-#include <hermes_shm/util/random.h>
+#include <clio_ctp/util/logging.h>
+#include <clio_ctp/util/random.h>
 #ifndef _WIN32
 #include <unistd.h>
 #endif

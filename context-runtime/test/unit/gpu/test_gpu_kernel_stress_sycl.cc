@@ -23,7 +23,7 @@
 #include "simple_test.h"
 #include "test_gpu_kernel_stress_common.h"
 
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_ctp/util/gpu_api.h>
 #include <sycl/sycl.hpp>
 
 using TaskT = chimaera::MOD_NAME::GpuSubmitTask;

@@ -31,15 +31,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "hermes_shm/lightbeam/lightbeam.h"
-#include "hermes_shm/lightbeam/thallium/server.h"
+#include "clio_ctp/lightbeam/lightbeam.h"
+#include "clio_ctp/lightbeam/thallium/server.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <atomic>
 #include <cstring>
 #include <string>
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 
 // Global running flag
 std::atomic<bool> running{true};

@@ -39,8 +39,8 @@
 #include <iostream>
 #include <string>
 
-#include "hermes_shm/util/logging.h"
-#include "hermes_shm/util/real_api.h"
+#include "clio_ctp/util/logging.h"
+#include "clio_ctp/util/real_api.h"
 
 extern "C" {
 typedef FILE* (*fopen_t)(const char* path, const char* mode);
@@ -189,7 +189,7 @@ class StdioApi : public RealApi {
 };
 }  // namespace clio::cae
 
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 // Singleton macros
 #define WRP_CTE_STDIO_API \

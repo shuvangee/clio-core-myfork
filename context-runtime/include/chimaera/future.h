@@ -37,9 +37,9 @@
 #include <coroutine>
 
 #include "chimaera/types.h"
-#include "hermes_shm/lightbeam/shm_transport.h"
-#include "hermes_shm/memory/allocator/allocator.h"
-#include "hermes_shm/util/logging.h"
+#include "clio_ctp/lightbeam/shm_transport.h"
+#include "clio_ctp/memory/allocator/allocator.h"
+#include "clio_ctp/util/logging.h"
 
 namespace chi {
 

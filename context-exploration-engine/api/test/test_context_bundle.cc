@@ -63,7 +63,7 @@
 #include <cstring>
 #include <thread>
 #include <chrono>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Test configuration
 const std::string kTestFileName = "/tmp/test_cee_bundle_file.bin";

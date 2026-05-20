@@ -34,7 +34,7 @@
 #ifndef CHIMAERA_INCLUDE_CHIMAERA_COMUTEX_H_
 #define CHIMAERA_INCLUDE_CHIMAERA_COMUTEX_H_
 
-#include <hermes_shm/thread/lock/mutex.h>
+#include <clio_ctp/thread/lock/mutex.h>
 #include "chimaera/types.h"
 
 namespace chi {

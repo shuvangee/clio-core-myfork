@@ -45,10 +45,10 @@
 #include <chimaera/pool_manager.h>
 #include <chimaera/task_archives.h>
 #include <chimaera/worker.h>
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
-#include <hermes_shm/serialize/msgpack_wrapper.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/serialize/msgpack_wrapper.h>
 
-#include "hermes_shm/data_structures/serialization/global_serialize.h"
+#include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <cerrno>
 #include <chrono>
 #include <climits>

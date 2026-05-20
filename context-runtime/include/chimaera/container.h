@@ -35,7 +35,7 @@
 #define CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
 
 #include <cmath>
-#include <hermes_shm/data_structures/serialization/global_serialize.h>
+#include <clio_ctp/data_structures/serialization/global_serialize.h>
 #include <iostream>
 #include <memory>
 #include <sstream>

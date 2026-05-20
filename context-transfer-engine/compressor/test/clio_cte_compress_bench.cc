@@ -79,7 +79,7 @@
 #include <chimaera/chimaera.h>
 #include <wrp_cte/core/core_client.h>
 #include <wrp_cte/core/core_tasks.h>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 using namespace std::chrono;
 

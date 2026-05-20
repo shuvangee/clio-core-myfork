@@ -75,7 +75,7 @@
 #include <wrp_cte/core/core_client.h>
 
 // Logging
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Test configuration
 const std::string kTestFileName = "/tmp/test_hdf5_assim_file.h5";

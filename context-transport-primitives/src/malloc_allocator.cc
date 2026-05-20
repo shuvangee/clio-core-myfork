@@ -31,7 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "hermes_shm/memory/allocator/malloc_allocator.h"
+#include "clio_ctp/memory/allocator/malloc_allocator.h"
 
 namespace ctp::ipc {
 

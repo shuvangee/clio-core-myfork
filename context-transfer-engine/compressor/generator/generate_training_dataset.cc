@@ -60,15 +60,15 @@
 #include <algorithm>
 
 #include "wrp_cte/compressor/models/data_stats.h"
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
 // Compression libraries
 #ifdef CTP_ENABLE_COMPRESS
-#include "hermes_shm/compress/compress_factory.h"
-#include "hermes_shm/compress/lossless_modes.h"
+#include "clio_ctp/compress/compress_factory.h"
+#include "clio_ctp/compress/lossless_modes.h"
 #ifdef CTP_ENABLE_LIBPRESSIO
-#include "hermes_shm/compress/libpressio.h"
-#include "hermes_shm/compress/libpressio_modes.h"
+#include "clio_ctp/compress/libpressio.h"
+#include "clio_ctp/compress/libpressio_modes.h"
 #endif
 #endif
 

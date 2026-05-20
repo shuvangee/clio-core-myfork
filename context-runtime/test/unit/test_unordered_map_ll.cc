@@ -55,9 +55,9 @@
 #include <atomic>
 #include <mutex>
 #include <cassert>
-#include <hermes_shm/util/logging.h>
+#include <clio_ctp/util/logging.h>
 
-#include <hermes_shm/data_structures/priv/unordered_map_ll.h>
+#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
 
 // Simple test helper macros
 #define EXPECT_EQ(a, b) do { \
