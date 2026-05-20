@@ -10,7 +10,7 @@
 #
 # WORKDIR (RADICAL sandbox + DDMD config) lives on $HOME (NFS), NOT on FUSE:
 # DDMD's `shutil.copy(args.config, cfg.experiment_directory)` calls chmod,
-# which wrp_cte_fuse returns ENOSYS for. The actual FUSE traffic is from
+# which clio_cte_fuse returns ENOSYS for. The actual FUSE traffic is from
 # /opt/run_ddmd.sh writing into the FUSE mountpoint.
 
 name: deepdrivemd_iowarp_libfuse_4n
@@ -102,7 +102,7 @@ pkgs:
     omp_threads: 4
     # WORKDIR (RADICAL sandbox + DDMD config) MUST live on NFS, not on
     # the FUSE mount. RADICAL's `shutil.copy(args.config, ...)` calls
-    # chmod on the destination, which wrp_cte_fuse returns ENOSYS for —
+    # chmod on the destination, which clio_cte_fuse returns ENOSYS for —
     # which crashed our previous run (15467) at start-up. The actual
     # FUSE traffic for this pipeline comes from the inside-container
     # /opt/run_ddmd.sh writing into /mnt/wrp_cte/ddmd (the FUSE

@@ -8,15 +8,15 @@ functionality of the CTE Python bindings.
 Requirements:
 - wrp_cte_core_ext module (Python bindings)
 - Chimaera runtime initialized with CHI_WITH_RUNTIME=1
-- WRP_RUNTIME_CONF environment variable set to config file
+- CHI_SERVER_CONF environment variable set to config file
 - pytest (optional, for test framework mode)
 
 Usage:
     # Run with pytest (if available)
-    CHI_WITH_RUNTIME=1 WRP_RUNTIME_CONF=/path/to/config.yaml pytest test_cte_telemetry.py -v
+    CHI_WITH_RUNTIME=1 CHI_SERVER_CONF=/path/to/config.yaml pytest test_cte_telemetry.py -v
 
     # Run as standalone script (no pytest required)
-    CHI_WITH_RUNTIME=1 WRP_RUNTIME_CONF=/path/to/config.yaml python3 test_cte_telemetry.py
+    CHI_WITH_RUNTIME=1 CHI_SERVER_CONF=/path/to/config.yaml python3 test_cte_telemetry.py
 """
 
 import sys
@@ -78,9 +78,9 @@ def runtime_initialized(cte_module):
         pytest.skip("Runtime initialization disabled (CHI_WITH_RUNTIME=0)")
 
     # Check for config file
-    config_path = os.getenv("WRP_RUNTIME_CONF")
+    config_path = os.getenv("CHI_SERVER_CONF")
     if not config_path:
-        pytest.skip("WRP_RUNTIME_CONF environment variable not set")
+        pytest.skip("CHI_SERVER_CONF environment variable not set")
 
     if not os.path.exists(config_path):
         pytest.skip(f"Config file not found: {config_path}")
@@ -322,9 +322,9 @@ def main():
         return 1
 
     # Initialize runtime
-    config_path = os.getenv("WRP_RUNTIME_CONF")
+    config_path = os.getenv("CHI_SERVER_CONF")
     if not config_path:
-        print("❌ WRP_RUNTIME_CONF environment variable not set")
+        print("❌ CHI_SERVER_CONF environment variable not set")
         return 1
 
     try:

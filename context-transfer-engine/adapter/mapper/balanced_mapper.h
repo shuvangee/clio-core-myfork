@@ -38,7 +38,7 @@
 
 #include "abstract_mapper.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 /**
  * Implement balanced mapping
  */
@@ -65,6 +65,6 @@ class BalancedMapper : public AbstractMapper {
     }
   }
 };
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #endif  // WRP_CTE_BALANCED_MAPPER_H

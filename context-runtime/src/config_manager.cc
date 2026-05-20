@@ -104,13 +104,7 @@ std::string ConfigManager::GetServerConfigPath() const {
     return std::string(chi_env_path);
   }
 
-  // Fall back to WRP_RUNTIME_CONF (secondary)
-  const char *wrp_env_path = std::getenv("WRP_RUNTIME_CONF");
-  if (wrp_env_path) {
-    return std::string(wrp_env_path);
-  }
-
-  // Fall back to ~/.chimaera/chimaera.yaml (tertiary)
+  // Fall back to ~/.chimaera/chimaera.yaml
   std::string home_config =
       hshm::ConfigParse::ExpandPath("${HOME}/.chimaera/chimaera.yaml");
   if (std::filesystem::exists(home_config)) {

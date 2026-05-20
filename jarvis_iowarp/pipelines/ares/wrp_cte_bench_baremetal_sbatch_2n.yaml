@@ -1,6 +1,6 @@
-# wrp_cte_bench on ares baremetal -- 2-node SLURM, SHM transport, RAM bdev.
+# clio_cte_bench on ares baremetal -- 2-node SLURM, SHM transport, RAM bdev.
 #
-# Purpose: bypass the FUSE adapter entirely. Each node runs a wrp_cte_bench
+# Purpose: bypass the FUSE adapter entirely. Each node runs a clio_cte_bench
 # process that issues PutBlob calls straight into its LOCAL chimaera
 # daemon. If this passes, we know the 2-node chimaera + CTE path is
 # healthy and the FUSE adapter is the lone bug (file size returns 0,
@@ -8,9 +8,9 @@
 #
 # Usage:
 #   jarvis ppl submit \
-#     ${IOWARP}/jarvis_iowarp/pipelines/ares/wrp_cte_bench_baremetal_sbatch_2n.yaml
+#     ${IOWARP}/jarvis_iowarp/pipelines/ares/clio_cte_bench_baremetal_sbatch_2n.yaml
 
-name: wrp_cte_bench_baremetal_sbatch_2n
+name: clio_cte_bench_baremetal_sbatch_2n
 
 # Pssh-to-localhost route -- the conda libcrypto.so.3 (ABI 3.0.x) shadows
 # the system libcrypto (ABI 3.6.x) that /usr/bin/ssh was built against.
@@ -18,7 +18,7 @@ name: wrp_cte_bench_baremetal_sbatch_2n
 # launcher can still find its own libs.
 ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
 
-# OpenMPI peer-wireup -- harmless here (wrp_cte_bench isn't MPI) but the
+# OpenMPI peer-wireup -- harmless here (clio_cte_bench isn't MPI) but the
 # pre_cmds load openmpi so jarvis's captured env is consistent with the
 # IOR pipeline. Pin both fabrics to 172.20.0.0/16 (eno1) which is what
 # `getent hosts ares-comp-XX` resolves to.
@@ -28,7 +28,7 @@ env:
 
 scheduler:
   name: slurm
-  job_name: wrp_cte_bench_baremetal_sbatch_2n
+  job_name: clio_cte_bench_baremetal_sbatch_2n
   nodes: 2
   ntasks_per_node: 1
   partition: compute
@@ -68,10 +68,10 @@ pkgs:
     # configured wrp_cte_core container.
     pool_query: "local"
 
-  - pkg_type: jarvis_iowarp.wrp_cte_bench
+  - pkg_type: jarvis_iowarp.clio_cte_bench
     pkg_name: bench
     # 1 thread x depth-8 in-flight x 4096 ops of 1 MiB = 4 GiB per node.
-    # nprocs == nodes * ppn so the wrp_cte_bench process fans 1-per-node
+    # nprocs == nodes * ppn so the clio_cte_bench process fans 1-per-node
     # via the Pssh path inside the bench pkg.
     test_case: Put
     num_threads: 1

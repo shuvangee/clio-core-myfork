@@ -15,7 +15,7 @@
 # Redis Benchmark Script
 #
 # This benchmark measures the performance of SET, GET, and combined operations
-# in Redis, comparable to the CTE Core benchmark (wrp_cte_bench).
+# in Redis, comparable to the CTE Core benchmark (clio_cte_bench).
 #
 # Usage:
 #   ./redis_bench.sh <test_case> <num_clients> <io_size> <io_count>

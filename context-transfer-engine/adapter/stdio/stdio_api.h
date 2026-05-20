@@ -72,7 +72,7 @@ typedef int (*fsetpos64_t)(FILE* stream, const fpos64_t* pos);
 typedef long int (*ftell_t)(FILE* fp);
 }
 
-namespace wrp::cae {
+namespace clio::cae {
 
 using hshm::RealApi;
 
@@ -187,13 +187,13 @@ class StdioApi : public RealApi {
     REQUIRE_API(ftell)
   }
 };
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #include "hermes_shm/util/singleton.h"
 
 // Singleton macros
 #define WRP_CTE_STDIO_API \
-  hshm::Singleton<::wrp::cae::StdioApi>::GetInstance()
-#define WRP_CTE_STDIO_API_T wrp::cae::StdioApi*
+  hshm::Singleton<::clio::cae::StdioApi>::GetInstance()
+#define WRP_CTE_STDIO_API_T clio::cae::StdioApi*
 
 #endif  // WRP_CTE_ADAPTER_STDIO_H

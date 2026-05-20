@@ -6,11 +6,11 @@
 # Stack:
 #   wrp_runtime  -> chimaera daemon
 #   wrp_cte      -> CTE storage tiers
-#   wrp_cte_libfuse -> mounts /home/llogan/libfuse via wrp_cte_fuse
+#   wrp_cte_libfuse -> mounts /home/llogan/libfuse via clio_cte_fuse
 #   builtin.ior  -> POSIX writes through the mountpoint
 #
-# Requires the system-installed wrp_cte_fuse binary
-# (/usr/local/bin/wrp_cte_fuse), built with
+# Requires the system-installed clio_cte_fuse binary
+# (/usr/local/bin/clio_cte_fuse), built with
 # WRP_CTE_ENABLE_FUSE_ADAPTER=ON (default for release-adapter).
 
 name: iowarp_ior_libfuse_aurora_1n

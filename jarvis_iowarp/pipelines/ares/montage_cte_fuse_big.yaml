@@ -65,7 +65,7 @@ pkgs:
     pkg_name: cte_fuse
     deploy_mode: default
     mountpoint: ${HOME}/wrp_cte
-    # wrp_cte_fuse now forces -s (single-threaded libfuse) at the
+    # clio_cte_fuse now forces -s (single-threaded libfuse) at the
     # binary level. Override at runtime with WRP_CTE_FUSE_ALLOW_MT=1
     # once the underlying race is debugged and fixed.
     sleep: 2

@@ -49,7 +49,7 @@ services:
         sleep 5 &&
         echo 'CAE: Sending omni file...' &&
         export PATH=/usr/local/bin:$PATH &&
-        wrp_cae_omni /binary_assim.yaml &&
+        clio_cae_omni /binary_assim.yaml &&
         echo 'CAE: Completed.' &&
         tail -f /dev/null
       "

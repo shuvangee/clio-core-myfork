@@ -79,9 +79,9 @@ hid_t H5FDhermes_err_class_g = H5I_INVALID_HID;
 #define OP_READ 1
 #define OP_WRITE 2
 
-using wrp::cae::AdapterStat;
-using wrp::cae::File;
-using wrp::cae::IoStatus;
+using clio::cae::AdapterStat;
+using clio::cae::File;
+using clio::cae::IoStatus;
 
 /* POSIX I/O mode used as the third parameter to open/_open
  * when creating a new file (O_CREAT is set). */

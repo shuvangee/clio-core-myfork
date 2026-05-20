@@ -29,7 +29,7 @@ pkgs:
     poll_period_ms: 5000
 
   # Stage 3: Run CTE benchmark (4 procs, 1 per node)
-  - pkg_type: jarvis_iowarp.wrp_cte_bench
+  - pkg_type: jarvis_iowarp.clio_cte_bench
     pkg_name: cte_bench
     test_case: "Put"
     num_threads: 1

@@ -43,12 +43,12 @@ bool stdio_intercepted = true;
 
 #include "stdio_fs_api.h"
 
-using wrp::cae::AdapterStat;
-using wrp::cae::File;
-using wrp::cae::FsIoOptions;
-using wrp::cae::IoStatus;
-using wrp::cae::MetadataManager;
-using wrp::cae::SeekMode;
+using clio::cae::AdapterStat;
+using clio::cae::File;
+using clio::cae::FsIoOptions;
+using clio::cae::IoStatus;
+using clio::cae::MetadataManager;
+using clio::cae::SeekMode;
 using hshm::u8;  // chimaera relocated u8/u16/... into hshm::; pull
                   // u8 in by name so the existing getc/putc bodies
                   // compile without rewriting every typed buffer.

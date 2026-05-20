@@ -1,9 +1,9 @@
 # Pipeline: dd benchmark through wrp_cte_libfuse with the chimaera
 # runtime embedded in the FUSE process (CHI_WITH_RUNTIME=1).
 #
-# No wrp_runtime package -- wrp_cte_fuse owns the runtime. The pool is
+# No wrp_runtime package -- clio_cte_fuse owns the runtime. The pool is
 # composed by wrp_cte (deploy_mode default) which connects via SHM to
-# wrp_cte_fuse's embedded runtime.
+# clio_cte_fuse's embedded runtime.
 #
 # Runs bare-metal on host; no container needed for the bench itself.
 

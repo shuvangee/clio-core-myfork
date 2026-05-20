@@ -23,7 +23,7 @@ class WrpCteBench(Application):
 
         This method is called during application initialization.
         """
-        self.benchmark_executable = 'wrp_cte_bench'
+        self.benchmark_executable = 'clio_cte_bench'
         self.output_file = None
 
     def _configure_menu(self):
@@ -76,7 +76,7 @@ class WrpCteBench(Application):
                 'type': int,
                 'default': 0,
                 'help': '0 = use io_count; >0 = run that many seconds '
-                        '(maps to wrp_cte_bench --time-limit)'
+                        '(maps to clio_cte_bench --time-limit)'
             },
             {
                 'name': 'max_total_blobs',

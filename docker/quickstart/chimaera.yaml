@@ -8,7 +8,7 @@
 #
 # Config lookup order:
 #   1. CHI_SERVER_CONF environment variable
-#   2. WRP_RUNTIME_CONF environment variable
+#   2. CHI_SERVER_CONF environment variable
 #   3. ~/.chimaera/chimaera.yaml
 #
 # Size values accept: B, KB, MB, GB, TB (case-insensitive)

@@ -57,7 +57,7 @@
 #include "simple_test.h"
 
 namespace fs = std::filesystem;
-using namespace wrp::cae::fuse;
+using namespace clio::cae::fuse;
 
 // ============================================================================
 // Test fixture

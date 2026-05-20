@@ -59,7 +59,7 @@
 #include "wrp_cte/core/core_client.h"
 #include "wrp_cte/core/core_tasks.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /** The maximum length of a posix path */
 static inline const int kMaxPathLen = 4096;
@@ -374,7 +374,7 @@ public:
     // Page-based CTE PutBlob with bounded-async dispatch.
     //
     // The original loop was strictly sync: issue one 1 MiB PutBlob,
-    // block on Wait(), move on. Measured ceiling ~1 GB/s. wrp_cte_bench
+    // block on Wait(), move on. Measured ceiling ~1 GB/s. clio_cte_bench
     // got 3.5 GB/s by pipelining 8 AsyncPutBlobs and reusing one SHM
     // buffer. This loop adopts the same pattern with a ring of slots:
     //
@@ -1123,6 +1123,6 @@ public:
   }
 };
 
-} // namespace wrp::cae
+} // namespace clio::cae
 
 #endif // WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_

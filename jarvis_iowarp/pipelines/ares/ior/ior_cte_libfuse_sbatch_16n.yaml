@@ -2,7 +2,7 @@
 #
 # 16-node scale-up of ior_cte_libfuse_sbatch_8n.yaml (proven pattern).
 # FUSE path is preferred over the clio POSIX LD_PRELOAD adapter for
-# multi-node: wrp_cte_fuse is launched per-node via pssh (CHI_MEMFD_DIR
+# multi-node: clio_cte_fuse is launched per-node via pssh (CHI_MEMFD_DIR
 # ${HOSTNAME} expands correctly on the ssh hop), so it avoids the
 # mpiexec -x literal-env-forwarding hazard that breaks clio at scale.
 #
@@ -24,7 +24,7 @@ mpi_cmd: 'mpiexec --mca btl_tcp_if_include enp47s0np0 --mca oob_tcp_if_include e
 
 env:
   TMPDIR: "/home/llogan/iowarp_prte_tmp"
-  # FUSE path: wrp_cte_fuse is launched per-node via pssh, so the ssh
+  # FUSE path: clio_cte_fuse is launched per-node via pssh, so the ssh
   # hop expands ${HOSTNAME} correctly per node (unlike the clio/mpiexec
   # case). Node-local memfd dir, NFS-safe.
   CHI_MEMFD_DIR: "/home/llogan/iowarp_chimaera_tmp_${HOSTNAME}"

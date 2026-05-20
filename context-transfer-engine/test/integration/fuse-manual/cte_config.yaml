@@ -5,7 +5,7 @@
 # the jarvis pipeline shape:
 #   1. chimaera runtime start   (this file, no compose section)
 #   2. chimaera compose cte_compose.yaml   (the compose lives in a sibling file)
-#   3. wrp_cte_fuse <mountpoint> -f
+#   3. clio_cte_fuse <mountpoint> -f
 #
 # Doing compose separately exercises the same admin-pool CreatePool path that
 # `wrp_cte` jarvis package uses, so any cross-node propagation bug shows up

@@ -12,11 +12,11 @@ include_directories(
     .
 )
 
-add_executable(wrp_cte_mpiio_unit_tests
+add_executable(clio_cte_mpiio_unit_tests
     test_mpiio_adapter.cc
 )
 
-target_link_libraries(wrp_cte_mpiio_unit_tests
+target_link_libraries(clio_cte_mpiio_unit_tests
     wrp_cte_mpiio
     wrp_cte_fs_base
     wrp_cte_core_client
@@ -27,6 +27,6 @@ target_link_libraries(wrp_cte_mpiio_unit_tests
 )
 
 install(
-    TARGETS wrp_cte_mpiio_unit_tests
+    TARGETS clio_cte_mpiio_unit_tests
     RUNTIME DESTINATION bin
 )

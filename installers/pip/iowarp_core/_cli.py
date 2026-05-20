@@ -61,13 +61,13 @@ def main():
 
 
 def cte_bench_main():
-    """Entry point for the ``wrp_cte_bench`` console script."""
-    _exec_iowarp_bin("wrp_cte_bench")
+    """Entry point for the ``clio_cte_bench`` console script."""
+    _exec_iowarp_bin("clio_cte_bench")
 
 
 def run_thrpt_main():
-    """Entry point for the ``wrp_run_thrpt_benchmark`` console script."""
-    _exec_iowarp_bin("wrp_run_thrpt_benchmark")
+    """Entry point for the ``clio_run_thrpt_benchmark`` console script."""
+    _exec_iowarp_bin("clio_run_thrpt_benchmark")
 
 
 if __name__ == "__main__":

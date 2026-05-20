@@ -48,15 +48,15 @@ bool mpiio_intercepted = true;
 /**
  * Namespace declarations
  */
-using wrp::cae::AdapterStat;
-using wrp::cae::File;
-using wrp::cae::FsIoOptions;
-using wrp::cae::IoStatus;
-using wrp::cae::MetadataManager;
-using wrp::cae::MpiioApi;
-using wrp::cae::MpiioFs;
-using wrp::cae::MpiioSeekModeConv;
-using wrp::cae::SeekMode;
+using clio::cae::AdapterStat;
+using clio::cae::File;
+using clio::cae::FsIoOptions;
+using clio::cae::IoStatus;
+using clio::cae::MetadataManager;
+using clio::cae::MpiioApi;
+using clio::cae::MpiioFs;
+using clio::cae::MpiioSeekModeConv;
+using clio::cae::SeekMode;
 
 extern "C" {
 

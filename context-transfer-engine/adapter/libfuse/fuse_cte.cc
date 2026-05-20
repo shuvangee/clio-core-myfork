@@ -52,7 +52,7 @@
 #include "chimaera/chimaera.h"
 #include "wrp_cte/core/content_transfer_engine.h"
 
-using namespace wrp::cae::fuse;
+using namespace clio::cae::fuse;
 
 // ============================================================================
 // Helpers
@@ -471,7 +471,7 @@ int main(int argc, char *argv[]) {
   const char *mountpoint = std::getenv("WRP_CTE_FUSE_MOUNTPOINT");
   if (mountpoint == nullptr) {
     std::fprintf(stderr,
-                 "wrp_cte_fuse: got pre-opened fd %d but "
+                 "clio_cte_fuse: got pre-opened fd %d but "
                  "WRP_CTE_FUSE_MOUNTPOINT env var is not set\n", prefd);
     return 1;
   }
@@ -481,11 +481,11 @@ int main(int argc, char *argv[]) {
                 prefd, (unsigned)getuid(), (unsigned)getgid());
   if (mount("nodev", mountpoint, "fuse", MS_NODEV | MS_NOSUID,
             mount_opts) != 0) {
-    std::fprintf(stderr, "wrp_cte_fuse: mount(\"%s\", fuse) failed: %s\n",
+    std::fprintf(stderr, "clio_cte_fuse: mount(\"%s\", fuse) failed: %s\n",
                  mountpoint, std::strerror(errno));
     return 1;
   }
-  std::fprintf(stderr, "wrp_cte_fuse: mounted FUSE at %s with fd=%d\n",
+  std::fprintf(stderr, "clio_cte_fuse: mounted FUSE at %s with fd=%d\n",
                mountpoint, prefd);
 
   struct fuse_args args = FUSE_ARGS_INIT(new_argc, argv);
@@ -515,7 +515,7 @@ int main(int argc, char *argv[]) {
       dlsym(RTLD_DEFAULT, "fuse_session_custom_io"));
   if (!fuse_session_custom_io_dyn) {
     std::fprintf(stderr,
-                 "wrp_cte_fuse: fuse_session_custom_io not available in "
+                 "clio_cte_fuse: fuse_session_custom_io not available in "
                  "the loaded libfuse (need 3.14+); --fusemount mode "
                  "requires a newer libfuse runtime.\n");
     fuse_destroy(fuse);
@@ -555,7 +555,7 @@ int main(int argc, char *argv[]) {
     ret = fuse_loop_mt_dyn(fuse, &loop_cfg);
   } else {
     std::fprintf(stderr,
-                 "wrp_cte_fuse: fuse_loop_mt not in runtime libfuse, "
+                 "clio_cte_fuse: fuse_loop_mt not in runtime libfuse, "
                  "falling back to single-threaded loop.\n");
     ret = fuse_loop(fuse);
   }

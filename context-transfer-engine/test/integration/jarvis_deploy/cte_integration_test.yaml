@@ -31,7 +31,7 @@ pkgs:
     poll_period_ms: 5000
 
   # Stage 3: Run CTE benchmark (single process on node1, client-only mode)
-  - pkg_type: jarvis_iowarp.wrp_cte_bench
+  - pkg_type: jarvis_iowarp.clio_cte_bench
     pkg_name: cte_bench
     test_case: "PutGet"
     num_threads: 2

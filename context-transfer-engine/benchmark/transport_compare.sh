@@ -3,13 +3,13 @@
 # Sweeps thread/client counts: 1, 4, 8, 16
 #
 # IOWarp transport is selected via CHI_IPC_MODE={TCP,IPC,SHM} on both
-# the runtime and the client; the wrp_cte_bench Put/Get/PutGet workload
+# the runtime and the client; the clio_cte_bench Put/Get/PutGet workload
 # is the IOWarp counterpart to redis-benchmark's SET/GET/SETGET.
 
 set -u  # don't `set -e` — bench errors on one config shouldn't kill the rest
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_BIN="${BUILD_BIN:-/workspace/build/bin}"
-CTE_BENCH="$BUILD_BIN/wrp_cte_bench"
+CTE_BENCH="$BUILD_BIN/clio_cte_bench"
 CHIMAERA="$BUILD_BIN/chimaera"
 CTE_CONFIG="${CTE_CONFIG:-$SCRIPT_DIR/cte_config_ram.yaml}"
 REDIS_PORT="${REDIS_PORT:-6390}"
@@ -34,7 +34,7 @@ fail() { echo "[compare][ERROR] $*" | tee -a "$LOG"; }
 # ----- IOWarp setup --------------------------------------------------------
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$BUILD_BIN"
 export CHI_REPO_PATH="${CHI_REPO_PATH:-$BUILD_BIN}"
-export WRP_RUNTIME_CONF="$CTE_CONFIG"
+export CHI_SERVER_CONF="$CTE_CONFIG"
 
 # Kill any leftover servers
 pkill -9 -f "$CHIMAERA runtime start" >/dev/null 2>&1 || true

@@ -2,7 +2,7 @@
 IOWarp FUSE adapter — bare-metal only.
 
 Mounts the CTE-backed virtual filesystem at a configured path by launching
-the `wrp_cte_fuse` binary (built with WRP_CTE_ENABLE_FUSE_ADAPTER=ON).
+the `clio_cte_fuse` binary (built with WRP_CTE_ENABLE_FUSE_ADAPTER=ON).
 """
 from jarvis_cd.core.pkg import Service
 from jarvis_cd.shell import Exec, PsshExecInfo
@@ -14,7 +14,7 @@ class WrpCteLibfuse(Service):
     """IOWarp FUSE adapter — mounts the CTE filesystem at a configured path."""
 
     def _init(self):
-        self.binary = 'wrp_cte_fuse'
+        self.binary = 'clio_cte_fuse'
 
     def _configure_menu(self):
         return [
@@ -33,7 +33,7 @@ class WrpCteLibfuse(Service):
             },
             {
                 'name': 'extra_fuse_args',
-                'msg': 'Extra CLI flags forwarded to wrp_cte_fuse / libfuse.',
+                'msg': 'Extra CLI flags forwarded to clio_cte_fuse / libfuse.',
                 'type': str,
                 'default': '-f',
             },
@@ -56,7 +56,7 @@ class WrpCteLibfuse(Service):
 
         # Hack: idempotent tear-down before bring-up so a prior
         # scancel-killed run that left a dangling FUSE mount doesn't
-        # poison this run's Mkdir/wrp_cte_fuse with "Transport endpoint
+        # poison this run's Mkdir/clio_cte_fuse with "Transport endpoint
         # is not connected". stop() is already a fusermount3 -u + Kill
         # of the binary; calling it here just makes start() idempotent.
         self.stop()

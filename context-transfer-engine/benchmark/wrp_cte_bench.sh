@@ -6,7 +6,7 @@
 # in the Content Transfer Engine (CTE) with RAM-only storage configuration.
 #
 # Usage:
-#   ./wrp_cte_bench.sh <test_case> <num_procs> <depth> <io_size> <io_count>
+#   ./clio_cte_bench.sh <test_case> <num_procs> <depth> <io_size> <io_count>
 #
 # Parameters:
 #   test_case: Benchmark to conduct (Put, Get, PutGet)
@@ -26,8 +26,8 @@ NC='\033[0m' # No Color
 
 # Script directory and paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${WRP_RUNTIME_CONF:-$SCRIPT_DIR/cte_config_ram.yaml}"
-BENCHMARK_EXE="wrp_cte_bench"
+CONFIG_FILE="${CHI_SERVER_CONF:-$SCRIPT_DIR/cte_config_ram.yaml}"
+BENCHMARK_EXE="clio_cte_bench"
 
 # Parse size string with k/K, m/M, g/G suffixes
 parse_size() {
@@ -155,13 +155,13 @@ main() {
 
     # Set environment variables
     export CHI_WITH_RUNTIME=1
-    export WRP_RUNTIME_CONF="$CONFIG_FILE"
+    export CHI_SERVER_CONF="$CONFIG_FILE"
 
     # Run benchmark with mpirun
     echo -e "${GREEN}Starting benchmark...${NC}"
     echo ""
 
-    mpirun -x WRP_RUNTIME_CONF -x CHI_WITH_RUNTIME -n $num_procs "$BENCHMARK_EXE" "$test_case" "$depth" "$io_size_str" "$io_count"
+    mpirun -x CHI_SERVER_CONF -x CHI_WITH_RUNTIME -n $num_procs "$BENCHMARK_EXE" "$test_case" "$depth" "$io_size_str" "$io_count"
 
     local exit_code=$?
 

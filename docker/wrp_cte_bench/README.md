@@ -265,7 +265,7 @@ docker-compose ps iowarp-runtime
 
 2. Check network configuration:
    ```bash
-   docker network inspect wrp_cte_bench_default
+   docker network inspect clio_cte_bench_default
    ```
 
 3. Verify runtime is listening:
@@ -307,7 +307,7 @@ Example GitHub Actions workflow:
 ```yaml
 - name: Run WRP CTE Benchmark
   run: |
-    cd docker/wrp_cte_bench
+    cd docker/clio_cte_bench
 
     # Start runtime
     docker-compose up -d iowarp-runtime

@@ -1,16 +1,16 @@
 #!/bin/bash
 # FUSE Filesystem Integration Test
 #
-# Tests the wrp_cte_fuse daemon by mounting a FUSE filesystem,
+# Tests the clio_cte_fuse daemon by mounting a FUSE filesystem,
 # performing standard POSIX I/O operations, and verifying data integrity.
 #
-# Requires: wrp_cte_fuse binary, libfuse3, /dev/fuse access
+# Requires: clio_cte_fuse binary, libfuse3, /dev/fuse access
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOUNT_POINT="/tmp/cte_fuse_test_mount"
-FUSE_BIN="${FUSE_BIN:-/workspace/build/bin/wrp_cte_fuse}"
+FUSE_BIN="${FUSE_BIN:-/workspace/build/bin/clio_cte_fuse}"
 RUNTIME_BIN="${RUNTIME_BIN:-/workspace/build/bin/chimaera}"
 CONFIG_FILE="${SCRIPT_DIR}/wrp_config.yaml"
 FUSE_PID=""
@@ -62,7 +62,7 @@ echo "========================================"
 
 # Check prerequisites
 if [ ! -x "$FUSE_BIN" ]; then
-    fail "wrp_cte_fuse binary not found at $FUSE_BIN"
+    fail "clio_cte_fuse binary not found at $FUSE_BIN"
     exit 1
 fi
 
@@ -97,7 +97,7 @@ FUSE_PID=$!
 sleep 2
 
 if ! kill -0 "$FUSE_PID" 2>/dev/null; then
-    fail "wrp_cte_fuse failed to start"
+    fail "clio_cte_fuse failed to start"
     exit 1
 fi
 

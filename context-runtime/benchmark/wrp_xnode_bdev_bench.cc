@@ -65,7 +65,7 @@ bool Parse(int argc, char **argv, Args &a) {
       continue;
     }
     if (s == "--help") {
-      std::cerr << "usage: wrp_xnode_bdev_bench --io-size <bytes> "
+      std::cerr << "usage: clio_xnode_bdev_bench --io-size <bytes> "
                    "--num-ops <N> --depth <D> [--no-create]\n";
       return false;
     }

@@ -34,7 +34,7 @@
 /**
  * Shared throughput-benchmark scaffolding.
  *
- * Used by both wrp_cte_bench (CTE PutBlob/GetBlob) and wrp_redis_bench
+ * Used by both clio_cte_bench (CTE PutBlob/GetBlob) and clio_redis_bench
  * (hiredis SET/GET) so the two are true apples-to-apples mirrors: same
  * CLI, same workload knobs, same results format. Backends only differ
  * in how a single Put/Get is issued.

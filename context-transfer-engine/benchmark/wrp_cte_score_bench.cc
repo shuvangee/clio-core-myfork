@@ -44,7 +44,7 @@
  *   4. Put new blobs
  *
  * Usage:
- *   mpirun -n <nprocs> wrp_cte_score_bench <data_per_rank_step> <busy_wait_sec>
+ *   mpirun -n <nprocs> clio_cte_score_bench <data_per_rank_step> <busy_wait_sec>
  * <num_steps> <demotion_pct>
  *
  * Parameters:
@@ -471,10 +471,10 @@ int main(int argc, char **argv) {
       HLOG(kError, "  demotion_pct: Percentage of blobs to demote (0-100)");
       HLOG(kError, "");
       HLOG(kError, "Example:");
-      HLOG(kError, "  mpirun -n 4 wrp_cte_score_bench 100m 0.5 10 50");
+      HLOG(kError, "  mpirun -n 4 clio_cte_score_bench 100m 0.5 10 50");
       HLOG(kError, "");
       HLOG(kError, "Environment variables:");
-      HLOG(kError, "  WRP_RUNTIME_CONF: Path to chimaera configuration file");
+      HLOG(kError, "  CHI_SERVER_CONF: Path to chimaera configuration file");
     }
     MPI_Finalize();
     return 1;

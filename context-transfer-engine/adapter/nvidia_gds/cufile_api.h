@@ -87,7 +87,7 @@ typedef CUfileError_t (*cuFileBatchIOCancel_t)(CUfileBatchHandle_t);
 typedef void (*cuFileBatchIODestroy_t)(CUfileBatchHandle_t);
 }
 
-namespace wrp::cae {
+namespace clio::cae {
 
 using hshm::RealApi;
 
@@ -153,15 +153,15 @@ class CuFileApi : public RealApi {
   }
 };
 
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #include "hermes_shm/util/singleton.h"
 
 // Singleton macros
 #define WRP_CTE_CUFILE_API \
-  hshm::Singleton<::wrp::cae::CuFileApi>::GetInstance()
+  hshm::Singleton<::clio::cae::CuFileApi>::GetInstance()
 #define WRP_CTE_STDIO_API \
-  hshm::Singleton<::wrp::cae::StdioApi>::GetInstance()
-#define WRP_CTE_STDIO_API_T wrp::cae::StdioApi *
+  hshm::Singleton<::clio::cae::StdioApi>::GetInstance()
+#define WRP_CTE_STDIO_API_T clio::cae::StdioApi *
 
 #endif  // WRP_CTE_ADAPTER_STDIO_H

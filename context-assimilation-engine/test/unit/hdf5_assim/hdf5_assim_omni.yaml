@@ -5,7 +5,7 @@
 # separate tags for each dataset in the CTE.
 #
 # Usage:
-#   wrp_cae_omni hdf5_assim_omni.yaml
+#   clio_cae_omni hdf5_assim_omni.yaml
 
 version: "1.0"
 

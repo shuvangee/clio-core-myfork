@@ -111,15 +111,15 @@ endif()
 # Utilities
 #------------------------------------------------------------------------------
 
-# wrp_cae_omni utility
-add_executable(wrp_cae_omni util/wrp_cae_omni.cc)
-target_link_libraries(wrp_cae_omni
+# clio_cae_omni utility
+add_executable(clio_cae_omni util/clio_cae_omni.cc)
+target_link_libraries(clio_cae_omni
   PRIVATE
     wrp_cae_core_client
     chimaera::cxx
     hshm::configure
 )
-install(TARGETS wrp_cae_omni DESTINATION bin)
+install(TARGETS clio_cae_omni DESTINATION bin)
 
 #------------------------------------------------------------------------------
 # Tests

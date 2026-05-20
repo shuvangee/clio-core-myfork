@@ -1,4 +1,4 @@
-# wrp_cte_bench on ares baremetal — single node, SHM transport, RAM bdev.
+# clio_cte_bench on ares baremetal — single node, SHM transport, RAM bdev.
 #
 # Purpose: measure raw CTE PutBlob bandwidth, isolated from the POSIX
 # adapter and IOR. Numbers from this run set the ceiling we can expect
@@ -7,7 +7,7 @@
 # Workload: 1 rank x 1 thread x depth=8 async x 4096 ops of 1 MiB
 #   = 4 GiB total, with 8 PutBlobs in flight per thread.
 
-name: wrp_cte_bench_baremetal
+name: clio_cte_bench_baremetal
 
 pkgs:
   - pkg_type: jarvis_iowarp.wrp_runtime
@@ -25,7 +25,7 @@ pkgs:
     dpe_type: max_bw
     neighborhood: 1
 
-  - pkg_type: jarvis_iowarp.wrp_cte_bench
+  - pkg_type: jarvis_iowarp.clio_cte_bench
     pkg_name: bench
     test_case: Put
     num_threads: 1

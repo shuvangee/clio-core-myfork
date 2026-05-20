@@ -39,7 +39,7 @@ Focused unit test suite for telemetry functionality.
 ```bash
 # Set environment variables
 export CHI_WITH_RUNTIME=1
-export WRP_RUNTIME_CONF=/path/to/cte_config.yaml
+export CHI_SERVER_CONF=/path/to/cte_config.yaml
 
 # Run all tests
 pytest test_cte_telemetry.py -v
@@ -53,7 +53,7 @@ pytest test_cte_telemetry.py -v -s
 
 **Usage as standalone script**:
 ```bash
-CHI_WITH_RUNTIME=1 WRP_RUNTIME_CONF=/path/to/cte_config.yaml python3 test_cte_telemetry.py
+CHI_WITH_RUNTIME=1 CHI_SERVER_CONF=/path/to/cte_config.yaml python3 test_cte_telemetry.py
 ```
 
 ## PollTelemetryLog Test Details
@@ -107,7 +107,7 @@ for entry in entries:
 ### Required for Runtime Initialization
 
 - `CHI_WITH_RUNTIME`: Set to `1` to enable runtime initialization (default: `1`)
-- `WRP_RUNTIME_CONF`: Path to CTE configuration YAML file
+- `CHI_SERVER_CONF`: Path to CTE configuration YAML file
 
 ### Optional
 
@@ -148,7 +148,7 @@ compose:
 cd /workspace/build
 
 # Set config path
-export WRP_RUNTIME_CONF=/workspace/context-transfer-engine/test/unit/adapters/adios2/cte_config.yaml
+export CHI_SERVER_CONF=/workspace/context-transfer-engine/test/unit/adapters/adios2/cte_config.yaml
 
 # Run example tests
 python3 /workspace/context-transfer-engine/wrapper/python/test_bindings.py
@@ -163,7 +163,7 @@ pytest /workspace/context-transfer-engine/wrapper/python/test_cte_telemetry.py -
 cd /workspace/context-transfer-engine/wrapper/python
 
 # Set config and library paths
-export WRP_RUNTIME_CONF=/workspace/context-transfer-engine/test/unit/adapters/adios2/cte_config.yaml
+export CHI_SERVER_CONF=/workspace/context-transfer-engine/test/unit/adapters/adios2/cte_config.yaml
 export LD_LIBRARY_PATH=/workspace/build/bin:$LD_LIBRARY_PATH
 export PYTHONPATH=/workspace/build/bin:$PYTHONPATH
 
@@ -186,7 +186,7 @@ If you see `ImportError: No module named 'wrp_cte_core_ext'`:
 
 If runtime initialization fails:
 
-1. Check config file exists: `ls -la $WRP_RUNTIME_CONF`
+1. Check config file exists: `ls -la $CHI_SERVER_CONF`
 2. Verify config syntax is valid YAML
 3. Check storage paths are writable
 4. Ensure no other runtime instance is running
@@ -242,7 +242,7 @@ To integrate these tests in CI/CD:
 - name: Run CTE Python Tests
   env:
     CHI_WITH_RUNTIME: 1
-    WRP_RUNTIME_CONF: /path/to/test_config.yaml
+    CHI_SERVER_CONF: /path/to/test_config.yaml
     LD_LIBRARY_PATH: ${{ github.workspace }}/build/bin
     PYTHONPATH: ${{ github.workspace }}/build/bin
   run: |

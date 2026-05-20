@@ -114,7 +114,7 @@ typedef int (*MPI_File_iwrite_shared_t)(MPI_File fh, const void* buf, int count,
 typedef int (*MPI_File_sync_t)(MPI_File fh);
 }
 
-namespace wrp::cae {
+namespace clio::cae {
 
 using hshm::RealApi;
 
@@ -252,13 +252,13 @@ class MpiioApi : public RealApi {
     REQUIRE_API(MPI_File_sync)
   }
 };
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #include "hermes_shm/util/singleton.h"
 
 /** Simplify access to the stateless MpiioFs Singleton */
 #define WRP_CTE_MPIIO_API \
-  hshm::Singleton<::wrp::cae::MpiioApi>::GetInstance()
-#define WRP_CTE_MPIIO_API_T wrp::cae::MpiioApi*
+  hshm::Singleton<::clio::cae::MpiioApi>::GetInstance()
+#define WRP_CTE_MPIIO_API_T clio::cae::MpiioApi*
 
 #endif  // WRP_CTE_ADAPTER_MPIIO_H

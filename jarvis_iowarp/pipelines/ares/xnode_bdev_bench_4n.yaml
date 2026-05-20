@@ -2,7 +2,7 @@
 #
 # Layout:
 #   wrp_runtime              -> chimaera daemon (one per node)
-#   wrp_xnode_bdev_bench     -> mpiexec across all ranks, each issuing
+#   clio_xnode_bdev_bench     -> mpiexec across all ranks, each issuing
 #                               AsyncWrite to DirectHash((my_node + 1)
 #                               % num_nodes) so every op crosses the
 #                               network.
@@ -29,7 +29,7 @@ name: xnode_bdev_bench_4n
 # same fix. Harmless on single-node.
 ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
 
-# Pipeline-level mpiexec base — picked up by wrp_xnode_bdev_bench when
+# Pipeline-level mpiexec base — picked up by clio_xnode_bdev_bench when
 # it builds the mpiexec invocation. Same set of flags the manual
 # /mnt/common/llogan/xnode_bdev_bench.sbatch script uses.
 #   --mca btl_tcp_if_include enp47s0np0  -> 40 GbE data plane
@@ -84,7 +84,7 @@ pkgs:
     # errors don't promote a peer to dead mid-bench.
     swim_enabled: false
 
-  - pkg_type: jarvis_iowarp.wrp_xnode_bdev_bench
+  - pkg_type: jarvis_iowarp.clio_xnode_bdev_bench
     pkg_name: xnode_bdev_bench
     nprocs: 96       # 4 nodes * 24 ranks/node
     ppn: 24

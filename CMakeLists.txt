@@ -1327,8 +1327,8 @@ endif()
 # weren't built (e.g. MPI/Redis-only ones disabled in pip configurations).
 if(WRP_CORE_ENABLE_BENCHMARKS)
   set(PIP_BENCH_TARGETS
-    wrp_cte_bench
-    wrp_run_thrpt_benchmark)
+    clio_cte_bench
+    clio_run_thrpt_benchmark)
   foreach(_bench ${PIP_BENCH_TARGETS})
     if(TARGET ${_bench})
       install(TARGETS ${_bench}

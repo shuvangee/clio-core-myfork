@@ -48,7 +48,7 @@ bool posix_intercepted = true;
 #include "hermes_shm/util/singleton.h"
 #include "posix_fs_api.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 // Define global pointer variables in source file
 HSHM_DEFINE_GLOBAL_PTR_VAR_CC(PosixApi, g_posix_api);
 HSHM_DEFINE_GLOBAL_PTR_VAR_CC(PosixFs, g_posix_fs);
@@ -63,15 +63,15 @@ int fxstat_to_fstat(int fd, struct stat *stbuf) {
   return -1;
 #endif
 }
-} // namespace wrp::cae
+} // namespace clio::cae
 
 
-using wrp::cae::AdapterStat;
-using wrp::cae::File;
-using wrp::cae::FsIoOptions;
-using wrp::cae::IoStatus;
-using wrp::cae::MetadataManager;
-using wrp::cae::SeekMode;
+using clio::cae::AdapterStat;
+using clio::cae::File;
+using clio::cae::FsIoOptions;
+using clio::cae::IoStatus;
+using clio::cae::MetadataManager;
+using clio::cae::SeekMode;
 
 
 extern "C" {

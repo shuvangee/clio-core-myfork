@@ -5,7 +5,7 @@
 # Stack on each of the 4 SLURM-allocated nodes:
 #   wrp_runtime     — chimaera daemon (baremetal on host)
 #   wrp_cte         — CTE storage tier (25 GB RAM per node)
-#   wrp_cte_libfuse — wrp_cte_fuse mounts the CTE pool at the host path
+#   wrp_cte_libfuse — clio_cte_fuse mounts the CTE pool at the host path
 #                     ${HOME}/wrp_cte_biobb_4n
 #   biobb_wf_md_setup — runs INSIDE the prebuilt biobb_wf_md_setup_apptainer_test
 #                       SIF; the FUSE mountpoint is bind-mounted into the

@@ -40,7 +40,7 @@
  * checkpointed via compression.
  *
  * Usage:
- *   wrp_cte_compress_bench <compress_type> <num_threads> <data_per_thread>
+ *   clio_cte_compress_bench <compress_type> <num_threads> <data_per_thread>
  *                          <transfer_size> <data_type> <distribution>
  *                          <compressibility> <test_case> <compute_phase_sec>
  *                          <checkpoint_interval>

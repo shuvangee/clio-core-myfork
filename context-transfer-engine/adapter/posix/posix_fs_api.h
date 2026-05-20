@@ -41,10 +41,10 @@
 #include "posix_api.h"
 #include "wrp_cte/core/content_transfer_engine.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /** A class to represent POSIX IO file system */
-class PosixFs : public wrp::cae::Filesystem {
+class PosixFs : public clio::cae::Filesystem {
 public:
   WRP_CTE_POSIX_API_T real_api_; /**< pointer to real APIs */
 
@@ -143,7 +143,7 @@ public:
     if (cte_manager != nullptr && !cte_manager->IsInitialized()) {
       return false;
     }
-    wrp::cae::File f;
+    clio::cae::File f;
     f.hermes_fd_ = fd;
     stat = WRP_CTE_FS_METADATA_MANAGER->Find(f);
     return stat != nullptr;
@@ -308,17 +308,17 @@ public:
   }
 };
 
-} // namespace wrp::cae
+} // namespace clio::cae
 
 // Global pointer-based singleton
 #include "hermes_shm/util/singleton.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 HSHM_DEFINE_GLOBAL_PTR_VAR_H(PosixFs, g_posix_fs);
 }
 
 /** Simplify access to the stateless PosixFs Singleton */
-#define WRP_CTE_POSIX_FS (HSHM_GET_GLOBAL_PTR_VAR(wrp::cae::PosixFs, wrp::cae::g_posix_fs))
-#define WRP_CTE_POSIX_FS_T wrp::cae::PosixFs *
+#define WRP_CTE_POSIX_FS (HSHM_GET_GLOBAL_PTR_VAR(clio::cae::PosixFs, clio::cae::g_posix_fs))
+#define WRP_CTE_POSIX_FS_T clio::cae::PosixFs *
 
 #endif // WRP_CTE_ADAPTER_POSIX_NATIVE_H_

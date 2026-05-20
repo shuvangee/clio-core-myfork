@@ -116,7 +116,7 @@ typedef int (*ftruncate_t)(int fd, off_t length);
 typedef int (*ftruncate64_t)(int fd, off64_t length);
 }
 
-namespace wrp::cae {
+namespace clio::cae {
 
 template <typename PosixT>
 using PreloadProgress = hshm::PreloadProgress<PosixT>;
@@ -276,21 +276,21 @@ class PosixApi : public RealApi {
   }
 };
 
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 // Global pointer-based singleton
 #include "hermes_shm/util/singleton.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 HSHM_DEFINE_GLOBAL_PTR_VAR_H(PosixApi, g_posix_api);
 }
 
-#define WRP_CTE_POSIX_API (HSHM_GET_GLOBAL_PTR_VAR(wrp::cae::PosixApi, wrp::cae::g_posix_api))
-#define WRP_CTE_POSIX_API_T wrp::cae::PosixApi *
+#define WRP_CTE_POSIX_API (HSHM_GET_GLOBAL_PTR_VAR(clio::cae::PosixApi, clio::cae::g_posix_api))
+#define WRP_CTE_POSIX_API_T clio::cae::PosixApi *
 
-namespace wrp::cae {
+namespace clio::cae {
 /** Used for compatability with older kernel versions */
 int fxstat_to_fstat(int fd, struct stat *stbuf);
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #endif  // WRP_CTE_ADAPTER_POSIX_H

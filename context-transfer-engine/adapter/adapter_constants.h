@@ -41,7 +41,7 @@
 
 #include "mapper/abstract_mapper.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 static inline const MapperType kMapperType = MapperType::kBalancedMapper;
 

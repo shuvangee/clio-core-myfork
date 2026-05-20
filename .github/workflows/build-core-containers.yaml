@@ -151,7 +151,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./docker/wrp_cte_bench/Dockerfile
+          file: ./docker/clio_cte_bench/Dockerfile
           platforms: linux/amd64
           push: true
           tags: iowarp/cte-bench:latest-amd64
@@ -190,7 +190,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./docker/wrp_cte_bench/Dockerfile
+          file: ./docker/clio_cte_bench/Dockerfile
           platforms: linux/arm64
           push: true
           tags: iowarp/cte-bench:latest-arm64

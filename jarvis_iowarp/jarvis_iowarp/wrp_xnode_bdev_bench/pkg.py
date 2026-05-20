@@ -1,6 +1,6 @@
 """
-wrp_xnode_bdev_bench — jarvis-cd wrapper for the cross-node chimaera
-bdev benchmark binary (`wrp_xnode_bdev_bench`).
+clio_xnode_bdev_bench — jarvis-cd wrapper for the cross-node chimaera
+bdev benchmark binary (`clio_xnode_bdev_bench`).
 
 The benchmark:
   - Calls MPI_Init, then chi::CHIMAERA_INIT(kClient, false), so it needs
@@ -33,7 +33,7 @@ This package mirrors the manual sbatch script
      CHI_MEMFD_DIR, intentionally contains ${HOSTNAME} and must be
      expanded by the rank-side shell on each node, so we wrap the
      bench in `bash -c 'export CHI_MEMFD_DIR=".../$HOSTNAME"; exec
-     wrp_xnode_bdev_bench ...'`. See _build_mpi_cmd for details.
+     clio_xnode_bdev_bench ...'`. See _build_mpi_cmd for details.
 
 Runs synchronously; the binary exits on completion. No teardown work in
 stop() — wrp_runtime owns the daemon lifecycle.
@@ -55,7 +55,7 @@ class WrpXnodeBdevBench(Application):
     # ------------------------------------------------------------------
 
     def _init(self):
-        self.benchmark_executable = 'wrp_xnode_bdev_bench'
+        self.benchmark_executable = 'clio_xnode_bdev_bench'
 
     def _configure_menu(self):
         return [
@@ -110,7 +110,7 @@ class WrpXnodeBdevBench(Application):
         for key in ('nprocs', 'ppn', 'io_size', 'num_ops', 'depth'):
             if self.config[key] is None or int(self.config[key]) <= 0:
                 raise ValueError(
-                    f"wrp_xnode_bdev_bench: {key} must be a positive int "
+                    f"clio_xnode_bdev_bench: {key} must be a positive int "
                     f"(got {self.config[key]!r})")
 
     # ------------------------------------------------------------------
@@ -129,7 +129,7 @@ class WrpXnodeBdevBench(Application):
         hosts = list(hf.hosts) if hf else []
         if not hosts:
             raise RuntimeError(
-                "wrp_xnode_bdev_bench: no hosts in self.hostfile — does the "
+                "clio_xnode_bdev_bench: no hosts in self.hostfile — does the "
                 "scheduler block populate hostfile.txt?")
 
         ppn = int(self.config['ppn'])
@@ -271,5 +271,5 @@ class WrpXnodeBdevBench(Application):
             if os.path.exists(mpi_hostfile):
                 os.remove(mpi_hostfile)
         except OSError as exc:
-            self.log(f"wrp_xnode_bdev_bench clean: {exc}")
+            self.log(f"clio_xnode_bdev_bench clean: {exc}")
         return True

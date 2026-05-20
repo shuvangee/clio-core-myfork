@@ -6,11 +6,11 @@ include_directories(
 )
 
 # Create the POSIX adapter unit test
-add_executable(wrp_cte_posix_unit_tests
+add_executable(clio_cte_posix_unit_tests
     test_posix_adapter.cc
 )
 
-target_link_libraries(wrp_cte_posix_unit_tests
+target_link_libraries(clio_cte_posix_unit_tests
     wrp_cte_posix
     wrp_cte_fs_base
     wrp_cte_core_client
@@ -21,11 +21,11 @@ target_link_libraries(wrp_cte_posix_unit_tests
 
 # Link MPI only if enabled
 if(WRP_CORE_ENABLE_MPI)
-    target_link_libraries(wrp_cte_posix_unit_tests MPI::MPI_CXX)
+    target_link_libraries(clio_cte_posix_unit_tests MPI::MPI_CXX)
 endif()
 
 # Install the test executable
 install(
-    TARGETS wrp_cte_posix_unit_tests
+    TARGETS clio_cte_posix_unit_tests
     RUNTIME DESTINATION bin
 )

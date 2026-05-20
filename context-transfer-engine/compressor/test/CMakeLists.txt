@@ -201,16 +201,16 @@ install(TARGETS test_adios2_transparent_compress RUNTIME DESTINATION bin)
 # CTE Compression Benchmark
 #------------------------------------------------------------------------------
 
-# Create wrp_cte_compress_bench executable
-add_executable(wrp_cte_compress_bench
-    wrp_cte_compress_bench.cc
+# Create clio_cte_compress_bench executable
+add_executable(clio_cte_compress_bench
+    clio_cte_compress_bench.cc
 )
 
 # Add compression compile definition
-target_compile_definitions(wrp_cte_compress_bench PRIVATE WRP_CORE_ENABLE_COMPRESS)
+target_compile_definitions(clio_cte_compress_bench PRIVATE WRP_CORE_ENABLE_COMPRESS)
 
 # Link required libraries
-target_link_libraries(wrp_cte_compress_bench
+target_link_libraries(clio_cte_compress_bench
     wrp_cte::core_client          # CTE core client library
     wrp_cte::core_runtime         # CTE core runtime (for compression context)
     chimaera::cxx                 # Core Chimaera library
@@ -219,10 +219,10 @@ target_link_libraries(wrp_cte_compress_bench
 )
 
 # Set C++ standard
-target_compile_features(wrp_cte_compress_bench PRIVATE cxx_std_17)
+target_compile_features(clio_cte_compress_bench PRIVATE cxx_std_17)
 
 # Install the compression benchmark executable
-install(TARGETS wrp_cte_compress_bench
+install(TARGETS clio_cte_compress_bench
     RUNTIME DESTINATION bin
 )
 

@@ -1,12 +1,13 @@
-# IOWarp Core
+# CLIO Core
 
 <p align="center">
   <strong>A Comprehensive Platform for Context Management in Scientific Computing</strong>
   <br />
   <br />
   <a href="#overview">Overview</a> ·
+  <a href="#installation">Installation</a> ·
   <a href="#components">Components</a> ·
-  <a href="#getting-started">Getting Started</a> ·
+  <a href="#quickstart">Quickstart</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="#contributing">Contributing</a>
 </p>
@@ -21,9 +22,9 @@
 
 ## Overview
 
-**IOWarp Core** is a unified framework that integrates multiple high-performance components for context management, data transfer, and scientific computing. Built with a modular architecture, IOWarp Core enables developers to create efficient data processing pipelines for HPC, storage systems, and near-data computing applications.
+**CLIO Core** is a unified framework that integrates multiple high-performance components for context management, data transfer, and scientific computing. Built with a modular architecture, CLIO Core enables developers to create efficient data processing pipelines for HPC, storage systems, and near-data computing applications.
 
-IOWarp Core provides:
+CLIO Core provides:
 - **High-Performance Context Management**: Efficient handling of computational contexts and data transformations
 - **Heterogeneous-Aware I/O**: Multi-tiered, dynamic buffering for accelerated data access
 - **Modular Runtime System**: Extensible architecture with dynamically loadable processing modules
@@ -32,7 +33,7 @@ IOWarp Core provides:
 
 ## Architecture
 
-IOWarp Core follows a layered architecture integrating five core components:
+CLIO Core follows a layered architecture integrating five core components:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -63,9 +64,36 @@ IOWarp Core follows a layered architecture integrating five core components:
                 └─────────────────────────┘
 ```
 
+## Installation
+
+### Cloning the Repository
+
+CLIO Core uses git submodules for several dependencies. Always clone with `--recurse-submodules`:
+
+```bash
+git clone --recurse-submodules https://github.com/iowarp/clio-core.git
+cd clio-core
+```
+
+If you already cloned without submodules, initialize them with:
+
+```bash
+git submodule update --init --recursive
+```
+
+### Native
+
+The following command will install conda, conda-build, and clio in a single script.
+```bash
+bash install.sh release
+```
+
+Release corresponds to a variant stored in installers/conda/variants.
+Feel free to add a new variant for your specific machine there.
+
 ## Components
 
-IOWarp Core consists of five integrated components, each with its own specialized functionality:
+CLIO Core consists of five integrated components, each with its own specialized functionality:
 
 ### 1. Context Transport Primitives
 **Location:** [`context-transport-primitives/`](context-transport-primitives/)
@@ -135,97 +163,26 @@ Interactive tools and interfaces for exploring scientific data contents and meta
 
 **[Read more →](context-exploration-engine/README.md)**
 
-## Installation
-
-### Cloning the Repository
-
-IOWarp Core uses git submodules for several dependencies. Always clone with `--recurse-submodules`:
-
-```bash
-git clone --recurse-submodules https://github.com/iowarp/clio-core.git
-cd clio-core
-```
-
-If you already cloned without submodules, initialize them with:
-
-```bash
-git submodule update --init --recursive
-```
-
-### Native
-
-The following command will install conda, conda-build, and iowarp in a single script.
-```bash
-bash install.sh release
-```
-
-Release corresponds to a variant stored in installers/conda/variants.
-Feel free to add a new variant for your specific machine there.
-
 ## Quickstart
 
 ### Starting the Runtime
 
-Before running our code, start the Chimaera runtime:
+Installation seeds a default configuration at `~/.chimaera/chimaera.yaml`, so
+the runtime works out of the box:
 
 ```bash
-# Start with custom configuration
-export CHI_SERVER_CONF=/workspace/docker/wrp_cte_bench/cte_config.yaml
+# Foreground
 chimaera runtime start
 
-# Run in background
+# Background
 chimaera runtime start &
 ```
 
-**Environment Variables:**
-| Variable | Description |
-|----------|-------------|
-| `CHI_SERVER_CONF` | Primary path to Chimaera configuration file (checked first) |
-| `WRP_RUNTIME_CONF` | Fallback configuration path (used if CHI_SERVER_CONF not set) |
+To override the configuration, point `CHI_SERVER_CONF` at your YAML file:
 
-### Chimaera Configuration
-
-Configuration uses YAML format. Example configuration:
-
-```yaml
-# Memory segment configuration
-memory:
-  main_segment_size: 1073741824           # 1GB main segment
-  client_data_segment_size: 536870912     # 512MB client data
-  runtime_data_segment_size: 536870912    # 512MB runtime data
-
-# Network configuration
-networking:
-  port: 9413                              # ZeroMQ port
-  neighborhood_size: 32                   # Max nodes for range queries
-
-# Runtime configuration
-runtime:
-  sched_threads: 4                        # Scheduler worker threads
-  slow_threads: 0                         # Slow worker threads (long tasks)
-  stack_size: 65536                       # 64KB per task
-  queue_depth: 10000                      # Maximum queue depth
-  local_sched: "default"                  # Local task scheduler (default: "default")
-
-# Compose section for declarative pool creation
-compose:
-  - mod_name: wrp_cte_core
-    pool_name: wrp_cte
-    pool_query: local
-    pool_id: 512.0
-
-    targets:
-      neighborhood: 1
-      default_target_timeout_ms: 30000
-
-    storage:
-      - path: "ram::cte_storage"          # RAM-based storage
-        bdev_type: "ram"
-        capacity_limit: "16GB"
-        score: 1.0                        # Higher = faster tier (0.0-1.0)
-
-    dpe:
-      dpe_type: "max_bw"                  # Options: random, round_robin, max_bw
+```bash
+export CHI_SERVER_CONF=/path/to/my_config.yaml
+chimaera runtime start
 ```
 
 ### Context Exploration Engine Python Example
@@ -282,14 +239,14 @@ int main() {
   if (!success) return 1;
 
   // 2. Initialize CTE subsystem
-  wrp_cte::core::WRP_CTE_CLIENT_INIT();
+  clio::cte::core::WRP_CTE_CLIENT_INIT();
 
   // 3. Create CTE client
-  wrp_cte::core::Client cte_client;
-  wrp_cte::core::CreateParams params;
+  clio::cte::core::Client cte_client;
+  clio::cte::core::CreateParams params;
   cte_client.Create(chi::PoolQuery::Dynamic(),
-                    wrp_cte::core::kCtePoolName,
-                    wrp_cte::core::kCtePoolId, params);
+                    clio::cte::core::kCtePoolName,
+                    clio::cte::core::kCtePoolId, params);
 
   // 4. Register a storage target (100MB file-based)
   cte_client.RegisterTarget("/tmp/cte_storage",
@@ -297,8 +254,8 @@ int main() {
                             100 * 1024 * 1024);
 
   // 5. Create a tag (container for blobs)
-  wrp_cte::core::TagId tag_id = cte_client.GetOrCreateTag(
-      "my_tag", wrp_cte::core::TagId::GetNull());
+  clio::cte::core::TagId tag_id = cte_client.GetOrCreateTag(
+      "my_tag", clio::cte::core::TagId::GetNull());
 
   // 6. Store blob data
   std::vector<char> data(4096, 'A');
@@ -358,7 +315,7 @@ target_link_libraries(my_app
 
 ## Testing
 
-IOWarp Core includes comprehensive test suites for each component:
+CLIO Core includes comprehensive test suites for each component:
 
 ```bash
 # Run all unit tests
@@ -374,14 +331,14 @@ ctest -R omni               # Context assimilation engine tests
 
 ## Benchmarking
 
-IOWarp Core includes performance benchmarks for measuring runtime and I/O throughput.
+CLIO Core includes performance benchmarks for measuring runtime and I/O throughput.
 
-### Runtime Throughput Benchmark (wrp_run_thrpt_benchmark)
+### Runtime Throughput Benchmark (clio_run_thrpt_benchmark)
 
 Measures task throughput and latency for the Chimaera runtime.
 
 ```bash
-wrp_run_thrpt_benchmark [options]
+clio_run_thrpt_benchmark [options]
 ```
 
 **Parameters:**
@@ -407,44 +364,53 @@ wrp_run_thrpt_benchmark [options]
 
 ```bash
 # Full I/O benchmark with 8 threads for 30 seconds
-wrp_run_thrpt_benchmark --test-case bdev_io --threads 8 --duration 30
+clio_run_thrpt_benchmark --test-case bdev_io --threads 8 --duration 30
 
 # Latency benchmark with verbose output
-wrp_run_thrpt_benchmark --test-case latency --threads 4 --verbose
+clio_run_thrpt_benchmark --test-case latency --threads 4 --verbose
 
 # Large I/O with 1MB blocks
-wrp_run_thrpt_benchmark --test-case bdev_io --io-size 1m --threads 16
+clio_run_thrpt_benchmark --test-case bdev_io --io-size 1m --threads 16
 ```
 
-### CTE Benchmark (wrp_cte_bench)
+### CTE Benchmark (clio_cte_bench)
 
 Measures Context Transfer Engine Put/Get performance.
 
 ```bash
-wrp_cte_bench <test_case> <num_threads> <depth> <io_size> <io_count>
+clio_cte_bench [options]
 ```
 
 **Parameters:**
 
-| Parameter | Position | Description |
-|-----------|----------|-------------|
-| `test_case` | 1 | Put, Get, or PutGet |
-| `num_threads` | 2 | Number of worker threads |
-| `depth` | 3 | Number of async requests per thread |
-| `io_size` | 4 | Size per operation (supports k, m, g suffixes) |
-| `io_count` | 5 | Number of operations per thread |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--op <Put\|Get\|PutGet>` | Put | Operation to benchmark (alias: `--test-case`) |
+| `--threads <N>` | 1 | Number of worker threads |
+| `--depth <N>` | 1 | Async requests in flight per thread |
+| `--io-size <size>` | 1m | Bytes per op (supports k, m, g suffixes) |
+| `--io-count <N>` | 1000 | Ops per thread (ignored when `--time-limit` is set) |
+| `--max-total-blobs <N>` | 0 (unbounded) | Total distinct keys across all threads (split evenly) |
+| `--time-limit <seconds>` | 0 (off) | Run for N seconds instead of `--io-count` ops |
+| `--help, -h` | | Show usage and exit |
+
+A legacy positional form is also accepted:
+```bash
+clio_cte_bench <test_case> <threads> <depth> <io_size> <io_count>
+```
 
 **Examples:**
 
 ```bash
-# Put benchmark: 4 threads, 8 async depth, 1MB I/O, 200 operations each
-wrp_cte_bench Put 4 8 1m 200
+# Put benchmark: 4 threads, 8 async depth, 1MB I/O, 200 ops/thread
+clio_cte_bench --op Put --threads 4 --depth 8 --io-size 1m --io-count 200
 
-# Get benchmark: 2 threads, 4 async depth, 4KB I/O, 1000 operations each
-wrp_cte_bench Get 2 4 4k 1000
+# Get benchmark with a 30-second time limit and 4KB I/O
+clio_cte_bench --op Get --threads 2 --depth 4 --io-size 4k --time-limit 30
 
-# Combined Put/Get: 8 threads, 16 async depth, 16MB I/O, 50 operations each
-wrp_cte_bench PutGet 8 16 16m 50
+# Combined Put/Get over a bounded keyspace of 1024 total blobs
+clio_cte_bench --op PutGet --threads 8 --depth 16 --io-size 16m \
+               --io-count 50 --max-total-blobs 1024
 ```
 
 **Output Metrics:**
@@ -456,7 +422,7 @@ wrp_cte_bench PutGet 8 16 16m 50
 
 Comprehensive documentation is available for each component:
 
-- **[CLAUDE.md](CLAUDE.md)**: Unified development guide and coding standards
+- **[AGENTS.md](AGENTS.md)**: Unified development guide and coding standards
 - **[Context Transport Primitives](context-transport-primitives/README.md)**: Shared memory data structures
 - **[Chimaera Runtime](context-runtime/README.md)**: Modular runtime system and ChiMod development
   - [MODULE_DEVELOPMENT_GUIDE.md](context-transport-primitives/docs/MODULE_DEVELOPMENT_GUIDE.md): Complete ChiMod development guide
@@ -487,7 +453,7 @@ Comprehensive documentation is available for each component:
 
 ## Performance Characteristics
 
-IOWarp Core is designed for high-performance computing scenarios:
+CLIO Core is designed for high-performance computing scenarios:
 
 - **Task Latency**: < 10 microseconds for local task execution (Chimaera Runtime)
 - **Memory Bandwidth**: Up to 50 GB/s with RAM-based storage backends
@@ -497,13 +463,13 @@ IOWarp Core is designed for high-performance computing scenarios:
 
 ## Contributing
 
-We welcome contributions to the IOWarp Core project!
+We welcome contributions to the CLIO Core project!
 
 ### Development Workflow
 
 1. **Fork** the repository
 2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **Follow** the coding standards in [CLAUDE.md](CLAUDE.md)
+3. **Follow** the coding standards in [AGENTS.md](AGENTS.md)
 4. **Test** your changes: `ctest --test-dir build`
 5. **Submit** a pull request
 
@@ -519,7 +485,7 @@ See [AGENTS.md](AGENTS.md) for complete coding standards and workflow guidelines
 
 ## License
 
-IOWarp Core is licensed under the **BSD 3-Clause License**. See [LICENSE](LICENSE) file for complete license text.
+CLIO Core is licensed under the **BSD 3-Clause License**. See [LICENSE](LICENSE) file for complete license text.
 
 **Copyright (c) 2024, Gnosis Research Center, Illinois Institute of Technology**
 
@@ -527,7 +493,7 @@ IOWarp Core is licensed under the **BSD 3-Clause License**. See [LICENSE](LICENS
 
 ## Acknowledgements
 
-IOWarp Core is developed at the [GRC lab](https://grc.iit.edu/) at Illinois Institute of Technology as part of the IOWarp project. This work is supported by the National Science Foundation (NSF) and aims to advance next-generation scientific computing infrastructure.
+CLIO Core is developed at the [GRC lab](https://grc.iit.edu/) at Illinois Institute of Technology as part of the IOWarp project. This work is supported by the National Science Foundation (NSF) and aims to advance next-generation scientific computing infrastructure.
 
 **For more information:**
 - IOWarp Project: https://grc.iit.edu/research/projects/iowarp

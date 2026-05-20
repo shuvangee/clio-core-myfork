@@ -11,7 +11,7 @@
 # exist as a directory at instance-start time; pre_cmds mkdir handles that.
 # (Metagem itself doesn't link libfuse3 — it just opens /mnt/wrp_cte/* like
 # any other directory; the kernel routes through FUSE to the host's
-# wrp_cte_fuse daemon. No FUSE awareness needed inside the container.)
+# clio_cte_fuse daemon. No FUSE awareness needed inside the container.)
 #
 # 4-node allocation; sample_replicates=12 → ~22 GB fastp I/O across 36
 # samples that route through the FUSE adapter.
@@ -25,7 +25,7 @@ container_image: metagem_apptainer_test
 container_binds:
   - ${HOME}/jarvis-bench-cache/metagem-stage:/tmp/metagem-cache:ro
   - ${HOME}/jarvis-runs:${HOME}/jarvis-runs
-  # Host-side wrp_cte_fuse mount bound into the container at /mnt/wrp_cte.
+  # Host-side clio_cte_fuse mount bound into the container at /mnt/wrp_cte.
   # The dir must exist at instance-start (created by the pre_cmd below);
   # apptainer's --bind uses MS_SLAVE so the FUSE mount that wrp_cte_libfuse
   # establishes on the host later still propagates into the container.
@@ -55,7 +55,7 @@ scheduler:
     - 'module load gcc/11.4.0/openmpi/5.0.5-x2kvx5l'
     - 'mkdir -p /home/llogan/iowarp_prte_tmp'
     # FUSE bind source. NFS-shared so a head-node mkdir is visible to every
-    # node; each node will mask it with its own wrp_cte_fuse mount during
+    # node; each node will mask it with its own clio_cte_fuse mount during
     # wrp_cte_libfuse start.
     - 'fusermount3 -u /home/llogan/wrp_cte_metagem_4n 2>/dev/null || umount -l /home/llogan/wrp_cte_metagem_4n 2>/dev/null || true'
     - 'mkdir -p /home/llogan/wrp_cte_metagem_4n'

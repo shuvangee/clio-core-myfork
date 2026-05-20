@@ -36,7 +36,7 @@
 
 #include "adapter/posix/posix_api.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /** Adapter types */
 enum class AdapterType {
@@ -119,6 +119,6 @@ struct AdapterInfo {
   }
 };
 
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #endif  // WRP_CTE_ADAPTER_ADAPTER_TYPES_H_

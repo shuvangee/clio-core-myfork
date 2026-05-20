@@ -4,7 +4,7 @@
 # This is the NFS-baseline counterpart to biobb_iowarp_libfuse_4n.yaml --
 # same SIF, same workload params (20 replicates, nprocs=4 ppn=1), same
 # scheduler config, just no IOWarp stack and out path is plain NFS rather
-# than a wrp_cte_fuse mount. Apples-to-apples comparison for FUSE+CTE
+# than a clio_cte_fuse mount. Apples-to-apples comparison for FUSE+CTE
 # overhead vs raw NFS.
 
 name: biobb_nfs_4n

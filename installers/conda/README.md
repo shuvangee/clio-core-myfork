@@ -189,7 +189,7 @@ $CONDA_PREFIX/
 ├── bin/                           # Command-line tools
 │   ├── chimaera runtime start
 │   ├── wrp_cte
-│   ├── wrp_cae_omni
+│   ├── clio_cae_omni
 │   └── ...
 ├── lib/                           # Shared libraries
 │   ├── libchimaera_cxx.so

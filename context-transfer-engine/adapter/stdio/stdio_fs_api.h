@@ -42,10 +42,10 @@
 #include "stdio_api.h"
 #include "wrp_cte/core/content_transfer_engine.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /** A class to represent POSIX IO file system */
-class StdioFs : public wrp::cae::Filesystem {
+class StdioFs : public clio::cae::Filesystem {
 public:
   WRP_CTE_STDIO_API_T real_api_; /**< pointer to real APIs */
 
@@ -103,7 +103,7 @@ public:
     if (cte_manager != nullptr && !cte_manager->IsInitialized()) {
       return false;
     }
-    wrp::cae::File f;
+    clio::cae::File f;
     f.hermes_fh_ = fp;
     stat = WRP_CTE_FS_METADATA_MANAGER->Find(f);
     return stat != nullptr;
@@ -277,9 +277,9 @@ public:
 
 /** Simplify access to the stateless StdioFs Singleton */
 #define WRP_CTE_STDIO_FS                                                        \
-  hshm::Singleton<::wrp::cae::StdioFs>::GetInstance()
-#define WRP_CTE_STDIO_FS_T wrp::cae::StdioFs *
+  hshm::Singleton<::clio::cae::StdioFs>::GetInstance()
+#define WRP_CTE_STDIO_FS_T clio::cae::StdioFs *
 
-} // namespace wrp::cae
+} // namespace clio::cae
 
 #endif // WRP_CTE_ADAPTER_STDIO_NATIVE_H_

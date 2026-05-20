@@ -95,11 +95,11 @@ ctest -R omni                # Context Assimilation Engine
 
 ```bash
 # Start runtime with default config
-export CHI_SERVER_CONF=/workspace/docker/wrp_cte_bench/cte_config.yaml
+export CHI_SERVER_CONF=/workspace/docker/clio_cte_bench/cte_config.yaml
 chimaera runtime start &
 
 # After a moment, run a quick benchmark
-wrp_run_thrpt_benchmark --test-case latency --threads 4 --duration 5
+clio_run_thrpt_benchmark --test-case latency --threads 4 --duration 5
 ```
 
 ### Container Architecture
@@ -290,7 +290,7 @@ cmake --preset=debug && cmake --build build -j$(nproc)
 cd build && ctest -VV
 
 # Start runtime
-export CHI_SERVER_CONF=/workspace/docker/wrp_cte_bench/cte_config.yaml
+export CHI_SERVER_CONF=/workspace/docker/clio_cte_bench/cte_config.yaml
 chimaera runtime start
 
 # IPC transport modes

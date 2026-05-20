@@ -1,11 +1,11 @@
 # Benchmark directory
 
 # BDev I/O throughput benchmark
-add_executable(wrp_run_thrpt_benchmark
-  wrp_run_thrpt_benchmark.cc
+add_executable(clio_run_thrpt_benchmark
+  clio_run_thrpt_benchmark.cc
 )
 
-target_link_libraries(wrp_run_thrpt_benchmark
+target_link_libraries(clio_run_thrpt_benchmark
   cxx                             # Core Chimaera runtime
   chimaera::bdev_client           # BDev client for I/O operations
   chimaera::MOD_NAME_client       # MOD_NAME template module
@@ -14,7 +14,7 @@ target_link_libraries(wrp_run_thrpt_benchmark
 )
 
 # Install benchmark executable
-install(TARGETS wrp_run_thrpt_benchmark
+install(TARGETS clio_run_thrpt_benchmark
   DESTINATION bin
 )
 
@@ -24,18 +24,18 @@ install(TARGETS wrp_run_thrpt_benchmark
 # FUSE/IOR.
 find_package(MPI QUIET)
 if(MPI_CXX_FOUND)
-  add_executable(wrp_xnode_bdev_bench wrp_xnode_bdev_bench.cc)
-  target_link_libraries(wrp_xnode_bdev_bench
+  add_executable(clio_xnode_bdev_bench clio_xnode_bdev_bench.cc)
+  target_link_libraries(clio_xnode_bdev_bench
     cxx
     chimaera::bdev_client
     chimaera::admin_client
     hshm::cxx
     MPI::MPI_CXX
   )
-  install(TARGETS wrp_xnode_bdev_bench DESTINATION bin)
+  install(TARGETS clio_xnode_bdev_bench DESTINATION bin)
 else()
   message(STATUS
-    "MPI not found — skipping wrp_xnode_bdev_bench target (cross-node "
+    "MPI not found — skipping clio_xnode_bdev_bench target (cross-node "
     "stress test requires MPI for cluster launch).")
 endif()
 

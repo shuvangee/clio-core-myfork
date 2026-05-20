@@ -4,7 +4,7 @@
 # If this passes, repeat with the 2n variant to introduce one cross-
 # node link.
 
-name: wrp_cte_bench_aurora_baremetal_1n
+name: clio_cte_bench_aurora_baremetal_1n
 
 pkgs:
   - pkg_type: jarvis_iowarp.wrp_runtime
@@ -25,7 +25,7 @@ pkgs:
     default_target_timeout_ms: 30000
     poll_period_ms: 5000
 
-  - pkg_type: jarvis_iowarp.wrp_cte_bench
+  - pkg_type: jarvis_iowarp.clio_cte_bench
     pkg_name: cte_bench
     test_case: "PutGet"
     num_threads: 1

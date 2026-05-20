@@ -40,7 +40,7 @@
 #include "adapter/filesystem/filesystem_mdm.h"
 #include "mpiio_api.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /** A class to represent MPI IO seek mode conversion */
 class MpiioSeekModeConv {
@@ -716,11 +716,11 @@ public:
   }
 };
 
-} // namespace wrp::cae
+} // namespace clio::cae
 
 /** Simplify access to the stateless StdioFs Singleton */
 #define WRP_CTE_MPIIO_FS                                                        \
-  hshm::Singleton<::wrp::cae::MpiioFs>::GetInstance()
-#define WRP_CTE_STDIO_FS_T wrp::cae::MpiioFs *
+  hshm::Singleton<::clio::cae::MpiioFs>::GetInstance()
+#define WRP_CTE_STDIO_FS_T clio::cae::MpiioFs *
 
 #endif // WRP_CTE_ADAPTER_MPIIO_MPIIO_FS_API_H_

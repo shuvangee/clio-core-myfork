@@ -1,7 +1,7 @@
 # Pipeline: IOR — Aurora baremetal, 1-node smoke.
 # Uses a system/conda-installed `ior` binary directly via PALS mpiexec
 # (no chimaera, no container). Baseline POSIX numbers vs the
-# wrp_cte_bench_baremetal pipelines.
+# clio_cte_bench_baremetal pipelines.
 
 name: ior_aurora_baremetal_1n
 

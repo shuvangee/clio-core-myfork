@@ -43,7 +43,7 @@ The `run_test.sh` script performs the following steps:
 1. **Start Chimaera Runtime**: Launches the Chimaera runtime in the background
 2. **Launch CTE**: Starts the Content Transfer Engine
 3. **Launch CAE**: Starts the Content Assimilation Engine with Globus support
-4. **Process OMNI File**: Uses `wrp_cae_omni` to process the transfer requests
+4. **Process OMNI File**: Uses `clio_cae_omni` to process the transfer requests
 5. **Cleanup**: Stops the Chimaera runtime
 
 ## Test Files
@@ -102,7 +102,7 @@ To transfer different files from the Globus dataset:
 ### "Failed to launch CTE/CAE"
 - Ensure the executables are installed and available in your PATH
 - Check that `WRP_CTE_CONF` points to a valid configuration file
-- Verify installation with: `which chimaera runtime start wrp_launch_cte wrp_launch_cae wrp_cae_omni`
+- Verify installation with: `which chimaera runtime start wrp_launch_cte wrp_launch_cae clio_cae_omni`
 
 ### Transfer Timeout
 - Large files may take longer to transfer

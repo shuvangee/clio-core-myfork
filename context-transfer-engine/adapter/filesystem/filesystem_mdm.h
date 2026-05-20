@@ -40,7 +40,7 @@
 #include "filesystem_io_client.h"
 #include "hermes_shm/thread/lock.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /**
  * Hardcoded adapter page size. Defined here (instead of using
@@ -220,16 +220,16 @@ public:
   }
 };
 
-} // namespace wrp::cae
+} // namespace clio::cae
 
 // Global pointer-based singleton
 #include "hermes_shm/util/singleton.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 HSHM_DEFINE_GLOBAL_PTR_VAR_H(MetadataManager, g_fs_metadata_manager);
 }
 
-#define WRP_CTE_FS_METADATA_MANAGER (HSHM_GET_GLOBAL_PTR_VAR(wrp::cae::MetadataManager, wrp::cae::g_fs_metadata_manager))
-#define WRP_CTE_FS_METADATA_MANAGER_T wrp::cae::MetadataManager *
+#define WRP_CTE_FS_METADATA_MANAGER (HSHM_GET_GLOBAL_PTR_VAR(clio::cae::MetadataManager, clio::cae::g_fs_metadata_manager))
+#define WRP_CTE_FS_METADATA_MANAGER_T clio::cae::MetadataManager *
 
 #endif // WRP_CTE_ADAPTER_METADATA_MANAGER_H

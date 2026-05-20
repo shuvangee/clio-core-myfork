@@ -32,8 +32,8 @@ visualizer = [
 
 [project.scripts]
 chimaera = "iowarp_core._cli:main"
-wrp_cte_bench = "iowarp_core._cli:cte_bench_main"
-wrp_run_thrpt_benchmark = "iowarp_core._cli:run_thrpt_main"
+clio_cte_bench = "iowarp_core._cli:cte_bench_main"
+clio_run_thrpt_benchmark = "iowarp_core._cli:run_thrpt_main"
 
 [project.urls]
 Homepage = "https://iowarp.ai"

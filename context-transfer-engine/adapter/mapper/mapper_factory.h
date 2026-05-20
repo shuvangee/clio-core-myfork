@@ -38,7 +38,7 @@
 #include "balanced_mapper.h"
 #include "hermes_shm/util/singleton.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 /**
  A class to represent mapper factory pattern
 */
@@ -62,5 +62,5 @@ class MapperFactory {
     return NULL;
   }
 };
-}  // namespace wrp::cae
+}  // namespace clio::cae
 #endif  // WRP_CTE_ADAPTER_FACTORY_H

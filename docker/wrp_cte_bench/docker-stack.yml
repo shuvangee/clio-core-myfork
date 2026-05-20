@@ -24,7 +24,7 @@ services:
       bash -c "
         chimaera runtime start --config /etc/iowarp/chimaera.yaml &
         sleep 3 &&
-        wrp_cte_bench Put 2 4 1m 20 &&
+        clio_cte_bench Put 2 4 1m 20 &&
         chimaera runtime stop
       "
     deploy:
@@ -44,7 +44,7 @@ services:
       bash -c "
         chimaera runtime start --config /etc/iowarp/chimaera.yaml &
         sleep 3 &&
-        wrp_cte_bench Put 2 4 1m 20 &&
+        clio_cte_bench Put 2 4 1m 20 &&
         chimaera runtime stop
       "
     deploy:

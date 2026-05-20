@@ -60,14 +60,14 @@ check_prerequisites() {
     fi
     print_msg "$GREEN" "✓ /dev/fuse available"
 
-    # Check that wrp_cte_fuse binary exists
-    local fuse_bin="${IOWARP_CORE_ROOT}/build/bin/wrp_cte_fuse"
+    # Check that clio_cte_fuse binary exists
+    local fuse_bin="${IOWARP_CORE_ROOT}/build/bin/clio_cte_fuse"
     if [ ! -x "$fuse_bin" ]; then
-        print_msg "$RED" "✗ wrp_cte_fuse not found at $fuse_bin"
-        print_msg "$YELLOW" "  Build with: cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON .. && make wrp_cte_fuse"
+        print_msg "$RED" "✗ clio_cte_fuse not found at $fuse_bin"
+        print_msg "$YELLOW" "  Build with: cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON .. && make clio_cte_fuse"
         exit 1
     fi
-    print_msg "$GREEN" "✓ wrp_cte_fuse binary found"
+    print_msg "$GREEN" "✓ clio_cte_fuse binary found"
 }
 
 cleanup() {

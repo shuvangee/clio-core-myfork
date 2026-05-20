@@ -52,7 +52,7 @@ pkgs:
     iterations: 2
     # WORKDIR (radical sandbox, config) lives on $HOME (NFS), NOT on
     # FUSE: DDMD's `shutil.copy(args.config, cfg.experiment_directory)`
-    # calls chmod, which wrp_cte_fuse returns ENOSYS for. The actual
+    # calls chmod, which clio_cte_fuse returns ENOSYS for. The actual
     # FUSE traffic comes from /opt/ddmd_io_task.sh writing into
     # /mnt/wrp_cte/ddmd (the cte_fuse mountpoint), so DDMD still
     # exercises wrp_cte_libfuse end-to-end.

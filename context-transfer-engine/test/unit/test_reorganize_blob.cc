@@ -101,7 +101,7 @@ class ReorganizeBlobTestFixture {
     // Set environment variable for runtime config
     // CHI_SERVER_CONF is checked first, so set it to override any existing value
     setenv("CHI_SERVER_CONF", config_path_.c_str(), 1);
-    setenv("WRP_RUNTIME_CONF", config_path_.c_str(), 1);
+    setenv("CHI_SERVER_CONF", config_path_.c_str(), 1);
 
     // Initialize Chimaera runtime
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);

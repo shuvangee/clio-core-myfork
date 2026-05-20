@@ -34,7 +34,7 @@
 /**
  * CTE Core throughput benchmark (Put / Get / PutGet).
  *
- * Shares its CLI + metrics with wrp_redis_bench via bench_common.h so the
+ * Shares its CLI + metrics with clio_redis_bench via bench_common.h so the
  * two are apples-to-apples. See bench_common.h for the full flag list;
  * notable additions: --max-total-blobs (global bounded keyspace split
  * evenly across threads, keys cycle) and --time-limit SECONDS (run for

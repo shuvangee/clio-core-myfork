@@ -2,7 +2,7 @@
 #
 # Brings up the Chimaera runtime + CTE core AND a Redis server in the
 # same deployment, then runs the two apples-to-apples benchmarks
-# (wrp_cte_bench and wrp_redis_bench — same CLI/metrics via
+# (clio_cte_bench and clio_redis_bench — same CLI/metrics via
 # bench_common.h) back to back under identical conditions.
 #
 # Experiment matrix (cross product => 2 x 5 = 10 experiments):
@@ -15,7 +15,7 @@
 #       thread count (16 threads -> 64 keys/thread @1m) instead of
 #       scaling with --threads and overrunning the 16 GiB tier.
 #
-# Requires: wrp_cte_bench + wrp_redis_bench in PATH (build with
+# Requires: clio_cte_bench + clio_redis_bench in PATH (build with
 #           -DWRP_CORE_ENABLE_REDIS=ON), redis-server in PATH.
 #
 # Usage:
@@ -49,7 +49,7 @@ config:
       port: 6379
 
     # --- CTE benchmark ---
-    - pkg_type: jarvis_iowarp.wrp_cte_bench
+    - pkg_type: jarvis_iowarp.clio_cte_bench
       pkg_name: cte_bench
       test_case: "Put"
       num_threads: 1
@@ -63,7 +63,7 @@ config:
       output_file: cte_bench.log
 
     # --- Redis benchmark (mirror) ---
-    - pkg_type: jarvis_iowarp.wrp_redis_bench
+    - pkg_type: jarvis_iowarp.clio_redis_bench
       pkg_name: redis_bench
       test_case: "Put"
       num_threads: 1

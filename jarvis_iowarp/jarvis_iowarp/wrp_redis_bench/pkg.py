@@ -5,11 +5,11 @@ import os
 
 class WrpRedisBench(Application):
     """
-    Redis throughput benchmark — apples-to-apples mirror of wrp_cte_bench.
+    Redis throughput benchmark — apples-to-apples mirror of clio_cte_bench.
 
-    Drives the `wrp_redis_bench` executable (built when
+    Drives the `clio_redis_bench` executable (built when
     WRP_CORE_ENABLE_REDIS=ON) which shares its CLI/metrics with
-    wrp_cte_bench via bench_common.h. Each client thread holds its own
+    clio_cte_bench via bench_common.h. Each client thread holds its own
     hiredis connection and issues SET (Put) / GET (Get) with --depth
     pipelining, mirroring CTE PutBlob/GetBlob. Supports --time-limit
     (run N seconds) and --max-total-blobs (global keyspace split
@@ -19,7 +19,7 @@ class WrpRedisBench(Application):
     """
 
     def _init(self):
-        self.benchmark_executable = 'wrp_redis_bench'
+        self.benchmark_executable = 'clio_redis_bench'
         self.output_file = None
 
     def _configure_menu(self):
@@ -37,7 +37,7 @@ class WrpRedisBench(Application):
                 'msg': 'Number of client threads (each its own connection)',
                 'type': int,
                 'default': 1,
-                'help': 'Maps to wrp_redis_bench --threads',
+                'help': 'Maps to clio_redis_bench --threads',
             },
             {
                 'name': 'depth',

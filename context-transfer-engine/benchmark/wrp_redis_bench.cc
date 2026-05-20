@@ -32,7 +32,7 @@
  */
 
 /**
- * Redis comparison benchmark — apples-to-apples mirror of wrp_cte_bench.
+ * Redis comparison benchmark — apples-to-apples mirror of clio_cte_bench.
  *
  * Same CLI and metrics (bench_common.h); the only difference is the
  * backend: each worker holds its own hiredis connection and issues

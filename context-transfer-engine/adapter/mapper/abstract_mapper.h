@@ -36,7 +36,7 @@
 
 #include "chimaera/chimaera.h"
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /**
  * Define different types of mappers supported by POSIX Adapter.
@@ -105,6 +105,6 @@ class AbstractMapper {
   virtual void map(size_t off, size_t size, size_t page_size,
                    BlobPlacements &ps) = 0;
 };
-}  // namespace wrp::cae
+}  // namespace clio::cae
 
 #endif  // WRP_CTE_ABSTRACT_MAPPER_H

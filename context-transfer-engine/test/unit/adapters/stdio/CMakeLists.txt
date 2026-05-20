@@ -5,11 +5,11 @@ include_directories(
     .
 )
 
-add_executable(wrp_cte_stdio_unit_tests
+add_executable(clio_cte_stdio_unit_tests
     test_stdio_adapter.cc
 )
 
-target_link_libraries(wrp_cte_stdio_unit_tests
+target_link_libraries(clio_cte_stdio_unit_tests
     wrp_cte_stdio
     wrp_cte_posix       # for shared PosixFs::IsFdTracked used by stdio
     wrp_cte_fs_base
@@ -20,10 +20,10 @@ target_link_libraries(wrp_cte_stdio_unit_tests
 )
 
 if(WRP_CORE_ENABLE_MPI)
-    target_link_libraries(wrp_cte_stdio_unit_tests MPI::MPI_CXX)
+    target_link_libraries(clio_cte_stdio_unit_tests MPI::MPI_CXX)
 endif()
 
 install(
-    TARGETS wrp_cte_stdio_unit_tests
+    TARGETS clio_cte_stdio_unit_tests
     RUNTIME DESTINATION bin
 )

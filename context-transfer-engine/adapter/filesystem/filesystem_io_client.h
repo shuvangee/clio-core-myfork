@@ -49,7 +49,7 @@
 
 namespace stdfs = std::filesystem;
 
-namespace wrp::cae {
+namespace clio::cae {
 
 /** Put or get data directly from I/O client */
 #define WRP_CTE_IO_CLIENT_BYPASS BIT_OPT(uint32_t, 0)
@@ -375,13 +375,13 @@ public:
   virtual void UpdateIoStatus(const FsIoOptions &opts, IoStatus &status) = 0;
 };
 
-} // namespace wrp::cae
+} // namespace clio::cae
 
 namespace std {
 /** A structure to represent hash */
-template <> struct hash<::wrp::cae::File> {
+template <> struct hash<::clio::cae::File> {
   /** hash creator functor */
-  std::size_t operator()(const wrp::cae::File &key) const {
+  std::size_t operator()(const clio::cae::File &key) const {
     return key.hash();
   }
 };

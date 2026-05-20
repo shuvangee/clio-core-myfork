@@ -26,11 +26,11 @@ RUN sudo mkdir -p /benchmarks && \
     sudo chown -R iowarp:ubuntu /benchmarks
 
 # Copy the benchmark script and configuration file
-COPY context-transfer-engine/benchmark/wrp_cte_bench.sh /benchmarks/wrp_cte_bench.sh
+COPY context-transfer-engine/benchmark/clio_cte_bench.sh /benchmarks/clio_cte_bench.sh
 COPY context-transfer-engine/benchmark/cte_config_ram.yaml /benchmarks/cte_config.yaml
 
 # Make the script executable
-RUN sudo chmod +x /benchmarks/wrp_cte_bench.sh
+RUN sudo chmod +x /benchmarks/clio_cte_bench.sh
 
 # Set working directory
 WORKDIR /benchmarks
@@ -50,7 +50,7 @@ ENV IO_COUNT=100
 RUN echo '#!/bin/bash' > /benchmarks/run_bench.sh && \
     echo 'set -e' >> /benchmarks/run_bench.sh && \
     echo '# Run benchmark using environment variables' >> /benchmarks/run_bench.sh && \
-    echo '/benchmarks/wrp_cte_bench.sh "$TEST_CASE" "$NUM_PROCS" "$DEPTH" "$IO_SIZE" "$IO_COUNT"' >> /benchmarks/run_bench.sh && \
+    echo '/benchmarks/clio_cte_bench.sh "$TEST_CASE" "$NUM_PROCS" "$DEPTH" "$IO_SIZE" "$IO_COUNT"' >> /benchmarks/run_bench.sh && \
     echo 'BENCH_EXIT=$?' >> /benchmarks/run_bench.sh && \
     echo '# Stop Chimaera runtime after benchmark completes' >> /benchmarks/run_bench.sh && \
     echo 'chimaera runtime stop' >> /benchmarks/run_bench.sh && \

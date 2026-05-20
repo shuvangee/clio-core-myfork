@@ -4,12 +4,12 @@
 #
 # This script:
 # 1. Starts the Chimaera runtime (with CTE + CAE compose) in the background
-# 2. Runs wrp_cae_omni to process the OMNI file
+# 2. Runs clio_cae_omni to process the OMNI file
 #
 # Prerequisites:
 # - GLOBUS_ACCESS_TOKEN environment variable must be set
 # - Globus endpoint must be accessible
-# - chimaera and wrp_cae_omni must be installed and in PATH
+# - chimaera and clio_cae_omni must be installed and in PATH
 # - Built with -DCAE_ENABLE_GLOBUS=ON
 #
 # Usage:
@@ -109,7 +109,7 @@ echo ""
 
 # Process OMNI file
 echo "Processing OMNI file..."
-wrp_cae_omni "${OMNI_FILE}"
+clio_cae_omni "${OMNI_FILE}"
 OMNI_STATUS=$?
 
 echo ""

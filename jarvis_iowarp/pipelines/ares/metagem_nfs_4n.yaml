@@ -3,7 +3,7 @@
 #
 # NFS-baseline counterpart to metagem_iowarp_libfuse_4n.yaml — same SIF,
 # same workload params, same scheduler config, just no IOWarp stack and
-# out path is plain NFS rather than a wrp_cte_fuse mount. Apples-to-apples
+# out path is plain NFS rather than a clio_cte_fuse mount. Apples-to-apples
 # comparison for FUSE+CTE overhead vs raw NFS.
 
 name: metagem_nfs_4n

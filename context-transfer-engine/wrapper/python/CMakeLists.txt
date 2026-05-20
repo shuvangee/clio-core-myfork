@@ -84,7 +84,7 @@ if(BUILD_TESTING)
 
     # PollTelemetryLog focused test (requires runtime initialization)
     # This test specifically validates telemetry logging functionality
-    # Requires: CHI_WITH_RUNTIME=1 and WRP_RUNTIME_CONF set
+    # Requires: CHI_WITH_RUNTIME=1 and CHI_SERVER_CONF set
     add_test(
         NAME python_telemetry_test
         COMMAND ${Python_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/test_cte_telemetry.py
@@ -99,7 +99,7 @@ if(BUILD_TESTING)
         PROPERTIES
         LABELS "python;bindings;telemetry"
         TIMEOUT 180
-        ENVIRONMENT "CHI_WITH_RUNTIME=1;WRP_RUNTIME_CONF=${CMAKE_SOURCE_DIR}/context-transfer-engine/test/unit/adapters/adios2/cte_config.yaml;LD_LIBRARY_PATH=/home/iowarp/miniconda3/lib"
+        ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_SOURCE_DIR}/context-transfer-engine/test/unit/adapters/adios2/cte_config.yaml;LD_LIBRARY_PATH=/home/iowarp/miniconda3/lib"
     )
 
     # Ensure test depends on the built module

@@ -47,7 +47,7 @@ chimaera runtime start
 chimaera compose /path/to/wrp_config_example.yaml
 
 # Now CAE is available for use
-wrp_cae_omni /path/to/omni_file.yaml
+clio_cae_omni /path/to/omni_file.yaml
 ```
 
 ## Integration with CTE
@@ -78,7 +78,7 @@ chimaera runtime start &
 chimaera compose $CHI_SERVER_CONF
 
 # 3. Use CAE to ingest data
-wrp_cae_omni /path/to/my_data_transfer.yaml
+clio_cae_omni /path/to/my_data_transfer.yaml
 
 # 4. Access data through CTE
 # (Your application uses CTE client to access assimilated data)

@@ -111,7 +111,7 @@ class DramDefaultTieringFixture {
     CreateConfigFile();
 
     setenv("CHI_SERVER_CONF", config_path_.c_str(), 1);
-    setenv("WRP_RUNTIME_CONF", config_path_.c_str(), 1);
+    setenv("CHI_SERVER_CONF", config_path_.c_str(), 1);
 
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);

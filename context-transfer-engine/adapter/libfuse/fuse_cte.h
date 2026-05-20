@@ -54,7 +54,7 @@
 #include "wrp_cte/core/core_client.h"
 #include "wrp_cte/core/core_tasks.h"
 
-namespace wrp::cae::fuse {
+namespace clio::cae::fuse {
 
 /** Default page size for blob I/O */
 static constexpr size_t kDefaultPageSize = 1024 * 1024;  // 1 MB
@@ -430,6 +430,6 @@ static inline std::string RegexEscape(const std::string &s) {
   return out;
 }
 
-}  // namespace wrp::cae::fuse
+}  // namespace clio::cae::fuse
 
 #endif  // WRP_CTE_ADAPTER_LIBFUSE_FUSE_CTE_H_

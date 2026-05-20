@@ -5,7 +5,7 @@
 # Stack (single host):
 #   wrp_runtime     — chimaera daemon on the host
 #   wrp_cte         — CTE storage tier (8GB RAM)
-#   wrp_cte_libfuse — wrp_cte_fuse binary (host PATH) mounts $HOME/wrp_cte
+#   wrp_cte_libfuse — clio_cte_fuse binary (host PATH) mounts $HOME/wrp_cte
 #   biobb_wf_md_setup — runs INSIDE the existing apptainer SIF; its
 #                       /mnt/wrp_cte path is bound from $HOME/wrp_cte on
 #                       the host, so workload writes land on the FUSE

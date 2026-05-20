@@ -4,7 +4,7 @@
 # scale (>2 peers, partial-mesh probe loss). If it hangs the same way,
 # the gossip layer is broken even at 2 nodes.
 
-name: wrp_cte_bench_aurora_baremetal_2n
+name: clio_cte_bench_aurora_baremetal_2n
 
 # Pin chimaera's ZMQ TCP traffic (server bind + client source-bind) to a
 # single Aurora HSN rail so connections are symmetric. Without this, the
@@ -32,7 +32,7 @@ pkgs:
     default_target_timeout_ms: 30000
     poll_period_ms: 5000
 
-  - pkg_type: jarvis_iowarp.wrp_cte_bench
+  - pkg_type: jarvis_iowarp.clio_cte_bench
     pkg_name: cte_bench
     test_case: "PutGet"
     num_threads: 1

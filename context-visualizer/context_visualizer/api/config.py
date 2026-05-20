@@ -13,14 +13,14 @@ def _load_config():
 
     Search order matches the runtime:
       1. CHI_SERVER_CONF env
-      2. WRP_RUNTIME_CONF env
+      2. CHI_SERVER_CONF env
       3. ~/.chimaera/chimaera.yaml
     """
     import yaml
 
     candidates = [
         os.environ.get("CHI_SERVER_CONF"),
-        os.environ.get("WRP_RUNTIME_CONF"),
+        os.environ.get("CHI_SERVER_CONF"),
         str(Path.home() / ".chimaera" / "chimaera.yaml"),
     ]
     for path in candidates:
@@ -36,7 +36,7 @@ def get_config():
     if cfg is None:
         return jsonify({"error": "no config file found", "searched": [
             "CHI_SERVER_CONF",
-            "WRP_RUNTIME_CONF",
+            "CHI_SERVER_CONF",
             "~/.chimaera/chimaera.yaml",
         ]}), 404
     return jsonify({"config": cfg})

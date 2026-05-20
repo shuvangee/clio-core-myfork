@@ -87,8 +87,8 @@ struct ComposeConfig {
  * Configuration manager singleton
  *
  * Inherits from hshm BaseConfig and manages YAML configuration parsing.
- * Config lookup: CHI_SERVER_CONF env -> WRP_RUNTIME_CONF env ->
- * ~/.chimaera/chimaera.yaml -> bare minimum defaults.
+ * Config lookup: CHI_SERVER_CONF env -> ~/.chimaera/chimaera.yaml ->
+ * bare minimum defaults.
  * Uses HSHM global cross pointer variable singleton pattern.
  */
 class ConfigManager : public hshm::BaseConfig {
@@ -125,9 +125,8 @@ class ConfigManager : public hshm::BaseConfig {
    * Get server configuration file path
    * Lookup order:
    *   1. CHI_SERVER_CONF env var
-   *   2. WRP_RUNTIME_CONF env var
-   *   3. ~/.chimaera/chimaera.yaml (if it exists)
-   *   4. Empty string (bare minimum defaults, no compose)
+   *   2. ~/.chimaera/chimaera.yaml (if it exists)
+   *   3. Empty string (bare minimum defaults, no compose)
    * @return Configuration file path or empty string if no config found
    */
   std::string GetServerConfigPath() const;
