@@ -218,7 +218,7 @@ TEST_CASE("CTE CreateParams Configuration", "[cte][core][params]") {
 
   SECTION("CreateParams constructor validation") {
     // NOTE: The allocator-based constructor test is commented out because it requires
-    // proper HSHM memory manager initialization which is complex to set up in unit tests.
+    // proper CTP memory manager initialization which is complex to set up in unit tests.
     // This test validates that the constructor signature is correct and compiles properly.
 
     // Test that we can construct parameters with default values
@@ -285,7 +285,7 @@ TEST_CASE("Target Configuration Validation", "[cte][core][target][config]") {
 TEST_CASE("Tag Information Structure", "[cte][core][tag][info]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("TagInfo structure validation") {
-    // NOTE: Allocator-based constructor tests are commented out due to HSHM memory manager 
+    // NOTE: Allocator-based constructor tests are commented out due to CTP memory manager 
     // initialization complexity. These tests validate that the constructor signatures 
     // are correct and the code compiles properly.
     
@@ -325,7 +325,7 @@ TEST_CASE("Tag Information Structure", "[cte][core][tag][info]") {
 TEST_CASE("Blob Information Structure", "[cte][core][blob][info]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("BlobInfo parameter validation") {
-    // NOTE: Allocator-based constructor tests are commented out due to HSHM memory manager
+    // NOTE: Allocator-based constructor tests are commented out due to CTP memory manager
     // initialization complexity. These tests validate parameter ranges and types.
     
     // Test BlobInfo parameters
@@ -376,7 +376,7 @@ TEST_CASE("Blob Information Structure", "[cte][core][blob][info]") {
 TEST_CASE("Task Structure Validation", "[cte][core][tasks]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("Task structure compilation validation") {
-    // NOTE: Allocator-based task constructor tests are commented out due to HSHM memory 
+    // NOTE: Allocator-based task constructor tests are commented out due to CTP memory 
     // manager initialization complexity. These tests validate that the task structures
     // compile correctly and have the expected member variables.
     

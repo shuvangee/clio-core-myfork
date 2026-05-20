@@ -54,7 +54,7 @@ static void ChimaeraCleanupAtExit() {
 
 namespace chi {
 
-// HSHM Thread-local storage key definitions
+// CTP Thread-local storage key definitions
 ctp::ThreadLocalKey chi_cur_worker_key_;
 bool chi_cur_worker_key_created_ = false;
 ctp::ThreadLocalKey chi_task_counter_key_;

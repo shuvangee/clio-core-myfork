@@ -80,12 +80,12 @@ namespace ctp {
 #define CTP_LOG ctp::CrossSingleton<ctp::Logger>::GetInstance()
 
 /**
- * Hermes Print. Like printf, except types are inferred
+ * Clio Print. Like printf, except types are inferred
  */
 #define HIPRINT(...) CTP_LOG->Print(__VA_ARGS__)
 
 /**
- * Hermes SHM Log - Unified logging macro
+ * Clio CTP Log - Unified logging macro
  *
  * Messages with LOG_CODE < CTP_LOG_LEVEL are compiled out entirely.
  * Messages with LOG_CODE >= CTP_LOG_LEVEL are subject to runtime filtering

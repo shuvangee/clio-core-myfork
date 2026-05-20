@@ -1,5 +1,5 @@
 name: adios2
-env: hermes
+env: clio
 pkgs:
   - pkg_type: hermes_run
     pkg_name: hermes_run
@@ -7,6 +7,6 @@ pkgs:
     provider: sockets
   - pkg_type: adios_gray_scott
     pkg_name: adios_gray_scott
-    engine: hermes
+    engine: clio
     ppn: 16
     nprocs: 4

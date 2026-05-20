@@ -179,9 +179,9 @@ struct ClientShmInfo {
 /**
  * IPC Manager singleton for inter-process communication
  *
- * Manages ZeroMQ server using lightbeam from HSHM, three memory segments,
+ * Manages ZeroMQ server using lightbeam from CTP, three memory segments,
  * and priority queues for task processing.
- * Uses HSHM global cross pointer variable singleton pattern.
+ * Uses CTP global cross pointer variable singleton pattern.
  */
 class IpcManager {
   friend struct IpcCpu2Self;

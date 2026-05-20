@@ -65,8 +65,8 @@ class Argobots : public ThreadModel {
   void SleepForUs(size_t us) {
     /**
      * TODO(llogan): make this API flexible enough to support argobots fully
-     * tl::thread::self().sleep(*HSHM->rpc_.server_engine_,
-                               HSHM->server_config_.borg_.blob_reorg_period_);
+     * tl::thread::self().sleep(*CTP->rpc_.server_engine_,
+                               CTP->server_config_.borg_.blob_reorg_period_);
      */
 #if CTP_IS_HOST
     usleep(us);

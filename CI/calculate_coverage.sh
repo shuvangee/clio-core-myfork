@@ -516,7 +516,7 @@ echo "=== Component Coverage ===" >> "${BUILD_DIR}/COVERAGE_SUMMARY.txt"
 for COMPONENT in ctp runtime cte cae cee; do
     case $COMPONENT in
         ctp)
-            NAME="Context Transport Primitives (HSHM)"
+            NAME="Context Transport Primitives (CTP)"
             ;;
         runtime)
             NAME="Context Runtime (Chimaera)"

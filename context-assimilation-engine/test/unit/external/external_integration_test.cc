@@ -16,7 +16,7 @@
 #include <clio_cae/core/constants.h>
 #include <chimaera/chimaera.h>
 
-// HSHM includes
+// CTP includes
 #include <clio_ctp/util/singleton.h>
 
 // Logging

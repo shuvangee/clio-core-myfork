@@ -35,7 +35,7 @@
  * Central header for Chimaera singleton access macros
  * 
  * This header provides convenient macros for accessing all Chimaera singletons
- * using HSHM's global cross pointer variable pattern. Include this header to
+ * using CTP's global cross pointer variable pattern. Include this header to
  * get access to all singleton macros in one place.
  */
 
@@ -54,7 +54,7 @@
  * Convenience macros for accessing Chimaera singletons
  * 
  * These macros provide easy access to all Chimaera singleton managers
- * using HSHM's global cross pointer variable pattern.
+ * using CTP's global cross pointer variable pattern.
  */
 
 // Core Framework Singleton Access

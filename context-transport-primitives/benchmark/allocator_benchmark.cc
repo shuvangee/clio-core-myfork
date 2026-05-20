@@ -236,7 +236,7 @@ class AllocatorBenchmarkWorker {
  * Benchmark worker for standard malloc
  *
  * Similar to AllocatorBenchmarkWorker but uses malloc/free instead of
- * HSHM allocator APIs.
+ * CTP allocator APIs.
  */
 class MallocBenchmarkWorker {
  private:

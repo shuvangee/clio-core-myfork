@@ -82,7 +82,7 @@ using DestroyTask = chi::Task;  // Simple task for destruction
  * ParseOmniTask - Parse OMNI YAML file and schedule assimilation tasks
  */
 struct ParseOmniTask : public chi::Task {
-  // Task-specific data using HSHM macros
+  // Task-specific data using CTP macros
   IN chi::priv::string
       serialized_ctx_;  // Input: Serialized AssimilationCtx (internal use)
   OUT chi::u32

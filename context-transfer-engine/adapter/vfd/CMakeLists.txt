@@ -76,14 +76,14 @@ if(CMAKE_BUILD_TYPE)
   string(TOLOWER ${CMAKE_BUILD_TYPE} lower_cmake_build_type)
 endif()
 
-# Hermes VFD package dependencies
+# Clio VFD package dependencies
 foreach(pkg_dep ${HDF5_HERMES_VFD_EXT_PKG_DEPENDENCIES})
   set(HDF5_HERMES_VFD_PKG_DEPENDENCIES ${HDF5_HERMES_VFD_PKG_DEPENDENCIES} ${pkg_dep})
 endforeach()
 
 set(HDF5_HERMES_VFD_PKG_DEPENDENCIES ${HDF5_HERMES_VFD_PKG_DEPENDENCIES} PARENT_SCOPE)
 
-# Hermes VFD private library dependencies
+# Clio VFD private library dependencies
 foreach(exported_lib ${HDF5_HERMES_VFD_EXPORTED_LIBS})
   if(lower_cmake_build_type MATCHES "debug")
     get_target_property(HDF5_HERMES_VFD_LIBRARY ${exported_lib} DEBUG_OUTPUT_NAME)
@@ -96,7 +96,7 @@ endforeach()
 
 set(HDF5_HERMES_VFD_LIBRARIES ${HDF5_HERMES_VFD_LIBRARIES} PARENT_SCOPE)
 
-# Hermes VFD external library dependencies
+# Clio VFD external library dependencies
 # Need to generate -lib if not already passed
 set(HDF5_HERMES_VFD_EXT_LIB_DEPENDENCIES
   ${HDF5_HERMES_VFD_EXT_LIB_DEPENDENCIES}

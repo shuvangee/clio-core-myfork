@@ -79,7 +79,7 @@ struct ChiModInfo {
  * - CHI_REPO_PATH directories
  * 
  * Each ChiMod provides functions to query name and allocate ChiContainers.
- * Uses HSHM SharedLibrary for cross-platform dynamic loading.
+ * Uses CTP SharedLibrary for cross-platform dynamic loading.
  */
 class ModuleManager {
  public:

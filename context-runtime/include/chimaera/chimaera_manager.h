@@ -45,7 +45,7 @@ namespace chi {
  * 
  * Central coordinator for the distributed task execution framework.
  * Manages initialization and coordination between client and runtime modes.
- * Uses HSHM global cross pointer variable singleton pattern.
+ * Uses CTP global cross pointer variable singleton pattern.
  */
 class Chimaera {
  public:

@@ -22,7 +22,7 @@
 #include <clio_cte/core/content_transfer_engine.h>
 #include <chimaera/chimaera.h>
 
-// HSHM includes
+// CTP includes
 #include <clio_ctp/util/singleton.h>
 
 namespace {

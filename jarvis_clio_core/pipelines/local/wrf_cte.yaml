@@ -1,5 +1,5 @@
 # WRF + CTE via POSIX adapter (containerized)
-# WRF uses ADIOS2 internally but its engine choices are bp5/hermes only,
+# WRF uses ADIOS2 internally but its engine choices are bp5/clio only,
 # so we intercept POSIX I/O via LD_PRELOAD.
 name: wrf_cte
 

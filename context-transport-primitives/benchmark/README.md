@@ -141,7 +141,7 @@ This runs all three allocators sequentially with identical parameters and displa
 - **BuddyAllocator**: Uses MallocBackend with 2GB heap
 - **Standard malloc**: Uses system malloc directly
 
-All HSHM allocators write to allocated memory to verify allocations are valid and properly mapped.
+All CTP allocators write to allocated memory to verify allocations are valid and properly mapped.
 
 ## Known Performance Characteristics
 

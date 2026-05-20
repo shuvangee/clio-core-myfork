@@ -36,7 +36,7 @@ pkgs:
     ppn: 16                  # Processes per node
 
     # I/O Configuration
-    engine: bp5              # ADIOS2 engine (bp5, hermes, iowarp, sst)
+    engine: bp5              # ADIOS2 engine (bp5, clio, iowarp, sst)
     out_file: /workspace/external/iowarp-gray-scott/gs-output.bp
     db_path: /workspace/external/iowarp-gray-scott/metadata.db
 

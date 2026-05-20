@@ -216,11 +216,11 @@ Each test case runs independently. The fixture ensures:
 ## Dependencies
 
 The tests require:
-- **Catch2** - Testing framework (included with HSHM)
+- **Catch2** - Testing framework (included with CTP)
 - **Chimaera Core** - Main runtime library
 - **Admin ChiMod** - For pool management
 - **MOD_NAME ChiMod** - For custom task testing
-- **HSHM** - Shared memory and threading support
+- **CTP** - Shared memory and threading support
 
 ## Contributing
 

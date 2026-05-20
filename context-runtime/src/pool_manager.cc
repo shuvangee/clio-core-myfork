@@ -52,7 +52,7 @@ CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::PoolManager, g_pool_manager);
 
 namespace chi {
 
-// Constructor and destructor removed - handled by HSHM singleton pattern
+// Constructor and destructor removed - handled by CTP singleton pattern
 
 bool PoolManager::ServerInit() {
   if (is_initialized_) {

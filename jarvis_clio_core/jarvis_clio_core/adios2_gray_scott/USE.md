@@ -49,24 +49,24 @@ Clean data produced by Gray Scott
 jarvis pipeline clean
 ```
 
-## Gray Scott With Hermes as I/O engine and adios2 as I/O library
-Please follow this steps for the gray-scott with hermes as I/O engine and adios2 as I/O libray.
+## Gray Scott With Clio as I/O engine and adios2 as I/O library
+Please follow this steps for the gray-scott with clio as I/O engine and adios2 as I/O libray.
 
 ### 1. Setup Environment
-Create the environment variables needed by Hermes + Gray Scott
+Create the environment variables needed by Clio + Gray Scott
 ```bash
 spack load adios2
-spack load hermes@master
+spack load clio@master
 export PATH="${COEUS_Adapter/build/bin}:$PATH"
 ```
 
 
 ### 2. Create a Pipeline
 
-The Jarvis pipeline will store all configuration data needed by Hermes and Gray Scott.
+The Jarvis pipeline will store all configuration data needed by Clio and Gray Scott.
 
 ```bash
-jarvis pipeline create gs-hermes
+jarvis pipeline create gs-clio
 ```
 
 ### 3. Save Environment
@@ -79,15 +79,15 @@ jarvis pipeline env build
 
 ### 4. Add pkgs to the Pipeline
 
-Create a Jarvis pipeline with Hermes (theMPI-IO interceptor), and Gray-Scott
+Create a Jarvis pipeline with Clio (theMPI-IO interceptor), and Gray-Scott
 
 Option 1: without derived variables
 ```bash
 jarvis pipeline append hermes_run --sleep=10 --provider=sockets
-jarvis pipeline append adios2_gray_scott engine=hermes 
+jarvis pipeline append adios2_gray_scott engine=clio 
 ```
 Option2: with derived variables
-For derived variable with adios2 in hermes:
+For derived variable with adios2 in clio:
 ```bash
 jarvis pipeline append hermes_run --sleep=10 --provider=sockets
 jarvis pipeline append adios2_gray_scott engine=hermes_derived
@@ -102,7 +102,7 @@ jarvis pipeline run
 
 ### 6. Clean Data
 
-To clean data produced by Hermes + Gray-Scott:
+To clean data produced by Clio + Gray-Scott:
 ```bash
 jarvis pipeline clean
 ```

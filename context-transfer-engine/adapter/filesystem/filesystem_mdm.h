@@ -158,9 +158,9 @@ public:
   }
 
   /**
-   * Find the hermes file relating to a path.
+   * Find the clio file relating to a path.
    * @param path the path being checked
-   * @return The hermes file.
+   * @return The clio file.
    * */
   std::list<File> *Find(const std::string &path) {
     std::string canon_path = stdfs::absolute(path).string();

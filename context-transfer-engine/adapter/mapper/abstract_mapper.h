@@ -94,7 +94,7 @@ class AbstractMapper {
   virtual ~AbstractMapper() = default;
 
   /**
-   * This method maps the current operation to Hermes data structures.
+   * This method maps the current operation to Clio data structures.
    *
    * @param off offset
    * @param size size

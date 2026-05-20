@@ -1,11 +1,11 @@
 project(clio_ctp)
 
 # -----------------------------------------------------------------------------
-# Build HSHM
+# Build CTP
 # -----------------------------------------------------------------------------
 set(CLIO_CTP_LIBS "")
 
-# BUILD HSHM FOR HOST ONLY
+# BUILD CTP FOR HOST ONLY
 if(WIN32)
     set(SRC_FILES
         system_info.cc
@@ -63,7 +63,7 @@ endif()
 
 list(APPEND CLIO_CTP_LIBS cxx)
 
-# BUILD HSHM FOR CUDA ONLY
+# BUILD CTP FOR CUDA ONLY
 if(CLIO_CORE_ENABLE_CUDA)
     add_cuda_library(clio_ctp_cuda SHARED TRUE ${SRC_FILES}
       INCLUDE_DIRS
@@ -104,7 +104,7 @@ if(CLIO_CORE_ENABLE_CUDA)
     add_library(ctp::gpu_linker ALIAS clio_ctp_gpu_linker)
 endif()
 
-# BUILD HSHM FOR ROCM ONLY
+# BUILD CTP FOR ROCM ONLY
 if(CLIO_CORE_ENABLE_ROCM)
     add_rocm_gpu_library(clio_ctp_rocm_gpu SHARED TRUE ${SRC_FILES})
     target_link_libraries(clio_ctp_rocm_gpu PUBLIC host_deps)

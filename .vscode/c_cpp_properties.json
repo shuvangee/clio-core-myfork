@@ -15,7 +15,7 @@
                 "${workspaceFolder}/context-exploration-engine/include",
                 "${workspaceFolder}/runtime/include",
                 "/usr/local/include/chimaera",
-                "/usr/local/include/hermes-shm"
+                "/usr/local/include/clio-ctp"
             ]
         }
     ],

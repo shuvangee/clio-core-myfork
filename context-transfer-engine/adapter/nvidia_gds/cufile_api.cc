@@ -90,7 +90,7 @@ ssize_t cuFileWrite(CUfileHandle_t fh, const void *buf, size_t size,
   // FullPtr<char> p = CHI_CLIENT->AllocateBuffer(size);
   char *host_data = (char *)malloc(size);
   cudaMemcpy(host_data, buf, size, cudaMemcpyDeviceToHost);
-  // Write data to Hermes
+  // Write data to Clio
   CUfileDescr_t *descr = (CUfileDescr_t *)fh;
   ssize_t ret = write(descr->handle.fd, host_data, size);
   free(host_data);

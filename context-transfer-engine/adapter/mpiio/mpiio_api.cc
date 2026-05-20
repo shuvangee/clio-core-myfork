@@ -35,9 +35,9 @@ bool mpiio_intercepted = true;
 
 #include "mpiio_api.h"
 
-// hermes/bucket.h and hermes/hermes.h were holdovers from the
+// clio/bucket.h and clio/clio.h were holdovers from the
 // pre-CTE adapter; nothing in this translation unit references the
-// hermes:: API any more, so they were dropped to unbreak the build.
+// clio:: API any more, so they were dropped to unbreak the build.
 
 #include "clio_cte/core/core_client.h"
 #include "clio_ctp/util/singleton.h"

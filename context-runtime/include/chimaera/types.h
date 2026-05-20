@@ -41,7 +41,7 @@
 #include <thread>
 #include <vector>
 
-// Main HSHM include
+// Main CTP include
 #include <clio_ctp/clio_ctp.h>
 #include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <clio_ctp/memory/allocator/thread_allocator.h>
@@ -53,7 +53,7 @@
 
 namespace chi {
 
-// Basic type aliases using HSHM types
+// Basic type aliases using CTP types
 using u32 = ctp::u32;
 using u64 = ctp::u64;
 using i64 = ctp::i64;
@@ -414,7 +414,7 @@ struct AddressHash {
   }
 };
 
-// Task flags using HSHM BIT_OPT macro
+// Task flags using CTP BIT_OPT macro
 #define TASK_PERIODIC BIT_OPT(chi::u32, 0)
 #define TASK_ROUTED BIT_OPT(chi::u32, 1)
 #define TASK_DATA_OWNER BIT_OPT(chi::u32, 2)
@@ -451,7 +451,7 @@ enum class LaneMapPolicy {
 constexpr PoolId kAdminPoolId =
     UniqueId(1, 0);  // Admin ChiMod pool ID (reserved)
 
-// Allocator type aliases using HSHM conventions
+// Allocator type aliases using CTP conventions
 //
 // CHI_QUEUE_ALLOC_T: BuddyAllocator on both CPU and GPU (queue ring buffers)
 //
@@ -519,7 +519,7 @@ enum MemorySegment {
 #define INOUT
 #define TEMP
 
-// HSHM Thread-local storage keys
+// CTP Thread-local storage keys
 extern ctp::ThreadLocalKey chi_cur_worker_key_;
 extern bool chi_cur_worker_key_created_;
 extern ctp::ThreadLocalKey chi_task_counter_key_;
@@ -563,7 +563,7 @@ inline CTP_CROSS_FUN TaskId CreateTaskId() {
 }
 #endif
 
-// Template aliases for full pointers using HSHM
+// Template aliases for full pointers using CTP
 template <typename T>
 using FullPtr = ctp::ipc::FullPtr<T>;
 

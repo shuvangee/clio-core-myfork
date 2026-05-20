@@ -35,7 +35,7 @@
  * Programmer:  Kimmy Mu
  *              April 2021
  *
- * Purpose: The public header file for the Hermes driver.
+ * Purpose: The public header file for the Clio driver.
  */
 #ifndef H5FDhermes_H
 #define H5FDhermes_H

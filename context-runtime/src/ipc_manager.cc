@@ -103,7 +103,7 @@ namespace chi {
 
 // IpcManager methods
 
-// Constructor and destructor removed - handled by HSHM singleton pattern
+// Constructor and destructor removed - handled by CTP singleton pattern
 
 bool IpcManager::ClientInit() {
   HLOG(kDebug, "IpcManager::ClientInit");
@@ -196,7 +196,7 @@ bool IpcManager::ClientInit() {
     zmq_recv_thread_ = std::thread([this]() { RecvZmqClientThread(); });
   }
 
-  // Initialize HSHM TLS key for task counter before calling WaitForLocalServer,
+  // Initialize CTP TLS key for task counter before calling WaitForLocalServer,
   // which calls CreateTaskId(). Without the key registered first, GetTls() on
   // the zero-initialized key may return a stale/freed pointer → crash.
   CTP_THREAD_MODEL->CreateTls<TaskCounter>(chi_task_counter_key_, nullptr);
@@ -351,7 +351,7 @@ bool IpcManager::ServerInit() {
     HLOG(kDebug, "Node ID identified: 0x{:x}", this_host_.node_id);
   }
 
-  // Initialize HSHM TLS key for task counter (needed for CreateTaskId in
+  // Initialize CTP TLS key for task counter (needed for CreateTaskId in
   // runtime)
   CTP_THREAD_MODEL->CreateTls<TaskCounter>(chi_task_counter_key_, nullptr);
 
@@ -720,7 +720,7 @@ bool IpcManager::StartLocalServer() {
   ConfigManager *config = CHI_CONFIG_MANAGER;
 
   try {
-    // Start local ZeroMQ server using HSHM Lightbeam
+    // Start local ZeroMQ server using CTP Lightbeam
     std::string addr = "127.0.0.1";
     std::string protocol = "tcp";
     u32 port = config->GetPort() + 1;  // Use ZMQ port + 1 for local server
@@ -917,7 +917,7 @@ bool IpcManager::LoadHostfile() {
   }
 
   try {
-    // Use HSHM to parse hostfile
+    // Use CTP to parse hostfile
     std::vector<std::string> host_ips =
         ctp::ConfigParse::ParseHostfile(hostfile_path);
 

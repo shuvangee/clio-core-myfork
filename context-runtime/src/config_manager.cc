@@ -46,7 +46,7 @@ CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::ConfigManager, g_config_manager);
 
 namespace chi {
 
-// Constructor and destructor removed - handled by HSHM singleton pattern
+// Constructor and destructor removed - handled by CTP singleton pattern
 
 bool ConfigManager::ClientInit() {
   if (is_initialized_) {
@@ -89,7 +89,7 @@ bool ConfigManager::ServerInit() {
 
 bool ConfigManager::LoadYaml(const std::string &config_path) {
   try {
-    // Use HSHM BaseConfig methods
+    // Use CTP BaseConfig methods
     LoadFromFile(config_path, true);
     return true;
   } catch (const std::exception &e) {
@@ -151,7 +151,7 @@ ConfigManager::GetSharedMemorySegmentName(MemorySegment segment) const {
     return "";
   }
 
-  // Use HSHM's ExpandPath to resolve environment variables
+  // Use CTP's ExpandPath to resolve environment variables
   return ctp::ConfigParse::ExpandPath(segment_name);
 }
 
@@ -160,7 +160,7 @@ std::string ConfigManager::GetHostfilePath() const {
     return "";
   }
 
-  // Use HSHM's ExpandPath to resolve environment variables in hostfile path
+  // Use CTP's ExpandPath to resolve environment variables in hostfile path
   return ctp::ConfigParse::ExpandPath(hostfile_path_);
 }
 

@@ -35,8 +35,8 @@
  * Programmer:  Kimmy Mu
  *              March 2021
  *
- * Purpose: The hermes file driver using only the HDF5 public API
- *          and buffer datasets in Hermes buffering systems with
+ * Purpose: The clio file driver using only the HDF5 public API
+ *          and buffer datasets in Clio buffering systems with
  *          multiple storage tiers.
  */
 #ifndef _GNU_SOURCE
@@ -55,14 +55,14 @@
 #include <unistd.h>
 
 /* HDF5 header for dynamic plugin loading */
-#include "H5FDhermes.h" /* Hermes file driver     */
+#include "H5FDhermes.h" /* Clio file driver     */
 #include "H5PLextern.h"
 #include "adapter/posix/posix_fs_api.h"
 #include "clio_cte/core/core_client.h"
 #include <clio_ctp/util/logging.h>
 
 /**
- * Make this adapter use Hermes.
+ * Make this adapter use Clio.
  * Disabling will use POSIX.
  * */
 #define USE_HERMES
@@ -181,7 +181,7 @@ static const H5FD_class_t H5FD_hermes_g = {
  * Purpose:     Initialize this driver by registering the driver with the
  *              library.
  *
- * Return:      Success:    The driver ID for the hermes driver
+ * Return:      Success:    The driver ID for the clio driver
  *              Failure:    H5I_INVALID_HID
  *
  *-------------------------------------------------------------------------
@@ -236,7 +236,7 @@ static herr_t H5FD__hermes_term(void) {
 /*-------------------------------------------------------------------------
  * Function:    H5FD__hermes_open
  *
- * Purpose:     Create and/or opens a bucket in Hermes.
+ * Purpose:     Create and/or opens a bucket in Clio.
  *
  * Return:      Success:    A pointer to a new bucket data structure.
  *              Failure:    NULL
@@ -246,7 +246,7 @@ static herr_t H5FD__hermes_term(void) {
 static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr) {
   clio_cte::core::CLIO_CTE_CLIENT_INIT();
-  H5FD_hermes_t *file = NULL; /* hermes VFD info          */
+  H5FD_hermes_t *file = NULL; /* clio VFD info          */
   int fd = -1;
   int o_flags = 0;
 
@@ -368,7 +368,7 @@ static int H5FD__hermes_cmp(const H5FD_t *_f1, const H5FD_t *_f2) {
 static herr_t H5FD__hermes_query(const H5FD_t *_file,
                                  unsigned long *flags /* out */) {
   /* Set the VFL feature flags that this driver supports */
-  /* Notice: the Mirror VFD Writer currently uses only the hermes driver as
+  /* Notice: the Mirror VFD Writer currently uses only the clio driver as
    * the underying driver -- as such, the Mirror VFD implementation copies
    * these feature flags as its own. Any modifications made here must be
    * reflected in H5FDmirror.c
@@ -495,7 +495,7 @@ static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
 /*-------------------------------------------------------------------------
  * Function:    H5FD__hermes_write
  *
- * Purpose:     Writes SIZE bytes of data contained in buffer BUF to Hermes
+ * Purpose:     Writes SIZE bytes of data contained in buffer BUF to Clio
  *              buffering system according to data transfer properties in
  *              DXPL_ID. Determine the number of file pages affected by this
  *              call from ADDR and SIZE. Utilize transfer buffer PAGE_BUF to
@@ -536,7 +536,7 @@ H5PL_type_t H5PLget_plugin_type(void) { return H5PL_TYPE_VFD; }
 
 const void *H5PLget_plugin_info(void) { return &H5FD_hermes_g; }
 
-/** Initialize Hermes */
+/** Initialize Clio */
 /*static __attribute__((constructor(101))) void init_hermes_in_vfd(void) {
   std::cout << "IN VFD" << std::endl;
   clio_cte::core::CLIO_CTE_CLIENT_INIT();

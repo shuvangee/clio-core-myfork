@@ -59,7 +59,7 @@ static void *GetSymbolForDlAddr() {
   return reinterpret_cast<void *>(&GetSymbolForDlAddr);
 }
 
-// Constructor and destructor removed - handled by HSHM singleton pattern
+// Constructor and destructor removed - handled by CTP singleton pattern
 
 bool ModuleManager::ServerInit() {
   if (is_initialized_) {

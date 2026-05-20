@@ -52,7 +52,7 @@ class Worker;
 /**
  * Work Orchestrator singleton for managing worker threads and lane scheduling
  *
- * Spawns configurable worker threads of different types using HSHM thread
+ * Spawns configurable worker threads of different types using CTP thread
  * model, maps queue lanes to workers using round-robin scheduling, and
  * coordinates task distribution. Uses ctp::ipc::multi_mpsc_ring_buffer for both container
  * queues and process queues.
@@ -143,7 +143,7 @@ class WorkOrchestrator {
 
  private:
   /**
-   * Spawn worker threads using HSHM thread model
+   * Spawn worker threads using CTP thread model
    * @return true if spawning successful, false otherwise
    */
   bool SpawnWorkerThreads();
@@ -182,7 +182,7 @@ class WorkOrchestrator {
   // Round-robin scheduling state
   std::atomic<u32> next_worker_index_for_scheduling_;
 
-  // HSHM threads (will be filled during initialization)
+  // CTP threads (will be filled during initialization)
   std::vector<ctp::thread::Thread> worker_threads_;
   ctp::thread::ThreadGroup thread_group_;
 

@@ -190,7 +190,7 @@ Applications
             │
             └── context-runtime (Chimaera)
                     │
-                    └── context-transport-primitives (HSHM)
+                    └── context-transport-primitives (CTP)
 ```
 
 Every component depends on the ones below it. Never create upward dependencies.

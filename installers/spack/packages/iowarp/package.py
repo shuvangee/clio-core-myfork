@@ -115,7 +115,7 @@ class Iowarp(CMakePackage):
         args.append(self.define_from_variant('CLIO_CORE_ENABLE_CAE', 'cae'))
         args.append(self.define_from_variant('CLIO_CORE_ENABLE_CEE', 'cee'))
 
-        # Context-transport-primitives (HSHM) options
+        # Context-transport-primitives (CTP) options
         if '+hdf5' in self.spec:
             args.append(self.define('CTP_ENABLE_VFD', 'ON'))
         if '+compress' in self.spec:

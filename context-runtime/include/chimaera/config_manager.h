@@ -89,7 +89,7 @@ struct ComposeConfig {
  * Inherits from ctp BaseConfig and manages YAML configuration parsing.
  * Config lookup: CHI_SERVER_CONF env -> ~/.chimaera/chimaera.yaml ->
  * bare minimum defaults.
- * Uses HSHM global cross pointer variable singleton pattern.
+ * Uses CTP global cross pointer variable singleton pattern.
  */
 class ConfigManager : public ctp::BaseConfig {
  public:

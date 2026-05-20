@@ -95,7 +95,7 @@ struct PoolInfo {
  * 
  * Maps PoolId to Containers on this node and manages the lifecycle
  * of pools in the distributed system.
- * Uses HSHM global cross pointer variable singleton pattern.
+ * Uses CTP global cross pointer variable singleton pattern.
  */
 class PoolManager {
  public:

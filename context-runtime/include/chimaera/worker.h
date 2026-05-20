@@ -110,7 +110,7 @@ struct WorkerStats {
   }
 };
 
-// Macro for accessing HSHM thread-local storage (worker thread context)
+// Macro for accessing CTP thread-local storage (worker thread context)
 // This macro allows access to the current worker from any thread
 // Example usage in ChiMod container code:
 //   Worker* worker = CHI_CUR_WORKER;

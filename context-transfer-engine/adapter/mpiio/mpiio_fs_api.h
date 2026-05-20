@@ -571,9 +571,9 @@ public:
   }
 
   /**
-   * Called after real open. Allocates the Hermes representation of
-   * identifying file information, such as a hermes file descriptor
-   * and hermes file handler. These are not the same as STDIO file
+   * Called after real open. Allocates the Clio representation of
+   * identifying file information, such as a clio file descriptor
+   * and clio file handler. These are not the same as STDIO file
    * descriptor and STDIO file handler.
    * */
   void HermesOpen(File &f, const AdapterStat &stat,

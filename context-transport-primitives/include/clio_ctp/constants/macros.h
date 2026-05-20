@@ -75,7 +75,7 @@
 #define CTP_DLL_IMPORT __attribute__((visibility("default")))
 #endif
 
-/** DLL import / export for HSHM code */
+/** DLL import / export for CTP code */
 #if CTP_ENABLE_DLL_EXPORT
 #define CTP_DLL CTP_DLL_EXPORT
 #else

@@ -241,7 +241,7 @@ add_library(ctp::mpi ALIAS mpi)
 function(hshm_target_compile_definitions target)
     get_target_property(target_type ${target} TYPE)
 
-    # Core definitions for all HSHM targets
+    # Core definitions for all CTP targets
     # Module-specific definitions (MPI, ZMQ, etc.) are now handled by modular targets
     set(common_definitions
         CTP_COMPILER_MSVC=$<BOOL:${CLIO_CTP_COMPILER_MSVC}>
@@ -464,12 +464,12 @@ set(TEST_MAIN ${CLIO_CTP_ROOT}/test/unit)
 # enable_testing() is handled by root CMakeLists.txt
 
 if(CLIO_CORE_ENABLE_TESTS)
-    message("Building HSHM unit tests")
+    message("Building CTP unit tests")
     add_subdirectory(test)
 endif()
 
 if(CLIO_CORE_ENABLE_BENCHMARKS)
-    message("Building HSHM benchmarks")
+    message("Building CTP benchmarks")
     add_subdirectory(benchmark)
 endif()
 

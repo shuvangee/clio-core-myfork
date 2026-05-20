@@ -53,7 +53,7 @@ namespace clio::cae {
 
 /** Put or get data directly from I/O client */
 #define CLIO_CTE_IO_CLIENT_BYPASS BIT_OPT(uint32_t, 0)
-/** Only put or get data from a Hermes buffer; no fallback to I/O client */
+/** Only put or get data from a Clio buffer; no fallback to I/O client */
 #define CLIO_CTE_IO_CLIENT_NO_FALLBACK BIT_OPT(uint32_t, 1)
 /** Whether to perform seek */
 #define CLIO_CTE_FS_SEEK BIT_OPT(uint32_t, 2)
@@ -289,13 +289,13 @@ struct FsIoClientMetadata {
     hermes_fd_max_ = std::numeric_limits<int>::max();
   }
 
-  /** Allocate a Hermes FD */
+  /** Allocate a Clio FD */
   int AllocateFd() {
     int cur = hermes_fd_cur_.fetch_add(1);
     return cur;
   }
 
-  /** Release a Hermes FD */
+  /** Release a Clio FD */
   void ReleaseFd(int hermes_fd) {
     // TODO(llogan): recycle instead of ignore
     (void)hermes_fd;
@@ -347,9 +347,9 @@ public:
                         const std::string &path) = 0;
 
   /**
-   * Called after real open. Allocates the Hermes representation of
-   * identifying file information, such as a hermes file descriptor
-   * and hermes file handler. These are not the same as POSIX file
+   * Called after real open. Allocates the Clio representation of
+   * identifying file information, such as a clio file descriptor
+   * and clio file handler. These are not the same as POSIX file
    * descriptor and STDIO file handler.
    * */
   virtual void HermesOpen(File &f, const AdapterStat &stat,

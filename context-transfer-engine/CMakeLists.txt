@@ -5,7 +5,7 @@ project(content_transfer_engine)
 set(CLIO_CTE_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Note: CLIO_CTE_ENABLE_COMPRESS is defined in root CMakeLists.txt
-# It controls both compressor chimod building and HSHM compression support
+# It controls both compressor chimod building and CTP compression support
 
 # Python bindings are controlled by CLIO_CORE_ENABLE_PYTHON in root CMakeLists.txt
 # CTE_ENABLE_ASAN is set by root CMakeLists.txt

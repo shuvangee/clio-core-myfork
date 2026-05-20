@@ -26,7 +26,7 @@ class ClioCteLibfuse(Service):
             },
             {
                 'name': 'log_level',
-                'msg': 'HSHM log level for the FUSE daemon',
+                'msg': 'CTP log level for the FUSE daemon',
                 'type': str,
                 'choices': ['debug', 'info', 'warning', 'error'],
                 'default': 'info',

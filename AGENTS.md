@@ -1,7 +1,7 @@
 # IOWarp Core - Unified Development Guide
 
 This repository contains the unified IOWarp Core framework, integrating multiple components:
-- **context-transport-primitives** (formerly cte-hermes-shm): Core transport and shared memory primitives
+- **context-transport-primitives** (formerly context-transport-primitives): Core transport and shared memory primitives
 - **runtime**: IOWarp runtime system
 - **context-transfer-engine**: Context transfer engine
 - **context-assimilation-engine**: Context assimilation engine
@@ -286,7 +286,7 @@ The build system uses **relative RPATHs** (`$ORIGIN`) for portable, relocatable 
 - Works for all deployment targets: system installs, pip wheels, conda packages, and relocatable builds
 - **Disable RPATH**: Set `-DWRP_CORE_ENABLE_RPATH=OFF` if you prefer using `LD_LIBRARY_PATH`
 
-### HSHM Usage
+### CTP Usage
 
 Always use CTP_MCTX macro unless we are writing GPU code, which necessitates a specific mctx to be created.
 
@@ -548,16 +548,16 @@ find_package(clio_cte_core REQUIRED)     # Provides CTE ChiMod (if enabled)
 find_package(clio_cae_core REQUIRED)     # Provides CAE ChiMod (if enabled)
 ```
 
-### HSHM Modular Dependency Targets
+### CTP Modular Dependency Targets
 
-HSHM (ClioCtp/context-transport-primitives) provides modular INTERFACE library targets for optional dependencies. Each target includes only the specific dependency it represents, along with the associated compile definitions.
+CTP (ClioCtp/context-transport-primitives) provides modular INTERFACE library targets for optional dependencies. Each target includes only the specific dependency it represents, along with the associated compile definitions.
 
 **Available Modular Targets:**
 
-- **`ctp::cxx`** - Core HSHM library
+- **`ctp::cxx`** - Core CTP library
   - Provides: Basic shared memory and data structures
   - Links to: `configure`, `thread_all`
-  - Always required by all HSHM users
+  - Always required by all CTP users
 
 - **`ctp::configure`** - Configuration parsing (yaml-cpp)
   - Provides: YAML configuration file parsing
@@ -598,13 +598,13 @@ HSHM (ClioCtp/context-transport-primitives) provides modular INTERFACE library t
   - Compile definitions: `CTP_ENABLE_ENCRYPT`
 
 - **`ctp::cuda_cxx`** - CUDA GPU support
-  - Provides: CUDA-enabled HSHM library for GPU code
+  - Provides: CUDA-enabled CTP library for GPU code
   - Use for: CUDA kernel code and GPU device functions
   - Compile definitions: `CTP_ENABLE_CUDA=1`, `CTP_ENABLE_ROCM=0`
   - Note: Only available when `CTP_ENABLE_CUDA=ON` at build time
 
 - **`ctp::rocm_cxx`** - ROCm GPU support
-  - Provides: ROCm-enabled HSHM library for GPU code
+  - Provides: ROCm-enabled CTP library for GPU code
   - Use for: HIP kernel code and GPU device functions
   - Compile definitions: `CTP_ENABLE_ROCM=1`, `CTP_ENABLE_CUDA=0`
   - Note: Only available when `CTP_ENABLE_ROCM=ON` at build time

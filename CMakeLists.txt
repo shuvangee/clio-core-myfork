@@ -507,7 +507,7 @@ if(CLIO_CTE_ENABLE_COMPRESS)
         list(APPEND COMPRESS_LIB_DIRS ${libpressio_LIBRARY_DIRS})
     endif()
 
-    # Make CTP_ENABLE_LIBPRESSIO available to subdirectories (HSHM)
+    # Make CTP_ENABLE_LIBPRESSIO available to subdirectories (CTP)
     set(CLIO_CTP_ENABLE_LIBPRESSIO ${CLIO_CTP_ENABLE_LIBPRESSIO} CACHE BOOL "Enable LibPressio wrapper (auto-detected)" FORCE)
 endif()
 
@@ -949,7 +949,7 @@ if(NOT TARGET yaml-cpp AND NOT TARGET yaml-cpp::yaml-cpp)
 endif()
 message(STATUS "yaml-cpp already found by IowarpCoreCommon")
 
-# Context Transport Primitives (formerly cte-hermes-shm) - Required by runtime
+# Context Transport Primitives (formerly context-transport-primitives) - Required by runtime
 message(STATUS "Building context-transport-primitives component")
 
 # Detect ELF library if enabled

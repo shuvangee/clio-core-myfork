@@ -286,7 +286,7 @@ struct TargetInfo {
  * RegisterTarget task - Get/create bdev locally, create Target struct
  */
 struct RegisterTargetTask : public chi::Task {
-  // Task-specific data using HSHM macros
+  // Task-specific data using CTP macros
   IN chi::priv::string
       target_name_;  // Name and file path of the target to register
   IN chimaera::bdev::BdevType bdev_type_;  // Block device type enum

@@ -25,7 +25,7 @@ This test serves multiple purposes:
 
 2. **Dependencies**: Ensure all CTE Core dependencies are available:
    - Chimaera framework (chimaera-core, chimaera-admin)
-   - HSHM (Hermes Shared Memory)
+   - CTP (Clio Shared Memory)
    - yaml-cpp
 
 ### Build the External Test
@@ -183,7 +183,7 @@ The `CMakeLists.txt` in this directory demonstrates the **proper MODULE_DEVELOPM
 ### Common Issues:
 
 1. **Library Not Found**: Ensure CTE Core is built and libraries exist in the build directory
-2. **Missing Dependencies**: Verify all dependencies (Chimaera, HSHM, etc.) are properly installed
+2. **Missing Dependencies**: Verify all dependencies (Chimaera, CTP, etc.) are properly installed
 3. **Runtime Initialization Failure**: Check that the runtime environment is properly configured
 4. **Permission Issues**: Ensure write permissions for temporary files (e.g., `/tmp/cte_external_test_target`)
 
@@ -208,7 +208,7 @@ export LD_LIBRARY_PATH=/path/to/chimaera/lib:$LD_LIBRARY_PATH
 This test demonstrates several important patterns for external CTE Core integration:
 
 1. **Proper Initialization Order**: Chimaera runtime → Chimaera client → CTE subsystem
-2. **Memory Management**: Using HSHM allocators for shared data
+2. **Memory Management**: Using CTP allocators for shared data
 3. **Error Handling**: Checking return codes and handling exceptions
 4. **Resource Cleanup**: Proper cleanup of tags, blobs, and resources
 5. **API Usage**: Correct parameter passing and result handling

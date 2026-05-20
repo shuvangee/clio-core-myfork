@@ -102,7 +102,7 @@ The pipeline is configured via `gray-scott.yaml` with the following key paramete
 | `nprocs` | 2 | Number of MPI processes |
 | `steps` | 100 | Total simulation steps |
 | `plotgap` | 5 | Output frequency (every 5 steps) |
-| `engine` | bp5 | ADIOS2 engine (bp5, hermes, iowarp, sst) |
+| `engine` | bp5 | ADIOS2 engine (bp5, clio, iowarp, sst) |
 | `out_file` | `/workspace/.../gs-output.bp` | Output location |
 | `full_run` | false | Don't run postprocessing automatically |
 
@@ -204,8 +204,8 @@ Change the `engine` parameter in `gray-scott.yaml`:
 
 - **bp5**: BP5 file format (default, fastest)
 - **bp5_derived**: BP5 with derived variables
-- **hermes**: Hermes I/O middleware
-- **hermes_derived**: Hermes with derived variables
+- **clio**: Clio I/O middleware
+- **hermes_derived**: Clio with derived variables
 - **iowarp**: IOWarp integration
 - **iowarp_derived**: IOWarp with derived variables
 - **sst**: Sustainable Staging Transport (for real-time streaming)

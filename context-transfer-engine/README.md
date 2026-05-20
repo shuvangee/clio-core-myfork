@@ -1,4 +1,4 @@
-# The Content Transfer Engine: Hermes
+# The Content Transfer Engine: Clio
 
 The CTE is a heterogeneous-aware, multi-tiered, dynamic, and distributed I/O buffering system designed to accelerate I/O for HPC and data-intensive workloads.
 

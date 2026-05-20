@@ -237,7 +237,7 @@ class PosixApi : public RealApi {
     REQUIRE_API(stat || __xstat || __lxstat)
     if (!fstat) {
       // NOTE(llogan): We use real_api->fstat in a couple of places
-      // fstat does need to be mapped always, or Hermes may segfault.
+      // fstat does need to be mapped always, or Clio may segfault.
       fstat = fxstat_to_fstat;
     }
 

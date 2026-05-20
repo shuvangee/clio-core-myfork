@@ -1,5 +1,5 @@
 
-# Hermes Shared Memory (CTE)
+# Clio Shared Memory (CTE)
 
 [![IoWarp](https://img.shields.io/badge/IoWarp-GitHub-blue.svg)](http://github.com/iowarp)
 [![GRC](https://img.shields.io/badge/GRC-Website-blue.svg)](https://grc.iit.edu/)
@@ -26,8 +26,8 @@ docker pull iowarp/iowarp-build:latest
 ## Building Manually
 
 ```bash
-git clone https://github.com/grc-iit/cte-hermes-shm.git
-cd cte-hermes-shm
+git clone https://github.com/grc-iit/context-transport-primitives.git
+cd context-transport-primitives
 mkdir build
 cd build
 cmake ../ -DHSHM_ENABLE_CUDA=OFF -DHSHM_ENABLE_ROCM=OFF

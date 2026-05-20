@@ -44,7 +44,7 @@ namespace clio_cte::core {
  * 
  * Central coordinator for the CTE system initialization and state management.
  * Manages initialization state to prevent race conditions during startup.
- * Uses HSHM global pointer variable singleton pattern.
+ * Uses CTP global pointer variable singleton pattern.
  */
 class ContentTransferEngine {
 public:

@@ -15,7 +15,7 @@ SPACK_DIR=${INSTALL_DIR}/spack
 mkdir -p "${HOME}/install"
 mkdir build
 pushd build
-spack load cte-hermes-shm
+spack load context-transport-primitives
 cmake ../ \
 -DCMAKE_BUILD_TYPE=Debug \
 -DHSHM_ENABLE_COVERAGE=ON \
@@ -35,7 +35,7 @@ export CXXFLAGS=-Wall
 ctest -VV
 popd
 
-# Set proper flags for cmake to find Hermes
+# Set proper flags for cmake to find Clio
 INSTALL_PREFIX="${HOME}/install"
 export LIBRARY_PATH="${INSTALL_PREFIX}/lib:${LIBRARY_PATH}"
 export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${LD_LIBRARY_PATH}"

@@ -159,7 +159,7 @@ class Adios2GrayScott(Application):
             {
                 'name': 'engine',
                 'msg': 'Engine to be used',
-                'choices': ['bp5', 'hermes', 'bp5_derived', 'hermes_derived',
+                'choices': ['bp5', 'clio', 'bp5_derived', 'hermes_derived',
                             'iowarp', 'iowarp_derived', 'sst'],
                 'type': str,
                 'default': 'bp5',
@@ -270,8 +270,8 @@ class Adios2GrayScott(Application):
         elif engine == 'sst':
             self.copy_template_file(f'{self.pkg_dir}/config/sst.xml',
                                     self.adios2_xml_path)
-        elif engine in ['hermes', 'hermes_derived']:
-            self.copy_template_file(f'{self.pkg_dir}/config/hermes.xml',
+        elif engine in ['clio', 'hermes_derived']:
+            self.copy_template_file(f'{self.pkg_dir}/config/clio.xml',
                                     self.adios2_xml_path,
                                     replacements={
                                         'PPN': self.config['ppn'],

@@ -57,14 +57,14 @@ namespace chi {
 // Work Orchestrator Implementation
 //===========================================================================
 
-// Constructor and destructor removed - handled by HSHM singleton pattern
+// Constructor and destructor removed - handled by CTP singleton pattern
 
 bool WorkOrchestrator::Init() {
   if (is_initialized_) {
     return true;
   }
 
-  // Initialize HSHM TLS key for workers
+  // Initialize CTP TLS key for workers
   if (!chi_cur_worker_key_created_) {
     CTP_THREAD_MODEL->CreateTls<class Worker>(chi_cur_worker_key_, nullptr);
     chi_cur_worker_key_created_ = true;
@@ -74,7 +74,7 @@ bool WorkOrchestrator::Init() {
   next_worker_index_for_scheduling_.store(0);
   active_lanes_ = nullptr;
 
-  // Initialize HSHM thread group first
+  // Initialize CTP thread group first
   auto thread_model = CTP_THREAD_MODEL;
   thread_group_ = thread_model->CreateThreadGroup({});
 
@@ -147,7 +147,7 @@ bool WorkOrchestrator::StartWorkers() {
     return false;
   }
 
-  // Spawn worker threads using HSHM thread model
+  // Spawn worker threads using CTP thread model
   if (!SpawnWorkerThreads()) {
     return false;
   }
@@ -324,7 +324,7 @@ bool WorkOrchestrator::SpawnWorkerThreads() {
     }
   }
 
-  // Use HSHM thread model to spawn worker threads
+  // Use CTP thread model to spawn worker threads
   auto thread_model = CTP_THREAD_MODEL;
   worker_threads_.reserve(all_workers_.size());
 
@@ -332,7 +332,7 @@ bool WorkOrchestrator::SpawnWorkerThreads() {
     for (size_t i = 0; i < all_workers_.size(); ++i) {
       auto *worker = all_workers_[i];
       if (worker) {
-        // Spawn thread using HSHM thread model
+        // Spawn thread using CTP thread model
         ctp::thread::Thread thread = thread_model->Spawn(
             thread_group_, [worker](int tid) { worker->Run(); },
             static_cast<int>(i));

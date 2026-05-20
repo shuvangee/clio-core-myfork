@@ -1,8 +1,8 @@
 
 """
-Create the .h and .cc files for defining hermes singletons
+Create the .h and .cc files for defining clio singletons
 USAGE:
-    cd /path/to/hermes
+    cd /path/to/clio
     python3 scripts/singleton_generator.py
 """
 

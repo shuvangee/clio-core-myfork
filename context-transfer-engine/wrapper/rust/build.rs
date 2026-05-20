@@ -15,7 +15,7 @@ fn main() {
         .flag("-Wno-sign-compare")
         .flag("-Wno-reorder")
         .flag("-Wno-pedantic")
-        // HSHM / chimaera defines (match CMake build)
+        // CTP / chimaera defines (match CMake build)
         .define("CTP_COMPILER_GNU", "1")
         .define("CTP_COMPILER_MSVC", "0")
         .define("CTP_DEBUG_LOCK", "0")
