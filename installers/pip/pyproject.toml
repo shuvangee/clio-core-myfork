@@ -34,6 +34,7 @@ visualizer = [
 chimaera = "iowarp_core._cli:main"
 wrp_cte_bench = "iowarp_core._cli:cte_bench_main"
 wrp_run_thrpt_benchmark = "iowarp_core._cli:run_thrpt_main"
+context-visualizer = "context_visualizer.__main__:main"
 
 [project.urls]
 Homepage = "https://iowarp.ai"
@@ -44,7 +45,10 @@ Documentation = "https://docs.iowarp.ai"
 cmake.source-dir = "../.."
 cmake.build-type = "Release"
 install.components = ["pip_package"]
-wheel.packages = ["iowarp_core"]
+wheel.packages = [
+    "iowarp_core",
+    "../../context-visualizer/context_visualizer",
+]
 # Sets CMAKE_INSTALL_PREFIX = <wheel>/platlib/iowarp_core, so every install()
 # DESTINATION is package-relative ("lib", "bin", "ext", ...) instead of having
 # to manually prefix each one with iowarp_core/.  The single exception is the

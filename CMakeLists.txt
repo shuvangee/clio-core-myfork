@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(iowarp-core VERSION 1.5.4 LANGUAGES C CXX)
+project(iowarp-core VERSION 1.5.6 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
 # Project Options
@@ -1350,15 +1350,11 @@ if(WRP_CORE_ENABLE_PYTHON)
       COMPONENT pip_package
       LIBRARY DESTINATION ext)
   endif()
-  # Context Visualizer -> iowarp_core/visualizer/
-  install(DIRECTORY context-visualizer/context_visualizer/
-    COMPONENT pip_package
-    DESTINATION visualizer
-    FILES_MATCHING
-      PATTERN "*.py"
-      PATTERN "*.html"
-      PATTERN "*.css"
-      PATTERN "*.js")
+  # Note: the context_visualizer Python package ships at the wheel root
+  # (top-level "context_visualizer/") via scikit-build-core's wheel.packages
+  # setting in pyproject.toml, not via CMake install.  That keeps the
+  # `python -m context_visualizer` and `context-visualizer` entry-point
+  # paths consistent with the package's own __main__.py.
 endif()
 
 # Default config -> iowarp_core/data/
