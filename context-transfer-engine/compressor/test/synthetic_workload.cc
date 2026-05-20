@@ -56,7 +56,7 @@
  *   Example: grayscott:70,gaussian:20,uniform:10
  *
  * Environment variables:
- *   WRP_CTE_COMPRESS_TRACE: Set to "on" to enable compression tracing
+ *   CLIO_CTE_COMPRESS_TRACE: Set to "on" to enable compression tracing
  */
 
 #include <mpi.h>
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
   }
 
   // Initialize CTE client (assumes Chimaera runtime is already running)
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
     if (rank == 0) {
       HLOG(kError, "Failed to initialize CTE client. Make sure chimaera runtime is started.");
     }
@@ -313,7 +313,7 @@ int main(int argc, char** argv) {
 
   // Pending async operations from previous iteration
   std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_futures;
-  std::vector<hipc::FullPtr<char>> pending_buffers;  // Keep SHM buffers alive
+  std::vector<ctp::ipc::FullPtr<char>> pending_buffers;  // Keep SHM buffers alive
 
   // Start end-to-end wall clock timer
   MPI_Barrier(MPI_COMM_WORLD);
@@ -377,7 +377,7 @@ int main(int argc, char** argv) {
       std::memcpy(shm_buffer.ptr_, chunk_ptr, chunk_size);
 
       // Convert ShmPtr<char> to ShmPtr<void> for async put
-      hipc::ShmPtr<> shm_ptr(shm_buffer.shm_);
+      ctp::ipc::ShmPtr<> shm_ptr(shm_buffer.shm_);
 
       // Async put blob with compression context
       auto future = tag.AsyncPutBlob(blob_name, shm_ptr, chunk_size,

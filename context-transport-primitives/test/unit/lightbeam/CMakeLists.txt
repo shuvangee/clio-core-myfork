@@ -1,4 +1,4 @@
-if(WRP_CORE_ENABLE_ZMQ)
+if(CLIO_CORE_ENABLE_ZMQ)
     add_executable(lightbeam_transport_test lightbeam_transport_test.cc)
     target_link_libraries(lightbeam_transport_test clio_ctp_host ctp::lightbeam ctp::serialize)
     target_compile_definitions(lightbeam_transport_test PRIVATE CTP_ENABLE_ZMQ)
@@ -67,7 +67,7 @@ install(TARGETS shm_transfer_test
 # EventManager test (always enabled - uses pipe/epoll + socket transport)
 add_executable(event_manager_test event_manager_test.cc)
 target_link_libraries(event_manager_test clio_ctp_host ctp::lightbeam ctp::serialize)
-if(WRP_CORE_ENABLE_ZMQ)
+if(CLIO_CORE_ENABLE_ZMQ)
     target_compile_definitions(event_manager_test PRIVATE CTP_ENABLE_ZMQ)
 endif()
 add_test(NAME ctp_event_manager COMMAND event_manager_test)
@@ -81,7 +81,7 @@ install(TARGETS event_manager_test
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # ZMQ transport full test (conditional on ZMQ)
-if(WRP_CORE_ENABLE_ZMQ)
+if(CLIO_CORE_ENABLE_ZMQ)
     add_executable(zmq_transport_full_test zmq_transport_full_test.cc)
     target_link_libraries(zmq_transport_full_test clio_ctp_host ctp::lightbeam ctp::serialize)
     target_compile_definitions(zmq_transport_full_test PRIVATE CTP_ENABLE_ZMQ)
@@ -97,7 +97,7 @@ if(WRP_CORE_ENABLE_ZMQ)
 endif()
 
 # Thallium transport test (conditional on Thallium)
-if(WRP_CORE_ENABLE_THALLIUM)
+if(CLIO_CORE_ENABLE_THALLIUM)
     add_executable(thallium_transport_test thallium_transport_test.cc)
     target_link_libraries(thallium_transport_test clio_ctp_host ctp::lightbeam ctp::serialize)
     add_test(NAME ctp_thallium_transport COMMAND thallium_transport_test)
@@ -125,7 +125,7 @@ install(TARGETS socket_transport_full_test
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # NIXL transport test (conditional on NIXL)
-if(WRP_CORE_ENABLE_NIXL)
+if(CLIO_CORE_ENABLE_NIXL)
     find_library(NIXL_LIB_TEST NAMES nixl PATHS /usr/local/lib /usr/local/lib/x86_64-linux-gnu
                  /usr/lib /usr/lib/x86_64-linux-gnu)
     find_library(NIXL_BUILD_LIB_TEST NAMES nixl_build PATHS /usr/local/lib /usr/local/lib/x86_64-linux-gnu
@@ -152,7 +152,7 @@ if(WRP_CORE_ENABLE_NIXL)
 endif()
 
 # distributed_lightbeam_test requires MPI
-if(WRP_CORE_ENABLE_MPI AND WRP_CORE_ENABLE_ZMQ)
+if(CLIO_CORE_ENABLE_MPI AND CLIO_CORE_ENABLE_ZMQ)
     add_executable(distributed_lightbeam_test distributed_lightbeam_test.cc)
     target_link_libraries(distributed_lightbeam_test
         clio_ctp_host

@@ -9,7 +9,7 @@ name: cte_integration_test
 
 pkgs:
   # Stage 1: Launch IOWarp runtime on all nodes in the hostfile (via parallel SSH)
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -19,7 +19,7 @@ pkgs:
     sleep: 4
 
   # Stage 2: Deploy CTE pools on all nodes (via parallel SSH + chimaera compose)
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       - ["ram::cte_ram_tier1", "4GB", 1.0]
@@ -29,7 +29,7 @@ pkgs:
     poll_period_ms: 5000
 
   # Stage 3: Run CTE benchmark (4 procs, 1 per node)
-  - pkg_type: jarvis_iowarp.clio_cte_bench
+  - pkg_type: jarvis_clio_core.clio_cte_bench
     pkg_name: cte_bench
     test_case: "Put"
     num_threads: 1

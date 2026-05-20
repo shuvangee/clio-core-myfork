@@ -39,7 +39,7 @@
 namespace chi {
 
 Future<Task> IpcCpu2Self::ClientSend(IpcManager *ipc,
-                                      const hipc::FullPtr<Task> &task_ptr) {
+                                      const ctp::ipc::FullPtr<Task> &task_ptr) {
   Worker *worker = CHI_CUR_WORKER;
 
   // Create pointer future (no serialization)
@@ -78,7 +78,7 @@ Future<Task> IpcCpu2Self::ClientSend(IpcManager *ipc,
   return future;
 }
 
-hipc::FullPtr<Task> IpcCpu2Self::RuntimeRecv(Future<Task> &future) {
+ctp::ipc::FullPtr<Task> IpcCpu2Self::RuntimeRecv(Future<Task> &future) {
   // No deserialization needed — task is a direct pointer
   return future.GetTaskPtr();
 }
@@ -106,7 +106,7 @@ void IpcCpu2Self::RuntimeSend(const FullPtr<Task> &task_ptr,
     // queue. FUTURE_COMPLETE is NOT set here — it will be set by
     // ProcessEventQueue on the parent's worker thread.
     auto *parent_event_queue =
-        reinterpret_cast<hipc::mpsc_ring_buffer<Future<Task, CHI_QUEUE_ALLOC_T>,
+        reinterpret_cast<ctp::ipc::mpsc_ring_buffer<Future<Task, CHI_QUEUE_ALLOC_T>,
                                                 ctp::ipc::MallocAllocator> *>(
             parent_task->event_queue_);
     parent_event_queue->Emplace(run_ctx->future_);

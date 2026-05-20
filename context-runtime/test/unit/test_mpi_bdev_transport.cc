@@ -183,7 +183,7 @@ bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
   }
 
   // Verify data
-  hipc::FullPtr<char> data_ptr =
+  ctp::ipc::FullPtr<char> data_ptr =
       CHI_IPC->ToFullPtr(read_task->data_.template Cast<char>());
   if (data_ptr.IsNull()) {
     HLOG(kError, "[Rank {}] Read data pointer is null", rank);

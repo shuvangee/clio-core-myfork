@@ -212,7 +212,7 @@ class slist {
       }
 
       // Get the next pointer from current node
-      auto current = FullPtr<NodeT>(static_cast<hipc::Allocator*>(alloc_),
+      auto current = FullPtr<NodeT>(static_cast<ctp::ipc::Allocator*>(alloc_),
                                     current_);
       OffsetPtr<> next_off = current.ptr_->next_;
 

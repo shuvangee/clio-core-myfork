@@ -2,7 +2,7 @@
 IOWarp FUSE adapter — bare-metal only.
 
 Mounts the CTE-backed virtual filesystem at a configured path by launching
-the `clio_cte_fuse` binary (built with WRP_CTE_ENABLE_FUSE_ADAPTER=ON).
+the `clio_cte_fuse` binary (built with CLIO_CTE_ENABLE_FUSE_ADAPTER=ON).
 """
 from jarvis_cd.core.pkg import Service
 from jarvis_cd.shell import Exec, PsshExecInfo

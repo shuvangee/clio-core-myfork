@@ -342,7 +342,7 @@ class Client : public chi::ContainerClient {
    * @return Future for RegisterMemoryTask
    */
   chi::Future<RegisterMemoryTask> AsyncRegisterMemory(
-      const chi::PoolQuery& pool_query, const hipc::AllocatorId& alloc_id) {
+      const chi::PoolQuery& pool_query, const ctp::ipc::AllocatorId& alloc_id) {
     auto* ipc_manager = CHI_IPC;
 
     auto task = ipc_manager->NewTask<RegisterMemoryTask>(

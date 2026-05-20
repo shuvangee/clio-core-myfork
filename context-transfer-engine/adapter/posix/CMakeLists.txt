@@ -7,7 +7,7 @@ add_library(clio_cte_posix SHARED
 # Note: core headers come transitively via clio_cte_core_client
 target_include_directories(clio_cte_posix PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}       # For local headers
-  ${WRP_CTE_ROOT}                   # For adapter/adapter_types.h include path
+  ${CLIO_CTE_ROOT}                   # For adapter/adapter_types.h include path
 )
 
 add_dependencies(clio_cte_posix clio_cte_fs_base)
@@ -35,10 +35,10 @@ install(
 # -----------------------------------------------------------------------------
 # Install headers
 # -----------------------------------------------------------------------------
-file(GLOB_RECURSE WRP_CTE_HEADERS "*.h")
+file(GLOB_RECURSE CLIO_CTE_HEADERS "*.h")
 install(
         FILES
-        ${WRP_CTE_HEADERS}
+        ${CLIO_CTE_HEADERS}
         DESTINATION
         include/adapter/posix
         COMPONENT

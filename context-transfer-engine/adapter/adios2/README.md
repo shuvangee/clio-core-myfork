@@ -11,7 +11,7 @@ The adapter code has been fully implemented and updated to work with the current
 ## Build Configuration
 
 ### CMake Options
-- `WRP_CTE_ENABLE_ADIOS2_ADAPTER`: Enable/disable ADIOS2 adapter (default: OFF)
+- `CLIO_CTE_ENABLE_ADIOS2_ADAPTER`: Enable/disable ADIOS2 adapter (default: OFF)
 - The adapter does NOT require ELF support (it's a plugin, not an interceptor)
 
 ### Dependencies
@@ -53,7 +53,7 @@ class Variable {
 ### API Updates
 The adapter has been updated to work with the current CTE API:
 - Removed `mctx` (MemoryCtx) parameters - no longer used in CTE API
-- Updated to use `WRP_CTE_CLIENT` global singleton
+- Updated to use `CLIO_CTE_CLIENT` global singleton
 - Fixed buffer allocation to use `AllocateBuffer()` instead of template version
 - Updated constructor to use move semantics for `adios2::helper::Comm`
 

@@ -192,7 +192,7 @@ class unordered_map_ll {
   /** Free a node via the allocator. */
   CTP_INLINE_CROSS_FUN
   void del_node(Node *n) {
-    hipc::FullPtr<Node> fp(alloc_, n);
+    ctp::ipc::FullPtr<Node> fp(alloc_, n);
     alloc_->template DelObj<Node>(fp);
   }
 

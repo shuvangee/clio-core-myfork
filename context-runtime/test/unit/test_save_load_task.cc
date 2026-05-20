@@ -75,7 +75,7 @@ using namespace chi;
 
 namespace {
 // Helper allocator for tests - uses CTP_MALLOC for non-IPC allocations
-hipc::MallocAllocator* GetTestAllocator() {
+ctp::ipc::MallocAllocator* GetTestAllocator() {
   return CTP_MALLOC;
 }
 
@@ -148,7 +148,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
 
   // Step 2: SaveIn - serialize IN/INOUT parameters
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
-  hipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kCreate, save_in_archive,
                       orig_task_ptr);
 
@@ -167,7 +167,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
   loaded_in_task->error_message_ = chi::priv::string(CTP_MALLOC, std::string(""));
   load_in_archive >> *loaded_in_task;
 
-  hipc::FullPtr<chi::Task> loaded_in_task_ptr = loaded_in_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr = loaded_in_task.template Cast<chi::Task>();
 
   REQUIRE(!loaded_in_task_ptr.IsNull());
 
@@ -194,7 +194,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
 
   // Step 6: SaveOut - serialize OUT/INOUT parameters
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
-  hipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kCreate, save_out_archive,
                       loaded_in_task_ptr2);
 
@@ -262,7 +262,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
 
   // Step 2: SaveIn - FlushTask has no IN parameters beyond base Task
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
-  hipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kFlush, save_in_archive,
                       orig_task_ptr);
 
@@ -289,7 +289,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
 
   // Step 6: SaveOut
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
-  hipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kFlush, save_out_archive,
                       loaded_in_task_ptr2);
 
@@ -341,7 +341,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
 
   // Step 2: SaveIn
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
-  hipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kSend, save_in_archive,
                       orig_task_ptr);
 
@@ -368,7 +368,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
 
   // Step 6: SaveOut
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
-  hipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kSend, save_out_archive,
                       loaded_in_task_ptr2);
 
@@ -424,7 +424,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
 
   // Step 2: SaveIn
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
-  hipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kDestroyPool, save_in_archive,
                       orig_task_ptr);
 
@@ -451,7 +451,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
 
   // Step 6: SaveOut
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
-  hipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
+  ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
   container->SaveTask(chimaera::admin::Method::kDestroyPool, save_out_archive,
                       loaded_in_task_ptr2);
 

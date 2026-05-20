@@ -6,8 +6,8 @@
  * BSD 3-Clause License. See LICENSE file.
  */
 
-#ifndef WRP_CTE_GPU_VECTOR_H_
-#define WRP_CTE_GPU_VECTOR_H_
+#ifndef CLIO_CTE_GPU_VECTOR_H_
+#define CLIO_CTE_GPU_VECTOR_H_
 
 #include <chimaera/chimaera.h>
 #include <chimaera/gpu/gpu_ipc_manager.h>
@@ -55,7 +55,7 @@ enum class CacheMode {
  *
  * Lifecycle:
  *   - Caller must have already initialized the Chimaera runtime and
- *     the CTE core pool (see clio_cte::core::WRP_CTE_CLIENT_INIT plus
+ *     the CTE core pool (see clio_cte::core::CLIO_CTE_CLIENT_INIT plus
  *     AsyncCreate(...)).
  *   - ctor: allocates the backends (HBM pages [kDeviceMem], optional
  *           DRAM pages [kPinnedHost], swap scratch [kDeviceMem], meta
@@ -468,13 +468,13 @@ CTP_GPU_FUN chi::u32 RunCachePass(::chi::gpu::IpcManager *ipc,
   __syncwarp();
 
   // ── Phase 2: Reorganize — promote hot DRAM pages to HBM ────────
-  // Disabled by default (WRP_CTE_PHASE2=1 to re-enable). Phase 2's
+  // Disabled by default (CLIO_CTE_PHASE2=1 to re-enable). Phase 2's
   // 3-step swap holds kPageBusy on both an HBM and a DRAM slot for
   // ~240 µs; the user kernel's read_range spin-waits on those flags
   // and falls into the cold-miss path, dwarfing whatever benefit
   // promotion provides. For streaming workloads, leave pages where
   // Phase 4 placed them.
-#if defined(WRP_CTE_PHASE2)
+#if defined(CLIO_CTE_PHASE2)
   if (v.host_pages_per_block > 0) {
     chi::u32 max_swaps_this_tick = v.gpu_pages_per_block;
     for (chi::u32 si = 0; si < max_swaps_this_tick; ++si) {
@@ -523,7 +523,7 @@ CTP_GPU_FUN chi::u32 RunCachePass(::chi::gpu::IpcManager *ipc,
       __syncwarp();
     }
   }
-#endif  // WRP_CTE_PHASE2
+#endif  // CLIO_CTE_PHASE2
 
   // ── Phase 3: Flush dirty unlocked pages (bounded) ──────────────
   // Bound work per tick so we don't saturate the gpu2cpu queue
@@ -767,12 +767,12 @@ struct Vector<T>::Impl {
   chi::u32 cache_period_us = 50;
   chi::u32 manager_threads_per_block = 32;
   CacheMode mode = CacheMode::kLegacy;
-  hipc::AllocatorId pages_alloc_id;
-  hipc::AllocatorId host_pages_alloc_id;
-  hipc::AllocatorId meta_alloc_id;
-  hipc::AllocatorId swap_alloc_id;
-  hipc::AllocatorId put_alloc_id;
-  hipc::AllocatorId get_alloc_id;
+  ctp::ipc::AllocatorId pages_alloc_id;
+  ctp::ipc::AllocatorId host_pages_alloc_id;
+  ctp::ipc::AllocatorId meta_alloc_id;
+  ctp::ipc::AllocatorId swap_alloc_id;
+  ctp::ipc::AllocatorId put_alloc_id;
+  ctp::ipc::AllocatorId get_alloc_id;
   char *pages_base = nullptr;
   char *host_pages_base = nullptr;
   char *meta_base = nullptr;
@@ -893,7 +893,7 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
           "gpu_vector: DRAM (pinned-host) pages backend allocation failed");
     }
   } else {
-    impl_->host_pages_alloc_id = hipc::AllocatorId::GetNull();
+    impl_->host_pages_alloc_id = ctp::ipc::AllocatorId::GetNull();
     impl_->host_pages_base = nullptr;
   }
 
@@ -910,7 +910,7 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
           "gpu_vector: swap scratch backend allocation failed");
     }
   } else {
-    impl_->swap_alloc_id = hipc::AllocatorId::GetNull();
+    impl_->swap_alloc_id = ctp::ipc::AllocatorId::GetNull();
     impl_->swap_base = nullptr;
   }
 
@@ -1042,7 +1042,7 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
           chi::CreateTaskId(), impl_->cte_pool_id,
           chi::PoolQuery::ToLocalCpu(), view_.base.tag_id,
           blob_name.c_str(), /*offset=*/0, /*size=*/0,
-          hipc::ShmPtr<>::GetNull(), /*score=*/-1.0f,
+          ctp::ipc::ShmPtr<>::GetNull(), /*score=*/-1.0f,
           clio_cte::core::Context(), /*flags=*/0);
       put_task->pod_size_ = static_cast<chi::u32>(sizeof(*put_task));
       new (put_addr + sizeof(*put_task)) chi::gpu::FutureShm();
@@ -1051,7 +1051,7 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
           chi::CreateTaskId(), impl_->cte_pool_id,
           chi::PoolQuery::ToLocalCpu(), view_.base.tag_id,
           blob_name.c_str(), /*offset=*/0, /*size=*/0,
-          /*flags=*/0, hipc::ShmPtr<>::GetNull());
+          /*flags=*/0, ctp::ipc::ShmPtr<>::GetNull());
       get_task->pod_size_ = static_cast<chi::u32>(sizeof(*get_task));
       new (get_addr + sizeof(*get_task)) chi::gpu::FutureShm();
     }
@@ -1233,8 +1233,8 @@ inline void Vector<T>::DrainHostPrefetchQueue(void *cuda_stream) {
       }
       std::string blob_name = impl_->tag_name + "_b" + std::to_string(b) +
                                "_pi" + std::to_string(p->page_idx);
-      hipc::ShmPtr<> blob_data;
-      blob_data.alloc_id_ = hipc::AllocatorId::GetNull();
+      ctp::ipc::ShmPtr<> blob_data;
+      blob_data.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
       blob_data.off_ = reinterpret_cast<chi::u64>(device_ptr);
       if (dbg && dbg[0] == '1') {
         std::fprintf(stderr, "[DRAIN] block %u slot %u page %d dispatch\n",
@@ -1280,4 +1280,4 @@ inline void Vector<T>::FlushAllSync() {
 
 #endif  // CTP_IS_GPU_COMPILER
 
-#endif  // WRP_CTE_GPU_VECTOR_H_
+#endif  // CLIO_CTE_GPU_VECTOR_H_

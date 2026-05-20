@@ -125,7 +125,7 @@
 #define CTP_IS_CUDA_COMPILER 0
 #endif
 
-/** HIP-NVCC: when WRP_ROCM_HIP_PLATFORM=nvidia, hipcc invokes nvcc and
+/** HIP-NVCC: when CLIO_ROCM_HIP_PLATFORM=nvidia, hipcc invokes nvcc and
  *  __CUDACC__ is defined (not __HIPCC__) — but we still want
  *  CTP_IS_ROCM_COMPILER=1 since the build was configured for ROCm and
  *  the headers expose HIP types via the HIP-NVCC shim. */
@@ -324,7 +324,7 @@
  *    nightlies reject `&fn` from device code unless the function is tagged,
  *    even with `-Xclang -fsycl-allow-func-ptr` enabled. The attribute also
  *    makes call sites work under the sycl_ext_oneapi_virtual_functions
- *    extension when WRP_SYCL_ALLOW_VIRTUAL_FUNCTIONS is on. Override with
+ *    extension when CLIO_SYCL_ALLOW_VIRTUAL_FUNCTIONS is on. Override with
  *    -DHSHM_NO_SYCL_INDIRECTLY_CALLABLE=1 to fall back to no-op. */
 #if CTP_IS_SYCL_COMPILER && !defined(CTP_NO_SYCL_INDIRECTLY_CALLABLE)
 #define CTP_INDIRECTLY_CALLABLE [[intel::device_indirectly_callable]]
@@ -354,7 +354,6 @@
 /** Namespace definitions */
 namespace ctp {}
 namespace ctp::ipc {}
-namespace hipc = ctp::ipc;
 
 /** The name of the current device */
 #define CTP_DEV_TYPE_CPU 0
@@ -374,7 +373,7 @@ namespace hipc = ctp::ipc;
  * ************************************************* */
 /** Define the root allocator class */
 #ifndef CTP_ROOT_ALLOC_T
-#define CTP_ROOT_ALLOC_T hipc::StackAllocator
+#define CTP_ROOT_ALLOC_T ctp::ipc::StackAllocator
 #endif
 #define CTP_ROOT_ALLOC \
   CTP_MEMORY_MANAGER->template GetRootAllocator<CTP_ROOT_ALLOC_T>()
@@ -383,7 +382,7 @@ namespace hipc = ctp::ipc;
   CTP_MEMORY_MANAGER->template GetDefaultAllocator<CTP_DEFAULT_ALLOC_T>()
 
 #ifndef CTP_DEFAULT_ALLOC_GPU_T
-#define CTP_DEFAULT_ALLOC_GPU_T hipc::PartitionedAllocator
+#define CTP_DEFAULT_ALLOC_GPU_T ctp::ipc::PartitionedAllocator
 #endif
 
 /** Default memory context macro (no longer used - kept for compatibility) */

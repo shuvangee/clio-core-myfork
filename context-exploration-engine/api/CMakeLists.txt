@@ -40,11 +40,11 @@ set_target_properties(clio_cee_api PROPERTIES
 #------------------------------------------------------------------------------
 # Python Bindings (using nanobind)
 #------------------------------------------------------------------------------
-# Python bindings are controlled by WRP_CORE_ENABLE_PYTHON in root CMakeLists.txt
-# nanobind is configured by root CMakeLists.txt when WRP_CORE_ENABLE_PYTHON=ON
-if(WRP_CORE_ENABLE_PYTHON)
+# Python bindings are controlled by CLIO_CORE_ENABLE_PYTHON in root CMakeLists.txt
+# nanobind is configured by root CMakeLists.txt when CLIO_CORE_ENABLE_PYTHON=ON
+if(CLIO_CORE_ENABLE_PYTHON)
   if(NOT COMMAND nanobind_add_module)
-    message(WARNING "WRP_CORE_ENABLE_PYTHON is ON but nanobind_add_module command not found. Python bindings will be skipped.")
+    message(WARNING "CLIO_CORE_ENABLE_PYTHON is ON but nanobind_add_module command not found. Python bindings will be skipped.")
   else()
     message(STATUS "Building CEE Python bindings - nanobind configured by root CMakeLists.txt")
 
@@ -68,7 +68,7 @@ if(WRP_CORE_ENABLE_PYTHON)
     message(STATUS "CEE Python wrapper will be installed to: ${PYTHON_SITE_PACKAGES}")
   endif()
 else()
-  message(STATUS "Python bindings disabled - set WRP_CORE_ENABLE_PYTHON=ON to enable")
+  message(STATUS "Python bindings disabled - set CLIO_CORE_ENABLE_PYTHON=ON to enable")
 endif()
 
 #------------------------------------------------------------------------------

@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_STDIO_H
-#define WRP_CTE_ADAPTER_STDIO_H
+#ifndef CLIO_CTE_ADAPTER_STDIO_H
+#define CLIO_CTE_ADAPTER_STDIO_H
 #include <dlfcn.h>
 
 #include <cstdio>
@@ -192,8 +192,8 @@ class StdioApi : public RealApi {
 #include "clio_ctp/util/singleton.h"
 
 // Singleton macros
-#define WRP_CTE_STDIO_API \
+#define CLIO_CTE_STDIO_API \
   ctp::Singleton<::clio::cae::StdioApi>::GetInstance()
-#define WRP_CTE_STDIO_API_T clio::cae::StdioApi*
+#define CLIO_CTE_STDIO_API_T clio::cae::StdioApi*
 
-#endif  // WRP_CTE_ADAPTER_STDIO_H
+#endif  // CLIO_CTE_ADAPTER_STDIO_H

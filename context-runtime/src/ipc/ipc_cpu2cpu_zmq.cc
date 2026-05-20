@@ -70,7 +70,7 @@ bool IpcCpu2CpuZmq::RuntimeRecv(IpcManager *ipc, u32 &tasks_received) {
       }
 
       // Allocate and deserialize the task
-      hipc::FullPtr<Task> task_ptr =
+      ctp::ipc::FullPtr<Task> task_ptr =
           container->AllocLoadTask(method_id, archive);
 
       // SerializeIn copied any zmq-owned BULK_XFER payloads into
@@ -99,7 +99,7 @@ bool IpcCpu2CpuZmq::RuntimeRecv(IpcManager *ipc, u32 &tasks_received) {
       }
 
       // Create FutureShm for the task (server-side)
-      hipc::FullPtr<FutureShm> future_shm = ipc->NewObj<FutureShm>();
+      ctp::ipc::FullPtr<FutureShm> future_shm = ipc->NewObj<FutureShm>();
       future_shm->pool_id_ = pool_id;
       future_shm->method_id_ = method_id;
       future_shm->origin_ = (mode == IpcMode::kTcp)
@@ -167,7 +167,7 @@ void IpcCpu2CpuZmq::EnqueueRuntimeSend(IpcManager *ipc, RunContext *run_ctx,
 
 bool IpcCpu2CpuZmq::RuntimeSend(
     IpcManager *ipc, u32 &tasks_sent,
-    std::vector<hipc::FullPtr<Task>> &deferred_deletes) {
+    std::vector<ctp::ipc::FullPtr<Task>> &deferred_deletes) {
   auto *pool_manager = CHI_POOL_MANAGER;
   bool did_work = false;
   tasks_sent = 0;

@@ -39,13 +39,13 @@
 #include "clio_ctp/memory/allocator/thread_allocator.h"
 #include "clio_ctp/memory/backend/posix_mmap.h"
 
-using hipc::PartitionedAllocator;
+using ctp::ipc::PartitionedAllocator;
 
-static PartitionedAllocator* MakeThreadAllocator(hipc::PosixMmap &backend,
+static PartitionedAllocator* MakeThreadAllocator(ctp::ipc::PosixMmap &backend,
                                                   size_t heap_size,
                                                   int max_threads = 32) {
   size_t total_size = sizeof(PartitionedAllocator) + heap_size;
-  backend.shm_init(hipc::MemoryBackendId(0, 0), total_size);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), total_size);
   auto *alloc = backend.Cast<PartitionedAllocator>();
   new (alloc) PartitionedAllocator();
   size_t thread_unit = (total_size - sizeof(PartitionedAllocator)) / max_threads;
@@ -54,7 +54,7 @@ static PartitionedAllocator* MakeThreadAllocator(hipc::PosixMmap &backend,
 }
 
 TEST_CASE("ThreadAllocator - AllocFreeImmediate", "[ThreadAllocator]") {
-  hipc::PosixMmap backend;
+  ctp::ipc::PosixMmap backend;
   size_t heap_size = 64 * 1024 * 1024;  // 64 MB
   auto *alloc = MakeThreadAllocator(backend, heap_size);
 
@@ -78,13 +78,13 @@ TEST_CASE("ThreadAllocator - AllocFreeImmediate", "[ThreadAllocator]") {
 }
 
 TEST_CASE("ThreadAllocator - AllocFreeBatch", "[ThreadAllocator]") {
-  hipc::PosixMmap backend;
+  ctp::ipc::PosixMmap backend;
   size_t heap_size = 128 * 1024 * 1024;  // 128 MB
   auto *alloc = MakeThreadAllocator(backend, heap_size);
 
   SECTION("Batch of 100 allocations of 4KB") {
     for (int iter = 0; iter < 10; ++iter) {
-      std::vector<hipc::FullPtr<char>> ptrs;
+      std::vector<ctp::ipc::FullPtr<char>> ptrs;
       ptrs.reserve(100);
 
       for (int i = 0; i < 100; ++i) {
@@ -102,12 +102,12 @@ TEST_CASE("ThreadAllocator - AllocFreeBatch", "[ThreadAllocator]") {
 }
 
 TEST_CASE("ThreadAllocator - MultiThreadedAlloc", "[ThreadAllocator][multithread]") {
-  hipc::PosixMmap backend;
+  ctp::ipc::PosixMmap backend;
   size_t heap_size = 256 * 1024 * 1024;  // 256 MB
   int num_threads = 8;
   auto *alloc = MakeThreadAllocator(backend, heap_size, num_threads);
   // Access the core allocator for the 2-arg AllocateOffset
-  auto *core = static_cast<hipc::_PartitionedAllocator*>(alloc);
+  auto *core = static_cast<ctp::ipc::_PartitionedAllocator*>(alloc);
 
   std::atomic<int> tid_counter{0};
   std::vector<std::thread> threads;
@@ -118,7 +118,7 @@ TEST_CASE("ThreadAllocator - MultiThreadedAlloc", "[ThreadAllocator][multithread
       int tid = tid_counter.fetch_add(1);
 
       for (int iter = 0; iter < 50; ++iter) {
-        std::vector<hipc::OffsetPtr<>> ptrs;
+        std::vector<ctp::ipc::OffsetPtr<>> ptrs;
         ptrs.reserve(20);
 
         for (int i = 0; i < 20; ++i) {
@@ -144,12 +144,12 @@ TEST_CASE("ThreadAllocator - MultiThreadedAlloc", "[ThreadAllocator][multithread
 }
 
 TEST_CASE("ThreadAllocator - LazyInit", "[ThreadAllocator]") {
-  hipc::PosixMmap backend;
+  ctp::ipc::PosixMmap backend;
   size_t heap_size = 64 * 1024 * 1024;  // 64 MB
   int max_threads = 8;
   auto *alloc = MakeThreadAllocator(backend, heap_size, max_threads);
 
-  auto *core = static_cast<hipc::_PartitionedAllocator*>(alloc);
+  auto *core = static_cast<ctp::ipc::_PartitionedAllocator*>(alloc);
 
   // Initially no thread blocks should be initialized
   for (int i = 0; i < max_threads; ++i) {

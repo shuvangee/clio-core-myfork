@@ -40,7 +40,7 @@ TEST_CASE("BackendReserve") {
   PosixShmMmap b1;
 
   // Reserve + Map 8GB of memory
-  b1.shm_init(hipc::MemoryBackendId::GetRoot(), ctp::Unit<size_t>::Gigabytes(8),
+  b1.shm_init(ctp::ipc::MemoryBackendId::GetRoot(), ctp::Unit<size_t>::Gigabytes(8),
               "shmem_test");
 
   // Set 2MB of SHMEM

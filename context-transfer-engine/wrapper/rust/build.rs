@@ -19,7 +19,7 @@ fn main() {
         .define("CTP_COMPILER_GNU", "1")
         .define("CTP_COMPILER_MSVC", "0")
         .define("CTP_DEBUG_LOCK", "0")
-        .define("CTP_DEFAULT_ALLOC_T", "hipc::ThreadLocalAllocator")
+        .define("CTP_DEFAULT_ALLOC_T", "ctp::ipc::ThreadLocalAllocator")
         .define("CTP_DEFAULT_THREAD_MODEL", "ctp::thread::Pthread")
         .define("CTP_DEFAULT_THREAD_MODEL_GPU", "ctp::thread::Cuda")
         .define("CTP_ENABLE_CEREAL", "1")

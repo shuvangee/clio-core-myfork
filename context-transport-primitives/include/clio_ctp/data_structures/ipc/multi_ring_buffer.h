@@ -229,7 +229,7 @@ class multi_ring_buffer : public ShmContainer<AllocT> {
  * making it suitable for scenarios where size cannot be predicted upfront.
  * NOT thread-safe for multiple producers.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using multi_ext_ring_buffer =
     multi_ring_buffer<T, AllocT, (RING_BUFFER_SPSC_FLAGS | RING_BUFFER_DYNAMIC_SIZE)>;
 
@@ -239,7 +239,7 @@ using multi_ext_ring_buffer =
  * This ring buffer is optimized for single-threaded scenarios and will
  * return an error when attempting to push beyond capacity.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using multi_spsc_ring_buffer =
     multi_ring_buffer<T, AllocT,
                 (RING_BUFFER_SPSC_FLAGS | RING_BUFFER_FIXED_SIZE |
@@ -252,7 +252,7 @@ using multi_spsc_ring_buffer =
  * but only one thread consumes. Uses atomic operations for thread-safe
  * multi-producer access while supporting single consumer.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using multi_mpsc_ring_buffer =
     multi_ring_buffer<T, AllocT,
                       (RING_BUFFER_MPSC_FLAGS | RING_BUFFER_FIXED_SIZE |

@@ -8,7 +8,7 @@
 /**
  * Transparent Compression Integration Test
  *
- * Validates that WRP_CTE_CLIENT_INIT() with a compose config placing the
+ * Validates that CLIO_CTE_CLIENT_INIT() with a compose config placing the
  * compressor at pool 512.0 (the CTE entrypoint) and CTE core at 513.0
  * results in transparent compression when calling the standard CTE client
  * AsyncPutBlob / AsyncGetBlob API.
@@ -51,15 +51,15 @@ static void EnsureInit() {
   std::this_thread::sleep_for(1s);
 
   // Point the global CTE client at the entrypoint pool (512.0 = compressor).
-  // Don't call WRP_CTE_CLIENT_INIT — compose already created everything.
-  auto *cte_client = WRP_CTE_CLIENT;
+  // Don't call CLIO_CTE_CLIENT_INIT — compose already created everything.
+  auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->Init(clio_cte::core::kCtePoolId);
 }
 
 TEST_CASE("Transparent PutBlob through compressor",
           "[compressor][transparent][putblob]") {
   EnsureInit();
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   // Create a tag
   auto tag_task = cte_client->AsyncGetOrCreateTag("transparent_test_tag");
@@ -76,7 +76,7 @@ TEST_CASE("Transparent PutBlob through compressor",
     data_ptr[i] = pattern[i % sizeof(pattern)];
   }
 
-  hipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
 
   // PutBlob — this should go through the compressor (512.0) transparently
   clio_cte::core::Context ctx;
@@ -97,7 +97,7 @@ TEST_CASE("Transparent PutBlob through compressor",
 TEST_CASE("Transparent GetBlob through compressor",
           "[compressor][transparent][getblob]") {
   EnsureInit();
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   // Get the tag we created in the previous test
   auto tag_task = cte_client->AsyncGetOrCreateTag("transparent_test_tag");
@@ -110,7 +110,7 @@ TEST_CASE("Transparent GetBlob through compressor",
   REQUIRE(!get_buffer.IsNull());
   memset(get_buffer.ptr_, 0, data_size);
 
-  hipc::ShmPtr<> get_blob_data = get_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> get_blob_data = get_buffer.shm_.template Cast<void>();
 
   // GetBlob — should retrieve and decompress transparently
   auto get_task = cte_client->AsyncGetBlob(

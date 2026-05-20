@@ -274,7 +274,7 @@ void TestSocketTransportWithEM() {
   send_meta.request_id = 55;
   send_meta.operation = "em_test";
   Bulk bulk = client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER);
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER);
   send_meta.send.push_back(bulk);
   send_meta.send_bulks = 1;
 
@@ -341,7 +341,7 @@ void TestZmqTransportWithEM() {
   send_meta.request_id = 66;
   send_meta.operation = "zmq_em";
   Bulk bulk = client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER);
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER);
   send_meta.send.push_back(bulk);
   send_meta.send_bulks = 1;
 

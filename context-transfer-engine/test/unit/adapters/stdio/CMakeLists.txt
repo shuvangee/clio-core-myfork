@@ -1,7 +1,7 @@
 # STDIO Adapter Unit Tests
 
 include_directories(
-    ${WRP_CTE_ROOT}
+    ${CLIO_CTE_ROOT}
     .
 )
 
@@ -19,7 +19,7 @@ target_link_libraries(clio_cte_stdio_unit_tests
     Catch2::Catch2WithMain
 )
 
-if(WRP_CORE_ENABLE_MPI)
+if(CLIO_CORE_ENABLE_MPI)
     target_link_libraries(clio_cte_stdio_unit_tests MPI::MPI_CXX)
 endif()
 

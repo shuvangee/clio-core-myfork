@@ -45,7 +45,7 @@ set_target_properties(${BDEV_TEST_TARGET} PROPERTIES
 # GPU bdev test build rules removed.
 
 # Enable CTest integration if testing is enabled
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
   # Comprehensive bdev test (runs all tests; explicit TCP/IPC auto-skip
   # because default IPC mode is SHM and the skip guards filter them out)
   add_test(

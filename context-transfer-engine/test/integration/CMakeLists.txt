@@ -5,15 +5,15 @@ cmake_minimum_required(VERSION 3.10)
 add_subdirectory(restart)
 
 # Distributed integration tests require Docker
-if(WRP_CORE_ENABLE_DOCKER_CI)
+if(CLIO_CORE_ENABLE_DOCKER_CI)
     message(STATUS "CTE integration tests enabled (Docker CI)")
     add_subdirectory(distributed)
     add_subdirectory(jarvis_deploy)
 
     # FUSE integration test requires Docker with FUSE support
-    if(WRP_CTE_ENABLE_FUSE_ADAPTER)
+    if(CLIO_CTE_ENABLE_FUSE_ADAPTER)
         add_subdirectory(fuse)
     endif()
 else()
-    message(STATUS "CTE distributed integration tests disabled (set WRP_CORE_ENABLE_DOCKER_CI=ON to enable)")
+    message(STATUS "CTE distributed integration tests disabled (set CLIO_CORE_ENABLE_DOCKER_CI=ON to enable)")
 endif()

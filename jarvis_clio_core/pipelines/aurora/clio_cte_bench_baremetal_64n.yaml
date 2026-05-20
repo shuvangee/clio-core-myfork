@@ -13,7 +13,7 @@ env:
   LIGHTBEAM_TCP_DEVICE: hsn0
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -22,7 +22,7 @@ pkgs:
     log_level: "info"
     sleep: 4
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       - ["ram::cte_ram_tier1", "64GB", 1.0]
@@ -31,7 +31,7 @@ pkgs:
     default_target_timeout_ms: 30000
     poll_period_ms: 5000
 
-  - pkg_type: jarvis_iowarp.clio_cte_bench
+  - pkg_type: jarvis_clio_core.clio_cte_bench
     pkg_name: cte_bench
     test_case: "PutGet"
     num_threads: 1

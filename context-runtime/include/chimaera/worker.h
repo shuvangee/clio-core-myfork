@@ -57,7 +57,7 @@ namespace chi {
 
 // Forward declaration to avoid circular dependency
 using WorkQueue =
-    ctp::ipc::mpsc_ring_buffer<hipc::ShmPtr<TaskLane>, CHI_QUEUE_ALLOC_T>;
+    ctp::ipc::mpsc_ring_buffer<ctp::ipc::ShmPtr<TaskLane>, CHI_QUEUE_ALLOC_T>;
 
 // Forward declarations
 class Task;
@@ -377,7 +377,7 @@ class Worker {
    * @param method_id Method ID for task creation
    * @return FullPtr to task (either existing or newly deserialized)
    */
-  hipc::FullPtr<Task> GetOrCopyTaskFromFuture(Future<Task> &future,
+  ctp::ipc::FullPtr<Task> GetOrCopyTaskFromFuture(Future<Task> &future,
                                                Container *container,
                                                u32 method_id);
 

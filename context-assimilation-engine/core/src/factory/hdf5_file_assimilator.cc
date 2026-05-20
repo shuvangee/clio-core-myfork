@@ -209,7 +209,7 @@ chi::TaskResume Hdf5FileAssimilator::Schedule(const AssimilationCtx& ctx,
          filtered_paths.size(), num_nodes);
 
     // Create a local CAE client with the correct pool_id for distributed tasks
-    // Do NOT use WRP_CAE_CLIENT global singleton as it may not be properly initialized
+    // Do NOT use CLIO_CAE_CLIENT global singleton as it may not be properly initialized
     // with the correct pool_id from the runtime's compose configuration
     clio_cae::core::Client cae_client(kCaePoolId);
     HLOG(kInfo, "Hdf5FileAssimilator: Created CAE client with pool_id {} for distributed tasks",

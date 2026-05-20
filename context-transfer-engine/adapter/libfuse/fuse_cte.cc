@@ -77,7 +77,7 @@ static void *cte_fuse_init(struct fuse_conn_info *conn,
     fprintf(stderr, "ERROR: CHIMAERA_INIT failed\n");
     return nullptr;
   }
-  clio_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::CLIO_CTE_CLIENT_INIT();
   return nullptr;
 }
 
@@ -171,7 +171,7 @@ static int cte_fuse_readdir(const char *path, void *buf,
   // Sentinel tags under "/a/b" look like "/a/b/childdir/" — match with
   // regex "^/a/b/[^/]+/$" to find direct child sentinels.
   {
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
     std::string escaped = RegexEscape(p);
     if (!escaped.empty() && escaped.back() != '/') escaped += '/';
     std::string regex = "^" + escaped + "[^/]+/$";
@@ -466,13 +466,13 @@ int main(int argc, char *argv[]) {
   // bind that fd to a mountpoint ourselves (this requires CAP_SYS_ADMIN
   // in the current user_ns, which we have via apptainer's userns
   // mapping). The mountpoint isn't communicated to us through argv or
-  // env by apptainer, so the caller MUST set WRP_CTE_FUSE_MOUNTPOINT
+  // env by apptainer, so the caller MUST set CLIO_CTE_FUSE_MOUNTPOINT
   // before exec'ing the FUSE binary via --fusemount.
-  const char *mountpoint = std::getenv("WRP_CTE_FUSE_MOUNTPOINT");
+  const char *mountpoint = std::getenv("CLIO_CTE_FUSE_MOUNTPOINT");
   if (mountpoint == nullptr) {
     std::fprintf(stderr,
                  "clio_cte_fuse: got pre-opened fd %d but "
-                 "WRP_CTE_FUSE_MOUNTPOINT env var is not set\n", prefd);
+                 "CLIO_CTE_FUSE_MOUNTPOINT env var is not set\n", prefd);
     return 1;
   }
   char mount_opts[256];

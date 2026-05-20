@@ -5,17 +5,17 @@ project(chimaera VERSION 1.0.0)
 set(CHIMAERA_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Enable CUDA if requested
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
     wrp_core_enable_cuda(20)
 endif()
 
 # Enable ROCm if requested
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
     wrp_core_enable_rocm(HIP 17)
 endif()
 
 # Enable SYCL if requested
-if(WRP_CORE_ENABLE_SYCL)
+if(CLIO_CORE_ENABLE_SYCL)
     wrp_core_enable_sycl(20)
 endif()
 
@@ -71,27 +71,27 @@ add_subdirectory(src)
 add_subdirectory(modules)
 
 # Add benchmark subdirectory if benchmarks are enabled
-# Benchmarks are controlled by WRP_CORE_ENABLE_BENCHMARKS
-if(WRP_CORE_ENABLE_BENCHMARKS)
+# Benchmarks are controlled by CLIO_CORE_ENABLE_BENCHMARKS
+if(CLIO_CORE_ENABLE_BENCHMARKS)
   add_subdirectory(benchmark)
   message(STATUS "Benchmarks enabled - added benchmark subdirectory")
 endif()
 
 # Add test subdirectory if testing is enabled
-# WRP_CORE_ENABLE_TESTS is set by root CMakeLists.txt
-if(WRP_CORE_ENABLE_TESTS)
+# CLIO_CORE_ENABLE_TESTS is set by root CMakeLists.txt
+if(CLIO_CORE_ENABLE_TESTS)
   # enable_testing() is handled by root CMakeLists.txt
   add_subdirectory(test)
   message(STATUS "Unit tests enabled - added test subdirectory")
 endif()
 
 # Add Python bindings if enabled
-if(WRP_CORE_ENABLE_PYTHON)
+if(CLIO_CORE_ENABLE_PYTHON)
   if(COMMAND nanobind_add_module)
     add_subdirectory(wrapper/python)
     message(STATUS "Chimaera runtime Python bindings enabled")
   else()
-    message(WARNING "WRP_CORE_ENABLE_PYTHON is ON but nanobind_add_module not found.")
+    message(WARNING "CLIO_CORE_ENABLE_PYTHON is ON but nanobind_add_module not found.")
   endif()
 endif()
 
@@ -99,8 +99,8 @@ endif()
 # SECTION 6: JARVIS INTEGRATION
 #------------------------------------------------------------------------------
 # Add Jarvis WRP runtime packages
-if(WRP_CORE_ENABLE_JARVIS)
-    jarvis_repo_add(${CHIMAERA_ROOT}/test/jarvis_iowarp)
+if(CLIO_CORE_ENABLE_JARVIS)
+    jarvis_repo_add(${CHIMAERA_ROOT}/test/jarvis_clio_core)
 endif()
 
 #------------------------------------------------------------------------------

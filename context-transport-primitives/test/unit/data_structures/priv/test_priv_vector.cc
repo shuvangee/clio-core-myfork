@@ -59,14 +59,14 @@ class SimpleHeapAllocator {
    * @return FullPtr to allocated memory
    */
   template <typename T>
-  hipc::FullPtr<T> AllocateObjs(size_t count) {
+  ctp::ipc::FullPtr<T> AllocateObjs(size_t count) {
     size_t size = count * sizeof(T);
     T* ptr = static_cast<T*>(malloc(size));
     // Create a FullPtr with only the private pointer (no shared backing)
-    hipc::FullPtr<T> result;
+    ctp::ipc::FullPtr<T> result;
     result.ptr_ = ptr;
     result.shm_.off_ = 0;
-    result.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+    result.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
     return result;
   }
 
@@ -78,12 +78,12 @@ class SimpleHeapAllocator {
    * @return FullPtr to allocated memory
    */
   template <typename T = char>
-  hipc::FullPtr<T> Allocate(size_t size) {
+  ctp::ipc::FullPtr<T> Allocate(size_t size) {
     T* ptr = static_cast<T*>(malloc(size));
-    hipc::FullPtr<T> result;
+    ctp::ipc::FullPtr<T> result;
     result.ptr_ = ptr;
     result.shm_.off_ = 0;
-    result.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+    result.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
     return result;
   }
 
@@ -95,7 +95,7 @@ class SimpleHeapAllocator {
    * @param ptr FullPtr to memory to free
    */
   template <typename T, bool ATOMIC = false>
-  void Free(const hipc::FullPtr<T, ATOMIC>& ptr) {
+  void Free(const ctp::ipc::FullPtr<T, ATOMIC>& ptr) {
     if (ptr.ptr_ != nullptr) {
       free(ptr.ptr_);
     }
@@ -112,30 +112,30 @@ class CountingAllocator {
   size_t free_count = 0;
 
   template <typename T>
-  hipc::FullPtr<T> AllocateObjs(size_t count) {
+  ctp::ipc::FullPtr<T> AllocateObjs(size_t count) {
     ++alloc_count;
     size_t size = count * sizeof(T);
     T* ptr = static_cast<T*>(malloc(size));
-    hipc::FullPtr<T> result;
+    ctp::ipc::FullPtr<T> result;
     result.ptr_ = ptr;
     result.shm_.off_ = 0;
-    result.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+    result.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
     return result;
   }
 
   template <typename T = char>
-  hipc::FullPtr<T> Allocate(size_t size) {
+  ctp::ipc::FullPtr<T> Allocate(size_t size) {
     ++alloc_count;
     T* ptr = static_cast<T*>(malloc(size));
-    hipc::FullPtr<T> result;
+    ctp::ipc::FullPtr<T> result;
     result.ptr_ = ptr;
     result.shm_.off_ = 0;
-    result.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+    result.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
     return result;
   }
 
   template <typename T, bool ATOMIC = false>
-  void Free(const hipc::FullPtr<T, ATOMIC>& ptr) {
+  void Free(const ctp::ipc::FullPtr<T, ATOMIC>& ptr) {
     if (ptr.ptr_ != nullptr) {
       ++free_count;
       free(ptr.ptr_);

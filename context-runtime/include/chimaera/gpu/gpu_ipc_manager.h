@@ -120,7 +120,7 @@ class IpcManager {
    */
   template <typename TaskT>
   CTP_CROSS_FUN gpu::Future<TaskT> Send(
-      const hipc::FullPtr<TaskT> &task_ptr) {
+      const ctp::ipc::FullPtr<TaskT> &task_ptr) {
 #if CTP_IS_GPU || CTP_IS_SYCL_DEVICE
     return IpcGpu2Cpu::ClientSend(this, task_ptr);
 #else
@@ -166,7 +166,7 @@ class IpcManager {
 
   /** Registration record for a client-owned device-memory backend. */
   struct ClientBackend {
-    hipc::AllocatorId alloc_id;
+    ctp::ipc::AllocatorId alloc_id;
     char *host_view = nullptr;  ///< CPU-readable pointer (pinned/UVM only)
     char *device_ptr = nullptr; ///< Raw device pointer (for kDeviceMem D2H copy)
     size_t capacity = 0;
@@ -180,7 +180,7 @@ class IpcManager {
     char *queue_backend = nullptr;
     size_t queue_backend_size = 0;
     /** The actual GpuTaskQueue object, constructed inside queue_backend. */
-    hipc::FullPtr<chi::GpuTaskQueue> gpu2cpu_queue;
+    ctp::ipc::FullPtr<chi::GpuTaskQueue> gpu2cpu_queue;
     /** AllocatorId → registered client backend. */
     std::unordered_map<u64, ClientBackend> client_backends;
     u32 gpu_id = 0;
@@ -227,7 +227,7 @@ class IpcManager {
   bool RegisterClientBackend(const ClientBackend &b);
 
   /** Unregister a client backend. */
-  void UnregisterClientBackend(u32 gpu_id, const hipc::AllocatorId &alloc_id);
+  void UnregisterClientBackend(u32 gpu_id, const ctp::ipc::AllocatorId &alloc_id);
 
   /**
    * Resolve an AllocatorId to its registered ClientBackend record.
@@ -237,7 +237,7 @@ class IpcManager {
    * Returns nullptr if unknown.
    */
   inline const ClientBackend *FindClientBackend(
-      u32 gpu_id, const hipc::AllocatorId &alloc_id) const {
+      u32 gpu_id, const ctp::ipc::AllocatorId &alloc_id) const {
     if (gpu_id >= per_gpu_devices_.size()) return nullptr;
     u64 key = (static_cast<u64>(alloc_id.major_) << 32) |
               static_cast<u64>(alloc_id.minor_);

@@ -78,13 +78,13 @@ public:
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       // Step 2: Initialize CTE client subsystem
-      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
       if (!success) {
-        throw std::runtime_error("WRP_CTE_CLIENT_INIT failed");
+        throw std::runtime_error("CLIO_CTE_CLIENT_INIT failed");
       }
 
       // Step 3: Set pool ID on global CTE client
-      auto *cte_client = WRP_CTE_CLIENT;
+      auto *cte_client = CLIO_CTE_CLIENT;
       cte_client->Init(clio_cte::core::kCtePoolId);
 
       // Step 4: Create CTE core pool
@@ -117,7 +117,7 @@ public:
     INFO("Initializing CAE client");
 
     // Initialize CAE client subsystem
-    WRP_CAE_CLIENT_INIT();
+    CLIO_CAE_CLIENT_INIT();
 
     // Create CAE client and pool
     clio_cae::core::Client cae_client;

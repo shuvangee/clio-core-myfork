@@ -76,9 +76,9 @@ void TestBasicTcpTransfer() {
   send_meta.request_id = 42;
   send_meta.operation = "test_op";
 
-  Bulk bulk1 = client->Expose(hipc::FullPtr<char>(const_cast<char*>(data1)),
+  Bulk bulk1 = client->Expose(ctp::ipc::FullPtr<char>(const_cast<char*>(data1)),
                               size1, BULK_XFER);
-  Bulk bulk2 = client->Expose(hipc::FullPtr<char>(const_cast<char*>(data2)),
+  Bulk bulk2 = client->Expose(ctp::ipc::FullPtr<char>(const_cast<char*>(data2)),
                               size2, BULK_XFER);
 
   send_meta.send.push_back(bulk1);
@@ -143,7 +143,7 @@ void TestMultipleBulks() {
   LbmMeta<> send_meta;
   for (const auto& chunk : data_chunks) {
     Bulk bulk = client->Expose(
-        hipc::FullPtr<char>(const_cast<char*>(chunk.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(chunk.data())),
         chunk.size(), BULK_XFER);
     send_meta.send.push_back(bulk);
     send_meta.send_bulks++;
@@ -196,7 +196,7 @@ void TestUnixDomainSocket() {
   send_meta.request_id = 99;
   send_meta.operation = "ipc_test";
 
-  Bulk bulk = client->Expose(hipc::FullPtr<char>(const_cast<char*>(data)),
+  Bulk bulk = client->Expose(ctp::ipc::FullPtr<char>(const_cast<char*>(data)),
                              size, BULK_XFER);
   send_meta.send.push_back(bulk);
   send_meta.send_bulks = 1;

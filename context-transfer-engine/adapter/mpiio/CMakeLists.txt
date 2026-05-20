@@ -1,5 +1,5 @@
 include_directories(
-        ${WRP_CTE_ROOT}
+        ${CLIO_CTE_ROOT}
         ${HERMES_SRC_DIR}
         ${HERMES_ADAPTER_DIR}
         ${HERMES_IO_CLIENT_DIR}
@@ -13,10 +13,10 @@ include_directories(
 # `mpicc -v` (MPICH). The adapter's UpdateIoStatus reads
 # implementation-specific MPI_Status fields, so it has to know which.
 find_package(MPI REQUIRED)
-if(WRP_CTE_MPICH)
+if(CLIO_CTE_MPICH)
         message(STATUS "MPIIO adapter: forced MPICH via -DWRP_CTE_MPICH")
         add_definitions(-DWRP_CTE_MPICH)
-elseif(WRP_CTE_OPENMPI)
+elseif(CLIO_CTE_OPENMPI)
         message(STATUS "MPIIO adapter: forced OpenMPI via -DWRP_CTE_OPENMPI")
         add_definitions(-DWRP_CTE_OPENMPI)
 else()
@@ -70,10 +70,10 @@ install(
 # -----------------------------------------------------------------------------
 # Install headers
 # -----------------------------------------------------------------------------
-file(GLOB_RECURSE WRP_CTE_HEADERS "*.h")
+file(GLOB_RECURSE CLIO_CTE_HEADERS "*.h")
 install(
         FILES
-        ${WRP_CTE_HEADERS}
+        ${CLIO_CTE_HEADERS}
         DESTINATION
         include/adapter/mpiio
         COMPONENT

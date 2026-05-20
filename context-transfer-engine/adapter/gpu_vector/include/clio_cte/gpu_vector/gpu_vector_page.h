@@ -6,8 +6,8 @@
  * BSD 3-Clause License. See LICENSE file.
  */
 
-#ifndef WRP_CTE_GPU_VECTOR_PAGE_H_
-#define WRP_CTE_GPU_VECTOR_PAGE_H_
+#ifndef CLIO_CTE_GPU_VECTOR_PAGE_H_
+#define CLIO_CTE_GPU_VECTOR_PAGE_H_
 
 #include <chimaera/types.h>
 #include <chimaera/gpu/future.h>
@@ -126,4 +126,4 @@ inline constexpr chi::u32 kPageGetInFlight = 1u << 2;
 
 }  // namespace clio_cte::gpu_vector
 
-#endif  // WRP_CTE_GPU_VECTOR_PAGE_H_
+#endif  // CLIO_CTE_GPU_VECTOR_PAGE_H_

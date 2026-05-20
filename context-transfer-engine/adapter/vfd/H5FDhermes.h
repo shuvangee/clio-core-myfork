@@ -49,7 +49,7 @@
 #define H5FD_WRP_CTE_NAME  "hdf5_hermes_vfd"
 #define H5FD_WRP_CTE_VALUE ((H5FD_class_value_t)(3200))
 
-#define WRP_CTE_FORWARD_DECL(func_, ret_, args_) \
+#define CLIO_CTE_FORWARD_DECL(func_, ret_, args_) \
   typedef ret_(*real_t_##func_##_) args_;       \
   ret_(*real_##func_##_) args_ = NULL;
 
@@ -72,8 +72,8 @@ herr_t H5Pset_fapl_hermes(hid_t fapl_id, hbool_t persistence, size_t page_size);
 H5PL_type_t H5PLget_plugin_type(void);
 const void* H5PLget_plugin_info(void);
 
-WRP_CTE_FORWARD_DECL(H5_init_library, herr_t, ());
-WRP_CTE_FORWARD_DECL(H5_term_library, herr_t, ());
+CLIO_CTE_FORWARD_DECL(H5_init_library, herr_t, ());
+CLIO_CTE_FORWARD_DECL(H5_term_library, herr_t, ());
 
 #ifdef __cplusplus
 }

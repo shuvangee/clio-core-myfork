@@ -7,7 +7,7 @@
 #                              data, unlike the dd /dev/urandom proxy.
 #   - clio_compress inserted -> clio_cte_compressor at pool 512.0 sits in
 #                              front of clio_cte_core (moved to 513.0).
-#                              Adapters' WRP_CTE_CLIENT_INIT defaults to
+#                              Adapters' CLIO_CTE_CLIENT_INIT defaults to
 #                              pool 512.0, so PutBlob/GetBlob land on the
 #                              compressor first; it forwards (optionally
 #                              compressed) blobs to next_pool_id=513.0.
@@ -28,7 +28,7 @@
 #   admin                              -> chimaera_admin (1.0)
 #   clio_cte_compressor (entrypoint)    -> 512.0
 #   clio_cte_core_storage  (downstream) -> 513.0
-#   FUSE adapter -> WRP_CTE_CLIENT_INIT -> 512.0
+#   FUSE adapter -> CLIO_CTE_CLIENT_INIT -> 512.0
 #
 # All other deploy semantics match metagem_iowarp_libfuse_4n.yaml:
 # host-side clio_runtime / clio_cte / clio_cte_libfuse, container-only
@@ -75,7 +75,7 @@ scheduler:
     - 'mkdir -p /home/llogan/clio_cte_metagem_compress_real_4n'
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     deploy_mode: default
     num_threads: 4
@@ -86,7 +86,7 @@ pkgs:
     sleep: 4
     swim_enabled: false
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     deploy_mode: default
     # Moved downstream of the compressor; adapter entrypoint stays 512.0,
@@ -102,7 +102,7 @@ pkgs:
     iowarp_compress: none
     pool_query: "local"
 
-  - pkg_type: jarvis_iowarp.clio_compress
+  - pkg_type: jarvis_clio_core.clio_compress
     pkg_name: cte_compress
     deploy_mode: default
     pool_name: clio_cte_compressor
@@ -118,7 +118,7 @@ pkgs:
     # Leave qtable_model_path / linreg_model_path / dnn_model_weights_path
     # blank; static lib path bypasses the predictor.
 
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
     mountpoint: ${HOME}/clio_cte_metagem_compress_real_4n

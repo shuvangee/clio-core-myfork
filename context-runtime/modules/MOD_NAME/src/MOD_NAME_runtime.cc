@@ -52,7 +52,7 @@ namespace chimaera::MOD_NAME {
 // Method implementations
 //===========================================================================
 
-chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
+chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing Create task for pool {}", task->pool_id_);
 
@@ -69,7 +69,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext 
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Custom(hipc::FullPtr<CustomTask> task, chi::RunContext &rctx) {
+chi::TaskResume Runtime::Custom(ctp::ipc::FullPtr<CustomTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing Custom task with data: {}",
         task->data_.c_str());
@@ -85,7 +85,7 @@ chi::TaskResume Runtime::Custom(hipc::FullPtr<CustomTask> task, chi::RunContext 
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
+chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing Destroy task - Pool ID: {}",
         task->target_pool_id_);
@@ -111,7 +111,7 @@ chi::u64 Runtime::GetWorkRemaining() const {
 // Task Serialization Method Implementations now in autogen/MOD_NAME_lib_exec.cc
 //===========================================================================
 
-chi::TaskResume Runtime::CoMutexTest(hipc::FullPtr<CoMutexTestTask> task,
+chi::TaskResume Runtime::CoMutexTest(ctp::ipc::FullPtr<CoMutexTestTask> task,
                           chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing CoMutexTest task {} (hold: {}ms)",
@@ -141,7 +141,7 @@ chi::TaskResume Runtime::CoMutexTest(hipc::FullPtr<CoMutexTestTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::CoRwLockTest(hipc::FullPtr<CoRwLockTestTask> task,
+chi::TaskResume Runtime::CoRwLockTest(ctp::ipc::FullPtr<CoRwLockTestTask> task,
                            chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing CoRwLockTest task {} ({}, hold: {}ms)",
@@ -190,7 +190,7 @@ chi::TaskResume Runtime::CoRwLockTest(hipc::FullPtr<CoRwLockTestTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::WaitTest(hipc::FullPtr<WaitTestTask> task,
+chi::TaskResume Runtime::WaitTest(ctp::ipc::FullPtr<WaitTestTask> task,
                                   chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug,
@@ -231,7 +231,7 @@ chi::TaskResume Runtime::WaitTest(hipc::FullPtr<WaitTestTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::TestLargeOutput(hipc::FullPtr<TestLargeOutputTask> task,
+chi::TaskResume Runtime::TestLargeOutput(ctp::ipc::FullPtr<TestLargeOutputTask> task,
                                          chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing TestLargeOutput task");
@@ -252,7 +252,7 @@ chi::TaskResume Runtime::TestLargeOutput(hipc::FullPtr<TestLargeOutputTask> task
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GpuSubmit(hipc::FullPtr<GpuSubmitTask> task,
+chi::TaskResume Runtime::GpuSubmit(ctp::ipc::FullPtr<GpuSubmitTask> task,
                                    chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing GpuSubmit task from GPU {}, test_value={}",
@@ -269,7 +269,7 @@ chi::TaskResume Runtime::GpuSubmit(hipc::FullPtr<GpuSubmitTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::SubtaskTest(hipc::FullPtr<SubtaskTestTask> task,
+chi::TaskResume Runtime::SubtaskTest(ctp::ipc::FullPtr<SubtaskTestTask> task,
                                      chi::RunContext &rctx) {
   HLOG(kDebug, "MOD_NAME: Executing SubtaskTest task with test_value={}",
        task->test_value_);
@@ -279,7 +279,7 @@ chi::TaskResume Runtime::SubtaskTest(hipc::FullPtr<SubtaskTestTask> task,
   co_return;
 }
 
-chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
+chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   // Generate test data: a vector of MonitorData structs

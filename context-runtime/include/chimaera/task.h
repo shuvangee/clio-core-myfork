@@ -208,9 +208,9 @@ class Task {
   IN double period_ns_;     /**< Period in nanoseconds for periodic tasks */
   IN TaskGroup
       task_group_; /**< Scheduling affinity group (null = no affinity) */
-  OUT hipc::atomic<u32>
+  OUT ctp::ipc::atomic<u32>
       return_code_; /**< Task return code (0=success, non-zero=error) */
-  OUT hipc::atomic<ContainerId>
+  OUT ctp::ipc::atomic<ContainerId>
       completer_; /**< Container ID that completed this task */
   IN u32 pod_size_; /**< sizeof(TaskT) for POD copy transport */
   /** Raw pointer to host RunContext (cast to RunContext* on CPU, always 0 on GPU).
@@ -270,7 +270,7 @@ class Task {
    *
    * @param other Pointer to the source task to copy from
    */
-  CTP_CROSS_FUN void Copy(const hipc::FullPtr<Task>& other) {
+  CTP_CROSS_FUN void Copy(const ctp::ipc::FullPtr<Task>& other) {
     pool_id_ = other->pool_id_;
     task_id_ = other->task_id_;
     pool_query_ = other->pool_query_;
@@ -470,7 +470,7 @@ class Task {
    *
    * @param replica_task The replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<Task>& replica_task) {
+  void Aggregate(const ctp::ipc::FullPtr<Task>& replica_task) {
     // Propagate return code from replica to this task
     if (!replica_task.IsNull() && replica_task->GetReturnCode() != 0) {
       SetReturnCode(replica_task->GetReturnCode());
@@ -553,17 +553,17 @@ struct TaskQueueHeader {
 // Type alias for individual lanes with per-lane headers (moved outside
 // TaskQueue class) Worker queues store Future<Task> objects directly
 using TaskLane =
-    hipc::multi_mpsc_ring_buffer<Future<Task>,
+    ctp::ipc::multi_mpsc_ring_buffer<Future<Task>,
                                  CHI_QUEUE_ALLOC_T>::ring_buffer_type;
 
 /**
- * Simple wrapper around hipc::multi_mpsc_ring_buffer
+ * Simple wrapper around ctp::ipc::multi_mpsc_ring_buffer
  *
  * This wrapper adds custom enqueue and dequeue functions while maintaining
  * compatibility with existing code that expects the multi_mpsc_ring_buffer
  * interface.
  */
-typedef hipc::multi_mpsc_ring_buffer<Future<Task>, CHI_QUEUE_ALLOC_T> TaskQueue;
+typedef ctp::ipc::multi_mpsc_ring_buffer<Future<Task>, CHI_QUEUE_ALLOC_T> TaskQueue;
 
 }  // namespace chi
 

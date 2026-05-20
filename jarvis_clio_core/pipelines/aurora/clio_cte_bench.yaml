@@ -1,5 +1,5 @@
 # Pipeline: WRP CTE benchmark — Aurora variant
-# Purpose: Run jarvis_iowarp.clio_cte_bench end-to-end against a containerized
+# Purpose: Run jarvis_clio_core.clio_cte_bench end-to-end against a containerized
 # IOWarp runtime + CTE deployment on a single Aurora compute node.
 #
 # Mirrors pipelines/ares/cte_1n_1p.yaml (3-stage runtime → cte → bench) but
@@ -10,7 +10,7 @@
 # Usage:
 #   jarvis hostfile set ~/hostfile.txt   # (or just localhost on a UAN)
 #   jarvis ppl load yaml \
-#       /home/llogan/clio-core/jarvis_iowarp/pipelines/aurora/clio_cte_bench.yaml
+#       /home/llogan/clio-core/jarvis_clio_core/pipelines/aurora/clio_cte_bench.yaml
 #   jarvis ppl run
 
 name: clio_cte_bench_aurora
@@ -42,7 +42,7 @@ pkgs:
     deploy_mode: container
 
   # Stage 1: chimaera runtime
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     deploy_mode: container
     git_branch: main
@@ -55,7 +55,7 @@ pkgs:
     sleep: 4
 
   # Stage 2: CTE pool deployment (RAM-only single tier — Aurora node-local)
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     deploy_mode: container
     devices:
@@ -67,7 +67,7 @@ pkgs:
 
   # Stage 3: benchmark — single-node, single-rank by default. Bump nprocs/ppn
   # for multi-rank runs (see ares/cte_integration_test.yaml for 64x16).
-  - pkg_type: jarvis_iowarp.clio_cte_bench
+  - pkg_type: jarvis_clio_core.clio_cte_bench
     pkg_name: cte_bench
     deploy_mode: container
     test_case: "PutGet"

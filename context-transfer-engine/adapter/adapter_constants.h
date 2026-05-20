@@ -31,12 +31,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_ADAPTER_CONSTANTS_H_
-#define WRP_CTE_ADAPTER_ADAPTER_CONSTANTS_H_
+#ifndef CLIO_CTE_ADAPTER_ADAPTER_CONSTANTS_H_
+#define CLIO_CTE_ADAPTER_ADAPTER_CONSTANTS_H_
 
 // Macro for function declarations (backward compatibility)
-#ifndef WRP_CTE_DECL
-#define WRP_CTE_DECL(F) F
+#ifndef CLIO_CTE_DECL
+#define CLIO_CTE_DECL(F) F
 #endif
 
 #include "mapper/abstract_mapper.h"
@@ -47,4 +47,4 @@ static inline const MapperType kMapperType = MapperType::kBalancedMapper;
 
 }
 
-#endif  // WRP_CTE_ADAPTER_ADAPTER_CONSTANTS_H_
+#endif  // CLIO_CTE_ADAPTER_ADAPTER_CONSTANTS_H_

@@ -19,10 +19,10 @@ file(GLOB_RECURSE CHIMAERA_MODULE_GPU_SOURCES
 
 # Separate GPU sources (_gpu.cc / _sycl.cc / _hip.cc files) from CPU
 # sources. _gpu.cc and _hip.cc are compiled by NVCC/HIPCC under
-# WRP_CORE_ENABLE_CUDA/ROCM, and skipped under SYCL via their own
+# CLIO_CORE_ENABLE_CUDA/ROCM, and skipped under SYCL via their own
 # `#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM` guard. _sycl.cc is the
 # SYCL twin: gated by `#if CTP_ENABLE_SYCL` and compiled by
-# add_sycl_library() when WRP_CORE_ENABLE_SYCL is on.
+# add_sycl_library() when CLIO_CORE_ENABLE_SYCL is on.
 set(CHIMAERA_GPU_SOURCES "")
 set(CHIMAERA_CPU_SOURCES "")
 foreach(src ${CHIMAERA_SOURCES})
@@ -54,7 +54,7 @@ add_library(${CHIMAERA_LIB_NAME} SHARED ${CHIMAERA_CPU_SOURCES})
 
 # Build GPU work orchestrator library if CUDA/ROCm/SYCL enabled and GPU sources exist
 if(CHIMAERA_GPU_SOURCES)
-  if(WRP_CORE_ENABLE_CUDA)
+  if(CLIO_CORE_ENABLE_CUDA)
     add_cuda_library(${CHIMAERA_LIB_NAME}_gpu SHARED TRUE ${CHIMAERA_GPU_SOURCES}
       INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/../include
@@ -79,7 +79,7 @@ if(CHIMAERA_GPU_SOURCES)
     # of chimaera_cxx sources (transport-primitives headers use CUDA builtins
     # guarded by CTP_ENABLE_CUDA which are not available in g++)
     target_link_libraries(${CHIMAERA_LIB_NAME} PRIVATE ${CHIMAERA_LIB_NAME}_gpu)
-  elseif(WRP_CORE_ENABLE_SYCL)
+  elseif(CLIO_CORE_ENABLE_SYCL)
     add_sycl_library(${CHIMAERA_LIB_NAME}_gpu SHARED TRUE ${CHIMAERA_GPU_SOURCES}
       INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/../include
@@ -116,7 +116,7 @@ if(CHIMAERA_GPU_SOURCES)
       target_include_directories(${CHIMAERA_LIB_NAME} PRIVATE
           /opt/adaptivecpp/include/AdaptiveCpp)
     endif()
-  elseif(WRP_CORE_ENABLE_ROCM)
+  elseif(CLIO_CORE_ENABLE_ROCM)
     add_rocm_gpu_library(${CHIMAERA_LIB_NAME}_gpu SHARED FALSE ${CHIMAERA_GPU_SOURCES})
     target_include_directories(${CHIMAERA_LIB_NAME}_gpu PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
@@ -149,7 +149,7 @@ target_include_directories(${CHIMAERA_LIB_NAME} PUBLIC
 # When CUDA is enabled, g++ source files get CTP_ENABLE_CUDA=1 transitively from
 # the GPU library link. They need the CUDA toolkit include directory so that
 # cuda_runtime_api.h (host-callable CUDA runtime functions) can be found.
-if(WRP_CORE_ENABLE_CUDA AND CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES)
+if(CLIO_CORE_ENABLE_CUDA AND CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES)
   find_package(CUDAToolkit QUIET)
   target_include_directories(${CHIMAERA_LIB_NAME} PUBLIC
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
@@ -162,10 +162,10 @@ endif()
 # PRIVATE link, so they need the HIP host-API headers (hip/hip_runtime_api.h) to
 # resolve hipMalloc / hipMemcpy / hipIpcMemHandle_t etc. Under HIP_PLATFORM=nvidia
 # the HIP runtime forwards to cudart, so cudart needs to be linked too.
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
   target_include_directories(${CHIMAERA_LIB_NAME} PUBLIC ${ROCM_ROOT}/include)
   target_compile_definitions(${CHIMAERA_LIB_NAME} PUBLIC CTP_ENABLE_ROCM=1)
-  if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+  if(CLIO_ROCM_HIP_PLATFORM STREQUAL "nvidia")
     target_compile_definitions(${CHIMAERA_LIB_NAME} PUBLIC
       __HIP_PLATFORM_NVIDIA__=1
       __HIP_PLATFORM_NVCC__=1)
@@ -214,7 +214,7 @@ set_target_properties(${CHIMAERA_LIB_NAME} PROPERTIES EXPORT_NAME cxx)
 # Precompiled headers for faster builds. Skipped under SYCL because the
 # SYCL flag set (`-fsycl`) is incompatible with clang's PCH bundler:
 # clang-offload-bundler refuses 'pch' as an input file type.
-if(NOT WRP_CORE_ENABLE_SYCL)
+if(NOT CLIO_CORE_ENABLE_SYCL)
   target_precompile_headers(${CHIMAERA_LIB_NAME} PRIVATE
       <string> <vector> <memory> <unordered_map>
       <functional> <algorithm> <cstdint> <cstring> <iostream>

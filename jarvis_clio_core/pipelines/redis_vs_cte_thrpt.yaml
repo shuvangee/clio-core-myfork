@@ -25,7 +25,7 @@ config:
   name: redis_vs_cte_thrpt
   pkgs:
     # --- Chimaera runtime (owns the daemon) ---
-    - pkg_type: jarvis_iowarp.clio_runtime
+    - pkg_type: jarvis_clio_core.clio_runtime
       pkg_name: runtime
       num_threads: 4
       port: 9413
@@ -34,7 +34,7 @@ config:
       sleep: 4
 
     # --- CTE core: single RAM tier ---
-    - pkg_type: jarvis_iowarp.clio_cte
+    - pkg_type: jarvis_clio_core.clio_cte
       pkg_name: cte_core
       devices:
         - ["ram::cte_ram_tier1", "16GB", 1.0]
@@ -44,12 +44,12 @@ config:
       poll_period_ms: 5000
 
     # --- Redis server (no persistence: fair vs CTE RAM tier) ---
-    - pkg_type: jarvis_iowarp.redis
+    - pkg_type: jarvis_clio_core.redis
       pkg_name: redis
       port: 6379
 
     # --- CTE benchmark ---
-    - pkg_type: jarvis_iowarp.clio_cte_bench
+    - pkg_type: jarvis_clio_core.clio_cte_bench
       pkg_name: cte_bench
       test_case: "Put"
       num_threads: 1
@@ -63,7 +63,7 @@ config:
       output_file: cte_bench.log
 
     # --- Redis benchmark (mirror) ---
-    - pkg_type: jarvis_iowarp.clio_redis_bench
+    - pkg_type: jarvis_clio_core.clio_redis_bench
       pkg_name: redis_bench
       test_case: "Put"
       num_threads: 1

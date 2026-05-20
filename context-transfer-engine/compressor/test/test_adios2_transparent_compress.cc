@@ -54,7 +54,7 @@ static void EnsureInit() {
   std::this_thread::sleep_for(1s);
 
   // Point the CTE client at the entrypoint pool (512.0 = compressor)
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->Init(clio_cte::core::kCtePoolId);
 
   // Create a tag for the tests
@@ -66,7 +66,7 @@ static void EnsureInit() {
 TEST_CASE("ADIOS2 transparent compress - PutBlob float array",
           "[adios2][compressor][transparent][put]") {
   EnsureInit();
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   // Simulate an ADIOS2 variable write: array of floats
   const size_t num_elements = 16 * 1024;  // 16K floats = 64KB
@@ -81,7 +81,7 @@ TEST_CASE("ADIOS2 transparent compress - PutBlob float array",
     fdata[i] = static_cast<float>(i % 256);
   }
 
-  hipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
 
   clio_cte::core::Context ctx;
 #if CTP_ENABLE_COMPRESS
@@ -102,7 +102,7 @@ TEST_CASE("ADIOS2 transparent compress - PutBlob float array",
 TEST_CASE("ADIOS2 transparent compress - GetBlob float array",
           "[adios2][compressor][transparent][get]") {
   EnsureInit();
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   const size_t num_elements = 16 * 1024;
   const size_t data_size = num_elements * sizeof(float);
@@ -111,7 +111,7 @@ TEST_CASE("ADIOS2 transparent compress - GetBlob float array",
   REQUIRE(!get_buffer.IsNull());
   memset(get_buffer.ptr_, 0, data_size);
 
-  hipc::ShmPtr<> get_data = get_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> get_data = get_buffer.shm_.template Cast<void>();
 
   auto get_task = cte_client->AsyncGetBlob(
       g_tag_id, "temperature/step0", 0, data_size, 0, get_data);
@@ -137,7 +137,7 @@ TEST_CASE("ADIOS2 transparent compress - GetBlob float array",
 TEST_CASE("ADIOS2 transparent compress - multi-step workflow",
           "[adios2][compressor][transparent][multistep]") {
   EnsureInit();
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   const size_t num_elements = 4096;
   const size_t data_size = num_elements * sizeof(double);
@@ -153,7 +153,7 @@ TEST_CASE("ADIOS2 transparent compress - multi-step workflow",
       ddata[i] = static_cast<double>(step * 1000 + i);
     }
 
-    hipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
     std::string blob_name = "pressure/step" + std::to_string(step);
 
     clio_cte::core::Context ctx;
@@ -175,7 +175,7 @@ TEST_CASE("ADIOS2 transparent compress - multi-step workflow",
     REQUIRE(!get_buffer.IsNull());
     memset(get_buffer.ptr_, 0, data_size);
 
-    hipc::ShmPtr<> get_data = get_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> get_data = get_buffer.shm_.template Cast<void>();
     std::string blob_name = "pressure/step" + std::to_string(step);
 
     auto get_task = cte_client->AsyncGetBlob(

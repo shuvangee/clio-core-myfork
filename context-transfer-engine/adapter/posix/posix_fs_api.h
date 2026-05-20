@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_POSIX_NATIVE_H_
-#define WRP_CTE_ADAPTER_POSIX_NATIVE_H_
+#ifndef CLIO_CTE_ADAPTER_POSIX_NATIVE_H_
+#define CLIO_CTE_ADAPTER_POSIX_NATIVE_H_
 
 #include <memory>
 
@@ -46,10 +46,10 @@ namespace clio::cae {
 /** A class to represent POSIX IO file system */
 class PosixFs : public clio::cae::Filesystem {
 public:
-  WRP_CTE_POSIX_API_T real_api_; /**< pointer to real APIs */
+  CLIO_CTE_POSIX_API_T real_api_; /**< pointer to real APIs */
 
 public:
-  PosixFs() : Filesystem(AdapterType::kPosix) { real_api_ = WRP_CTE_POSIX_API; }
+  PosixFs() : Filesystem(AdapterType::kPosix) { real_api_ = CLIO_CTE_POSIX_API; }
 
   /**
    * Fill a struct stat / stat64 for a clio:: file.
@@ -61,7 +61,7 @@ public:
    * first, then fill every field we have a sensible answer for.
    */
   template <typename StatT> int Stat(File &f, StatT *buf) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto existing = mdm->Find(f);
     if (!existing) {
       errno = EBADF;
@@ -145,7 +145,7 @@ public:
     }
     clio::cae::File f;
     f.hermes_fd_ = fd;
-    stat = WRP_CTE_FS_METADATA_MANAGER->Find(f);
+    stat = CLIO_CTE_FS_METADATA_MANAGER->Find(f);
     return stat != nullptr;
   }
 
@@ -161,26 +161,26 @@ public:
     // Check the first two bits for read/write mode
     switch (stat.flags_ & O_ACCMODE) {
     case O_RDONLY:
-      stat.hflags_.SetBits(WRP_CTE_FS_READ);
+      stat.hflags_.SetBits(CLIO_CTE_FS_READ);
       break;
     case O_WRONLY:
-      stat.hflags_.SetBits(WRP_CTE_FS_WRITE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_WRITE);
       break;
     case O_RDWR:
-      stat.hflags_.SetBits(WRP_CTE_FS_READ | WRP_CTE_FS_WRITE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_READ | CLIO_CTE_FS_WRITE);
       break;
     }
     if (stat.flags_ & O_APPEND) {
-      stat.hflags_.SetBits(WRP_CTE_FS_APPEND);
+      stat.hflags_.SetBits(CLIO_CTE_FS_APPEND);
     }
     if (stat.flags_ & O_CREAT || stat.flags_ & O_TMPFILE) {
-      stat.hflags_.SetBits(WRP_CTE_FS_CREATE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_CREATE);
     }
     if (stat.flags_ & O_TRUNC) {
-      stat.hflags_.SetBits(WRP_CTE_FS_TRUNC);
+      stat.hflags_.SetBits(CLIO_CTE_FS_TRUNC);
     }
 
-    if (stat.hflags_.Any(WRP_CTE_FS_CREATE)) {
+    if (stat.hflags_.Any(CLIO_CTE_FS_CREATE)) {
       if (stat.adapter_mode_ != AdapterMode::kScratch) {
         stat.fd_ = real_api_->open(path.c_str(), stat.flags_, stat.st_mode_);
       }
@@ -189,7 +189,7 @@ public:
     }
 
     if (stat.fd_ >= 0) {
-      stat.hflags_.SetBits(WRP_CTE_FS_EXISTS);
+      stat.hflags_.SetBits(CLIO_CTE_FS_EXISTS);
     }
     if (stat.fd_ < 0 && stat.adapter_mode_ != AdapterMode::kScratch) {
       f.status_ = false;
@@ -318,7 +318,7 @@ CTP_DEFINE_GLOBAL_PTR_VAR_H(PosixFs, g_posix_fs);
 }
 
 /** Simplify access to the stateless PosixFs Singleton */
-#define WRP_CTE_POSIX_FS (CTP_GET_GLOBAL_PTR_VAR(clio::cae::PosixFs, clio::cae::g_posix_fs))
-#define WRP_CTE_POSIX_FS_T clio::cae::PosixFs *
+#define CLIO_CTE_POSIX_FS (CTP_GET_GLOBAL_PTR_VAR(clio::cae::PosixFs, clio::cae::g_posix_fs))
+#define CLIO_CTE_POSIX_FS_T clio::cae::PosixFs *
 
-#endif // WRP_CTE_ADAPTER_POSIX_NATIVE_H_
+#endif // CLIO_CTE_ADAPTER_POSIX_NATIVE_H_

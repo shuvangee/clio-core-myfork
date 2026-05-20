@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_IO_CLIENT_H_
-#define WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_IO_CLIENT_H_
+#ifndef CLIO_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_IO_CLIENT_H_
+#define CLIO_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_IO_CLIENT_H_
 
 #include <mpi.h>
 
@@ -52,23 +52,23 @@ namespace stdfs = std::filesystem;
 namespace clio::cae {
 
 /** Put or get data directly from I/O client */
-#define WRP_CTE_IO_CLIENT_BYPASS BIT_OPT(uint32_t, 0)
+#define CLIO_CTE_IO_CLIENT_BYPASS BIT_OPT(uint32_t, 0)
 /** Only put or get data from a Hermes buffer; no fallback to I/O client */
-#define WRP_CTE_IO_CLIENT_NO_FALLBACK BIT_OPT(uint32_t, 1)
+#define CLIO_CTE_IO_CLIENT_NO_FALLBACK BIT_OPT(uint32_t, 1)
 /** Whether to perform seek */
-#define WRP_CTE_FS_SEEK BIT_OPT(uint32_t, 2)
+#define CLIO_CTE_FS_SEEK BIT_OPT(uint32_t, 2)
 /** Whether to perform create */
-#define WRP_CTE_FS_CREATE BIT_OPT(uint32_t, 3)
+#define CLIO_CTE_FS_CREATE BIT_OPT(uint32_t, 3)
 /** Whether in append mode */
-#define WRP_CTE_FS_APPEND BIT_OPT(uint32_t, 4)
+#define CLIO_CTE_FS_APPEND BIT_OPT(uint32_t, 4)
 /** Whether to perform truncate */
-#define WRP_CTE_FS_TRUNC BIT_OPT(uint32_t, 5)
+#define CLIO_CTE_FS_TRUNC BIT_OPT(uint32_t, 5)
 /** Whether the file was found on-disk */
-#define WRP_CTE_FS_EXISTS BIT_OPT(uint32_t, 6)
+#define CLIO_CTE_FS_EXISTS BIT_OPT(uint32_t, 6)
 /** Whether the file supports reading */
-#define WRP_CTE_FS_READ BIT_OPT(uint32_t, 7)
+#define CLIO_CTE_FS_READ BIT_OPT(uint32_t, 7)
 /** Whether the file supports writing */
-#define WRP_CTE_FS_WRITE BIT_OPT(uint32_t, 8)
+#define CLIO_CTE_FS_WRITE BIT_OPT(uint32_t, 8)
 
 /** A structure to represent IO status */
 struct IoStatus {
@@ -117,19 +117,19 @@ struct FsIoOptions {
   }
 
   /** Enable seek for this I/O */
-  void SetSeek() { flags_.SetBits(WRP_CTE_FS_SEEK); }
+  void SetSeek() { flags_.SetBits(CLIO_CTE_FS_SEEK); }
 
   /** Disable seek for this I/O */
-  void UnsetSeek() { flags_.UnsetBits(WRP_CTE_FS_SEEK); }
+  void UnsetSeek() { flags_.UnsetBits(CLIO_CTE_FS_SEEK); }
 
   /** Whether or not to perform seek in FS adapter */
-  bool DoSeek() const { return flags_.Any(WRP_CTE_FS_SEEK); }
+  bool DoSeek() const { return flags_.Any(CLIO_CTE_FS_SEEK); }
 
   /** Marks the file as truncated */
-  void MarkTruncated() { flags_.SetBits(WRP_CTE_FS_TRUNC); }
+  void MarkTruncated() { flags_.SetBits(CLIO_CTE_FS_TRUNC); }
 
   /** Whether a file is marked truncated */
-  bool IsTruncated() const { return flags_.Any(WRP_CTE_FS_TRUNC); }
+  bool IsTruncated() const { return flags_.Any(CLIO_CTE_FS_TRUNC); }
 
   /** return IO options with \a mpi_type MPI data type */
   static FsIoOptions DataType(MPI_Datatype mpi_type, bool seek = true) {
@@ -387,4 +387,4 @@ template <> struct hash<::clio::cae::File> {
 };
 } // namespace std
 
-#endif // WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_IO_CLIENT_H_
+#endif // CLIO_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_IO_CLIENT_H_

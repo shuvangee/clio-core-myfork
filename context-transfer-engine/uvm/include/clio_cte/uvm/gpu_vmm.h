@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_UVM_GPU_VMM_H_
-#define WRP_CTE_UVM_GPU_VMM_H_
+#ifndef CLIO_CTE_UVM_GPU_VMM_H_
+#define CLIO_CTE_UVM_GPU_VMM_H_
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -45,7 +45,7 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef WRP_CTE_AVAILABLE
+#ifdef CLIO_CTE_AVAILABLE
 #include <clio_cte/core/core_client.h>
 #endif
 
@@ -185,7 +185,7 @@ class GpuVirtualMemoryManager {
   cudaStream_t compute_stream_ = nullptr;
 
   // CTE backing store (optional, compile-time gated)
-#ifdef WRP_CTE_AVAILABLE
+#ifdef CLIO_CTE_AVAILABLE
   bool use_cte_ = false;
   std::unique_ptr<clio_cte::core::Tag> cte_tag_;
 #endif
@@ -199,4 +199,4 @@ class GpuVirtualMemoryManager {
 
 }  // namespace clio_cte::uvm
 
-#endif  // WRP_CTE_UVM_GPU_VMM_H_
+#endif  // CLIO_CTE_UVM_GPU_VMM_H_

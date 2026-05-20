@@ -148,7 +148,7 @@ TEST_CASE("GpuMalloc", "[gpu][backend]") {
     REQUIRE(init_success);
 
     // Step 2: Create an allocator on that backend (using GPU kernel)
-    using AllocT = hipc::BuddyAllocator;
+    using AllocT = ctp::ipc::BuddyAllocator;
     AllocT **alloc_result_dev;
     cudaMalloc(&alloc_result_dev, sizeof(AllocT *));
 

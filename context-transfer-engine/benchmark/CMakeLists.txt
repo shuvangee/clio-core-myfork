@@ -22,7 +22,7 @@ install(TARGETS clio_cte_bench
 
 # Create clio_cte_score_bench executable (MPI-based score/demotion benchmark)
 # Only build if MPI is enabled
-if(WRP_CORE_ENABLE_MPI)
+if(CLIO_CORE_ENABLE_MPI)
   add_executable(clio_cte_score_bench
     clio_cte_score_bench.cc
   )
@@ -42,18 +42,18 @@ if(WRP_CORE_ENABLE_MPI)
     RUNTIME DESTINATION bin
   )
 else()
-  message(STATUS "Skipping clio_cte_score_bench - MPI not enabled (set WRP_CORE_ENABLE_MPI=ON)")
+  message(STATUS "Skipping clio_cte_score_bench - MPI not enabled (set CLIO_CORE_ENABLE_MPI=ON)")
 endif()
 
 # Redis comparison benchmark — apples-to-apples mirror of clio_cte_bench
-# (shares bench_common.h). Built only when WRP_CORE_ENABLE_REDIS=ON, which
-# locates hiredis and sets WRP_REDIS_LIBS (see top-level CMakeLists.txt).
-if(WRP_CORE_ENABLE_REDIS)
+# (shares bench_common.h). Built only when CLIO_CORE_ENABLE_REDIS=ON, which
+# locates hiredis and sets CLIO_REDIS_LIBS (see top-level CMakeLists.txt).
+if(CLIO_CORE_ENABLE_REDIS)
   add_executable(clio_redis_bench
     clio_redis_bench.cc
   )
   target_link_libraries(clio_redis_bench
-    ${WRP_REDIS_LIBS}
+    ${CLIO_REDIS_LIBS}
     ctp::cxx
   )
   target_compile_features(clio_redis_bench PRIVATE cxx_std_17)
@@ -62,7 +62,7 @@ if(WRP_CORE_ENABLE_REDIS)
   )
 else()
   message(STATUS "Skipping clio_redis_bench - Redis not enabled "
-                 "(set WRP_CORE_ENABLE_REDIS=ON; requires hiredis)")
+                 "(set CLIO_CORE_ENABLE_REDIS=ON; requires hiredis)")
 endif()
 
 # NOTE: Compression benchmark (clio_cte_compress_bench) has been moved to

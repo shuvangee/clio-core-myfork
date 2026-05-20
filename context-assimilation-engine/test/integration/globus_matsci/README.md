@@ -101,7 +101,7 @@ To transfer different files from the Globus dataset:
 
 ### "Failed to launch CTE/CAE"
 - Ensure the executables are installed and available in your PATH
-- Check that `WRP_CTE_CONF` points to a valid configuration file
+- Check that `CLIO_CTE_CONF` points to a valid configuration file
 - Verify installation with: `which chimaera runtime start clio_launch_cte clio_launch_cae clio_cae_omni`
 
 ### Transfer Timeout

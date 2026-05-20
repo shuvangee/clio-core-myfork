@@ -61,7 +61,7 @@ static constexpr float kRetryTimeoutSec = 30.0f;
 
 /** Entry in a retry queue for tasks that couldn't be sent */
 struct RetryEntry {
-  hipc::FullPtr<chi::Task> task;
+  ctp::ipc::FullPtr<chi::Task> task;
   chi::u64 target_node_id;
   std::chrono::steady_clock::time_point enqueued_at;
 };
@@ -105,7 +105,7 @@ private:
 
   // System monitor ring buffer and CPU state
   static inline constexpr size_t kSystemStatsRingSize = 1024;
-  std::unique_ptr<hipc::circular_mpsc_ring_buffer<SystemStats, hipc::MallocAllocator>>
+  std::unique_ptr<ctp::ipc::circular_mpsc_ring_buffer<SystemStats, ctp::ipc::MallocAllocator>>
       system_stats_ring_;
   ctp::CpuTimes prev_cpu_times_;
 
@@ -126,8 +126,8 @@ private:
   static constexpr size_t kNumMapBuckets = 1024;
   mutable std::mutex send_map_mutex_;
   mutable std::mutex recv_map_mutex_;
-  ctp::priv::unordered_map_ll<size_t, hipc::FullPtr<chi::Task>> send_map_{kNumMapBuckets};  // Tasks sent to remote nodes
-  ctp::priv::unordered_map_ll<size_t, hipc::FullPtr<chi::Task>> recv_map_{kNumMapBuckets};  // Tasks received from remote nodes
+  ctp::priv::unordered_map_ll<size_t, ctp::ipc::FullPtr<chi::Task>> send_map_{kNumMapBuckets};  // Tasks sent to remote nodes
+  ctp::priv::unordered_map_ll<size_t, ctp::ipc::FullPtr<chi::Task>> recv_map_{kNumMapBuckets};  // Tasks received from remote nodes
 
   // Dedicated recv threads — bypass the Worker scheduler for the hot
   // inbound network path. Single thread per channel:
@@ -163,12 +163,12 @@ public:
   /**
    * Schedule a task by resolving Dynamic pool queries.
    */
-  chi::PoolQuery ScheduleTask(const hipc::FullPtr<chi::Task> &task) override;
+  chi::PoolQuery ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) override;
 
   /**
    * Execute a method on a task
    */
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr,
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr,
                       chi::RunContext &rctx) override;
 
   //===========================================================================
@@ -179,14 +179,14 @@ public:
    * Handle Create task - Initialize the Admin container (IS_ADMIN=true)
    * Returns TaskResume for consistency with other methods called from Run
    */
-  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext &rctx);
+  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &rctx);
 
   /**
    * Handle GetOrCreatePool task - Pool get-or-create operation (IS_ADMIN=false)
    * This is a coroutine that can co_await nested Create methods
    */
   chi::TaskResume GetOrCreatePool(
-      hipc::FullPtr<
+      ctp::ipc::FullPtr<
           chimaera::admin::GetOrCreatePoolTask<chimaera::admin::CreateParams>>
           task,
       chi::RunContext &rctx);
@@ -195,24 +195,24 @@ public:
    * Handle Destroy task - Alias for DestroyPool (DestroyTask = DestroyPoolTask)
    * This is a coroutine for consistency with GetOrCreatePool
    */
-  chi::TaskResume Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext &rctx);
+  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &rctx);
 
   /**
    * Handle DestroyPool task - Destroy an existing ChiPool
    * This is a coroutine that can co_await pool destruction
    */
-  chi::TaskResume DestroyPool(hipc::FullPtr<DestroyPoolTask> task, chi::RunContext &rctx);
+  chi::TaskResume DestroyPool(ctp::ipc::FullPtr<DestroyPoolTask> task, chi::RunContext &rctx);
 
   /**
    * Handle StopRuntime task - Stop the entire runtime
    * Returns TaskResume for consistency with other methods called from Run
    */
-  chi::TaskResume StopRuntime(hipc::FullPtr<StopRuntimeTask> task, chi::RunContext &rctx);
+  chi::TaskResume StopRuntime(ctp::ipc::FullPtr<StopRuntimeTask> task, chi::RunContext &rctx);
 
   /**
    * Handle Flush task - Flush administrative operations
    */
-  chi::TaskResume Flush(hipc::FullPtr<FlushTask> task, chi::RunContext &rctx);
+  chi::TaskResume Flush(ctp::ipc::FullPtr<FlushTask> task, chi::RunContext &rctx);
 
   //===========================================================================
   // Distributed Task Scheduling Methods
@@ -222,48 +222,48 @@ public:
    * Handle Send - Send task inputs or outputs over network
    * Returns TaskResume for consistency with other methods called from Run
    */
-  chi::TaskResume Send(hipc::FullPtr<SendTask> task, chi::RunContext &rctx);
+  chi::TaskResume Send(ctp::ipc::FullPtr<SendTask> task, chi::RunContext &rctx);
 
   /**
    * Helper: Send task inputs to remote node
    */
-  void SendIn(hipc::FullPtr<chi::Task> origin_task, chi::RunContext &rctx);
+  void SendIn(ctp::ipc::FullPtr<chi::Task> origin_task, chi::RunContext &rctx);
 
   /**
    * Helper: Send task outputs back to origin node
    */
-  void SendOut(hipc::FullPtr<chi::Task> origin_task);
+  void SendOut(ctp::ipc::FullPtr<chi::Task> origin_task);
 
   /**
    * Handle Recv - Receive task inputs or outputs from network
    * Returns TaskResume for consistency with other methods called from Run
    */
-  chi::TaskResume Recv(hipc::FullPtr<RecvTask> task, chi::RunContext &rctx);
+  chi::TaskResume Recv(ctp::ipc::FullPtr<RecvTask> task, chi::RunContext &rctx);
 
   /**
    * Handle ClientConnect - Respond to client connection request
    * Sets response to 0 to indicate runtime is healthy
    */
-  chi::TaskResume ClientConnect(hipc::FullPtr<ClientConnectTask> task, chi::RunContext &rctx);
+  chi::TaskResume ClientConnect(ctp::ipc::FullPtr<ClientConnectTask> task, chi::RunContext &rctx);
 
   /**
    * Handle ClientRecv - Receive tasks from ZMQ clients (TCP/IPC)
    * Polls ZMQ ROUTER sockets for incoming task submissions
    */
-  chi::TaskResume ClientRecv(hipc::FullPtr<ClientRecvTask> task, chi::RunContext &rctx);
+  chi::TaskResume ClientRecv(ctp::ipc::FullPtr<ClientRecvTask> task, chi::RunContext &rctx);
 
   /**
    * Handle ClientSend - Send completed task outputs to ZMQ clients
    * Polls net_queue_ kClientSendTcp/kClientSendIpc priorities
    */
-  chi::TaskResume ClientSend(hipc::FullPtr<ClientSendTask> task, chi::RunContext &rctx);
+  chi::TaskResume ClientSend(ctp::ipc::FullPtr<ClientSendTask> task, chi::RunContext &rctx);
 
   /**
    * Handle WreapDeadIpcs - Periodic task to reap shared memory from dead processes
    * Calls IpcManager::WreapDeadIpcs() to clean up orphaned shared memory segments
    * Returns TaskResume for consistency with other methods called from Run
    */
-  chi::TaskResume WreapDeadIpcs(hipc::FullPtr<WreapDeadIpcsTask> task, chi::RunContext &rctx);
+  chi::TaskResume WreapDeadIpcs(ctp::ipc::FullPtr<WreapDeadIpcsTask> task, chi::RunContext &rctx);
 
   /**
    * Handle Monitor - Unified monitor query for admin chimod
@@ -273,31 +273,31 @@ public:
    *   "system_stats[:<min_event_id>]" - system resource utilization
    *   "bdev_stats" - block device statistics
    */
-  chi::TaskResume Monitor(hipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
+  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
 
   /** Monitor sub-handler: collect per-worker statistics. */
-  void MonitorWorkerStats(hipc::FullPtr<MonitorTask> task);
+  void MonitorWorkerStats(ctp::ipc::FullPtr<MonitorTask> task);
 
   /** Monitor sub-handler: return per-container model statistics. */
-  void MonitorContainerStats(hipc::FullPtr<MonitorTask> task);
+  void MonitorContainerStats(ctp::ipc::FullPtr<MonitorTask> task);
 
   /** Monitor sub-handler: delegate query to a specific pool. */
-  chi::TaskResume MonitorPoolStats(hipc::FullPtr<MonitorTask> task);
+  chi::TaskResume MonitorPoolStats(ctp::ipc::FullPtr<MonitorTask> task);
 
   /** Monitor sub-handler: return system_stats ring buffer entries. */
-  void MonitorSystemStats(hipc::FullPtr<MonitorTask> task);
+  void MonitorSystemStats(ctp::ipc::FullPtr<MonitorTask> task);
 
   /** Monitor sub-handler: collect bdev pool statistics. */
-  chi::TaskResume MonitorBdevStats(hipc::FullPtr<MonitorTask> task);
+  chi::TaskResume MonitorBdevStats(ctp::ipc::FullPtr<MonitorTask> task);
 
   /** Monitor sub-handler: return host info (hostname, IP, node_id). */
-  void MonitorGetHostInfo(hipc::FullPtr<MonitorTask> task);
+  void MonitorGetHostInfo(ctp::ipc::FullPtr<MonitorTask> task);
 
   /**
    * Handle AnnounceShutdown - Mark a departing node as dead immediately
    * and trigger recovery if this node is the new leader.
    */
-  chi::TaskResume AnnounceShutdown(hipc::FullPtr<AnnounceShutdownTask> task,
+  chi::TaskResume AnnounceShutdown(ctp::ipc::FullPtr<AnnounceShutdownTask> task,
                                     chi::RunContext &rctx);
 
   /**
@@ -305,19 +305,19 @@ public:
    * Called by SHM-mode clients after IncreaseMemory() to tell the runtime
    * to attach to the new shared memory segment
    */
-  chi::TaskResume RegisterMemory(hipc::FullPtr<RegisterMemoryTask> task, chi::RunContext &rctx);
+  chi::TaskResume RegisterMemory(ctp::ipc::FullPtr<RegisterMemoryTask> task, chi::RunContext &rctx);
 
   /**
    * Handle RestartContainers - Re-create pools from saved restart configs
    * Reads conf_dir/restart/ directory and re-creates pools from saved YAML
    */
-  chi::TaskResume RestartContainers(hipc::FullPtr<RestartContainersTask> task, chi::RunContext &rctx);
+  chi::TaskResume RestartContainers(ctp::ipc::FullPtr<RestartContainersTask> task, chi::RunContext &rctx);
 
   /**
    * Handle AddNode - Register a new node with this runtime
    * Updates IpcManager's hostfile and calls Expand on all containers
    */
-  chi::TaskResume AddNode(hipc::FullPtr<AddNodeTask> task, chi::RunContext &rctx);
+  chi::TaskResume AddNode(ctp::ipc::FullPtr<AddNodeTask> task, chi::RunContext &rctx);
 
   /**
    * Handle SubmitBatch - Submit a batch of tasks in a single RPC
@@ -326,64 +326,64 @@ public:
    * @param task The SubmitBatchTask containing serialized tasks
    * @param rctx Runtime context for the current worker
    */
-  chi::TaskResume SubmitBatch(hipc::FullPtr<SubmitBatchTask> task, chi::RunContext &rctx);
+  chi::TaskResume SubmitBatch(ctp::ipc::FullPtr<SubmitBatchTask> task, chi::RunContext &rctx);
 
   /**
    * Handle ChangeAddressTable - Update ContainerId->NodeId mapping
    * Writes WAL entry and updates pool manager's address table
    */
-  chi::TaskResume ChangeAddressTable(hipc::FullPtr<ChangeAddressTableTask> task, chi::RunContext &rctx);
+  chi::TaskResume ChangeAddressTable(ctp::ipc::FullPtr<ChangeAddressTableTask> task, chi::RunContext &rctx);
 
   /**
    * Handle MigrateContainers - Orchestrate container migration
    * Processes each MigrateInfo entry and broadcasts address table changes
    */
-  chi::TaskResume MigrateContainers(hipc::FullPtr<MigrateContainersTask> task, chi::RunContext &rctx);
+  chi::TaskResume MigrateContainers(ctp::ipc::FullPtr<MigrateContainersTask> task, chi::RunContext &rctx);
 
   /**
    * Handle Heartbeat - Liveness probe, just returns success
    */
-  chi::TaskResume Heartbeat(hipc::FullPtr<HeartbeatTask> task, chi::RunContext &rctx);
+  chi::TaskResume Heartbeat(ctp::ipc::FullPtr<HeartbeatTask> task, chi::RunContext &rctx);
 
   /**
    * Handle HeartbeatProbe - Periodic SWIM failure detector
    * Sends direct probes, escalates to indirect probes, manages suspicion
    */
-  chi::TaskResume HeartbeatProbe(hipc::FullPtr<HeartbeatProbeTask> task, chi::RunContext &rctx);
+  chi::TaskResume HeartbeatProbe(ctp::ipc::FullPtr<HeartbeatProbeTask> task, chi::RunContext &rctx);
 
   /**
    * Handle ProbeRequest - Indirect probe on behalf of another node
    * Probes target node and returns result to requester
    */
-  chi::TaskResume ProbeRequest(hipc::FullPtr<ProbeRequestTask> task, chi::RunContext &rctx);
+  chi::TaskResume ProbeRequest(ctp::ipc::FullPtr<ProbeRequestTask> task, chi::RunContext &rctx);
 
   /**
    * Handle RecoverContainers - Recreate containers from dead nodes
    * All nodes update address_map_, only dest node creates the container
    */
-  chi::TaskResume RecoverContainers(hipc::FullPtr<RecoverContainersTask> task, chi::RunContext &rctx);
+  chi::TaskResume RecoverContainers(ctp::ipc::FullPtr<RecoverContainersTask> task, chi::RunContext &rctx);
 
   /**
    * Handle SystemMonitor - Periodic system resource utilization sampling
    * Samples DRAM, CPU, and (optionally) GPU/HBM utilization into ring buffer
    */
-  chi::TaskResume SystemMonitor(hipc::FullPtr<SystemMonitorTask> task, chi::RunContext &rctx);
+  chi::TaskResume SystemMonitor(ctp::ipc::FullPtr<SystemMonitorTask> task, chi::RunContext &rctx);
 
   /**
    * Handle RegisterGpuContainer - Register a GPU container with the GPU orchestrator
    * The GPU orchestrator's gpu::PoolManager will be updated with the new container
    */
-  chi::TaskResume RegisterGpuContainer(hipc::FullPtr<RegisterGpuContainerTask> task, chi::RunContext &rctx);
+  chi::TaskResume RegisterGpuContainer(ctp::ipc::FullPtr<RegisterGpuContainerTask> task, chi::RunContext &rctx);
 
   /**
    * Helper: Receive task inputs from remote node
    */
-  void RecvIn(hipc::FullPtr<RecvTask> task, chi::LoadTaskArchive& archive, ctp::lbm::Transport* lbm_transport);
+  void RecvIn(ctp::ipc::FullPtr<RecvTask> task, chi::LoadTaskArchive& archive, ctp::lbm::Transport* lbm_transport);
 
   /**
    * Helper: Receive task outputs from remote node
    */
-  void RecvOut(hipc::FullPtr<RecvTask> task, chi::LoadTaskArchive& archive, ctp::lbm::Transport* lbm_transport);
+  void RecvOut(ctp::ipc::FullPtr<RecvTask> task, chi::LoadTaskArchive& archive, ctp::lbm::Transport* lbm_transport);
 
   /**
    * Get live task statistics for this task instance.
@@ -406,49 +406,49 @@ public:
    * Serialize task parameters (IN or OUT based on archive mode)
    */
   void SaveTask(chi::u32 method, chi::SaveTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Deserialize task parameters into an existing task (IN or OUT based on archive mode)
    */
   void LoadTask(chi::u32 method, chi::LoadTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Allocate and deserialize task parameters from network transfer
    */
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override;
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override;
 
   /**
    * Deserialize task input parameters into an existing task using LocalSerialize
    */
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Allocate and deserialize task input parameters using LocalSerialize
    */
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive) override;
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive) override;
 
   /**
    * Serialize task output parameters using LocalSerialize (for local transfers)
    */
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Create a new copy of a task (deep copy for distributed execution)
    */
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr,
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
                                         bool deep) override;
 
   /**
    * Create a new task of the specified method type
    */
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Attempt to send a retried task to the given node

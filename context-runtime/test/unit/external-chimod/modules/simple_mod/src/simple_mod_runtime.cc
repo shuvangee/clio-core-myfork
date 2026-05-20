@@ -66,7 +66,7 @@ void Runtime::Init(const chi::PoolId &pool_id, const std::string &pool_name) {
 // Method implementations
 //===========================================================================
 
-void Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
+void Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
   // Simple mod container creation logic
   HLOG(kInfo, "SimpleMod: Initializing simple_mod container");
 
@@ -84,7 +84,7 @@ void Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
        pool_name_, task->pool_id_, create_count_);
 }
 
-void Runtime::Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
+void Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
   HLOG(kInfo, "SimpleMod: Executing Destroy task - Pool ID: {}", task->target_pool_id_);
 
   // Initialize output values
@@ -107,7 +107,7 @@ void Runtime::Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
   }
 }
 
-void Runtime::Flush(hipc::FullPtr<FlushTask> task, chi::RunContext &rctx) {
+void Runtime::Flush(ctp::ipc::FullPtr<FlushTask> task, chi::RunContext &rctx) {
   HLOG(kInfo, "SimpleMod: Executing Flush task");
 
   // Simple flush implementation - just report no work remaining

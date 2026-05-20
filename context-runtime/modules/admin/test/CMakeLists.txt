@@ -103,7 +103,7 @@ set_target_properties(${SUBMIT_BATCH_TEST_TARGET} PROPERTIES
 )
 
 # Enable CTest integration if testing is enabled
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
   # Task Archive Tests
   add_test(
     NAME cr_task_archive_basic_tests

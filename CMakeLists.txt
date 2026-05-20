@@ -13,29 +13,29 @@ project(iowarp-core VERSION 1.5.7 LANGUAGES C CXX)
 #------------------------------------------------------------------------------
 # Component Enable/Disable
 #------------------------------------------------------------------------------
-option(WRP_CORE_ENABLE_RUNTIME "Enable runtime component" ON)
-option(WRP_CORE_ENABLE_CTE "Enable context-transfer-engine component" ON)
-option(WRP_CORE_ENABLE_CAE "Enable context-assimilation-engine component" ON)
-option(WRP_CORE_ENABLE_CEE "Enable context-exploration-engine component" ON)
+option(CLIO_CORE_ENABLE_RUNTIME "Enable runtime component" ON)
+option(CLIO_CORE_ENABLE_CTE "Enable context-transfer-engine component" ON)
+option(CLIO_CORE_ENABLE_CAE "Enable context-assimilation-engine component" ON)
+option(CLIO_CORE_ENABLE_CEE "Enable context-exploration-engine component" ON)
 
 #------------------------------------------------------------------------------
 # Global Master Switches
 #------------------------------------------------------------------------------
-option(WRP_CORE_ENABLE_TESTS "Master switch: Enable testing for all components" OFF)
-option(WRP_CORE_ENABLE_BENCHMARKS "Master switch: Enable benchmarks for all components" ON)
-option(WRP_CORE_ENABLE_PYTHON "Enable Python bindings for all components" OFF)
-option(WRP_CORE_ENABLE_CMAKE_DOTENV "Enable reading environment variables from .env.cmake" OFF)
-option(WRP_CORE_ENABLE_ASAN "Enable AddressSanitizer + LeakSanitizer for debugging" OFF)
-option(WRP_CORE_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer for debugging" OFF)
-option(WRP_CORE_ENABLE_MSAN "Enable MemorySanitizer for debugging (requires instrumented dependencies)" OFF)
-option(WRP_CORE_ENABLE_COVERAGE "Enable code coverage instrumentation for all components" OFF)
-option(WRP_CORE_ENABLE_DOXYGEN "Check how well the code is documented" OFF)
-option(WRP_CORE_ENABLE_RPATH "Enable RPATH configuration with relative ($ORIGIN) paths" ON)
-option(WRP_CORE_ENABLE_CPACK "Enable CPack for package generation" OFF)
-option(WRP_CORE_ENABLE_CONDA "Enable Conda environment configuration (adds Conda paths to include/link directories)" OFF)
-option(WRP_CORE_ENABLE_DOCKER_CI "Enable Docker-based integration tests (requires Docker)" OFF)
+option(CLIO_CORE_ENABLE_TESTS "Master switch: Enable testing for all components" OFF)
+option(CLIO_CORE_ENABLE_BENCHMARKS "Master switch: Enable benchmarks for all components" ON)
+option(CLIO_CORE_ENABLE_PYTHON "Enable Python bindings for all components" OFF)
+option(CLIO_CORE_ENABLE_CMAKE_DOTENV "Enable reading environment variables from .env.cmake" OFF)
+option(CLIO_CORE_ENABLE_ASAN "Enable AddressSanitizer + LeakSanitizer for debugging" OFF)
+option(CLIO_CORE_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer for debugging" OFF)
+option(CLIO_CORE_ENABLE_MSAN "Enable MemorySanitizer for debugging (requires instrumented dependencies)" OFF)
+option(CLIO_CORE_ENABLE_COVERAGE "Enable code coverage instrumentation for all components" OFF)
+option(CLIO_CORE_ENABLE_DOXYGEN "Check how well the code is documented" OFF)
+option(CLIO_CORE_ENABLE_RPATH "Enable RPATH configuration with relative ($ORIGIN) paths" ON)
+option(CLIO_CORE_ENABLE_CPACK "Enable CPack for package generation" OFF)
+option(CLIO_CORE_ENABLE_CONDA "Enable Conda environment configuration (adds Conda paths to include/link directories)" OFF)
+option(CLIO_CORE_ENABLE_DOCKER_CI "Enable Docker-based integration tests (requires Docker)" OFF)
 option(BUILD_SHARED_LIBS "Build shared libraries (.dll/.so) instead of static ones (.lib/.a)" ON)
-option(WRP_CORE_STATIC_DEPS "Link external dependencies statically (for self-contained wheels)" OFF)
+option(CLIO_CORE_STATIC_DEPS "Link external dependencies statically (for self-contained wheels)" OFF)
 
 # Installation Prefix Configuration
 # - For Conda builds: Set CMAKE_INSTALL_PREFIX via -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
@@ -46,11 +46,11 @@ option(WRP_CORE_STATIC_DEPS "Link external dependencies statically (for self-con
 #------------------------------------------------------------------------------
 # Conda Environment Configuration (Explicit)
 #------------------------------------------------------------------------------
-# Conda support is enabled explicitly via WRP_CORE_ENABLE_CONDA option.
+# Conda support is enabled explicitly via CLIO_CORE_ENABLE_CONDA option.
 # When enabled, the build system expects CONDA_PREFIX to be set.
-if(WRP_CORE_ENABLE_CONDA)
+if(CLIO_CORE_ENABLE_CONDA)
     if(NOT DEFINED ENV{CONDA_PREFIX})
-        message(FATAL_ERROR "WRP_CORE_ENABLE_CONDA is ON but CONDA_PREFIX environment variable is not set")
+        message(FATAL_ERROR "CLIO_CORE_ENABLE_CONDA is ON but CONDA_PREFIX environment variable is not set")
     endif()
 
     set(IN_CONDA_BUILD TRUE)
@@ -84,39 +84,39 @@ message(STATUS "  Install prefix:     ${CMAKE_INSTALL_PREFIX}")
 #------------------------------------------------------------------------------
 # Transport and Network Features
 #------------------------------------------------------------------------------
-option(WRP_CORE_ENABLE_MPI "Enable MPI support" OFF)
-option(WRP_CORE_ENABLE_ZMQ "Enable ZeroMQ transport" ON)
-option(WRP_CORE_ENABLE_LIBFABRIC "Enable Libfabric transport" OFF)
-option(WRP_CORE_ENABLE_THALLIUM "Build tests which depend on thallium" OFF)
-option(WRP_CORE_ENABLE_REDIS "Find hiredis and build the Redis comparison benchmark" OFF)
+option(CLIO_CORE_ENABLE_MPI "Enable MPI support" OFF)
+option(CLIO_CORE_ENABLE_ZMQ "Enable ZeroMQ transport" ON)
+option(CLIO_CORE_ENABLE_LIBFABRIC "Enable Libfabric transport" OFF)
+option(CLIO_CORE_ENABLE_THALLIUM "Build tests which depend on thallium" OFF)
+option(CLIO_CORE_ENABLE_REDIS "Find hiredis and build the Redis comparison benchmark" OFF)
 
 #------------------------------------------------------------------------------
 # Data and Serialization Features
 #------------------------------------------------------------------------------
-option(WRP_CORE_ENABLE_CEREAL "Enable serialization using cereal" ON)
-option(WRP_CTE_ENABLE_COMPRESS "Enable compression support (builds compressor chimod and tests)" OFF)
-option(WRP_CORE_ENABLE_ENCRYPT "Enable encryption" OFF)
-option(WRP_CORE_ENABLE_IO_URING "Enable io_uring async I/O backend (Linux 5.1+, requires liburing)" OFF)
+option(CLIO_CORE_ENABLE_CEREAL "Enable serialization using cereal" ON)
+option(CLIO_CTE_ENABLE_COMPRESS "Enable compression support (builds compressor chimod and tests)" OFF)
+option(CLIO_CORE_ENABLE_ENCRYPT "Enable encryption" OFF)
+option(CLIO_CORE_ENABLE_IO_URING "Enable io_uring async I/O backend (Linux 5.1+, requires liburing)" OFF)
 
-# Set internal compression flags from WRP_CTE_ENABLE_COMPRESS
-if(WRP_CTE_ENABLE_COMPRESS)
-    set(WRP_CORE_ENABLE_COMPRESS ON)
+# Set internal compression flags from CLIO_CTE_ENABLE_COMPRESS
+if(CLIO_CTE_ENABLE_COMPRESS)
+    set(CLIO_CORE_ENABLE_COMPRESS ON)
 else()
-    set(WRP_CORE_ENABLE_COMPRESS OFF)
+    set(CLIO_CORE_ENABLE_COMPRESS OFF)
 endif()
 
 #------------------------------------------------------------------------------
 # System and Runtime Features
 #------------------------------------------------------------------------------
-option(WRP_CORE_ENABLE_ELF "Enable ELF support (required for CTE adapters)" OFF)
-option(WRP_CORE_ENABLE_OPENMP "Enable the use of OpenMP" OFF)
-option(WRP_CORE_ENABLE_CUDA "Enable CUDA support" OFF)
-option(WRP_CORE_ENABLE_GPU_RUNTIME "Enable GPU runtime (CDP-based parallelism)" OFF)
-option(WRP_CORE_ENABLE_ROCM "Enable ROCm support" OFF)
-option(WRP_CORE_ENABLE_NIXL "Enable NIXL (NVIDIA Inference Xfer Library) transport" OFF)
-option(WRP_CORE_ENABLE_NVSHMEM "Enable NVSHMEM GPU-to-GPU communication library" OFF)
-option(WRP_CORE_ENABLE_SYCL "Enable Intel GPU support via SYCL/oneAPI (icpx -fsycl)" OFF)
-option(WRP_CORE_ENABLE_JARVIS "Enable Jarvis CI infrastructure installation" OFF)
+option(CLIO_CORE_ENABLE_ELF "Enable ELF support (required for CTE adapters)" OFF)
+option(CLIO_CORE_ENABLE_OPENMP "Enable the use of OpenMP" OFF)
+option(CLIO_CORE_ENABLE_CUDA "Enable CUDA support" OFF)
+option(CLIO_CORE_ENABLE_GPU_RUNTIME "Enable GPU runtime (CDP-based parallelism)" OFF)
+option(CLIO_CORE_ENABLE_ROCM "Enable ROCm support" OFF)
+option(CLIO_CORE_ENABLE_NIXL "Enable NIXL (NVIDIA Inference Xfer Library) transport" OFF)
+option(CLIO_CORE_ENABLE_NVSHMEM "Enable NVSHMEM GPU-to-GPU communication library" OFF)
+option(CLIO_CORE_ENABLE_SYCL "Enable Intel GPU support via SYCL/oneAPI (icpx -fsycl)" OFF)
+option(CLIO_CORE_ENABLE_JARVIS "Enable Jarvis CI infrastructure installation" OFF)
 
 #------------------------------------------------------------------------------
 # ClioCtp (context-transport-primitives) Options
@@ -134,15 +134,15 @@ set(CLIO_CTP_LOG_LEVEL "1" CACHE STRING "Log level threshold (0=Debug, 1=Info, 2
 #------------------------------------------------------------------------------
 # CTE (context-transfer-engine) Options
 #------------------------------------------------------------------------------
-# CTE Adapter Options (require WRP_CORE_ENABLE_ELF=ON)
-option(WRP_CTE_ENABLE_POSIX_ADAPTER "Enable POSIX adapter" ON)
-option(WRP_CTE_ENABLE_STDIO_ADAPTER "Enable STDIO adapter" OFF)
-option(WRP_CTE_ENABLE_MPIIO_ADAPTER "Enable MPI-IO adapter" OFF)
-option(WRP_CTE_ENABLE_VFD "Enable HDF5 VFD adapter" OFF)
-option(WRP_CTE_ENABLE_NVIDIA_GDS_ADAPTER "Enable NVIDIA GDS adapter" OFF)
-option(WRP_CTE_ENABLE_ADIOS2_ADAPTER "Enable ADIOS2 adapter" OFF)
-option(WRP_CTE_ENABLE_FUSE_ADAPTER "Enable FUSE3 adapter" OFF)
-option(WRP_CTE_ENABLE_HDF5_VOL "Enable HDF5 VOL connector (requires HDF5 >= 2.0)" OFF)
+# CTE Adapter Options (require CLIO_CORE_ENABLE_ELF=ON)
+option(CLIO_CTE_ENABLE_POSIX_ADAPTER "Enable POSIX adapter" ON)
+option(CLIO_CTE_ENABLE_STDIO_ADAPTER "Enable STDIO adapter" OFF)
+option(CLIO_CTE_ENABLE_MPIIO_ADAPTER "Enable MPI-IO adapter" OFF)
+option(CLIO_CTE_ENABLE_VFD "Enable HDF5 VFD adapter" OFF)
+option(CLIO_CTE_ENABLE_NVIDIA_GDS_ADAPTER "Enable NVIDIA GDS adapter" OFF)
+option(CLIO_CTE_ENABLE_ADIOS2_ADAPTER "Enable ADIOS2 adapter" OFF)
+option(CLIO_CTE_ENABLE_FUSE_ADAPTER "Enable FUSE3 adapter" OFF)
+option(CLIO_CTE_ENABLE_HDF5_VOL "Enable HDF5 VOL connector (requires HDF5 >= 2.0)" OFF)
 
 #------------------------------------------------------------------------------
 # CAE (context-assimilation-engine) Options
@@ -152,54 +152,54 @@ option(CAE_ENABLE_GLOBUS "Enable Globus transfer support in CAE" OFF)
 #------------------------------------------------------------------------------
 # External Examples and Applications
 #------------------------------------------------------------------------------
-option(WRP_CORE_ENABLE_GRAY_SCOTT "Enable Gray-Scott ADIOS2 example (requires ADIOS2)" OFF)
-option(WRP_CORE_ENABLE_LLAMA "Enable llama.cpp LLM inference integration (llm-hooks)" OFF)
-option(WRP_CORE_ENABLE_LLAMA_SERVER "Add external/llama.cpp to the build (requires WRP_CORE_ENABLE_LLAMA=ON)" OFF)
+option(CLIO_CORE_ENABLE_GRAY_SCOTT "Enable Gray-Scott ADIOS2 example (requires ADIOS2)" OFF)
+option(CLIO_CORE_ENABLE_LLAMA "Enable llama.cpp LLM inference integration (llm-hooks)" OFF)
+option(CLIO_CORE_ENABLE_LLAMA_SERVER "Add external/llama.cpp to the build (requires CLIO_CORE_ENABLE_LLAMA=ON)" OFF)
 
 #==============================================================================
 # END BUILD CONFIGURATION OPTIONS
 #==============================================================================
 
 # Hierarchical control logic:
-# If WRP_CORE_ENABLE_TESTS is OFF, force all component tests OFF
-# If WRP_CORE_ENABLE_BENCHMARKS is OFF, force all component benchmarks OFF
+# If CLIO_CORE_ENABLE_TESTS is OFF, force all component tests OFF
+# If CLIO_CORE_ENABLE_BENCHMARKS is OFF, force all component benchmarks OFF
 # Otherwise, use individual component values
 
 # Apply master test switch: propagate to CMake's standard BUILD_TESTING variable
 # so components that use if(BUILD_TESTING) are also controlled by this flag.
-if(NOT WRP_CORE_ENABLE_TESTS)
-  set(BUILD_TESTING OFF CACHE BOOL "Build tests (controlled by WRP_CORE_ENABLE_TESTS)" FORCE)
+if(NOT CLIO_CORE_ENABLE_TESTS)
+  set(BUILD_TESTING OFF CACHE BOOL "Build tests (controlled by CLIO_CORE_ENABLE_TESTS)" FORCE)
 endif()
 
 # Set CTP_ENABLE_* aliases for backward compatibility
 # These allow component code to continue using CTP_ENABLE_* while we transition
 # Mark them as cache variables to prevent options from overriding them
-set(CLIO_CTP_ENABLE_MPI ${WRP_CORE_ENABLE_MPI} CACHE BOOL "Enable MPI (controlled by WRP_CORE_ENABLE_MPI)" FORCE)
-set(CLIO_CTP_ENABLE_ZMQ ${WRP_CORE_ENABLE_ZMQ} CACHE BOOL "Enable ZMQ (controlled by WRP_CORE_ENABLE_ZMQ)" FORCE)
-set(CLIO_CTP_ENABLE_LIBFABRIC ${WRP_CORE_ENABLE_LIBFABRIC} CACHE BOOL "Enable Libfabric (controlled by WRP_CORE_ENABLE_LIBFABRIC)" FORCE)
-set(CLIO_CTP_ENABLE_THALLIUM ${WRP_CORE_ENABLE_THALLIUM} CACHE BOOL "Enable Thallium (controlled by WRP_CORE_ENABLE_THALLIUM)" FORCE)
-set(CLIO_CTP_ENABLE_OPENMP ${WRP_CORE_ENABLE_OPENMP} CACHE BOOL "Enable OpenMP (controlled by WRP_CORE_ENABLE_OPENMP)" FORCE)
-set(CLIO_CTP_ENABLE_CEREAL ${WRP_CORE_ENABLE_CEREAL} CACHE BOOL "Enable Cereal (controlled by WRP_CORE_ENABLE_CEREAL)" FORCE)
-set(CLIO_CTP_ENABLE_DOXYGEN ${WRP_CORE_ENABLE_DOXYGEN} CACHE BOOL "Enable Doxygen (controlled by WRP_CORE_ENABLE_DOXYGEN)" FORCE)
-set(CLIO_CTP_ENABLE_COMPRESS ${WRP_CTE_ENABLE_COMPRESS} CACHE BOOL "Enable Compress (controlled by WRP_CTE_ENABLE_COMPRESS)" FORCE)
-set(CLIO_CTP_ENABLE_ENCRYPT ${WRP_CORE_ENABLE_ENCRYPT} CACHE BOOL "Enable Encrypt (controlled by WRP_CORE_ENABLE_ENCRYPT)" FORCE)
-set(CLIO_CTP_ENABLE_ELF ${WRP_CORE_ENABLE_ELF} CACHE BOOL "Enable ELF (controlled by WRP_CORE_ENABLE_ELF)" FORCE)
-set(CLIO_CTP_ENABLE_CUDA ${WRP_CORE_ENABLE_CUDA} CACHE BOOL "Enable CUDA (controlled by WRP_CORE_ENABLE_CUDA)" FORCE)
-set(CLIO_CTP_ENABLE_ROCM ${WRP_CORE_ENABLE_ROCM} CACHE BOOL "Enable ROCm (controlled by WRP_CORE_ENABLE_ROCM)" FORCE)
-set(CLIO_CTP_ENABLE_SYCL ${WRP_CORE_ENABLE_SYCL} CACHE BOOL "Enable SYCL (controlled by WRP_CORE_ENABLE_SYCL)" FORCE)
-set(CLIO_CTP_ENABLE_IO_URING ${WRP_CORE_ENABLE_IO_URING} CACHE BOOL "Enable io_uring (controlled by WRP_CORE_ENABLE_IO_URING)" FORCE)
-set(CLIO_CTP_ENABLE_NIXL ${WRP_CORE_ENABLE_NIXL} CACHE BOOL "Enable NIXL (controlled by WRP_CORE_ENABLE_NIXL)" FORCE)
-set(CLIO_CTP_ENABLE_NVSHMEM ${WRP_CORE_ENABLE_NVSHMEM} CACHE BOOL "Enable NVSHMEM (controlled by WRP_CORE_ENABLE_NVSHMEM)" FORCE)
-# Note: Coverage is handled globally via add_compile_options when WRP_CORE_ENABLE_COVERAGE=ON
+set(CLIO_CTP_ENABLE_MPI ${CLIO_CORE_ENABLE_MPI} CACHE BOOL "Enable MPI (controlled by CLIO_CORE_ENABLE_MPI)" FORCE)
+set(CLIO_CTP_ENABLE_ZMQ ${CLIO_CORE_ENABLE_ZMQ} CACHE BOOL "Enable ZMQ (controlled by CLIO_CORE_ENABLE_ZMQ)" FORCE)
+set(CLIO_CTP_ENABLE_LIBFABRIC ${CLIO_CORE_ENABLE_LIBFABRIC} CACHE BOOL "Enable Libfabric (controlled by CLIO_CORE_ENABLE_LIBFABRIC)" FORCE)
+set(CLIO_CTP_ENABLE_THALLIUM ${CLIO_CORE_ENABLE_THALLIUM} CACHE BOOL "Enable Thallium (controlled by CLIO_CORE_ENABLE_THALLIUM)" FORCE)
+set(CLIO_CTP_ENABLE_OPENMP ${CLIO_CORE_ENABLE_OPENMP} CACHE BOOL "Enable OpenMP (controlled by CLIO_CORE_ENABLE_OPENMP)" FORCE)
+set(CLIO_CTP_ENABLE_CEREAL ${CLIO_CORE_ENABLE_CEREAL} CACHE BOOL "Enable Cereal (controlled by CLIO_CORE_ENABLE_CEREAL)" FORCE)
+set(CLIO_CTP_ENABLE_DOXYGEN ${CLIO_CORE_ENABLE_DOXYGEN} CACHE BOOL "Enable Doxygen (controlled by CLIO_CORE_ENABLE_DOXYGEN)" FORCE)
+set(CLIO_CTP_ENABLE_COMPRESS ${CLIO_CTE_ENABLE_COMPRESS} CACHE BOOL "Enable Compress (controlled by CLIO_CTE_ENABLE_COMPRESS)" FORCE)
+set(CLIO_CTP_ENABLE_ENCRYPT ${CLIO_CORE_ENABLE_ENCRYPT} CACHE BOOL "Enable Encrypt (controlled by CLIO_CORE_ENABLE_ENCRYPT)" FORCE)
+set(CLIO_CTP_ENABLE_ELF ${CLIO_CORE_ENABLE_ELF} CACHE BOOL "Enable ELF (controlled by CLIO_CORE_ENABLE_ELF)" FORCE)
+set(CLIO_CTP_ENABLE_CUDA ${CLIO_CORE_ENABLE_CUDA} CACHE BOOL "Enable CUDA (controlled by CLIO_CORE_ENABLE_CUDA)" FORCE)
+set(CLIO_CTP_ENABLE_ROCM ${CLIO_CORE_ENABLE_ROCM} CACHE BOOL "Enable ROCm (controlled by CLIO_CORE_ENABLE_ROCM)" FORCE)
+set(CLIO_CTP_ENABLE_SYCL ${CLIO_CORE_ENABLE_SYCL} CACHE BOOL "Enable SYCL (controlled by CLIO_CORE_ENABLE_SYCL)" FORCE)
+set(CLIO_CTP_ENABLE_IO_URING ${CLIO_CORE_ENABLE_IO_URING} CACHE BOOL "Enable io_uring (controlled by CLIO_CORE_ENABLE_IO_URING)" FORCE)
+set(CLIO_CTP_ENABLE_NIXL ${CLIO_CORE_ENABLE_NIXL} CACHE BOOL "Enable NIXL (controlled by CLIO_CORE_ENABLE_NIXL)" FORCE)
+set(CLIO_CTP_ENABLE_NVSHMEM ${CLIO_CORE_ENABLE_NVSHMEM} CACHE BOOL "Enable NVSHMEM (controlled by CLIO_CORE_ENABLE_NVSHMEM)" FORCE)
+# Note: Coverage is handled globally via add_compile_options when CLIO_CORE_ENABLE_COVERAGE=ON
 # No need for component-level CTP_ENABLE_COVERAGE
 
 # Print final test/benchmark configuration
 message(STATUS "Test/Benchmark Configuration:")
-message(STATUS "  WRP_CORE_ENABLE_TESTS: ${WRP_CORE_ENABLE_TESTS}")
-message(STATUS "  WRP_CORE_ENABLE_BENCHMARKS: ${WRP_CORE_ENABLE_BENCHMARKS}")
+message(STATUS "  CLIO_CORE_ENABLE_TESTS: ${CLIO_CORE_ENABLE_TESTS}")
+message(STATUS "  CLIO_CORE_ENABLE_BENCHMARKS: ${CLIO_CORE_ENABLE_BENCHMARKS}")
 
 # Read environment variables from .env.cmake if enabled
-if(WRP_CORE_ENABLE_CMAKE_DOTENV)
+if(CLIO_CORE_ENABLE_CMAKE_DOTENV)
   if(EXISTS "${CMAKE_SOURCE_DIR}/.env.cmake")
     include("${CMAKE_SOURCE_DIR}/.env.cmake")
   endif()
@@ -221,7 +221,7 @@ include(IowarpCoreCommon)
 # 3. CMake find_package() in standard locations
 
 # Static dependency linking (for self-contained pip wheels)
-if(WRP_CORE_STATIC_DEPS)
+if(CLIO_CORE_STATIC_DEPS)
     message(STATUS "Static dependency linking enabled")
 endif()
 
@@ -241,7 +241,7 @@ if(PkgConfig_FOUND)
 endif()
 
 # Doxygen (conditional)
-if(WRP_CORE_ENABLE_DOXYGEN)
+if(CLIO_CORE_ENABLE_DOXYGEN)
     find_package(Perl REQUIRED)
     find_package(Doxygen REQUIRED)
     message(STATUS "found doxygen at ${DOXYGEN_EXECUTABLE}")
@@ -259,7 +259,7 @@ endif()
 # (IMPORTED_LOCATION_RELEASE, IMPORTED_SONAME_RELEASE) take precedence
 # over the generic IMPORTED_LOCATION.  We must override every config that
 # was registered so the linker always picks the static archive.
-if(WRP_CORE_STATIC_DEPS)
+if(CLIO_CORE_STATIC_DEPS)
     find_library(YAML_CPP_STATIC_LIB NAMES libyaml-cpp.a REQUIRED)
     if(YAML_CPP_STATIC_LIB)
         message(STATUS "Static yaml-cpp: ${YAML_CPP_STATIC_LIB}")
@@ -310,7 +310,7 @@ else()
 endif()
 
 # MPICH (only find when explicitly enabled)
-if(WRP_CORE_ENABLE_MPI)
+if(CLIO_CORE_ENABLE_MPI)
     find_package(MPI REQUIRED COMPONENTS C CXX)
     set(MPI_LIBS MPI::MPI_CXX)
     message(STATUS "found mpi.h at ${MPI_CXX_INCLUDE_DIRS}")
@@ -319,55 +319,55 @@ endif()
 # ROCm (conditional). Only require the HIP CMake package when HIP-AMD is
 # in use; the HIP-NVCC path goes through CMake's CUDA language and the
 # HIP CMake package isn't shipped by ROCm builds that target NVIDIA.
-if(WRP_CORE_ENABLE_ROCM)
-    if(NOT DEFINED WRP_ROCM_HIP_PLATFORM)
+if(CLIO_CORE_ENABLE_ROCM)
+    if(NOT DEFINED CLIO_ROCM_HIP_PLATFORM)
         if(DEFINED ENV{HIP_PLATFORM})
-            set(WRP_ROCM_HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING
+            set(CLIO_ROCM_HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING
                 "HIP platform (amd|nvidia)")
         else()
-            set(WRP_ROCM_HIP_PLATFORM "amd" CACHE STRING
+            set(CLIO_ROCM_HIP_PLATFORM "amd" CACHE STRING
                 "HIP platform (amd|nvidia)")
         endif()
     endif()
-    if(NOT WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+    if(NOT CLIO_ROCM_HIP_PLATFORM STREQUAL "nvidia")
         find_package(HIP REQUIRED)
     endif()
-    message(STATUS "found ROCm/HIP support (HIP_PLATFORM=${WRP_ROCM_HIP_PLATFORM})")
+    message(STATUS "found ROCm/HIP support (HIP_PLATFORM=${CLIO_ROCM_HIP_PLATFORM})")
 endif()
 
 # OpenMP (conditional)
-if(WRP_CORE_ENABLE_OPENMP)
+if(CLIO_CORE_ENABLE_OPENMP)
     find_package(OpenMP REQUIRED COMPONENTS C CXX)
     set(OpenMP_LIBS OpenMP::OpenMP_CXX)
     message(STATUS "found omp.h at ${OpenMP_CXX_INCLUDE_DIRS}")
 endif()
 
 # Thallium (conditional)
-if(WRP_CORE_ENABLE_THALLIUM)
+if(CLIO_CORE_ENABLE_THALLIUM)
     find_package(thallium CONFIG REQUIRED)
     if(thallium_FOUND)
         message(STATUS "found thallium at ${thallium_DIR}")
     endif()
     set(SERIALIZATION_LIBS thallium ${SERIALIZATION_LIBS})
-    set(WRP_CORE_ENABLE_CEREAL ON)
+    set(CLIO_CORE_ENABLE_CEREAL ON)
 endif()
 
 # hiredis (conditional) — Redis comparison benchmark only.
-if(WRP_CORE_ENABLE_REDIS)
+if(CLIO_CORE_ENABLE_REDIS)
     find_package(hiredis CONFIG QUIET)
     if(hiredis_FOUND)
-        set(WRP_REDIS_LIBS hiredis::hiredis)
+        set(CLIO_REDIS_LIBS hiredis::hiredis)
         message(STATUS "found hiredis (CMake config) at ${hiredis_DIR}")
     else()
         find_package(PkgConfig REQUIRED)
         pkg_check_modules(HIREDIS REQUIRED IMPORTED_TARGET hiredis)
-        set(WRP_REDIS_LIBS PkgConfig::HIREDIS)
+        set(CLIO_REDIS_LIBS PkgConfig::HIREDIS)
         message(STATUS "found hiredis (pkg-config) v${HIREDIS_VERSION}")
     endif()
 endif()
 
 # Update cereal libraries if enabled
-if(WRP_CORE_ENABLE_CEREAL)
+if(CLIO_CORE_ENABLE_CEREAL)
     set(SERIALIZATION_LIBS cereal::cereal ${SERIALIZATION_LIBS})
 endif()
 
@@ -378,8 +378,8 @@ set(SERIALIZATION_LIBS ${MSGPACK_TARGET} ${SERIALIZATION_LIBS})
 find_package(Threads REQUIRED)
 
 # Compression libraries (conditional)
-if(WRP_CTE_ENABLE_COMPRESS)
-    message(STATUS "WRP_CTE_ENABLE_COMPRESS is ON")
+if(CLIO_CTE_ENABLE_COMPRESS)
+    message(STATUS "CLIO_CTE_ENABLE_COMPRESS is ON")
 
     # Libraries with pkg-config support
     pkg_check_modules(libzstd REQUIRED libzstd)
@@ -512,7 +512,7 @@ if(WRP_CTE_ENABLE_COMPRESS)
 endif()
 
 # Encryption libraries (conditional)
-if(WRP_CORE_ENABLE_ENCRYPT)
+if(CLIO_CORE_ENABLE_ENCRYPT)
     pkg_check_modules(libcrypto REQUIRED libcrypto)
     message(STATUS "found libcrypto.h at ${libcrypto_INCLUDE_DIRS}")
 
@@ -524,14 +524,14 @@ endif()
 # Note: ELF library detection moved to after CTP_ENABLE_ELF is set (line ~520)
 
 # ZeroMQ (conditional) - try system first, fall back to submodule
-if(WRP_CORE_ENABLE_ZMQ)
+if(CLIO_CORE_ENABLE_ZMQ)
     set(_ZMQ_FOUND FALSE)
     # Try pkg-config first (Linux/macOS)
     if(PkgConfig_FOUND)
         pkg_check_modules(ZeroMQ QUIET libzmq)
         if(ZeroMQ_FOUND)
             message(STATUS "found zmq.h at ${ZeroMQ_INCLUDE_DIRS}")
-            if(WRP_CORE_STATIC_DEPS)
+            if(CLIO_CORE_STATIC_DEPS)
                 # Find static .a archives directly — pkg-config _STATIC_LIBRARIES
                 # still returns -l flags that the linker resolves to shared libs.
                 find_library(ZMQ_STATIC_LIB NAMES libzmq.a REQUIRED)
@@ -575,7 +575,7 @@ if(WRP_CORE_ENABLE_ZMQ)
 endif()
 
 # Libfabric (conditional)
-if(WRP_CORE_ENABLE_LIBFABRIC)
+if(CLIO_CORE_ENABLE_LIBFABRIC)
     pkg_check_modules(Libfabric REQUIRED libfabric)
     message(STATUS "found rdma/fabric.h at ${Libfabric_INCLUDE_DIRS}")
     set(LIBFABRIC_LIBS ${Libfabric_LIBRARIES})
@@ -584,7 +584,7 @@ if(WRP_CORE_ENABLE_LIBFABRIC)
 endif()
 
 # HDF5 (optional - for CAE HDF5 assimilator and CTE HDF5 VOL connector)
-if(WRP_CTE_ENABLE_HDF5_VOL)
+if(CLIO_CTE_ENABLE_HDF5_VOL)
     # Try CONFIG mode first (for HDF5 installed to non-standard cmake/ directory)
     find_package(HDF5 COMPONENTS C QUIET CONFIG)
     if(NOT HDF5_FOUND)
@@ -624,18 +624,18 @@ endif()
 find_package(Poco COMPONENTS Net NetSSL Crypto JSON QUIET)
 find_package(nlohmann_json QUIET)
 
-if (WRP_CTE_ENABLE_ADIOS2_ADAPTER OR WRP_CORE_ENABLE_GRAY_SCOTT)
+if (CLIO_CTE_ENABLE_ADIOS2_ADAPTER OR CLIO_CORE_ENABLE_GRAY_SCOTT)
     # Find ADIOS2
     find_package(ADIOS2 REQUIRED)
     if(ADIOS2_FOUND)
         message(STATUS "found ADIOS2 at ${ADIOS2_DIR}")
     else()
-        message(FATAL_ERROR "WRP_CORE_ENABLE_GRAY_SCOTT is ON but ADIOS2 not found. Please install ADIOS2 or disable the option.")
+        message(FATAL_ERROR "CLIO_CORE_ENABLE_GRAY_SCOTT is ON but ADIOS2 not found. Please install ADIOS2 or disable the option.")
     endif()
 endif()
 
 # ADIOS2 (optional - for Gray-Scott example)
-if(WRP_CORE_ENABLE_GRAY_SCOTT)
+if(CLIO_CORE_ENABLE_GRAY_SCOTT)
     # Gray-Scott requires MPI - find it if not already found
     if(NOT MPI_FOUND)
         find_package(MPI REQUIRED COMPONENTS C CXX)
@@ -650,7 +650,7 @@ endif()
 #------------------------------------------------------------------------------
 # Python Bindings Configuration
 #------------------------------------------------------------------------------
-if(WRP_CORE_ENABLE_PYTHON)
+if(CLIO_CORE_ENABLE_PYTHON)
   message(STATUS "Python bindings enabled - configuring nanobind")
 
   # Find Python executable using helper from IowarpCoreCommon
@@ -735,7 +735,7 @@ endif()
 # This ensures binaries and libraries can find their dependencies regardless
 # of where the installation is located (works for system installs, pip wheels,
 # conda packages, and relocatable builds).
-if(WRP_CORE_ENABLE_RPATH)
+if(CLIO_CORE_ENABLE_RPATH)
     set(CMAKE_SKIP_BUILD_RPATH FALSE)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
@@ -792,28 +792,28 @@ if(NOT MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 
     # CUDA: allow constexpr __host__ functions in __host__ __device__ contexts
-    if(WRP_CORE_ENABLE_CUDA)
+    if(CLIO_CORE_ENABLE_CUDA)
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -diag-suppress=20011,20012,20013")
     endif()
 
     # AddressSanitizer + LeakSanitizer configuration
-    if(WRP_CORE_ENABLE_ASAN)
+    if(CLIO_CORE_ENABLE_ASAN)
         message(STATUS "AddressSanitizer + LeakSanitizer (ASan/LSan) enabled for iowarp-core")
         add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
         add_link_options(-fsanitize=address)
     endif()
 
     # UndefinedBehaviorSanitizer configuration
-    if(WRP_CORE_ENABLE_UBSAN)
+    if(CLIO_CORE_ENABLE_UBSAN)
         message(STATUS "UndefinedBehaviorSanitizer (UBSan) enabled for iowarp-core")
         add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
         add_link_options(-fsanitize=undefined)
     endif()
 
     # MemorySanitizer configuration (incompatible with ASan; requires instrumented dependencies)
-    if(WRP_CORE_ENABLE_MSAN)
-        if(WRP_CORE_ENABLE_ASAN)
-            message(FATAL_ERROR "WRP_CORE_ENABLE_MSAN and WRP_CORE_ENABLE_ASAN are mutually exclusive")
+    if(CLIO_CORE_ENABLE_MSAN)
+        if(CLIO_CORE_ENABLE_ASAN)
+            message(FATAL_ERROR "CLIO_CORE_ENABLE_MSAN and CLIO_CORE_ENABLE_ASAN are mutually exclusive")
         endif()
         message(STATUS "MemorySanitizer (MSan) enabled for iowarp-core")
         message(WARNING "MSan requires all dependencies to be built with -fsanitize=memory; false-positives are expected from uninstrumented libs")
@@ -826,7 +826,7 @@ if(NOT MSVC)
     # Code Coverage configuration
     # Exclude CUDA: NVCC passes --coverage through to device code, generating
     # __gcov_* symbols in device stubs that the host linker can't resolve.
-    if(WRP_CORE_ENABLE_COVERAGE)
+    if(CLIO_CORE_ENABLE_COVERAGE)
         message(STATUS "Code coverage instrumentation enabled for iowarp-core")
         add_compile_options($<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:--coverage>
                             $<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-fprofile-arcs>
@@ -869,7 +869,7 @@ endforeach()
 #------------------------------------------------------------------------------
 # Testing
 #------------------------------------------------------------------------------
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
     enable_testing()
     include(CTest)
 
@@ -927,7 +927,7 @@ endif()
 # CXXABI_1.3.15`. Building Catch2 from the bundled source with the
 # same host compiler keeps the CXXABI consistent. Falls back to
 # find_package only when the bundled source is absent.
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/Catch2/CMakeLists.txt")
     message(STATUS "Using bundled Catch2 (external/Catch2) built with host compiler")
     set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
@@ -953,7 +953,7 @@ message(STATUS "yaml-cpp already found by IowarpCoreCommon")
 message(STATUS "Building context-transport-primitives component")
 
 # Detect ELF library if enabled
-if(WRP_CORE_ENABLE_ELF)
+if(CLIO_CORE_ENABLE_ELF)
     pkg_check_modules(libelf REQUIRED libelf)
     message(STATUS "found libelf.h at ${libelf_INCLUDE_DIRS}")
 
@@ -963,12 +963,12 @@ if(WRP_CORE_ENABLE_ELF)
 endif()
 
 # BaM (Big Accelerator Memory) — GPU page cache with optional NVMe
-option(WRP_CORE_ENABLE_BAM "Enable BaM GPU page cache module" OFF)
-option(WRP_CORE_ENABLE_BAM_NVME "Enable NVMe backend for BaM (requires gpu-nvme-bridge)" OFF)
-if(WRP_CORE_ENABLE_BAM)
+option(CLIO_CORE_ENABLE_BAM "Enable BaM GPU page cache module" OFF)
+option(CLIO_CORE_ENABLE_BAM_NVME "Enable NVMe backend for BaM (requires gpu-nvme-bridge)" OFF)
+if(CLIO_CORE_ENABLE_BAM)
     message(STATUS "Building BaM GPU page cache module")
-    set(BAM_ENABLE_NVME ${WRP_CORE_ENABLE_BAM_NVME} CACHE BOOL "NVMe for BaM" FORCE)
-    set(BAM_ENABLE_TESTS ${WRP_CORE_ENABLE_TESTS} CACHE BOOL "BaM tests" FORCE)
+    set(BAM_ENABLE_NVME ${CLIO_CORE_ENABLE_BAM_NVME} CACHE BOOL "NVMe for BaM" FORCE)
+    set(BAM_ENABLE_TESTS ${CLIO_CORE_ENABLE_TESTS} CACHE BOOL "BaM tests" FORCE)
     add_subdirectory(external/bam)
 else()
     message(STATUS "BaM module disabled")
@@ -982,7 +982,7 @@ list(APPEND _WRP_ENABLED_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/context-tra
 set(CLIO_CTP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/context-transport-primitives" CACHE PATH "Root directory for context-transport-primitives")
 
 # Runtime component
-if(WRP_CORE_ENABLE_RUNTIME)
+if(CLIO_CORE_ENABLE_RUNTIME)
     message(STATUS "Building runtime component")
     add_subdirectory(context-runtime)
     list(APPEND _WRP_ENABLED_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/context-runtime")
@@ -993,7 +993,7 @@ else()
 endif()
 
 # Context Transfer Engine
-if(WRP_CORE_ENABLE_CTE)
+if(CLIO_CORE_ENABLE_CTE)
     message(STATUS "Building context-transfer-engine component")
     add_subdirectory(context-transfer-engine)
     list(APPEND _WRP_ENABLED_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/context-transfer-engine")
@@ -1002,7 +1002,7 @@ else()
 endif()
 
 # Context Assimilation Engine
-if(WRP_CORE_ENABLE_CAE)
+if(CLIO_CORE_ENABLE_CAE)
     message(STATUS "Building context-assimilation-engine component")
     add_subdirectory(context-assimilation-engine)
     list(APPEND _WRP_ENABLED_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/context-assimilation-engine")
@@ -1011,7 +1011,7 @@ else()
 endif()
 
 # Context Exploration Engine
-if(WRP_CORE_ENABLE_CEE)
+if(CLIO_CORE_ENABLE_CEE)
     message(STATUS "Building context-exploration-engine component")
     add_subdirectory(context-exploration-engine)
     list(APPEND _WRP_ENABLED_COMPONENT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/context-exploration-engine")
@@ -1020,15 +1020,15 @@ else()
 endif()
 
 # Context Visualizer (pure Python web dashboard)
-if(WRP_CORE_ENABLE_PYTHON)
+if(CLIO_CORE_ENABLE_PYTHON)
     message(STATUS "Building context-visualizer component (Python)")
     add_subdirectory(context-visualizer)
 else()
-    message(STATUS "Context-visualizer component disabled (requires WRP_CORE_ENABLE_PYTHON)")
+    message(STATUS "Context-visualizer component disabled (requires CLIO_CORE_ENABLE_PYTHON)")
 endif()
 
 # Gray-Scott Example Application
-if(WRP_CORE_ENABLE_GRAY_SCOTT)
+if(CLIO_CORE_ENABLE_GRAY_SCOTT)
     message(STATUS "Building Gray-Scott ADIOS2 example")
     add_subdirectory(external/iowarp-gray-scott)
 else()
@@ -1047,12 +1047,12 @@ endif()
 # get_directory_property(TESTS) only returns tests from the exact directory
 # scope, not from nested subdirectories. We therefore recurse through the
 # full SUBDIRECTORIES tree of each component to apply the lock.
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
     # Build the LSAN_OPTIONS value when ASan or combined sanitize is enabled,
     # so that ctest (run standalone or via run_sanitizers.sh) always finds the
     # suppressions file and does not falsely fail on known architectural leaks.
     set(_lsan_opts "")
-    if(WRP_CORE_ENABLE_ASAN AND NOT WRP_CORE_ENABLE_MSAN)
+    if(CLIO_CORE_ENABLE_ASAN AND NOT CLIO_CORE_ENABLE_MSAN)
         set(_lsan_opts
             "detect_leaks=1:halt_on_error=0:print_stacktrace=1:symbolize=1:suppressions=${CMAKE_SOURCE_DIR}/CI/lsan_suppressions.txt")
     endif()
@@ -1077,10 +1077,10 @@ if(WRP_CORE_ENABLE_TESTS)
     endfunction()
 
     foreach(_component_dir_pair
-            "context-runtime:WRP_CORE_ENABLE_RUNTIME"
-            "context-transfer-engine:WRP_CORE_ENABLE_CTE"
-            "context-assimilation-engine:WRP_CORE_ENABLE_CAE"
-            "context-exploration-engine:WRP_CORE_ENABLE_CEE")
+            "context-runtime:CLIO_CORE_ENABLE_RUNTIME"
+            "context-transfer-engine:CLIO_CORE_ENABLE_CTE"
+            "context-assimilation-engine:CLIO_CORE_ENABLE_CAE"
+            "context-exploration-engine:CLIO_CORE_ENABLE_CEE")
         string(REPLACE ":" ";" _pair "${_component_dir_pair}")
         list(GET _pair 0 _component_dir)
         list(GET _pair 1 _component_flag)
@@ -1112,11 +1112,11 @@ if(WRP_CORE_ENABLE_TESTS)
     endfunction()
 
     foreach(_component_dir_pair
-            "context-transport-primitives:WRP_CORE_ENABLE_TESTS"
-            "context-runtime:WRP_CORE_ENABLE_RUNTIME"
-            "context-transfer-engine:WRP_CORE_ENABLE_CTE"
-            "context-assimilation-engine:WRP_CORE_ENABLE_CAE"
-            "context-exploration-engine:WRP_CORE_ENABLE_CEE")
+            "context-transport-primitives:CLIO_CORE_ENABLE_TESTS"
+            "context-runtime:CLIO_CORE_ENABLE_RUNTIME"
+            "context-transfer-engine:CLIO_CORE_ENABLE_CTE"
+            "context-assimilation-engine:CLIO_CORE_ENABLE_CAE"
+            "context-exploration-engine:CLIO_CORE_ENABLE_CEE")
         string(REPLACE ":" ";" _pair "${_component_dir_pair}")
         list(GET _pair 0 _component_dir)
         list(GET _pair 1 _component_flag)
@@ -1131,9 +1131,9 @@ endif()
 # These can be built independently of llama.cpp so they can be tested without
 # the full llama.cpp integration (which causes a CUDA platform conflict when
 # llama.cpp's project("llama.cpp" C CXX) resets the CUDA compiler state).
-if(WRP_CORE_ENABLE_LLAMA)
-    if(NOT WRP_CORE_ENABLE_CTE)
-        message(FATAL_ERROR "WRP_CORE_ENABLE_LLAMA requires WRP_CORE_ENABLE_CTE=ON")
+if(CLIO_CORE_ENABLE_LLAMA)
+    if(NOT CLIO_CORE_ENABLE_CTE)
+        message(FATAL_ERROR "CLIO_CORE_ENABLE_LLAMA requires CLIO_CORE_ENABLE_CTE=ON")
     endif()
     message(STATUS "Building llm-hooks KV cache + weight offload libraries")
     add_subdirectory(context-transfer-engine/llm-hooks)
@@ -1143,9 +1143,9 @@ if(WRP_CORE_ENABLE_LLAMA)
     # NOTE: external/llama.cpp calls project("llama.cpp" C CXX) which resets
     # CMake's CUDA platform variables.  Add it LAST so it cannot corrupt the
     # IOWarp CUDA targets already defined above.
-    if(WRP_CORE_ENABLE_LLAMA_SERVER)
+    if(CLIO_CORE_ENABLE_LLAMA_SERVER)
         # GGML_CUDA controls llama.cpp's own GPU inference backend independently
-        # from WRP_CORE_ENABLE_CUDA (IOWarp's own CUDA targets).
+        # from CLIO_CORE_ENABLE_CUDA (IOWarp's own CUDA targets).
         # Pass -DGGML_CUDA=ON on the command line to enable GPU inference.
         add_subdirectory(external/llama.cpp)
         message(STATUS "llama.cpp server integration enabled")
@@ -1154,7 +1154,7 @@ if(WRP_CORE_ENABLE_LLAMA)
         # CUDA platform variables (_CMAKE_CUDA_WHOLE_FLAG etc.).  Re-enabling CUDA
         # at the top level forces CMake to re-run CMakeCUDAInformation.cmake and
         # restore all required device-link variables before generating build rules.
-        if(WRP_CORE_ENABLE_CUDA)
+        if(CLIO_CORE_ENABLE_CUDA)
             enable_language(CUDA)
         endif()
 
@@ -1175,9 +1175,9 @@ if(WRP_CORE_ENABLE_LLAMA)
         endif()
 
         # IOWarp weight offloading via GpuVmm — requires CUDA and clio_llm_weights.
-        # clio_llm_weights is only built when WRP_CORE_ENABLE_CUDA=ON (it depends
+        # clio_llm_weights is only built when CLIO_CORE_ENABLE_CUDA=ON (it depends
         # on clio_cte_uvm which needs CUDA driver API).
-        if(WRP_CORE_ENABLE_CUDA AND TARGET clio_llm_weights)
+        if(CLIO_CORE_ENABLE_CUDA AND TARGET clio_llm_weights)
             if(TARGET server-context)
                 target_compile_definitions(server-context PRIVATE IOWARP_LLM_WEIGHTS)
                 target_link_libraries(server-context PRIVATE clio_llm_weights)
@@ -1190,10 +1190,10 @@ if(WRP_CORE_ENABLE_LLAMA)
             endif()
         endif()
     else()
-        message(STATUS "llama.cpp server integration skipped (set WRP_CORE_ENABLE_LLAMA_SERVER=ON)")
+        message(STATUS "llama.cpp server integration skipped (set CLIO_CORE_ENABLE_LLAMA_SERVER=ON)")
     endif()
 else()
-    message(STATUS "llm-hooks disabled (set WRP_CORE_ENABLE_LLAMA=ON to enable)")
+    message(STATUS "llm-hooks disabled (set CLIO_CORE_ENABLE_LLAMA=ON to enable)")
 endif()
 
 #------------------------------------------------------------------------------
@@ -1235,10 +1235,10 @@ message(STATUS "  Components included:")
 message(STATUS "    - ClioCtp (context-transport-primitives)")
 message(STATUS "    - Chimaera (runtime)")
 message(STATUS "    - Core ChiMods: admin, bdev")
-if(WRP_CORE_ENABLE_CTE)
+if(CLIO_CORE_ENABLE_CTE)
     message(STATUS "    - CTE ChiMod: clio_cte_core")
 endif()
-if(WRP_CORE_ENABLE_CAE)
+if(CLIO_CORE_ENABLE_CAE)
     message(STATUS "    - CAE ChiMod: clio_cae_core")
 endif()
 
@@ -1250,21 +1250,21 @@ message(STATUS "IOWarp Core Configuration Summary:")
 message(STATUS "  Build Shared Libraries:       ${BUILD_SHARED_LIBS}")
 message(STATUS "  ")
 message(STATUS "  Component Modules:")
-message(STATUS "    Runtime:                    ${WRP_CORE_ENABLE_RUNTIME}")
-message(STATUS "    Context Transfer Engine:    ${WRP_CORE_ENABLE_CTE}")
-message(STATUS "    Context Assimilation:       ${WRP_CORE_ENABLE_CAE}")
-message(STATUS "    Context Exploration:        ${WRP_CORE_ENABLE_CEE}")
+message(STATUS "    Runtime:                    ${CLIO_CORE_ENABLE_RUNTIME}")
+message(STATUS "    Context Transfer Engine:    ${CLIO_CORE_ENABLE_CTE}")
+message(STATUS "    Context Assimilation:       ${CLIO_CORE_ENABLE_CAE}")
+message(STATUS "    Context Exploration:        ${CLIO_CORE_ENABLE_CEE}")
 message(STATUS "  ")
 message(STATUS "  External Examples:")
-message(STATUS "    Gray-Scott (ADIOS2):        ${WRP_CORE_ENABLE_GRAY_SCOTT}")
+message(STATUS "    Gray-Scott (ADIOS2):        ${CLIO_CORE_ENABLE_GRAY_SCOTT}")
 message(STATUS "  ")
 message(STATUS "  Global Options:")
-message(STATUS "    Enable Tests:               ${WRP_CORE_ENABLE_TESTS}")
-message(STATUS "    Python Bindings:            ${WRP_CORE_ENABLE_PYTHON}")
-message(STATUS "    AddressSanitizer (ASan):    ${WRP_CORE_ENABLE_ASAN}")
-message(STATUS "    UndefinedBehaviorSan (UBSan): ${WRP_CORE_ENABLE_UBSAN}")
-message(STATUS "    MemorySanitizer (MSan):     ${WRP_CORE_ENABLE_MSAN}")
-message(STATUS "    Code Coverage:              ${WRP_CORE_ENABLE_COVERAGE}")
+message(STATUS "    Enable Tests:               ${CLIO_CORE_ENABLE_TESTS}")
+message(STATUS "    Python Bindings:            ${CLIO_CORE_ENABLE_PYTHON}")
+message(STATUS "    AddressSanitizer (ASan):    ${CLIO_CORE_ENABLE_ASAN}")
+message(STATUS "    UndefinedBehaviorSan (UBSan): ${CLIO_CORE_ENABLE_UBSAN}")
+message(STATUS "    MemorySanitizer (MSan):     ${CLIO_CORE_ENABLE_MSAN}")
+message(STATUS "    Code Coverage:              ${CLIO_CORE_ENABLE_COVERAGE}")
 message(STATUS "")
 
 
@@ -1296,13 +1296,13 @@ endif()
 if(TARGET chimaera_MOD_NAME_client)
   list(APPEND PIP_LIB_TARGETS chimaera_MOD_NAME_client chimaera_MOD_NAME_runtime)
 endif()
-if(WRP_CORE_ENABLE_CTE AND TARGET clio_cte_core_client)
+if(CLIO_CORE_ENABLE_CTE AND TARGET clio_cte_core_client)
   list(APPEND PIP_LIB_TARGETS clio_cte_core_client clio_cte_core_runtime)
 endif()
-if(WRP_CORE_ENABLE_CAE AND TARGET clio_cae_core_client)
+if(CLIO_CORE_ENABLE_CAE AND TARGET clio_cae_core_client)
   list(APPEND PIP_LIB_TARGETS clio_cae_core_client clio_cae_core_runtime)
 endif()
-if(WRP_CORE_ENABLE_CEE AND TARGET clio_cee_api)
+if(CLIO_CORE_ENABLE_CEE AND TARGET clio_cee_api)
   list(APPEND PIP_LIB_TARGETS clio_cee_api)
 endif()
 
@@ -1321,7 +1321,7 @@ if(TARGET chimaera)
   # Also install to PYTHON_SITE_PACKAGES/iowarp_core/bin/ so that
   # `sudo make install` keeps the binary in sync with the Python package,
   # matching how chimaera_runtime_ext.so is installed directly to site-packages.
-  if(WRP_CORE_ENABLE_PYTHON AND PYTHON_SITE_PACKAGES)
+  if(CLIO_CORE_ENABLE_PYTHON AND PYTHON_SITE_PACKAGES)
     install(TARGETS chimaera
       RUNTIME DESTINATION "${PYTHON_SITE_PACKAGES}/iowarp_core/bin")
   endif()
@@ -1333,7 +1333,7 @@ endif()
 # Re-install the user-facing benchmarks here under COMPONENT pip_package
 # so they ship in the wheel.  if(TARGET ...) guards skip benchmarks that
 # weren't built (e.g. MPI/Redis-only ones disabled in pip configurations).
-if(WRP_CORE_ENABLE_BENCHMARKS)
+if(CLIO_CORE_ENABLE_BENCHMARKS)
   set(PIP_BENCH_TARGETS
     clio_cte_bench
     clio_run_thrpt_benchmark)
@@ -1347,7 +1347,7 @@ if(WRP_CORE_ENABLE_BENCHMARKS)
 endif()
 
 # Python extensions -> iowarp_core/ext/
-if(WRP_CORE_ENABLE_PYTHON)
+if(CLIO_CORE_ENABLE_PYTHON)
   if(TARGET clio_cte_core_ext)
     install(TARGETS clio_cte_core_ext
       COMPONENT pip_package
@@ -1381,7 +1381,7 @@ install(FILES installers/pip/iowarp_core.pth
 #------------------------------------------------------------------------------
 # CPack Configuration
 #------------------------------------------------------------------------------
-if(WRP_CORE_ENABLE_CPACK)
+if(CLIO_CORE_ENABLE_CPACK)
     set(CPACK_PACKAGE_NAME "iowarp-core")
     set(CPACK_PACKAGE_VENDOR "IOWarp Team")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "IOWarp Core: High-performance distributed I/O and task execution runtime")

@@ -50,8 +50,8 @@ typedef BaseAllocator<_RoundRobinAllocator> RoundRobinAllocator;
  * The BuddyAllocator MUST BE LAST — it is followed by its managed region.
  */
 struct RrPartitionBlock {
-  hipc::atomic<int> initialized_;  /**< 0=uninitialized, 1=ready */
-  hipc::atomic<int> lock_;         /**< Spinlock: 0=unlocked, 1=locked */
+  ctp::ipc::atomic<int> initialized_;  /**< 0=uninitialized, 1=ready */
+  ctp::ipc::atomic<int> lock_;         /**< Spinlock: 0=unlocked, 1=locked */
   BuddyAllocator alloc_;          /**< Shared buddy allocator (MUST BE LAST) */
 
   CTP_CROSS_FUN
@@ -126,8 +126,8 @@ struct RrPartitionBlock {
  */
 class _RoundRobinAllocator : public Allocator {
  public:
-  hipc::atomic<int> heap_ready_;      /**< Grid-level sync: 0=not ready, 1=ready */
-  hipc::atomic<int> next_partition_;  /**< Round-robin counter */
+  ctp::ipc::atomic<int> heap_ready_;      /**< Grid-level sync: 0=not ready, 1=ready */
+  ctp::ipc::atomic<int> next_partition_;  /**< Round-robin counter */
   volatile int num_partitions_;       /**< Number of partitions */
   volatile size_t partition_size_;    /**< Bytes per partition */
   char * volatile base_;              /**< Cached base pointer */

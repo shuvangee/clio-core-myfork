@@ -12,7 +12,7 @@
 #  - Jarvis copies the effective hostfile into <shared_dir>/hostfile on
 #    save, and shared_dir is already bind-mounted inside the container at
 #    the same path, so no extra /tmp pass-through is needed.
-#  - clio_runtime builds IOWarp with WRP_CORE_ENABLE_GRAY_SCOTT=ON via the
+#  - clio_runtime builds IOWarp with CLIO_CORE_ENABLE_GRAY_SCOTT=ON via the
 #    release-adapter preset, so gray-scott lands in /usr/local/bin of the
 #    shared build image; adios2_gray_scott itself contributes no build
 #    phase (delegated — see its pkg.py).
@@ -46,17 +46,17 @@ pkgs:
   - pkg_type: builtin.compress_libs
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     deploy_mode: container
     git_branch: transparent-compress
     cmake_preset: release-adapter
     port: 9413
     sleep: 2
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.adios2_gray_scott
+  - pkg_type: jarvis_clio_core.adios2_gray_scott
     deploy_mode: container
     engine: iowarp
     nprocs: 1

@@ -282,7 +282,7 @@ TEST_CASE("IpcErrors - Invalid Allocator Registration", "[ipc][errors][shm]") {
   REQUIRE(ipc != nullptr);
 
   // Try to register with invalid allocator ID
-  hipc::AllocatorId invalid_id(0xFFFF, 0xFFFF);
+  ctp::ipc::AllocatorId invalid_id(0xFFFF, 0xFFFF);
   bool registered = ipc->RegisterMemory(invalid_id);
   // May succeed or fail, but shouldn't crash
 

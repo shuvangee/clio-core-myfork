@@ -16,20 +16,20 @@ pkgs:
   - pkg_type: builtin.adios2
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     deploy_mode: container
     git_branch: transparent-compress
     cmake_preset: release-adapter
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.clio_adapters
+  - pkg_type: jarvis_clio_core.clio_adapters
     deploy_mode: container
     adios2: true
     include: [".*"]
 
-  - pkg_type: jarvis_iowarp.adios2_gray_scott
+  - pkg_type: jarvis_clio_core.adios2_gray_scott
     deploy_mode: container
     engine: iowarp
     nprocs: 4

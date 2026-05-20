@@ -12,14 +12,14 @@ name: iowarp_libfuse_dd_bench_1n
 install_manager: native
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
     mountpoint: /home/llogan/clio_cte
     embedded_runtime: true
     sleep: 4
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     deploy_mode: default
     devices:

@@ -15,11 +15,11 @@ add_executable(clio_cte_fuse
 
 target_compile_definitions(clio_cte_fuse PRIVATE
     FUSE_USE_VERSION=35
-    WRP_CTE_FUSE_ENABLED)
+    CLIO_CTE_FUSE_ENABLED)
 
 target_include_directories(clio_cte_fuse PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${WRP_CTE_ROOT}
+    ${CLIO_CTE_ROOT}
     ${FUSE3_INCLUDE_DIRS}
     ${FUSE3_INCLUDEDIR})  # parent of include/fuse3 so
                           # `#include <fuse3/fuse.h>` resolves
@@ -31,4 +31,4 @@ target_link_libraries(clio_cte_fuse
     ctp::cxx)
 
 install(TARGETS clio_cte_fuse
-    RUNTIME DESTINATION ${WRP_CTE_INSTALL_BIN_DIR})
+    RUNTIME DESTINATION ${CLIO_CTE_INSTALL_BIN_DIR})

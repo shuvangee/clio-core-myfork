@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 # UVM module: Software-managed GPU demand paging
 # Only builds when CUDA support is enabled
-if(NOT WRP_CORE_ENABLE_CUDA)
-    message(STATUS "CTE UVM: Skipping (WRP_CORE_ENABLE_CUDA is OFF)")
+if(NOT CLIO_CORE_ENABLE_CUDA)
+    message(STATUS "CTE UVM: Skipping (CLIO_CORE_ENABLE_CUDA is OFF)")
     return()
 endif()
 
@@ -50,7 +50,7 @@ install(DIRECTORY include/clio_cte/uvm
 # Test executable. test_gpu_vmm.cc launches a __global__ kernel and so
 # must be compiled by nvcc — the .cc extension defaults to CXX, so we
 # force LANGUAGE CUDA explicitly.
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
     set_source_files_properties(test/test_gpu_vmm.cc PROPERTIES LANGUAGE CUDA)
     add_executable(test_gpu_vmm test/test_gpu_vmm.cc)
     # Do NOT use CUDA_SEPARABLE_COMPILATION ON here: that would invoke nvlink,

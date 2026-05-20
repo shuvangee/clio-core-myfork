@@ -84,7 +84,7 @@ inline void TransportDeleter::operator()(Transport* t) const {
 }
 
 // --- Unified Transport Non-Template Dispatch ---
-inline Bulk Transport::Expose(const hipc::FullPtr<char>& ptr, size_t data_size, u32 flags) {
+inline Bulk Transport::Expose(const ctp::ipc::FullPtr<char>& ptr, size_t data_size, u32 flags) {
   switch (type_) {
 #if CTP_ENABLE_ZMQ
     case TransportType::kZeroMq:

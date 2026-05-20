@@ -6,8 +6,8 @@
  * BSD 3-Clause License. See LICENSE file.
  */
 
-#ifndef WRP_CTE_GPU_VECTOR_KERNELS_H_
-#define WRP_CTE_GPU_VECTOR_KERNELS_H_
+#ifndef CLIO_CTE_GPU_VECTOR_KERNELS_H_
+#define CLIO_CTE_GPU_VECTOR_KERNELS_H_
 
 #include <chimaera/gpu/gpu_ipc_manager.h>
 #include <chimaera/types.h>
@@ -22,7 +22,7 @@ namespace detail {
 
 /** Per-warp last-page cache. Lane 0 reads / writes; other lanes read after
  *  __syncwarp. The user kernel must provide a __shared__ array via
- *  WRP_GPU_VECTOR_KERNEL_INIT — this function just resolves the lane slot. */
+ *  CLIO_GPU_VECTOR_KERNEL_INIT — this function just resolves the lane slot. */
 CTP_GPU_FUN Page *&LaneLastPage(Page **last_page_array) {
   return last_page_array[threadIdx.x & 31];
 }
@@ -95,11 +95,11 @@ CTP_GPU_FUN void ReleaseBusy(Page *p) {
  * the memory kind via pointer attributes and copies in the right
  * direction without staging.
  */
-CTP_GPU_FUN hipc::ShmPtr<> MakeBlobShmPtr(void *device_addr,
-                                                  hipc::AllocatorId alloc_id) {
+CTP_GPU_FUN ctp::ipc::ShmPtr<> MakeBlobShmPtr(void *device_addr,
+                                                  ctp::ipc::AllocatorId alloc_id) {
   (void)alloc_id;
-  hipc::ShmPtr<> p;
-  p.alloc_id_ = hipc::AllocatorId::GetNull();
+  ctp::ipc::ShmPtr<> p;
+  p.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
   p.off_ = reinterpret_cast<chi::u64>(device_addr);
   return p;
 }
@@ -162,11 +162,11 @@ CTP_GPU_FUN void FlushPageBase(::chi::gpu::IpcManager *ipc,
   task->offset_ = 0;
   task->size_ = v.page_size_bytes;
   task->gpu_page_idx_ = static_cast<chi::u32>(page->page_idx);
-  hipc::AllocatorId alloc =
+  ctp::ipc::AllocatorId alloc =
       (page->tier == 0) ? v.pages_alloc_id : v.host_pages_alloc_id;
   task->blob_data_ = detail::MakeBlobShmPtr(page->device_ptr, alloc);
 
-  hipc::FullPtr<clio_cte::core::PutBlobTask> fp;
+  ctp::ipc::FullPtr<clio_cte::core::PutBlobTask> fp;
   fp.shm_.alloc_id_ = v.put_pool_alloc_id;
   fp.shm_.off_ = reinterpret_cast<chi::u64>(task);
   fp.ptr_ = task;
@@ -211,12 +211,12 @@ CTP_GPU_FUN void FlushPage(::chi::gpu::IpcManager *ipc,
   task->offset_ = mn_b;            // offset within the per-page blob
   task->size_ = mx_b - mn_b;
   task->gpu_page_idx_ = static_cast<chi::u32>(page->page_idx);
-  hipc::AllocatorId alloc =
+  ctp::ipc::AllocatorId alloc =
       (page->tier == 0) ? v.base.pages_alloc_id : v.base.host_pages_alloc_id;
   task->blob_data_ = detail::MakeBlobShmPtr(
       reinterpret_cast<char *>(page->device_ptr) + mn_b, alloc);
 
-  hipc::FullPtr<clio_cte::core::PutBlobTask> fp;
+  ctp::ipc::FullPtr<clio_cte::core::PutBlobTask> fp;
   fp.shm_.alloc_id_ = v.base.put_pool_alloc_id;
   fp.shm_.off_ = reinterpret_cast<chi::u64>(task);
   fp.ptr_ = task;
@@ -238,10 +238,10 @@ CTP_GPU_FUN void FaultPage(::chi::gpu::IpcManager *ipc,
   task->offset_ = 0;
   task->size_ = v.base.page_size_bytes;
   task->gpu_page_idx_ = static_cast<chi::u32>(target_page_idx);
-  hipc::AllocatorId alloc =
+  ctp::ipc::AllocatorId alloc =
       (page->tier == 0) ? v.base.pages_alloc_id : v.base.host_pages_alloc_id;
   task->blob_data_ = detail::MakeBlobShmPtr(page->device_ptr, alloc);
-  hipc::FullPtr<clio_cte::core::GetBlobTask> fp;
+  ctp::ipc::FullPtr<clio_cte::core::GetBlobTask> fp;
   fp.shm_.alloc_id_ = v.base.get_pool_alloc_id;
   fp.shm_.off_ = reinterpret_cast<chi::u64>(task);
   fp.ptr_ = task;
@@ -924,4 +924,4 @@ class vector {
 
 #endif  // CTP_IS_GPU_COMPILER
 
-#endif  // WRP_CTE_GPU_VECTOR_KERNELS_H_
+#endif  // CLIO_CTE_GPU_VECTOR_KERNELS_H_

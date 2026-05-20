@@ -14,7 +14,7 @@ namespace chi {
 
 template <typename TaskT>
 Future<TaskT> IpcCpu2Cpu::ClientSend(IpcManager *ipc,
-                                      const hipc::FullPtr<TaskT> &task_ptr) {
+                                      const ctp::ipc::FullPtr<TaskT> &task_ptr) {
   if (task_ptr.IsNull()) return Future<TaskT>();
 
   // Allocate FutureShm with copy_space

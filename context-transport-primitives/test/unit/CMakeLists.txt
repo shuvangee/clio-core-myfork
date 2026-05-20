@@ -21,17 +21,17 @@ if(NOT CLIO_CTP_COMPILER_MSVC)
     add_subdirectory(interceptor)
 endif()
 
-if(WRP_CTE_ENABLE_COMPRESS)
+if(CLIO_CTE_ENABLE_COMPRESS)
     add_subdirectory(compress)
 endif()
 
-if(WRP_CORE_ENABLE_ENCRYPT)
+if(CLIO_CORE_ENABLE_ENCRYPT)
     add_subdirectory(encrypt)
 endif()
 
 add_subdirectory(io)
 
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM OR WRP_CORE_ENABLE_SYCL)
+if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM OR CLIO_CORE_ENABLE_SYCL)
     add_subdirectory(gpu)
 endif()
 

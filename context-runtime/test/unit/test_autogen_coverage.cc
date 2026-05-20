@@ -70,7 +70,7 @@ void EnsureInitialized() {
 }
 
 // Get test allocator
-hipc::Allocator* GetTestAllocator() {
+ctp::ipc::Allocator* GetTestAllocator() {
   return CTP_MALLOC;
 }
 } // namespace
@@ -103,7 +103,7 @@ TEST_CASE("Autogen - Admin MonitorTask SaveTask/LoadTask", "[autogen][admin][mon
 
     // SaveTask (SaveIn)
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->SaveTask(chimaera::admin::Method::kMonitor, save_archive, task_ptr);
 
     // LoadTask (LoadIn)
@@ -112,7 +112,7 @@ TEST_CASE("Autogen - Admin MonitorTask SaveTask/LoadTask", "[autogen][admin][mon
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
     auto loaded_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>();
-    hipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
     container->LoadTask(chimaera::admin::Method::kMonitor, load_archive, loaded_ptr);
 
     REQUIRE(!loaded_task.IsNull());
@@ -146,7 +146,7 @@ TEST_CASE("Autogen - Admin FlushTask SaveTask/LoadTask", "[autogen][admin][flush
     }
 
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->SaveTask(chimaera::admin::Method::kFlush, save_archive, task_ptr);
 
     std::string save_data = save_archive.GetData();
@@ -154,7 +154,7 @@ TEST_CASE("Autogen - Admin FlushTask SaveTask/LoadTask", "[autogen][admin][flush
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
     auto loaded_task = ipc_manager->NewTask<chimaera::admin::FlushTask>();
-    hipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
     container->LoadTask(chimaera::admin::Method::kFlush, load_archive, loaded_ptr);
 
     REQUIRE(!loaded_task.IsNull());
@@ -187,7 +187,7 @@ TEST_CASE("Autogen - Admin ClientConnectTask SaveTask/LoadTask", "[autogen][admi
     }
 
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->SaveTask(chimaera::admin::Method::kClientConnect, save_archive, task_ptr);
 
     std::string save_data = save_archive.GetData();
@@ -195,7 +195,7 @@ TEST_CASE("Autogen - Admin ClientConnectTask SaveTask/LoadTask", "[autogen][admi
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
     auto loaded_task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>();
-    hipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
     container->LoadTask(chimaera::admin::Method::kClientConnect, load_archive, loaded_ptr);
 
     REQUIRE(!loaded_task.IsNull());
@@ -262,7 +262,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
       return;
     }
 
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     auto copied_task = container->NewCopyTask(chimaera::admin::Method::kFlush, task_ptr, false);
 
     if (!copied_task.IsNull()) {
@@ -282,7 +282,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
       return;
     }
 
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     auto copied_task = container->NewCopyTask(chimaera::admin::Method::kMonitor, task_ptr, false);
 
     if (!copied_task.IsNull()) {
@@ -302,7 +302,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
       return;
     }
 
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     auto copied_task = container->NewCopyTask(chimaera::admin::Method::kClientConnect, task_ptr, false);
 
     if (!copied_task.IsNull()) {
@@ -339,8 +339,8 @@ TEST_CASE("Autogen - Admin Aggregate", "[autogen][admin][aggregate]") {
       return;
     }
 
-    hipc::FullPtr<chi::Task> origin_ptr = origin_task.template Cast<chi::Task>();
-    hipc::FullPtr<chi::Task> replica_ptr = replica_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> origin_ptr = origin_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> replica_ptr = replica_task.template Cast<chi::Task>();
     origin_ptr.ptr_->Aggregate(replica_ptr.template Cast<chi::Task>());
 
     INFO("Aggregate for FlushTask completed");
@@ -361,8 +361,8 @@ TEST_CASE("Autogen - Admin Aggregate", "[autogen][admin][aggregate]") {
       return;
     }
 
-    hipc::FullPtr<chi::Task> origin_ptr = origin_task.template Cast<chi::Task>();
-    hipc::FullPtr<chi::Task> replica_ptr = replica_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> origin_ptr = origin_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> replica_ptr = replica_task.template Cast<chi::Task>();
     origin_ptr.ptr_->Aggregate(replica_ptr.template Cast<chi::Task>());
 
     INFO("Aggregate for MonitorTask completed");
@@ -395,7 +395,7 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
     // LocalSaveTask
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->LocalSaveTask(chimaera::admin::Method::kFlush, save_archive, task_ptr);
 
     // LocalLoadTask
@@ -421,7 +421,7 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
 
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->LocalSaveTask(chimaera::admin::Method::kMonitor, save_archive, task_ptr);
 
     auto loaded_task = container->NewTask(chimaera::admin::Method::kMonitor);
@@ -446,7 +446,7 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
 
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->LocalSaveTask(chimaera::admin::Method::kClientConnect, save_archive, task_ptr);
 
     auto loaded_task = container->NewTask(chimaera::admin::Method::kClientConnect);
@@ -5624,13 +5624,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for CreateTask
     auto task = ipc_manager->NewTask<clio_cte::core::CreateTask>();
     if (!task.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kCreate, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::CreateTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kCreate, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task);
       CHI_IPC->DelTask(loaded);
@@ -5639,13 +5639,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for DestroyTask
     auto task_d = ipc_manager->NewTask<clio_cte::core::DestroyTask>();
     if (!task_d.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_d.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kDestroy, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::DestroyTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kDestroy, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_d);
       CHI_IPC->DelTask(loaded);
@@ -5654,13 +5654,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for RegisterTargetTask
     auto task_r = ipc_manager->NewTask<clio_cte::core::RegisterTargetTask>();
     if (!task_r.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_r.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kRegisterTarget, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::RegisterTargetTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kRegisterTarget, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_r);
       CHI_IPC->DelTask(loaded);
@@ -5669,13 +5669,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for PutBlobTask
     auto task_p = ipc_manager->NewTask<clio_cte::core::PutBlobTask>();
     if (!task_p.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_p.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kPutBlob, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::PutBlobTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kPutBlob, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_p);
       CHI_IPC->DelTask(loaded);
@@ -5684,13 +5684,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for GetBlobTask
     auto task_g = ipc_manager->NewTask<clio_cte::core::GetBlobTask>();
     if (!task_g.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_g.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_g.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetBlob, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetBlobTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetBlob, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_g);
       CHI_IPC->DelTask(loaded);
@@ -5699,13 +5699,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for UnregisterTargetTask
     auto task_u = ipc_manager->NewTask<clio_cte::core::UnregisterTargetTask>();
     if (!task_u.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_u.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_u.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kUnregisterTarget, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::UnregisterTargetTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kUnregisterTarget, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_u);
       CHI_IPC->DelTask(loaded);
@@ -5714,13 +5714,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for ListTargetsTask
     auto task_l = ipc_manager->NewTask<clio_cte::core::ListTargetsTask>();
     if (!task_l.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_l.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_l.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kListTargets, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::ListTargetsTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kListTargets, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_l);
       CHI_IPC->DelTask(loaded);
@@ -5729,13 +5729,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for StatTargetsTask
     auto task_s = ipc_manager->NewTask<clio_cte::core::StatTargetsTask>();
     if (!task_s.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_s.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_s.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kStatTargets, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::StatTargetsTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kStatTargets, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_s);
       CHI_IPC->DelTask(loaded);
@@ -5744,13 +5744,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for GetOrCreateTagTask
     auto task_t = ipc_manager->NewTask<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>();
     if (!task_t.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_t.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_t.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetOrCreateTag, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetOrCreateTag, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_t);
       CHI_IPC->DelTask(loaded);
@@ -5759,13 +5759,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for ReorganizeBlobTask
     auto task_re = ipc_manager->NewTask<clio_cte::core::ReorganizeBlobTask>();
     if (!task_re.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_re.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_re.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kReorganizeBlob, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::ReorganizeBlobTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kReorganizeBlob, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_re);
       CHI_IPC->DelTask(loaded);
@@ -5774,13 +5774,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for DelBlobTask
     auto task_db = ipc_manager->NewTask<clio_cte::core::DelBlobTask>();
     if (!task_db.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_db.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_db.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kDelBlob, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::DelBlobTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kDelBlob, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_db);
       CHI_IPC->DelTask(loaded);
@@ -5789,13 +5789,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for DelTagTask
     auto task_dt = ipc_manager->NewTask<clio_cte::core::DelTagTask>();
     if (!task_dt.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_dt.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_dt.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kDelTag, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::DelTagTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kDelTag, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_dt);
       CHI_IPC->DelTask(loaded);
@@ -5804,13 +5804,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for GetTagSizeTask
     auto task_ts = ipc_manager->NewTask<clio_cte::core::GetTagSizeTask>();
     if (!task_ts.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_ts.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_ts.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetTagSize, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetTagSizeTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetTagSize, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_ts);
       CHI_IPC->DelTask(loaded);
@@ -5819,13 +5819,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for PollTelemetryLogTask
     auto task_te = ipc_manager->NewTask<clio_cte::core::PollTelemetryLogTask>();
     if (!task_te.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_te.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_te.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kPollTelemetryLog, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::PollTelemetryLogTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kPollTelemetryLog, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_te);
       CHI_IPC->DelTask(loaded);
@@ -5834,13 +5834,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for GetBlobScoreTask
     auto task_sc = ipc_manager->NewTask<clio_cte::core::GetBlobScoreTask>();
     if (!task_sc.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_sc.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_sc.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetBlobScore, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetBlobScoreTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetBlobScore, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_sc);
       CHI_IPC->DelTask(loaded);
@@ -5849,13 +5849,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for GetBlobSizeTask
     auto task_bs = ipc_manager->NewTask<clio_cte::core::GetBlobSizeTask>();
     if (!task_bs.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_bs.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_bs.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetBlobSize, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetBlobSizeTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetBlobSize, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_bs);
       CHI_IPC->DelTask(loaded);
@@ -5864,13 +5864,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for GetContainedBlobsTask
     auto task_cb = ipc_manager->NewTask<clio_cte::core::GetContainedBlobsTask>();
     if (!task_cb.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_cb.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_cb.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetContainedBlobs, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetContainedBlobsTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetContainedBlobs, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_cb);
       CHI_IPC->DelTask(loaded);
@@ -5879,13 +5879,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for TagQueryTask
     auto task_tq = ipc_manager->NewTask<clio_cte::core::TagQueryTask>();
     if (!task_tq.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_tq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_tq.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kTagQuery, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::TagQueryTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kTagQuery, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_tq);
       CHI_IPC->DelTask(loaded);
@@ -5894,13 +5894,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test SaveTask and LoadTask for BlobQueryTask
     auto task_bq = ipc_manager->NewTask<clio_cte::core::BlobQueryTask>();
     if (!task_bq.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_bq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_bq.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kBlobQuery, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::BlobQueryTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kBlobQuery, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_bq);
       CHI_IPC->DelTask(loaded);
@@ -5926,7 +5926,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for CreateTask
     auto orig = ipc_manager->NewTask<clio_cte::core::CreateTask>();
     if (!orig.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kCreate, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::CreateTask>());
       CHI_IPC->DelTask(orig);
@@ -5935,7 +5935,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for DestroyTask
     auto orig_d = ipc_manager->NewTask<clio_cte::core::DestroyTask>();
     if (!orig_d.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kDestroy, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::DestroyTask>());
       CHI_IPC->DelTask(orig_d);
@@ -5944,7 +5944,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for RegisterTargetTask
     auto orig_r = ipc_manager->NewTask<clio_cte::core::RegisterTargetTask>();
     if (!orig_r.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_r.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kRegisterTarget, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::RegisterTargetTask>());
       CHI_IPC->DelTask(orig_r);
@@ -5953,7 +5953,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for UnregisterTargetTask
     auto orig_u = ipc_manager->NewTask<clio_cte::core::UnregisterTargetTask>();
     if (!orig_u.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_u.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_u.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kUnregisterTarget, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::UnregisterTargetTask>());
       CHI_IPC->DelTask(orig_u);
@@ -5962,7 +5962,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for ListTargetsTask
     auto orig_l = ipc_manager->NewTask<clio_cte::core::ListTargetsTask>();
     if (!orig_l.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_l.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_l.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kListTargets, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::ListTargetsTask>());
       CHI_IPC->DelTask(orig_l);
@@ -5971,7 +5971,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for StatTargetsTask
     auto orig_s = ipc_manager->NewTask<clio_cte::core::StatTargetsTask>();
     if (!orig_s.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_s.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_s.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kStatTargets, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::StatTargetsTask>());
       CHI_IPC->DelTask(orig_s);
@@ -5980,7 +5980,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for PutBlobTask
     auto orig_p = ipc_manager->NewTask<clio_cte::core::PutBlobTask>();
     if (!orig_p.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_p.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kPutBlob, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::PutBlobTask>());
       CHI_IPC->DelTask(orig_p);
@@ -5989,7 +5989,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for GetBlobTask
     auto orig_g = ipc_manager->NewTask<clio_cte::core::GetBlobTask>();
     if (!orig_g.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_g.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_g.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kGetBlob, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::GetBlobTask>());
       CHI_IPC->DelTask(orig_g);
@@ -5998,7 +5998,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for ReorganizeBlobTask
     auto orig_re = ipc_manager->NewTask<clio_cte::core::ReorganizeBlobTask>();
     if (!orig_re.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_re.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_re.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kReorganizeBlob, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::ReorganizeBlobTask>());
       CHI_IPC->DelTask(orig_re);
@@ -6007,7 +6007,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for DelBlobTask
     auto orig_db = ipc_manager->NewTask<clio_cte::core::DelBlobTask>();
     if (!orig_db.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_db.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_db.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kDelBlob, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::DelBlobTask>());
       CHI_IPC->DelTask(orig_db);
@@ -6016,7 +6016,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for DelTagTask
     auto orig_dt = ipc_manager->NewTask<clio_cte::core::DelTagTask>();
     if (!orig_dt.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_dt.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_dt.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kDelTag, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::DelTagTask>());
       CHI_IPC->DelTask(orig_dt);
@@ -6025,7 +6025,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for GetTagSizeTask
     auto orig_ts = ipc_manager->NewTask<clio_cte::core::GetTagSizeTask>();
     if (!orig_ts.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_ts.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_ts.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kGetTagSize, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::GetTagSizeTask>());
       CHI_IPC->DelTask(orig_ts);
@@ -6034,7 +6034,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for PollTelemetryLogTask
     auto orig_te = ipc_manager->NewTask<clio_cte::core::PollTelemetryLogTask>();
     if (!orig_te.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_te.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_te.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kPollTelemetryLog, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::PollTelemetryLogTask>());
       CHI_IPC->DelTask(orig_te);
@@ -6043,7 +6043,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for GetBlobScoreTask
     auto orig_sc = ipc_manager->NewTask<clio_cte::core::GetBlobScoreTask>();
     if (!orig_sc.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_sc.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_sc.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kGetBlobScore, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::GetBlobScoreTask>());
       CHI_IPC->DelTask(orig_sc);
@@ -6052,7 +6052,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for GetBlobSizeTask
     auto orig_bs = ipc_manager->NewTask<clio_cte::core::GetBlobSizeTask>();
     if (!orig_bs.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_bs.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_bs.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kGetBlobSize, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::GetBlobSizeTask>());
       CHI_IPC->DelTask(orig_bs);
@@ -6061,7 +6061,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for GetContainedBlobsTask
     auto orig_cb = ipc_manager->NewTask<clio_cte::core::GetContainedBlobsTask>();
     if (!orig_cb.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_cb.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cb.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kGetContainedBlobs, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::GetContainedBlobsTask>());
       CHI_IPC->DelTask(orig_cb);
@@ -6070,7 +6070,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for TagQueryTask
     auto orig_tq = ipc_manager->NewTask<clio_cte::core::TagQueryTask>();
     if (!orig_tq.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_tq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_tq.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kTagQuery, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::TagQueryTask>());
       CHI_IPC->DelTask(orig_tq);
@@ -6079,7 +6079,7 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Test NewCopyTask for BlobQueryTask
     auto orig_bq = ipc_manager->NewTask<clio_cte::core::BlobQueryTask>();
     if (!orig_bq.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_bq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_bq.template Cast<chi::Task>();
       auto copy = cte_runtime.NewCopyTask(clio_cte::core::Method::kBlobQuery, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cte::core::BlobQueryTask>());
       CHI_IPC->DelTask(orig_bq);
@@ -6103,8 +6103,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_c = ipc_manager->NewTask<clio_cte::core::CreateTask>();
     auto t2_c = ipc_manager->NewTask<clio_cte::core::CreateTask>();
     if (!t1_c.IsNull() && !t2_c.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_c);
       CHI_IPC->DelTask(t2_c);
@@ -6114,8 +6114,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_d = ipc_manager->NewTask<clio_cte::core::DestroyTask>();
     auto t2_d = ipc_manager->NewTask<clio_cte::core::DestroyTask>();
     if (!t1_d.IsNull() && !t2_d.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_d);
       CHI_IPC->DelTask(t2_d);
@@ -6125,8 +6125,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_r = ipc_manager->NewTask<clio_cte::core::RegisterTargetTask>();
     auto t2_r = ipc_manager->NewTask<clio_cte::core::RegisterTargetTask>();
     if (!t1_r.IsNull() && !t2_r.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_r.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_r.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_r);
       CHI_IPC->DelTask(t2_r);
@@ -6136,8 +6136,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_u = ipc_manager->NewTask<clio_cte::core::UnregisterTargetTask>();
     auto t2_u = ipc_manager->NewTask<clio_cte::core::UnregisterTargetTask>();
     if (!t1_u.IsNull() && !t2_u.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_u.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_u.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_u.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_u.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_u);
       CHI_IPC->DelTask(t2_u);
@@ -6147,8 +6147,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_l = ipc_manager->NewTask<clio_cte::core::ListTargetsTask>();
     auto t2_l = ipc_manager->NewTask<clio_cte::core::ListTargetsTask>();
     if (!t1_l.IsNull() && !t2_l.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_l.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_l.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_l.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_l.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_l);
       CHI_IPC->DelTask(t2_l);
@@ -6158,8 +6158,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_p = ipc_manager->NewTask<clio_cte::core::PutBlobTask>();
     auto t2_p = ipc_manager->NewTask<clio_cte::core::PutBlobTask>();
     if (!t1_p.IsNull() && !t2_p.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_p.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_p.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_p);
       CHI_IPC->DelTask(t2_p);
@@ -6169,8 +6169,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_g = ipc_manager->NewTask<clio_cte::core::GetBlobTask>();
     auto t2_g = ipc_manager->NewTask<clio_cte::core::GetBlobTask>();
     if (!t1_g.IsNull() && !t2_g.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_g.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_g.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_g.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_g.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_g);
       CHI_IPC->DelTask(t2_g);
@@ -6180,8 +6180,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_st = ipc_manager->NewTask<clio_cte::core::StatTargetsTask>();
     auto t2_st = ipc_manager->NewTask<clio_cte::core::StatTargetsTask>();
     if (!t1_st.IsNull() && !t2_st.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_st.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_st.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_st.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_st.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_st);
       CHI_IPC->DelTask(t2_st);
@@ -6191,8 +6191,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_gt = ipc_manager->NewTask<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>();
     auto t2_gt = ipc_manager->NewTask<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>();
     if (!t1_gt.IsNull() && !t2_gt.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_gt.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_gt.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_gt.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_gt.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_gt);
       CHI_IPC->DelTask(t2_gt);
@@ -6202,8 +6202,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_re = ipc_manager->NewTask<clio_cte::core::ReorganizeBlobTask>();
     auto t2_re = ipc_manager->NewTask<clio_cte::core::ReorganizeBlobTask>();
     if (!t1_re.IsNull() && !t2_re.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_re.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_re.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_re.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_re.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_re);
       CHI_IPC->DelTask(t2_re);
@@ -6213,8 +6213,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_db = ipc_manager->NewTask<clio_cte::core::DelBlobTask>();
     auto t2_db = ipc_manager->NewTask<clio_cte::core::DelBlobTask>();
     if (!t1_db.IsNull() && !t2_db.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_db.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_db.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_db.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_db.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_db);
       CHI_IPC->DelTask(t2_db);
@@ -6224,8 +6224,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_dt = ipc_manager->NewTask<clio_cte::core::DelTagTask>();
     auto t2_dt = ipc_manager->NewTask<clio_cte::core::DelTagTask>();
     if (!t1_dt.IsNull() && !t2_dt.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_dt.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_dt.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_dt.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_dt.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_dt);
       CHI_IPC->DelTask(t2_dt);
@@ -6235,8 +6235,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_ts = ipc_manager->NewTask<clio_cte::core::GetTagSizeTask>();
     auto t2_ts = ipc_manager->NewTask<clio_cte::core::GetTagSizeTask>();
     if (!t1_ts.IsNull() && !t2_ts.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_ts.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_ts.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_ts.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_ts.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_ts);
       CHI_IPC->DelTask(t2_ts);
@@ -6246,8 +6246,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_tl = ipc_manager->NewTask<clio_cte::core::PollTelemetryLogTask>();
     auto t2_tl = ipc_manager->NewTask<clio_cte::core::PollTelemetryLogTask>();
     if (!t1_tl.IsNull() && !t2_tl.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_tl.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_tl.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_tl.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_tl.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_tl);
       CHI_IPC->DelTask(t2_tl);
@@ -6257,8 +6257,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_sc = ipc_manager->NewTask<clio_cte::core::GetBlobScoreTask>();
     auto t2_sc = ipc_manager->NewTask<clio_cte::core::GetBlobScoreTask>();
     if (!t1_sc.IsNull() && !t2_sc.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_sc.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_sc.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_sc.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_sc.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_sc);
       CHI_IPC->DelTask(t2_sc);
@@ -6268,8 +6268,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_bs = ipc_manager->NewTask<clio_cte::core::GetBlobSizeTask>();
     auto t2_bs = ipc_manager->NewTask<clio_cte::core::GetBlobSizeTask>();
     if (!t1_bs.IsNull() && !t2_bs.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_bs.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_bs.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_bs.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_bs.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_bs);
       CHI_IPC->DelTask(t2_bs);
@@ -6279,8 +6279,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_cb = ipc_manager->NewTask<clio_cte::core::GetContainedBlobsTask>();
     auto t2_cb = ipc_manager->NewTask<clio_cte::core::GetContainedBlobsTask>();
     if (!t1_cb.IsNull() && !t2_cb.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_cb.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_cb.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cb.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cb.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_cb);
       CHI_IPC->DelTask(t2_cb);
@@ -6290,8 +6290,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_tq = ipc_manager->NewTask<clio_cte::core::TagQueryTask>();
     auto t2_tq = ipc_manager->NewTask<clio_cte::core::TagQueryTask>();
     if (!t1_tq.IsNull() && !t2_tq.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_tq.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_tq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_tq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_tq.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_tq);
       CHI_IPC->DelTask(t2_tq);
@@ -6301,8 +6301,8 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     auto t1_bq = ipc_manager->NewTask<clio_cte::core::BlobQueryTask>();
     auto t2_bq = ipc_manager->NewTask<clio_cte::core::BlobQueryTask>();
     if (!t1_bq.IsNull() && !t2_bq.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_bq.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_bq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_bq.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_bq.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_bq);
       CHI_IPC->DelTask(t2_bq);
@@ -6324,13 +6324,13 @@ TEST_CASE("Autogen - CTE Runtime Container Methods", "[autogen][cte][runtime]") 
     // Additional test for GetOrCreateTag SaveTask
     auto task = ipc_manager->NewTask<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>();
     if (!task.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetOrCreateTag, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cte::core::GetOrCreateTagTask<clio_cte::core::CreateParams>>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       cte_runtime.LoadTask(clio_cte::core::Method::kGetOrCreateTag, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task);
       CHI_IPC->DelTask(loaded);
@@ -6383,13 +6383,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for CreateTask
     auto task_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
     if (!task_c.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_c.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kCreate, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kCreate, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_c);
       CHI_IPC->DelTask(loaded);
@@ -6398,13 +6398,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for DestroyTask
     auto task_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
     if (!task_d.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_d.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kDestroy, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kDestroy, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_d);
       CHI_IPC->DelTask(loaded);
@@ -6413,13 +6413,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for AllocateBlocksTask
     auto task_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
     if (!task_a.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_a.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_a.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kAllocateBlocks, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kAllocateBlocks, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_a);
       CHI_IPC->DelTask(loaded);
@@ -6428,13 +6428,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for FreeBlocksTask
     auto task_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
     if (!task_f.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_f.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_f.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kFreeBlocks, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kFreeBlocks, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_f);
       CHI_IPC->DelTask(loaded);
@@ -6443,13 +6443,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for WriteTask
     auto task_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
     if (!task_w.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_w.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kWrite, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kWrite, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_w);
       CHI_IPC->DelTask(loaded);
@@ -6458,13 +6458,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for ReadTask
     auto task_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
     if (!task_r.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_r.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kRead, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kRead, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_r);
       CHI_IPC->DelTask(loaded);
@@ -6473,13 +6473,13 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     // Test SaveTask and LoadTask for GetStatsTask
     auto task_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
     if (!task_s.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_s.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_s.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(chimaera::bdev::Method::kGetStats, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
-      hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
       bdev_runtime.LoadTask(chimaera::bdev::Method::kGetStats, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_s);
       CHI_IPC->DelTask(loaded);
@@ -6493,7 +6493,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
     if (!orig_c.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kCreate, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::CreateTask>());
       CHI_IPC->DelTask(orig_c);
@@ -6501,7 +6501,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
     if (!orig_d.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kDestroy, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::DestroyTask>());
       CHI_IPC->DelTask(orig_d);
@@ -6509,7 +6509,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
     if (!orig_a.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_a.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_a.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kAllocateBlocks, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::AllocateBlocksTask>());
       CHI_IPC->DelTask(orig_a);
@@ -6517,7 +6517,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
     if (!orig_f.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_f.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_f.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kFreeBlocks, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::FreeBlocksTask>());
       CHI_IPC->DelTask(orig_f);
@@ -6525,7 +6525,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
     if (!orig_w.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_w.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kWrite, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::WriteTask>());
       CHI_IPC->DelTask(orig_w);
@@ -6533,7 +6533,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
     if (!orig_r.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_r.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kRead, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::ReadTask>());
       CHI_IPC->DelTask(orig_r);
@@ -6541,7 +6541,7 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
 
     auto orig_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
     if (!orig_s.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_s.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_s.template Cast<chi::Task>();
       auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kGetStats, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::GetStatsTask>());
       CHI_IPC->DelTask(orig_s);
@@ -6556,8 +6556,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
     auto t2_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
     if (!t1_c.IsNull() && !t2_c.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_c);
       CHI_IPC->DelTask(t2_c);
@@ -6566,8 +6566,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
     auto t2_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
     if (!t1_d.IsNull() && !t2_d.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_d);
       CHI_IPC->DelTask(t2_d);
@@ -6576,8 +6576,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
     auto t2_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
     if (!t1_a.IsNull() && !t2_a.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_a.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_a.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_a.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_a.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_a);
       CHI_IPC->DelTask(t2_a);
@@ -6586,8 +6586,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
     auto t2_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
     if (!t1_f.IsNull() && !t2_f.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_f.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_f.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_f.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_f.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_f);
       CHI_IPC->DelTask(t2_f);
@@ -6596,8 +6596,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
     auto t2_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
     if (!t1_w.IsNull() && !t2_w.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_w.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_w.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_w);
       CHI_IPC->DelTask(t2_w);
@@ -6606,8 +6606,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
     auto t2_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
     if (!t1_r.IsNull() && !t2_r.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_r.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_r.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_r.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_r);
       CHI_IPC->DelTask(t2_r);
@@ -6616,8 +6616,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     auto t1_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
     auto t2_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
     if (!t1_s.IsNull() && !t2_s.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_s.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_s.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_s.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_s.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_s);
       CHI_IPC->DelTask(t2_s);
@@ -6682,7 +6682,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
 
     auto task_create = ipc_manager->NewTask<clio_cae::core::CreateTask>();
     if (!task_create.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
@@ -6693,13 +6693,13 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
 
     auto task_parse = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
     if (!task_parse.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_parse.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_parse.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
     auto task_hdf5 = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
     if (!task_hdf5.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_hdf5.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_hdf5.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
@@ -6718,7 +6718,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     // Test kCreate
     auto task_create = ipc_manager->NewTask<clio_cae::core::CreateTask>();
     if (!task_create.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cae_runtime.SaveTask(clio_cae::core::Method::kCreate, save_archive, task_ptr);
 
@@ -6726,7 +6726,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cae::core::CreateTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         cae_runtime.LoadTask(clio_cae::core::Method::kCreate, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -6752,7 +6752,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     // Test kParseOmni
     auto task_parse = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
     if (!task_parse.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_parse.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_parse.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cae_runtime.SaveTask(clio_cae::core::Method::kParseOmni, save_archive, task_ptr);
 
@@ -6760,7 +6760,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         cae_runtime.LoadTask(clio_cae::core::Method::kParseOmni, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -6770,7 +6770,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     // Test kProcessHdf5Dataset
     auto task_hdf5 = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
     if (!task_hdf5.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_hdf5.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_hdf5.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cae_runtime.SaveTask(clio_cae::core::Method::kProcessHdf5Dataset, save_archive, task_ptr);
 
@@ -6778,7 +6778,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         cae_runtime.LoadTask(clio_cae::core::Method::kProcessHdf5Dataset, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -6806,7 +6806,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     {
       auto orig = ipc_manager->NewTask<clio_cae::core::CreateTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         cae_runtime.SaveTask(clio_cae::core::Method::kCreate, save_archive, orig_ptr);
 
@@ -6824,7 +6824,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     {
       auto orig = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         cae_runtime.SaveTask(clio_cae::core::Method::kParseOmni, save_archive, orig_ptr);
 
@@ -6842,7 +6842,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     {
       auto orig = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         cae_runtime.SaveTask(clio_cae::core::Method::kProcessHdf5Dataset, save_archive, orig_ptr);
 
@@ -6865,7 +6865,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     // Test kCreate
     auto orig_c = ipc_manager->NewTask<clio_cae::core::CreateTask>();
     if (!orig_c.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
       auto copy = cae_runtime.NewCopyTask(clio_cae::core::Method::kCreate, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cae::core::CreateTask>());
       CHI_IPC->DelTask(orig_c);
@@ -6882,7 +6882,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     // Test kParseOmni
     auto orig_p = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
     if (!orig_p.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_p.template Cast<chi::Task>();
       auto copy = cae_runtime.NewCopyTask(clio_cae::core::Method::kParseOmni, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cae::core::ParseOmniTask>());
       CHI_IPC->DelTask(orig_p);
@@ -6891,7 +6891,7 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     // Test kProcessHdf5Dataset
     auto orig_h = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
     if (!orig_h.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_h.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_h.template Cast<chi::Task>();
       auto copy = cae_runtime.NewCopyTask(clio_cae::core::Method::kProcessHdf5Dataset, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_cae::core::ProcessHdf5DatasetTask>());
       CHI_IPC->DelTask(orig_h);
@@ -6915,8 +6915,8 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     auto t1_c = ipc_manager->NewTask<clio_cae::core::CreateTask>();
     auto t2_c = ipc_manager->NewTask<clio_cae::core::CreateTask>();
     if (!t1_c.IsNull() && !t2_c.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_c);
       CHI_IPC->DelTask(t2_c);
@@ -6935,8 +6935,8 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     auto t1_p = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
     auto t2_p = ipc_manager->NewTask<clio_cae::core::ParseOmniTask>();
     if (!t1_p.IsNull() && !t2_p.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_p.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_p.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_p.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_p);
       CHI_IPC->DelTask(t2_p);
@@ -6946,8 +6946,8 @@ TEST_CASE("Autogen - CAE Runtime Container Methods", "[autogen][cae][runtime]") 
     auto t1_h = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
     auto t2_h = ipc_manager->NewTask<clio_cae::core::ProcessHdf5DatasetTask>();
     if (!t1_h.IsNull() && !t2_h.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_h.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_h.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_h.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_h.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_h);
       CHI_IPC->DelTask(t2_h);
@@ -7161,37 +7161,37 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
 
     auto task_create = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
     if (!task_create.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
     auto task_destroy = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
     if (!task_destroy.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_destroy.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_destroy.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
     auto task_custom = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
     if (!task_custom.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_custom.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_custom.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
     auto task_comutex = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
     if (!task_comutex.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_comutex.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_comutex.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
     auto task_corwlock = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
     if (!task_corwlock.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_corwlock.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_corwlock.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
     auto task_wait = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
     if (!task_wait.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_wait.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_wait.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
@@ -7210,7 +7210,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCreate
     auto task_create = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
     if (!task_create.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCreate, save_archive, task_ptr);
 
@@ -7218,7 +7218,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCreate, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -7228,7 +7228,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kDestroy
     auto task_destroy = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
     if (!task_destroy.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_destroy.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_destroy.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kDestroy, save_archive, task_ptr);
 
@@ -7236,7 +7236,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kDestroy, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -7246,7 +7246,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCustom
     auto task_custom = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
     if (!task_custom.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_custom.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_custom.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCustom, save_archive, task_ptr);
 
@@ -7254,7 +7254,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCustom, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -7264,7 +7264,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCoMutexTest
     auto task_comutex = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
     if (!task_comutex.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_comutex.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_comutex.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, task_ptr);
 
@@ -7272,7 +7272,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCoMutexTest, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -7282,7 +7282,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCoRwLockTest
     auto task_corwlock = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
     if (!task_corwlock.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_corwlock.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_corwlock.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoRwLockTest, save_archive, task_ptr);
 
@@ -7290,7 +7290,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCoRwLockTest, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -7300,7 +7300,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kWaitTest
     auto task_wait = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
     if (!task_wait.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task_wait.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task_wait.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kWaitTest, save_archive, task_ptr);
 
@@ -7308,7 +7308,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
       auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
       if (!loaded.IsNull()) {
-        hipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
         mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kWaitTest, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
@@ -7336,7 +7336,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     {
       auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCreate, save_archive, orig_ptr);
 
@@ -7354,7 +7354,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     {
       auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCustom, save_archive, orig_ptr);
 
@@ -7372,7 +7372,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     {
       auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, orig_ptr);
 
@@ -7390,7 +7390,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     {
       auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoRwLockTest, save_archive, orig_ptr);
 
@@ -7408,7 +7408,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     {
       auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
       if (!orig.IsNull()) {
-        hipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
+        ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
         mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kWaitTest, save_archive, orig_ptr);
 
@@ -7431,7 +7431,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCreate
     auto orig_c = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
     if (!orig_c.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
       auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCreate, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CreateTask>());
       CHI_IPC->DelTask(orig_c);
@@ -7440,7 +7440,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kDestroy
     auto orig_d = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
     if (!orig_d.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
       auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kDestroy, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::DestroyTask>());
       CHI_IPC->DelTask(orig_d);
@@ -7449,7 +7449,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCustom
     auto orig_cu = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
     if (!orig_cu.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_cu.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cu.template Cast<chi::Task>();
       auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCustom, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CustomTask>());
       CHI_IPC->DelTask(orig_cu);
@@ -7458,7 +7458,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCoMutexTest
     auto orig_cm = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
     if (!orig_cm.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_cm.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cm.template Cast<chi::Task>();
       auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCoMutexTest, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CoMutexTestTask>());
       CHI_IPC->DelTask(orig_cm);
@@ -7467,7 +7467,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kCoRwLockTest
     auto orig_cr = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
     if (!orig_cr.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_cr.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cr.template Cast<chi::Task>();
       auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCoRwLockTest, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CoRwLockTestTask>());
       CHI_IPC->DelTask(orig_cr);
@@ -7476,7 +7476,7 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     // Test kWaitTest
     auto orig_w = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
     if (!orig_w.IsNull()) {
-      hipc::FullPtr<chi::Task> orig_ptr = orig_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_w.template Cast<chi::Task>();
       auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kWaitTest, orig_ptr, false);
       if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::WaitTestTask>());
       CHI_IPC->DelTask(orig_w);
@@ -7500,8 +7500,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     auto t1_c = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
     auto t2_c = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
     if (!t1_c.IsNull() && !t2_c.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_c);
       CHI_IPC->DelTask(t2_c);
@@ -7511,8 +7511,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     auto t1_d = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
     auto t2_d = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
     if (!t1_d.IsNull() && !t2_d.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_d);
       CHI_IPC->DelTask(t2_d);
@@ -7522,8 +7522,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     auto t1_cu = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
     auto t2_cu = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
     if (!t1_cu.IsNull() && !t2_cu.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_cu.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_cu.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cu.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cu.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_cu);
       CHI_IPC->DelTask(t2_cu);
@@ -7533,8 +7533,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     auto t1_cm = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
     auto t2_cm = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
     if (!t1_cm.IsNull() && !t2_cm.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_cm.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_cm.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cm.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cm.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_cm);
       CHI_IPC->DelTask(t2_cm);
@@ -7544,8 +7544,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     auto t1_cr = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
     auto t2_cr = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
     if (!t1_cr.IsNull() && !t2_cr.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_cr.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_cr.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cr.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cr.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_cr);
       CHI_IPC->DelTask(t2_cr);
@@ -7555,8 +7555,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     auto t1_w = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
     auto t2_w = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
     if (!t1_w.IsNull() && !t2_w.IsNull()) {
-      hipc::FullPtr<chi::Task> ptr1 = t1_w.template Cast<chi::Task>();
-      hipc::FullPtr<chi::Task> ptr2 = t2_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr1 = t1_w.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> ptr2 = t2_w.template Cast<chi::Task>();
       ptr1.ptr_->Aggregate(ptr2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t1_w);
       CHI_IPC->DelTask(t2_w);
@@ -9665,7 +9665,7 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
 
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->LocalSaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task_ptr);
 
     auto loaded_task = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
@@ -9690,7 +9690,7 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
 
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-    hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+    ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
     container->LocalSaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task_ptr);
 
     chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
@@ -9723,7 +9723,7 @@ TEST_CASE("Autogen - Admin LocalAllocLoadTask Additional Methods", "[autogen][ad
     if (!orig_task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
       container->LocalSaveTask(chimaera::admin::Method::kFlush, save_archive, task_ptr);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
@@ -9743,7 +9743,7 @@ TEST_CASE("Autogen - Admin LocalAllocLoadTask Additional Methods", "[autogen][ad
     if (!orig_task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
       container->LocalSaveTask(chimaera::admin::Method::kMonitor, save_archive, task_ptr);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
@@ -9763,7 +9763,7 @@ TEST_CASE("Autogen - Admin LocalAllocLoadTask Additional Methods", "[autogen][ad
     if (!orig_task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      hipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
+      ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
       container->LocalSaveTask(chimaera::admin::Method::kClientConnect, save_archive, task_ptr);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
@@ -10018,7 +10018,7 @@ TEST_CASE("Autogen - CTE GetTargetInfo Container Methods", "[autogen][cte][getta
   SECTION("GetTargetInfo SaveTask/LoadTask") {
     auto task = cte_runtime.NewTask(clio_cte::core::Method::kGetTargetInfo);
     if (!task.IsNull()) {
-      hipc::FullPtr<chi::Task> task_ptr = task;
+      ctp::ipc::FullPtr<chi::Task> task_ptr = task;
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       cte_runtime.SaveTask(clio_cte::core::Method::kGetTargetInfo, save_archive, task_ptr);
 
@@ -12228,7 +12228,7 @@ TEST_CASE("Autogen - CTE Context struct GlobalSerialize", "[autogen][cte][contex
     ctx.persistence_target_ = 1;
     ctx.min_persistence_level_ = 2;
     ctx.preallocate_ = 4096;
-#ifdef WRP_CTE_ENABLE_COMPRESSION
+#ifdef CLIO_CTE_ENABLE_COMPRESSION
     ctx.dynamic_compress_ = 2;
     ctx.compress_lib_ = 3;
     ctx.compress_preset_ = 1;
@@ -12256,7 +12256,7 @@ TEST_CASE("Autogen - CTE Context struct GlobalSerialize", "[autogen][cte][contex
     REQUIRE(loaded.persistence_target_ == 1);
     REQUIRE(loaded.min_persistence_level_ == 2);
     REQUIRE(loaded.preallocate_ == 4096);
-#ifdef WRP_CTE_ENABLE_COMPRESSION
+#ifdef CLIO_CTE_ENABLE_COMPRESSION
     REQUIRE(loaded.dynamic_compress_ == 2);
     REQUIRE(loaded.compress_lib_ == 3);
     REQUIRE(loaded.compress_preset_ == 1);
@@ -12296,7 +12296,7 @@ TEST_CASE("Autogen - CTE Context struct GlobalSerialize", "[autogen][cte][contex
     REQUIRE(ctx.persistence_target_ == -1);
     REQUIRE(ctx.min_persistence_level_ == 0);
     REQUIRE(ctx.preallocate_ == 0);
-#ifdef WRP_CTE_ENABLE_COMPRESSION
+#ifdef CLIO_CTE_ENABLE_COMPRESSION
     REQUIRE(ctx.dynamic_compress_ == 0);
     REQUIRE(ctx.compress_preset_ == 2);
     REQUIRE(ctx.psnr_chance_ == 100);
@@ -13733,7 +13733,7 @@ TEST_CASE("Autogen - ClientShmInfo struct", "[autogen][ipc][clientshminfo]") {
   }
 
   SECTION("Parameterized constructor") {
-    hipc::AllocatorId alloc_id(1, 2);
+    ctp::ipc::AllocatorId alloc_id(1, 2);
     chi::ClientShmInfo info("test_shm", 1234, 3, 4096, alloc_id);
     REQUIRE(info.shm_name == "test_shm");
     REQUIRE(info.owner_pid == 1234);

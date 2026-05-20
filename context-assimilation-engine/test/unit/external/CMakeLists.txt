@@ -26,8 +26,8 @@ find_package(iowarp-core CONFIG REQUIRED)
 #     - chimaera::bdev_client, chimaera::bdev_runtime
 #
 #   Optional ChiMods (if enabled at build time):
-#     - clio_cte::core_client, clio_cte::core_runtime (CTE - included if WRP_CORE_ENABLE_CTE=ON)
-#     - clio_cae::core_client, clio_cae::core_runtime (CAE - included if WRP_CORE_ENABLE_CAE=ON)
+#     - clio_cte::core_client, clio_cte::core_runtime (CTE - included if CLIO_CORE_ENABLE_CTE=ON)
+#     - clio_cae::core_client, clio_cae::core_runtime (CAE - included if CLIO_CORE_ENABLE_CAE=ON)
 
 # Find additional system dependencies
 find_package(PkgConfig REQUIRED)

@@ -79,8 +79,8 @@ void EnsureInit() {
   if (g_initialized) return;
   std::fprintf(stderr, "[INIT] Bringing up Chimaera server\n");
   REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer));
-  REQUIRE(cte::WRP_CTE_CLIENT_INIT());
-  auto *cte_client = WRP_CTE_CLIENT;
+  REQUIRE(cte::CLIO_CTE_CLIENT_INIT());
+  auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
   cte_client->Init(cte::kCtePoolId);
   cte::CreateParams params;
@@ -130,7 +130,7 @@ __global__ void DevMemFillKernel(char *buf, chi::u32 size, chi::u32 seed) {
 
 /** Submit one pre-built device-resident task and wait for completion. */
 __global__ void DevMemSubmitPutKernel(chi::IpcManagerGpuInfo info,
-                                       hipc::FullPtr<cte::PutBlobTask> task) {
+                                       ctp::ipc::FullPtr<cte::PutBlobTask> task) {
   CHIMAERA_GPU_INIT(info, /*ipc_ptr=*/nullptr);
   if (threadIdx.x != 0) return;
   auto fut = g_ipc_manager_ptr->Send(task);
@@ -139,7 +139,7 @@ __global__ void DevMemSubmitPutKernel(chi::IpcManagerGpuInfo info,
 }
 
 __global__ void DevMemSubmitGetKernel(chi::IpcManagerGpuInfo info,
-                                       hipc::FullPtr<cte::GetBlobTask> task) {
+                                       ctp::ipc::FullPtr<cte::GetBlobTask> task) {
   CHIMAERA_GPU_INIT(info, /*ipc_ptr=*/nullptr);
   if (threadIdx.x != 0) return;
   auto fut = g_ipc_manager_ptr->Send(task);
@@ -200,7 +200,7 @@ TEST_CASE("CTE PutBlob+GetBlob round trip with device-memory task & data",
   // PutBlob prototype:
   alignas(64) char put_proto[kPutSlot];
   std::memset(put_proto, 0, sizeof(put_proto));
-  hipc::ShmPtr<> put_blob_shm;
+  ctp::ipc::ShmPtr<> put_blob_shm;
   put_blob_shm.alloc_id_.SetNull();
   put_blob_shm.off_ = reinterpret_cast<chi::u64>(blob_dev);
   auto *put_proto_task = new (put_proto) cte::PutBlobTask(
@@ -215,7 +215,7 @@ TEST_CASE("CTE PutBlob+GetBlob round trip with device-memory task & data",
   // GetBlob prototype:
   alignas(64) char get_proto[kGetSlot];
   std::memset(get_proto, 0, sizeof(get_proto));
-  hipc::ShmPtr<> get_blob_shm;
+  ctp::ipc::ShmPtr<> get_blob_shm;
   get_blob_shm.alloc_id_.SetNull();
   get_blob_shm.off_ = reinterpret_cast<chi::u64>(blob_dev);
   auto *get_proto_task = new (get_proto) cte::GetBlobTask(
@@ -236,11 +236,11 @@ TEST_CASE("CTE PutBlob+GetBlob round trip with device-memory task & data",
 
   // ---- 4) Build kernel-visible FullPtrs (raw device addresses
   //         stashed in off_, null alloc_id). ----
-  hipc::FullPtr<cte::PutBlobTask> put_fp;
+  ctp::ipc::FullPtr<cte::PutBlobTask> put_fp;
   put_fp.shm_.alloc_id_.SetNull();
   put_fp.shm_.off_ = reinterpret_cast<chi::u64>(task_dev_base);
   put_fp.ptr_ = reinterpret_cast<cte::PutBlobTask *>(task_dev_base);
-  hipc::FullPtr<cte::GetBlobTask> get_fp;
+  ctp::ipc::FullPtr<cte::GetBlobTask> get_fp;
   get_fp.shm_.alloc_id_.SetNull();
   get_fp.shm_.off_ =
       reinterpret_cast<chi::u64>(task_dev_base + kPutSlot);

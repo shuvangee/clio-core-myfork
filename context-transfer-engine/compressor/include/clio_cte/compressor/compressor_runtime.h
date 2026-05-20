@@ -32,8 +32,8 @@
  */
 
 // Copyright 2024 IOWarp contributors
-#ifndef WRP_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_
-#define WRP_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_
+#ifndef CLIO_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_
+#define CLIO_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_
 
 #include <atomic>
 #include <chimaera/chimaera.h>
@@ -51,7 +51,7 @@
 #include <clio_cte/compressor/models/distribution_classifier.h>
 #include <clio_cte/core/core_client.h>
 
-#ifdef WRP_COMPRESSOR_ENABLE_DENSE_NN
+#ifdef CLIO_COMPRESSOR_ENABLE_DENSE_NN
 #include <clio_cte/compressor/models/dense_nn_predictor.h>
 #endif
 
@@ -99,85 +99,85 @@ private:
    * Create the container (Method::kCreate)
    * Initializes predictors and loads AI models
    */
-  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext &ctx);
+  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &ctx);
 
   /**
    * Destroy the container (Method::kDestroy)
    * Cleanup resources and predictors
    */
-  chi::TaskResume Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext &ctx);
+  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &ctx);
 
   /**
    * Monitor container state (Method::kMonitor)
    * Polls core for target information and serializes results with msgpack
    */
-  chi::TaskResume Monitor(hipc::FullPtr<MonitorTask> task, chi::RunContext &ctx);
+  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &ctx);
 
   /**
    * Dynamic compression scheduling (Method::kDynamicSchedule)
    * Analyzes data and determines optimal compression strategy
    */
-  chi::TaskResume DynamicSchedule(hipc::FullPtr<DynamicScheduleTask> task,
+  chi::TaskResume DynamicSchedule(ctp::ipc::FullPtr<DynamicScheduleTask> task,
                                    chi::RunContext &ctx);
 
   /**
    * Compress data (Method::kCompress)
    * Executes compression with specified library and parameters
    */
-  chi::TaskResume Compress(hipc::FullPtr<CompressTask> task,
+  chi::TaskResume Compress(ctp::ipc::FullPtr<CompressTask> task,
                             chi::RunContext &ctx);
 
   /**
    * Decompress data (Method::kDecompress)
    * Executes decompression with specified library and parameters
    */
-  chi::TaskResume Decompress(hipc::FullPtr<DecompressTask> task,
+  chi::TaskResume Decompress(ctp::ipc::FullPtr<DecompressTask> task,
                               chi::RunContext &ctx);
 
   /**
    * Sample this node's CPU utilization and aggregated worker load
    * (Method::kPollNodeLoad). Writes results into task->sample_.
    */
-  chi::TaskResume PollNodeLoad(hipc::FullPtr<PollNodeLoadTask> task,
+  chi::TaskResume PollNodeLoad(ctp::ipc::FullPtr<PollNodeLoadTask> task,
                                 chi::RunContext &ctx);
 
   /**
    * Periodic task that iterates the tracked consumer list and dispatches
    * PollNodeLoad to each consumer node (Method::kPollConsumers).
    */
-  chi::TaskResume PollConsumers(hipc::FullPtr<PollConsumersTask> task,
+  chi::TaskResume PollConsumers(ctp::ipc::FullPtr<PollConsumersTask> task,
                                  chi::RunContext &ctx);
 
   /**
    * Schedule a task by resolving Dynamic pool queries.
    */
-  chi::PoolQuery ScheduleTask(const hipc::FullPtr<chi::Task> &task) override;
+  chi::PoolQuery ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) override;
 
   // Autogen-provided methods
   void Init(const chi::PoolId &pool_id, const std::string &pool_name,
             chi::u32 container_id = 0) override;
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr,
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr,
                       chi::RunContext &rctx) override;
   chi::u64 GetWorkRemaining() const override;
   void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   // Container virtual method implementations (defined in autogen/compressor_lib_exec.cc)
   void LoadTask(chi::u32 method, chi::LoadTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override;
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr,
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override;
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
                                         bool deep) override;
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method,
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method,
                                                chi::DefaultLoadArchive &archive) override;
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
 private:
   // AI model predictors
@@ -185,13 +185,13 @@ private:
   std::unique_ptr<LinRegTablePredictor> linreg_predictor_;
   // Note: DistributionClassifier is a template - use DistributionClassifierFactory for type-erased access
 
-#ifdef WRP_COMPRESSOR_ENABLE_DENSE_NN
+#ifdef CLIO_COMPRESSOR_ENABLE_DENSE_NN
   std::unique_ptr<DenseNNPredictor> nn_predictor_;
 #endif
 
   // Compression telemetry ring buffer for performance monitoring
-  using CompressionTelemetryLog = hipc::ring_buffer<CompressionTelemetry, CHI_TASK_ALLOC_T>;
-  hipc::ShmPtr<CompressionTelemetryLog> compression_telemetry_log_;
+  using CompressionTelemetryLog = ctp::ipc::ring_buffer<CompressionTelemetry, CHI_TASK_ALLOC_T>;
+  ctp::ipc::ShmPtr<CompressionTelemetryLog> compression_telemetry_log_;
   std::atomic<std::uint64_t> compression_logical_time_;
 
   // Configuration
@@ -319,4 +319,4 @@ private:
 
 } // namespace clio_cte::compressor
 
-#endif // WRP_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_
+#endif // CLIO_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_

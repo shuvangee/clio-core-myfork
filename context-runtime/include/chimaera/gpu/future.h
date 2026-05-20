@@ -95,20 +95,20 @@ class Future {
   friend class Future;
 
  private:
-  hipc::FullPtr<TaskT> task_ptr_;
-  hipc::ShmPtr<FutureT> future_shm_;
+  ctp::ipc::FullPtr<TaskT> task_ptr_;
+  ctp::ipc::ShmPtr<FutureT> future_shm_;
 
  public:
   CTP_CROSS_FUN Future() = default;
 
-  CTP_CROSS_FUN Future(hipc::ShmPtr<FutureT> future_shm,
-                        const hipc::FullPtr<TaskT> &task_ptr)
+  CTP_CROSS_FUN Future(ctp::ipc::ShmPtr<FutureT> future_shm,
+                        const ctp::ipc::FullPtr<TaskT> &task_ptr)
       : future_shm_(future_shm) {
     task_ptr_.shm_ = task_ptr.shm_;
     task_ptr_.ptr_ = task_ptr.ptr_;
   }
 
-  CTP_CROSS_FUN explicit Future(const hipc::ShmPtr<FutureT> &future_shm_ptr)
+  CTP_CROSS_FUN explicit Future(const ctp::ipc::ShmPtr<FutureT> &future_shm_ptr)
       : future_shm_(future_shm_ptr) {
     task_ptr_.SetNull();
   }
@@ -153,9 +153,9 @@ class Future {
   CTP_CROSS_FUN TaskT *operator->() const { return task_ptr_.ptr_; }
   CTP_CROSS_FUN bool IsNull() const { return task_ptr_.IsNull(); }
 
-  hipc::FullPtr<TaskT> &GetTaskPtr() { return task_ptr_; }
-  const hipc::FullPtr<TaskT> &GetTaskPtr() const { return task_ptr_; }
-  CTP_CROSS_FUN hipc::ShmPtr<FutureT> GetFutureShmPtr() const {
+  ctp::ipc::FullPtr<TaskT> &GetTaskPtr() { return task_ptr_; }
+  const ctp::ipc::FullPtr<TaskT> &GetTaskPtr() const { return task_ptr_; }
+  CTP_CROSS_FUN ctp::ipc::ShmPtr<FutureT> GetFutureShmPtr() const {
     return future_shm_;
   }
 
@@ -196,7 +196,7 @@ class Future {
 
 /** Queue type for the per-device gpu2cpu_queue (stores gpu::Future<Task>). */
 using GpuTaskQueue =
-    hipc::multi_mpsc_ring_buffer<gpu::Future<Task>, CHI_QUEUE_ALLOC_T>;
+    ctp::ipc::multi_mpsc_ring_buffer<gpu::Future<Task>, CHI_QUEUE_ALLOC_T>;
 /** Single lane within a GpuTaskQueue. */
 using GpuTaskLane = GpuTaskQueue::ring_buffer_type;
 

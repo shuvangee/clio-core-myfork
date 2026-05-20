@@ -261,7 +261,7 @@ int main() {
   if (!success) return 1;
 
   // 2. Initialize CTE subsystem
-  clio_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::CLIO_CTE_CLIENT_INIT();
 
   // 3. Create CTE client
   clio_cte::core::Client cte_client;
@@ -281,7 +281,7 @@ int main() {
 
   // 6. Store blob data
   std::vector<char> data(4096, 'A');
-  hipc::FullPtr<char> shared_data = CHI_IPC->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shared_data = CHI_IPC->AllocateBuffer(data.size());
   memcpy(shared_data.ptr_, data.data(), data.size());
 
   cte_client.PutBlob(tag_id, "my_blob",
@@ -293,7 +293,7 @@ int main() {
   CHI_IPC->FreeBuffer(shared_data);
 
   // 7. Retrieve blob data
-  hipc::FullPtr<char> read_buf = CHI_IPC->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> read_buf = CHI_IPC->AllocateBuffer(data.size());
   cte_client.GetBlob(tag_id, "my_blob",
                      0,                    // offset
                      data.size(),          // size

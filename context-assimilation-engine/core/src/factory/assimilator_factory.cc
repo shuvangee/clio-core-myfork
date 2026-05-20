@@ -33,7 +33,7 @@
 
 #include <clio_cae/core/factory/assimilator_factory.h>
 #include <clio_cae/core/factory/binary_file_assimilator.h>
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
 #include <clio_cae/core/factory/hdf5_file_assimilator.h>
 #endif
 #ifdef CAE_ENABLE_GLOBUS
@@ -79,7 +79,7 @@ std::unique_ptr<BaseAssimilator> AssimilatorFactory::Get(
     // For file protocol, return a BinaryFileAssimilator
     return std::make_unique<BinaryFileAssimilator>(cte_client_);
   } else if (protocol == "hdf5") {
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
     HLOG(
         kInfo,
         "AssimilatorFactory: Creating Hdf5FileAssimilator for 'hdf5' protocol");

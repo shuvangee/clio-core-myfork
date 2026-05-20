@@ -45,7 +45,7 @@
 #include "clio_ctp/memory/backend/gpu_shm_mmap.h"
 #include "clio_ctp/util/gpu_api.h"
 
-using hipc::PartitionedAllocator;
+using ctp::ipc::PartitionedAllocator;
 using ctp::ipc::GpuShmMmap;
 using ctp::ipc::MemoryBackendId;
 
@@ -56,13 +56,13 @@ using ctp::ipc::MemoryBackendId;
 __global__ void ThreadAllocInitKernel(
     char *backend_base,
     size_t data_capacity,
-    hipc::MemoryBackendId backend_id,
+    ctp::ipc::MemoryBackendId backend_id,
     int max_threads) {
 
   auto *alloc = reinterpret_cast<ctp::ipc::_PartitionedAllocator*>(backend_base);
   new (alloc) ctp::ipc::_PartitionedAllocator();
 
-  hipc::MemoryBackend sub_backend;
+  ctp::ipc::MemoryBackend sub_backend;
   sub_backend.data_ = backend_base;
   sub_backend.data_capacity_ = data_capacity;
   sub_backend.id_ = backend_id;
@@ -128,7 +128,7 @@ __global__ void ThreadAllocWorkKernel(
   // Allocate from this thread block's BuddyAllocator
   int count = 0;
   while (count < 100) {
-    hipc::OffsetPtr<> off = block->alloc_.AllocateOffset(sizeof(TestObj128));
+    ctp::ipc::OffsetPtr<> off = block->alloc_.AllocateOffset(sizeof(TestObj128));
     if (off.IsNull()) break;
 
     auto *obj = reinterpret_cast<TestObj128*>(
@@ -183,7 +183,7 @@ __global__ void CrossBlockAllocKernel(
 
   int count = 0;
   for (int i = 0; i < kCrossBlockObjs; ++i) {
-    hipc::OffsetPtr<> off = block->alloc_.AllocateOffset(sizeof(TestObj128));
+    ctp::ipc::OffsetPtr<> off = block->alloc_.AllocateOffset(sizeof(TestObj128));
     if (off.IsNull()) break;
 
     auto *obj = reinterpret_cast<TestObj128*>(backend_base + off.load());
@@ -208,7 +208,7 @@ __global__ void CrossBlockFreeKernel(
 
   int count = 0;
   for (int i = 0; i < num_to_free; ++i) {
-    hipc::OffsetPtr<> off(d_offsets[i]);
+    ctp::ipc::OffsetPtr<> off(d_offsets[i]);
     // Verify data before freeing
     auto *obj = reinterpret_cast<TestObj128*>(backend_base + off.load());
     if (!obj->Check(0, static_cast<ctp::u32>(i))) {
@@ -238,7 +238,7 @@ __global__ void CrossBlockReallocKernel(
 
   int count = 0;
   for (int i = 0; i < kCrossBlockObjs; ++i) {
-    hipc::OffsetPtr<> off = block->alloc_.AllocateOffset(sizeof(TestObj128));
+    ctp::ipc::OffsetPtr<> off = block->alloc_.AllocateOffset(sizeof(TestObj128));
     if (off.IsNull()) break;
 
     auto *obj = reinterpret_cast<TestObj128*>(backend_base + off.load());

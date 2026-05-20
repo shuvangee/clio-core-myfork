@@ -16,7 +16,6 @@
 #include <cstring>
 #include <thread>
 
-namespace hipc = ctp::ipc;
 
 namespace {
 struct ReuseResult {
@@ -24,7 +23,7 @@ struct ReuseResult {
   size_t fail_iter;  // first iteration that returned null, 0 if none
 };
 
-ReuseResult RunReuse(hipc::ProducerConsumerAllocator *alloc,
+ReuseResult RunReuse(ctp::ipc::ProducerConsumerAllocator *alloc,
                      size_t alloc_size, size_t iterations) {
   ReuseResult r{0, 0};
   for (size_t i = 0; i < iterations; ++i) {
@@ -43,12 +42,12 @@ ReuseResult RunReuse(hipc::ProducerConsumerAllocator *alloc,
 
 TEST_CASE("ProducerConsumerAllocator - Reuse: 4400B same-thread tight loop",
           "[ProducerConsumerAllocator][reuse]") {
-  hipc::PosixMmap backend;
+  ctp::ipc::PosixMmap backend;
   // 64MB heap: way more than 4400B but far less than 1M*4400B (=4.2GB)
   size_t heap_size = 64 * 1024 * 1024;
-  size_t header = sizeof(hipc::ProducerConsumerAllocator);
-  REQUIRE(backend.shm_init(hipc::MemoryBackendId(99, 0), header + heap_size));
-  auto *alloc = backend.MakeAlloc<hipc::ProducerConsumerAllocator>();
+  size_t header = sizeof(ctp::ipc::ProducerConsumerAllocator);
+  REQUIRE(backend.shm_init(ctp::ipc::MemoryBackendId(99, 0), header + heap_size));
+  auto *alloc = backend.MakeAlloc<ctp::ipc::ProducerConsumerAllocator>();
   REQUIRE(alloc != nullptr);
 
   auto r = RunReuse(alloc, 4400, 1'000'000);
@@ -62,11 +61,11 @@ TEST_CASE("ProducerConsumerAllocator - Reuse: 4400B same-thread tight loop",
 
 TEST_CASE("ProducerConsumerAllocator - Reuse: 4400B in worker thread",
           "[ProducerConsumerAllocator][reuse]") {
-  hipc::PosixMmap backend;
+  ctp::ipc::PosixMmap backend;
   size_t heap_size = 64 * 1024 * 1024;
-  size_t header = sizeof(hipc::ProducerConsumerAllocator);
-  REQUIRE(backend.shm_init(hipc::MemoryBackendId(99, 1), header + heap_size));
-  auto *alloc = backend.MakeAlloc<hipc::ProducerConsumerAllocator>();
+  size_t header = sizeof(ctp::ipc::ProducerConsumerAllocator);
+  REQUIRE(backend.shm_init(ctp::ipc::MemoryBackendId(99, 1), header + heap_size));
+  auto *alloc = backend.MakeAlloc<ctp::ipc::ProducerConsumerAllocator>();
   REQUIRE(alloc != nullptr);
 
   ReuseResult r{0, 0};
@@ -93,12 +92,12 @@ TEST_CASE("ProducerConsumerAllocator - Reuse after cross-process attach",
   std::string url = "test_mp_reuse_xproc";
   ::shm_unlink(url.c_str());
 
-  hipc::PosixShmMmap backend;
+  ctp::ipc::PosixShmMmap backend;
   size_t heap_size = 64 * 1024 * 1024;
-  size_t header = sizeof(hipc::ProducerConsumerAllocator);
-  REQUIRE(backend.shm_init(hipc::MemoryBackendId(77, 0),
+  size_t header = sizeof(ctp::ipc::ProducerConsumerAllocator);
+  REQUIRE(backend.shm_init(ctp::ipc::MemoryBackendId(77, 0),
                             header + heap_size, url));
-  auto *alloc = backend.MakeAlloc<hipc::ProducerConsumerAllocator>();
+  auto *alloc = backend.MakeAlloc<ctp::ipc::ProducerConsumerAllocator>();
   REQUIRE(alloc != nullptr);
 
   // Fork a child to act as "the runtime": attach to the allocator and exit.
@@ -114,9 +113,9 @@ TEST_CASE("ProducerConsumerAllocator - Reuse after cross-process attach",
     // subsystems before attaching).
     pthread_key_t pad[8];
     for (auto &k : pad) pthread_key_create(&k, nullptr);
-    hipc::PosixShmMmap child_backend;
+    ctp::ipc::PosixShmMmap child_backend;
     if (!child_backend.shm_attach(url)) _exit(2);
-    if (child_backend.AttachAlloc<hipc::ProducerConsumerAllocator>() == nullptr)
+    if (child_backend.AttachAlloc<ctp::ipc::ProducerConsumerAllocator>() == nullptr)
       _exit(3);
     _exit(0);
   }

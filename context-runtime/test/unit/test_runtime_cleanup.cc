@@ -237,7 +237,7 @@ TEST_CASE("Cleanup - RegisterMemory", "[cleanup][ipc][memory]") {
   REQUIRE(ipc != nullptr);
 
   // Create a custom allocator ID
-  hipc::AllocatorId custom_alloc_id(1, 42);
+  ctp::ipc::AllocatorId custom_alloc_id(1, 42);
 
   // Test RegisterMemory
   bool registered = ipc->RegisterMemory(custom_alloc_id);

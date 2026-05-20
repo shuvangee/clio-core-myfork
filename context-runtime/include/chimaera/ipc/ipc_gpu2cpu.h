@@ -44,7 +44,7 @@ struct IpcGpu2Cpu {
    */
   template <typename TaskT>
   static CTP_GPU_FUN gpu::Future<TaskT> ClientSend(
-      gpu::IpcManager *ipc, const hipc::FullPtr<TaskT> &task_ptr);
+      gpu::IpcManager *ipc, const ctp::ipc::FullPtr<TaskT> &task_ptr);
 
   /**
    * CPU-side: resolve the popped gpu::Future<Task> into a host-readable
@@ -54,7 +54,7 @@ struct IpcGpu2Cpu {
    * Note: with the producer-only redesign this no longer touches a
    * lightbeam transport — the GPU never serializes through ZMQ.
    */
-  static hipc::FullPtr<Task> RuntimeRecv(
+  static ctp::ipc::FullPtr<Task> RuntimeRecv(
       IpcManager *ipc, Future<Task> &future, Container *container,
       u32 method_id, ctp::lbm::Transport *recv_transport);
 

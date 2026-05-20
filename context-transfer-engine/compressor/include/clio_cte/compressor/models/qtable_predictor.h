@@ -40,8 +40,8 @@
  * and lookup tables for fast, dependency-free prediction.
  */
 
-#ifndef WRP_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_
-#define WRP_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_
+#ifndef CLIO_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_
+#define CLIO_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_
 
 #include "compression_features.h"
 #include <map>
@@ -287,4 +287,4 @@ class QTablePredictor : public CompressionPredictor {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_
+#endif  // CLIO_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_

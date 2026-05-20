@@ -16,7 +16,7 @@ name: wfcommons_posix_baremetal
 install_manager: default
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: cte_runtime
     # Use shared-memory IPC instead of TCP. wfbench spawns stress-ng
     # subprocesses for its memory benchmarks which signal the parent
@@ -47,6 +47,6 @@ pkgs:
     interceptors: [cte_posix]
 
 interceptors:
-  - pkg_type: jarvis_iowarp.clio_adapters
+  - pkg_type: jarvis_clio_core.clio_adapters
     pkg_name: cte_posix
     posix: true

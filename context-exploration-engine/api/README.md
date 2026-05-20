@@ -235,7 +235,7 @@ cmake --build build --target test_context_bundle test_context_query test_context
 # Terminal 1: Start the Chimaera runtime
 cd build
 LD_LIBRARY_PATH=/workspace/build/bin:$LD_LIBRARY_PATH \
-WRP_CTE_CONF=/workspace/context-assimilation-engine/test/unit/clio_config.yaml \
+CLIO_CTE_CONF=/workspace/context-assimilation-engine/test/unit/clio_config.yaml \
 ./bin/chimaera runtime start
 
 # Wait for message: "Successfully started local server at 127.0.0.1:9129"

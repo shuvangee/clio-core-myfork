@@ -26,7 +26,7 @@ struct IpcCpu2CpuZmq {
   /** Serialize and send via ZMQ. */
   template <typename TaskT>
   static Future<TaskT> ClientSend(IpcManager *ipc,
-                                   const hipc::FullPtr<TaskT> &task_ptr,
+                                   const ctp::ipc::FullPtr<TaskT> &task_ptr,
                                    IpcMode mode);
 
   /**
@@ -56,7 +56,7 @@ struct IpcCpu2CpuZmq {
    * @return true if any work was done
    */
   static bool RuntimeSend(IpcManager *ipc, u32 &tasks_sent,
-                           std::vector<hipc::FullPtr<Task>> &deferred_deletes);
+                           std::vector<ctp::ipc::FullPtr<Task>> &deferred_deletes);
 
   /** Wait for COMPLETE, deserialize from pending archives. */
   template <typename TaskT>

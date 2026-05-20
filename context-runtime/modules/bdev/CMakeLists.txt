@@ -2,15 +2,15 @@ cmake_minimum_required(VERSION 3.10)
 
 # Collect optional NIXL dependency
 set(BDEV_OPTIONAL_LIBS "")
-if(WRP_CORE_ENABLE_NIXL)
+if(CLIO_CORE_ENABLE_NIXL)
   list(APPEND BDEV_OPTIONAL_LIBS ctp::nixl)
 endif()
 
 # Collect optional CUDA dependency for kHbm/kPinned bdev types
 set(BDEV_GPU_LIBS "")
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
   list(APPEND BDEV_GPU_LIBS ctp::cuda_cxx)
-elseif(WRP_CORE_ENABLE_ROCM)
+elseif(CLIO_CORE_ENABLE_ROCM)
   list(APPEND BDEV_GPU_LIBS ctp::rocm_cxx)
 endif()
 
@@ -41,7 +41,7 @@ add_chimod_runtime(
 # headers (clang-offload-bundler rejects .pch). When that's resolved
 # (likely needs PCH disabled for SYCL builds), enable here:
 #
-#   if(WRP_CORE_ENABLE_SYCL AND TARGET chimaera_bdev_runtime)
+#   if(CLIO_CORE_ENABLE_SYCL AND TARGET chimaera_bdev_runtime)
 #     set_target_properties(chimaera_bdev_runtime PROPERTIES
 #       DISABLE_PRECOMPILE_HEADERS ON)
 #     wrp_core_apply_sycl_flags(chimaera_bdev_runtime)
@@ -51,6 +51,6 @@ add_chimod_runtime(
 # `#if CTP_ENABLE_SYCL && !(CUDA||ROCM)` guard in src/bdev_runtime.cc.
 
 # Unit tests
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
   add_subdirectory(test)
 endif()

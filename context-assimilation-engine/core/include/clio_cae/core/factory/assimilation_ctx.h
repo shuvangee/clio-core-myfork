@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CAE_CORE_ASSIMILATION_CTX_H_
-#define WRP_CAE_CORE_ASSIMILATION_CTX_H_
+#ifndef CLIO_CAE_CORE_ASSIMILATION_CTX_H_
+#define CLIO_CAE_CORE_ASSIMILATION_CTX_H_
 
 #include <string>
 #include <vector>
@@ -90,4 +90,4 @@ struct AssimilationCtx {
 
 }  // namespace clio_cae::core
 
-#endif  // WRP_CAE_CORE_ASSIMILATION_CTX_H_
+#endif  // CLIO_CAE_CORE_ASSIMILATION_CTX_H_

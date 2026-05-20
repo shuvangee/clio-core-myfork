@@ -62,7 +62,7 @@ IowarpEngine::IowarpEngine(adios2::core::IO &io, const std::string &name,
       total_io_time_ms_(0.0) {
   HLOG(kDebug, "[IowarpEngine] Constructor entered, rank={}, name={}", rank_, name);
 
-  // At >=512 nodes (>=6144 ranks at 12 ppn) calling WRP_CTE_CLIENT_INIT
+  // At >=512 nodes (>=6144 ranks at 12 ppn) calling CLIO_CTE_CLIENT_INIT
   // simultaneously across all ranks overwhelms each daemon's local 9416
   // ROUTER — every per-rank ZMTP greeting times out and the SIM aborts
   // before step 1. Stagger init per local-rank within a node so the
@@ -95,7 +95,7 @@ IowarpEngine::IowarpEngine(adios2::core::IO &io, const std::string &name,
   // Jitter desynchronizes 12 same-node ranks so they don't all retry
   // on the same second. Tunable via CHI_INIT_ATTEMPTS and
   // CHI_INIT_SLEEP_MS (sleep is mean; actual is uniform [0.5x, 1.5x]).
-  HLOG(kDebug, "[IowarpEngine] About to call WRP_CTE_CLIENT_INIT");
+  HLOG(kDebug, "[IowarpEngine] About to call CLIO_CTE_CLIENT_INIT");
   const char *att_env = std::getenv("CHI_INIT_ATTEMPTS");
   int max_attempts = (att_env && *att_env) ? std::atoi(att_env) : 60;
   if (max_attempts < 1) max_attempts = 1;
@@ -108,12 +108,12 @@ IowarpEngine::IowarpEngine(adios2::core::IO &io, const std::string &name,
       static_cast<unsigned int>(::getpid());
   bool ok = false;
   for (int attempt = 0; attempt < max_attempts; ++attempt) {
-    if (clio_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+    if (clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
       ok = true;
       break;
     }
     HLOG(kWarning,
-         "[IowarpEngine] WRP_CTE_CLIENT_INIT failed (rank={}, attempt={}/{}); retrying",
+         "[IowarpEngine] CLIO_CTE_CLIENT_INIT failed (rank={}, attempt={}/{}); retrying",
          rank_, attempt + 1, max_attempts);
     // uniform jitter in [0.5, 1.5] × mean
     int rnd = rand_r(&rng_state) % 1001;  // 0..1000
@@ -122,11 +122,11 @@ IowarpEngine::IowarpEngine(adios2::core::IO &io, const std::string &name,
   }
   if (!ok) {
     throw std::runtime_error(
-        "IowarpEngine: WRP_CTE_CLIENT_INIT failed after " +
+        "IowarpEngine: CLIO_CTE_CLIENT_INIT failed after " +
         std::to_string(max_attempts) +
         " attempts - is Chimaera runtime running?");
   }
-  HLOG(kDebug, "[IowarpEngine] WRP_CTE_CLIENT_INIT completed");
+  HLOG(kDebug, "[IowarpEngine] CLIO_CTE_CLIENT_INIT completed");
 
   // Start wall clock timer
   wall_clock_start_ = std::chrono::high_resolution_clock::now();

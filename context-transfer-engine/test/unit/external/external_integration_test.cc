@@ -58,7 +58,7 @@ public:
 
             // Step 2: Initialize CTE subsystem
             HLOG(kInfo, "2. Initializing CTE subsystem...");
-            bool cte_init = clio_cte::core::WRP_CTE_CLIENT_INIT();
+            bool cte_init = clio_cte::core::CLIO_CTE_CLIENT_INIT();
             if (!cte_init) {
                 HLOG(kError, "Failed to initialize CTE subsystem");
                 return false;
@@ -66,7 +66,7 @@ public:
 
             // Step 4: Get CTE client instance
             HLOG(kInfo, "4. Getting CTE client instance...");
-            auto *global_client = WRP_CTE_CLIENT;
+            auto *global_client = CLIO_CTE_CLIENT;
             if (!global_client) {
                 HLOG(kError, "Failed to get CTE client instance");
                 return false;
@@ -81,7 +81,7 @@ public:
 
             try{
                 // Use CTE Core constants from core_tasks.h
-                cte_client_->Create(hipc::MemContext(), chi::PoolQuery::Dynamic(),
+                cte_client_->Create(ctp::ipc::MemContext(), chi::PoolQuery::Dynamic(),
                                    clio_cte::core::kCtePoolName,
                                    clio_cte::core::kCtePoolId, create_params);
                 HLOG(kInfo, "CTE container created successfully");
@@ -149,7 +149,7 @@ private:
             chi::u64 target_size = 100 * 1024 * 1024;  // 100MB
 
             chi::u32 result = cte_client_->RegisterTarget(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 target_name,
                 chimaera::bdev::BdevType::kFile,
                 target_size
@@ -179,7 +179,7 @@ private:
             }
 
             // Allocate shared memory for the data
-            hipc::FullPtr<char> shared_data = CHI_IPC->AllocateBuffer(kTestDataSize);
+            ctp::ipc::FullPtr<char> shared_data = CHI_IPC->AllocateBuffer(kTestDataSize);
             if (shared_data.IsNull()) {
                 HLOG(kError, "Failed to allocate shared memory buffer");
                 return false;
@@ -190,7 +190,7 @@ private:
 
             // Create or get tag
             clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 kTestTagName,
                 clio_cte::core::TagId::GetNull()
             );
@@ -199,7 +199,7 @@ private:
 
             // Store blob data
             bool put_result = cte_client_->PutBlob(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 tag_id,
                 kTestBlobName,
                 0,  // offset
@@ -229,13 +229,13 @@ private:
         try {
             // Get the tag ID first
             clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 kTestTagName,
                 clio_cte::core::TagId::GetNull()
             );
 
             // Allocate buffer for reading
-            hipc::FullPtr<char> read_buffer = CHI_IPC->AllocateBuffer(kTestDataSize);
+            ctp::ipc::FullPtr<char> read_buffer = CHI_IPC->AllocateBuffer(kTestDataSize);
             if (read_buffer.IsNull()) {
                 HLOG(kError, "Failed to allocate read buffer");
                 return false;
@@ -243,7 +243,7 @@ private:
 
             // Retrieve blob data
             bool get_result = cte_client_->GetBlob(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 tag_id,
                 kTestBlobName,
                 0,  // offset
@@ -288,7 +288,7 @@ private:
         try {
             // Poll telemetry log
             std::vector<clio_cte::core::CteTelemetry> telemetry =
-                cte_client_->PollTelemetryLog(hipc::MemContext(), 0);
+                cte_client_->PollTelemetryLog(ctp::ipc::MemContext(), 0);
 
             HLOG(kSuccess, "Retrieved {} telemetry entries", telemetry.size());
 
@@ -313,7 +313,7 @@ private:
 
         try {
             std::vector<std::string> targets =
-                cte_client_->ListTargets(hipc::MemContext());
+                cte_client_->ListTargets(ctp::ipc::MemContext());
 
             HLOG(kSuccess, "Found {} registered targets", targets.size());
 
@@ -336,12 +336,12 @@ private:
         try {
             // Get the tag ID first
             clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 kTestTagName,
                 clio_cte::core::TagId::GetNull()
             );
 
-            size_t tag_size = cte_client_->GetTagSize(hipc::MemContext(), tag_id);
+            size_t tag_size = cte_client_->GetTagSize(ctp::ipc::MemContext(), tag_id);
 
             HLOG(kSuccess, "Tag size: {} bytes", tag_size);
 
@@ -367,14 +367,14 @@ private:
         try {
             // Get the tag ID
             clio_cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 kTestTagName,
                 clio_cte::core::TagId::GetNull()
             );
 
             // Delete the blob
             bool del_blob_result = cte_client_->DelBlob(
-                hipc::MemContext(),
+                ctp::ipc::MemContext(),
                 tag_id,
                 kTestBlobName
             );
@@ -386,7 +386,7 @@ private:
             }
 
             // Delete the tag
-            bool del_tag_result = cte_client_->DelTag(hipc::MemContext(), kTestTagName);
+            bool del_tag_result = cte_client_->DelTag(ctp::ipc::MemContext(), kTestTagName);
 
             if (del_tag_result) {
                 HLOG(kSuccess, "Tag deleted successfully");

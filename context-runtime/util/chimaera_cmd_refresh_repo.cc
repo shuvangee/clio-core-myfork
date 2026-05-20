@@ -338,7 +338,7 @@ class ChiModGenerator {
       oss << "\n";
     }
 
-    oss << "chi::TaskResume Runtime::Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) {\n";
+    oss << "chi::TaskResume Runtime::Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) {\n";
     oss << "  switch (method) {\n";
 
     // Add Run switch cases for each method
@@ -350,7 +350,7 @@ class ChiModGenerator {
       std::string task_type = GetTaskTypeName(method.method_name, chimod_name);
       oss << "    case Method::" << method.constant_name << ": {\n";
       oss << "      // Cast task FullPtr to specific type\n";
-      oss << "      hipc::FullPtr<" << task_type << "> typed_task = task_ptr.template Cast<" << task_type << ">();\n";
+      oss << "      ctp::ipc::FullPtr<" << task_type << "> typed_task = task_ptr.template Cast<" << task_type << ">();\n";
       oss << "      co_await " << method.method_name << "(typed_task, rctx);\n";
       oss << "      break;\n";
       oss << "    }\n";
@@ -366,7 +366,7 @@ class ChiModGenerator {
     oss << "}\n";
     oss << "\n";
     oss << "void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, \n";
-    oss << "                        hipc::FullPtr<chi::Task> task_ptr) {\n";
+    oss << "                        ctp::ipc::FullPtr<chi::Task> task_ptr) {\n";
     oss << "  switch (method) {\n";
 
     // Add SaveTask switch cases
@@ -387,7 +387,7 @@ class ChiModGenerator {
     oss << "}\n";
     oss << "\n";
     oss << "void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,\n";
-    oss << "                        hipc::FullPtr<chi::Task> task_ptr) {\n";
+    oss << "                        ctp::ipc::FullPtr<chi::Task> task_ptr) {\n";
     oss << "  switch (method) {\n";
 
     // Add LoadTask switch cases
@@ -407,8 +407,8 @@ class ChiModGenerator {
     oss << "  }\n";
     oss << "}\n";
     oss << "\n";
-    oss << "hipc::FullPtr<chi::Task> Runtime::AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) {\n";
-    oss << "  hipc::FullPtr<chi::Task> task_ptr = NewTask(method);\n";
+    oss << "ctp::ipc::FullPtr<chi::Task> Runtime::AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) {\n";
+    oss << "  ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);\n";
     oss << "  if (!task_ptr.IsNull()) {\n";
     oss << "    LoadTask(method, archive, task_ptr);\n";
     oss << "  }\n";
@@ -416,7 +416,7 @@ class ChiModGenerator {
     oss << "}\n";
     oss << "\n";
     oss << "void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,\n";
-    oss << "                            hipc::FullPtr<chi::Task> task_ptr) {\n";
+    oss << "                            ctp::ipc::FullPtr<chi::Task> task_ptr) {\n";
     oss << "  switch (method) {\n";
 
     // Add LocalLoadTask switch cases
@@ -437,8 +437,8 @@ class ChiModGenerator {
     oss << "  }\n";
     oss << "}\n";
     oss << "\n";
-    oss << "hipc::FullPtr<chi::Task> Runtime::LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) {\n";
-    oss << "  hipc::FullPtr<chi::Task> task_ptr = NewTask(method);\n";
+    oss << "ctp::ipc::FullPtr<chi::Task> Runtime::LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) {\n";
+    oss << "  ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);\n";
     oss << "  if (!task_ptr.IsNull()) {\n";
     oss << "    LocalLoadTask(method, archive, task_ptr);\n";
     oss << "  }\n";
@@ -446,7 +446,7 @@ class ChiModGenerator {
     oss << "}\n";
     oss << "\n";
     oss << "void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive, \n";
-    oss << "                             hipc::FullPtr<chi::Task> task_ptr) {\n";
+    oss << "                             ctp::ipc::FullPtr<chi::Task> task_ptr) {\n";
     oss << "  switch (method) {\n";
 
     // Add LocalSaveTask switch cases
@@ -467,10 +467,10 @@ class ChiModGenerator {
     oss << "  }\n";
     oss << "}\n";
     oss << "\n";
-    oss << "hipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr, bool deep) {\n";
+    oss << "ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr, bool deep) {\n";
     oss << "  auto* ipc_manager = CHI_IPC;\n";
     oss << "  if (!ipc_manager) {\n";
-    oss << "    return hipc::FullPtr<chi::Task>();\n";
+    oss << "    return ctp::ipc::FullPtr<chi::Task>();\n";
     oss << "  }\n";
     oss << "  \n";
     oss << "  switch (method) {\n";
@@ -503,13 +503,13 @@ class ChiModGenerator {
     oss << "  }\n";
     oss << "  \n";
     oss << "  (void)deep;    // Deep copy parameter reserved for future use\n";
-    oss << "  return hipc::FullPtr<chi::Task>();\n";
+    oss << "  return ctp::ipc::FullPtr<chi::Task>();\n";
     oss << "}\n";
     oss << "\n";
-    oss << "hipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {\n";
+    oss << "ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {\n";
     oss << "  auto* ipc_manager = CHI_IPC;\n";
     oss << "  if (!ipc_manager) {\n";
-    oss << "    return hipc::FullPtr<chi::Task>();\n";
+    oss << "    return ctp::ipc::FullPtr<chi::Task>();\n";
     oss << "  }\n";
     oss << "  \n";
     oss << "  switch (method) {\n";
@@ -525,14 +525,14 @@ class ChiModGenerator {
 
     oss << "    default: {\n";
     oss << "      // For unknown methods, return null pointer\n";
-    oss << "      return hipc::FullPtr<chi::Task>();\n";
+    oss << "      return ctp::ipc::FullPtr<chi::Task>();\n";
     oss << "    }\n";
     oss << "  }\n";
     oss << "}\n";
     oss << "\n";
     // Generate Aggregate method - dispatches to typed task's Aggregate
-    oss << "void Runtime::Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,\n";
-    oss << "                        const hipc::FullPtr<chi::Task>& replica_task) {\n";
+    oss << "void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,\n";
+    oss << "                        const ctp::ipc::FullPtr<chi::Task>& replica_task) {\n";
     oss << "  switch (method) {\n";
 
     for (const auto& method : methods) {
@@ -553,7 +553,7 @@ class ChiModGenerator {
     oss << "\n";
 
     // Generate DelTask method - dispatches to typed task deletion
-    oss << "void Runtime::DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) {\n";
+    oss << "void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {\n";
     oss << "  auto* ipc_manager = CHI_IPC;\n";
     oss << "  if (!ipc_manager) return;\n";
     oss << "  switch (method) {\n";
@@ -618,7 +618,7 @@ class ChiModGenerator {
     oss << "template <typename ArchiveT>\n";
     oss << "CTP_GPU_FUN void LoadTaskTmpl(\n";
     oss << "    chi::u32 method, ArchiveT &archive,\n";
-    oss << "    const hipc::FullPtr<chi::Task> &task) {\n";
+    oss << "    const ctp::ipc::FullPtr<chi::Task> &task) {\n";
     if (!gpu_methods.empty()) {
       oss << "  switch (method) {\n";
       for (const auto& method : gpu_methods) {
@@ -642,7 +642,7 @@ class ChiModGenerator {
     oss << "template <typename ArchiveT>\n";
     oss << "CTP_GPU_FUN void SaveTaskTmpl(\n";
     oss << "    chi::u32 method, ArchiveT &archive,\n";
-    oss << "    const hipc::FullPtr<chi::Task> &task) {\n";
+    oss << "    const ctp::ipc::FullPtr<chi::Task> &task) {\n";
     if (!gpu_methods.empty()) {
       oss << "  switch (method) {\n";
       for (const auto& method : gpu_methods) {
@@ -668,7 +668,7 @@ class ChiModGenerator {
     // SYCL flag set it expands to nothing.
     oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN chi::gpu::TaskResume RunImpl(\n";
     oss << "    chi::gpu::Container *self_, chi::u32 method,\n";
-    oss << "    hipc::FullPtr<chi::Task> task_ptr, chi::gpu::RunContext &rctx) {\n";
+    oss << "    ctp::ipc::FullPtr<chi::Task> task_ptr, chi::gpu::RunContext &rctx) {\n";
     oss << "  auto *self = static_cast<GpuRuntime *>(self_);\n";
     if (!gpu_methods.empty()) {
       oss << "  switch (method) {\n";
@@ -701,7 +701,7 @@ class ChiModGenerator {
         std::string task_type = GetTaskTypeName(method.method_name, chimod_name);
         oss << "    case Method::" << method.constant_name << ": {\n";
         oss << "      auto fp = ipc->template NewTaskExec<" << task_type << ">(stack_size);\n";
-        oss << "      if (fp.IsNull()) return {hipc::FullPtr<chi::Task>::GetNull(), nullptr};\n";
+        oss << "      if (fp.IsNull()) return {ctp::ipc::FullPtr<chi::Task>::GetNull(), nullptr};\n";
         oss << "      auto *rctx = reinterpret_cast<chi::gpu::RunContext *>(\n";
         oss << "          reinterpret_cast<char *>(fp.ptr_) + sizeof(" << task_type << "));\n";
         oss << "      new (rctx) chi::gpu::RunContext();\n";
@@ -709,16 +709,16 @@ class ChiModGenerator {
         oss << "      return {fp.template Cast<chi::Task>(), rctx};\n";
         oss << "    }\n";
       }
-      oss << "    default: return {hipc::FullPtr<chi::Task>::GetNull(), nullptr};\n";
+      oss << "    default: return {ctp::ipc::FullPtr<chi::Task>::GetNull(), nullptr};\n";
       oss << "  }\n";
     } else {
       oss << "  (void)self_; (void)method; (void)stack_size;\n";
-      oss << "  return {hipc::FullPtr<chi::Task>::GetNull(), nullptr};\n";
+      oss << "  return {ctp::ipc::FullPtr<chi::Task>::GetNull(), nullptr};\n";
     }
     oss << "}\n\n";
 
     // AllocLoadTaskDefaultImpl
-    oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocLoadTaskDefaultImpl(\n";
+    oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN ctp::ipc::FullPtr<chi::Task> AllocLoadTaskDefaultImpl(\n";
     oss << "    chi::gpu::Container *self_, chi::u32 method, chi::GpuLoadTaskArchive &ar) {\n";
     oss << "  auto *self = static_cast<GpuRuntime *>(self_);\n";
     oss << "  auto block = self->alloc_task_(self_, method, 0);\n";
@@ -744,7 +744,7 @@ class ChiModGenerator {
     // LoadTaskDefaultImpl
     oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void LoadTaskDefaultImpl(\n";
     oss << "    chi::gpu::Container *self_, chi::u32 method,\n";
-    oss << "    chi::GpuLoadTaskArchive &ar, const hipc::FullPtr<chi::Task> &task) {\n";
+    oss << "    chi::GpuLoadTaskArchive &ar, const ctp::ipc::FullPtr<chi::Task> &task) {\n";
     oss << "  ar.SetMsgType(chi::LocalMsgType::kSerializeIn);\n";
     oss << "  static_cast<GpuRuntime *>(self_)->LoadTaskTmpl(method, ar, task);\n";
     oss << "}\n\n";
@@ -752,14 +752,14 @@ class ChiModGenerator {
     // SaveTaskDefaultImpl
     oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void SaveTaskDefaultImpl(\n";
     oss << "    chi::gpu::Container *self_, chi::u32 method,\n";
-    oss << "    chi::GpuSaveTaskArchive &ar, const hipc::FullPtr<chi::Task> &task) {\n";
+    oss << "    chi::GpuSaveTaskArchive &ar, const ctp::ipc::FullPtr<chi::Task> &task) {\n";
     oss << "  static_cast<GpuRuntime *>(self_)->SaveTaskTmpl(method, ar, task);\n";
     oss << "}\n\n";
 
     // LoadTaskOutputImpl
     oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void LoadTaskOutputImpl(\n";
     oss << "    chi::gpu::Container *self_, chi::u32 method,\n";
-    oss << "    chi::GpuLoadTaskArchive &ar, const hipc::FullPtr<chi::Task> &task) {\n";
+    oss << "    chi::GpuLoadTaskArchive &ar, const ctp::ipc::FullPtr<chi::Task> &task) {\n";
     oss << "  ar.SetMsgType(chi::LocalMsgType::kSerializeOut);\n";
     oss << "  static_cast<GpuRuntime *>(self_)->LoadTaskTmpl(method, ar, task);\n";
     oss << "}\n\n";
@@ -767,7 +767,7 @@ class ChiModGenerator {
     // DestroyTaskImpl
     oss << "CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void DestroyTaskImpl(\n";
     oss << "    chi::gpu::Container *self_, chi::u32 method,\n";
-    oss << "    hipc::FullPtr<chi::Task> &task) {\n";
+    oss << "    ctp::ipc::FullPtr<chi::Task> &task) {\n";
     oss << "  if (task.IsNull()) return;\n";
     if (!gpu_methods.empty()) {
       oss << "  switch (method) {\n";

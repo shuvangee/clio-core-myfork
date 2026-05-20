@@ -218,7 +218,7 @@ class CalculateSizeTaskArchive {
 
   /** Bulk transfer size for ShmPtr */
   template <typename T>
-  CTP_CROSS_FUN void bulk(hipc::ShmPtr<T> ptr, size_t size, uint32_t flags) {
+  CTP_CROSS_FUN void bulk(ctp::ipc::ShmPtr<T> ptr, size_t size, uint32_t flags) {
     if (!ptr.alloc_id_.IsNull()) {
       // mode=0: uint8_t + size_t + u32 + u32
       calc_.cur_off_ += sizeof(uint8_t) + sizeof(size_t) +
@@ -237,7 +237,7 @@ class CalculateSizeTaskArchive {
 
   /** Bulk transfer size for FullPtr */
   template <typename T>
-  CTP_CROSS_FUN void bulk(const hipc::FullPtr<T> &ptr, size_t size,
+  CTP_CROSS_FUN void bulk(const ctp::ipc::FullPtr<T> &ptr, size_t size,
                            uint32_t flags) {
     if (!ptr.shm_.alloc_id_.IsNull()) {
       calc_.cur_off_ += sizeof(uint8_t) + sizeof(size_t) +
@@ -428,7 +428,7 @@ class LocalSaveTaskArchive : public LocalLbmBase {
   }
 
   template <typename T>
-  CTP_CROSS_FUN void bulk(hipc::ShmPtr<T> ptr, size_t size, uint32_t flags) {
+  CTP_CROSS_FUN void bulk(ctp::ipc::ShmPtr<T> ptr, size_t size, uint32_t flags) {
     if (!ptr.alloc_id_.IsNull()) {
       uint8_t mode = 0;
       serializer_ << mode;
@@ -451,7 +451,7 @@ class LocalSaveTaskArchive : public LocalLbmBase {
   }
 
   template <typename T>
-  CTP_CROSS_FUN void bulk(const hipc::FullPtr<T> &ptr, size_t size,
+  CTP_CROSS_FUN void bulk(const ctp::ipc::FullPtr<T> &ptr, size_t size,
                            uint32_t flags) {
     if (!ptr.shm_.alloc_id_.IsNull()) {
       uint8_t mode = 0;
@@ -653,7 +653,7 @@ class LocalLoadTaskArchive : public LocalLbmBase {
   }
 
   template <typename T>
-  CTP_CROSS_FUN void bulk(hipc::ShmPtr<T> &ptr, size_t size, uint32_t flags) {
+  CTP_CROSS_FUN void bulk(ctp::ipc::ShmPtr<T> &ptr, size_t size, uint32_t flags) {
     (void)flags;
     uint8_t mode = 0;
     deserializer_ >> mode;
@@ -662,7 +662,7 @@ class LocalLoadTaskArchive : public LocalLbmBase {
       ptr.alloc_id_.SetNull();
       ptr.off_ = 0;
 #else
-      hipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
+      ctp::ipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
       deserializer_.read_binary(buf.ptr_, size);
       ptr.off_ = buf.shm_.off_.load();
       ptr.alloc_id_ = buf.shm_.alloc_id_;
@@ -672,7 +672,7 @@ class LocalLoadTaskArchive : public LocalLbmBase {
       ptr.alloc_id_.SetNull();
       ptr.off_ = 0;
 #else
-      hipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
+      ctp::ipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
       ptr.off_ = buf.shm_.off_.load();
       ptr.alloc_id_ = buf.shm_.alloc_id_;
 #endif
@@ -686,23 +686,23 @@ class LocalLoadTaskArchive : public LocalLbmBase {
       u32 major = 0, minor = 0;
       deserializer_ >> off >> major >> minor;
       ptr.off_ = off;
-      ptr.alloc_id_ = hipc::AllocatorId(major, minor);
+      ptr.alloc_id_ = ctp::ipc::AllocatorId(major, minor);
     }
   }
 
   template <typename T>
-  void bulk(hipc::FullPtr<T> &ptr, size_t size, uint32_t flags) {
+  void bulk(ctp::ipc::FullPtr<T> &ptr, size_t size, uint32_t flags) {
     (void)flags;
     uint8_t mode = 0;
     deserializer_ >> mode;
     if (mode == 1) {
-      hipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
+      ctp::ipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
       deserializer_.read_binary(buf.ptr_, size);
       ptr.shm_.off_ = buf.shm_.off_.load();
       ptr.shm_.alloc_id_ = buf.shm_.alloc_id_;
       ptr.ptr_ = reinterpret_cast<T *>(buf.ptr_);
     } else if (mode == 2) {
-      hipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
+      ctp::ipc::FullPtr<char> buf = CTP_MALLOC->AllocateObjs<char>(size);
       ptr.shm_.off_ = buf.shm_.off_.load();
       ptr.shm_.alloc_id_ = buf.shm_.alloc_id_;
       ptr.ptr_ = reinterpret_cast<T *>(buf.ptr_);
@@ -711,7 +711,7 @@ class LocalLoadTaskArchive : public LocalLbmBase {
       u32 major = 0, minor = 0;
       deserializer_ >> off >> major >> minor;
       ptr.shm_.off_ = off;
-      ptr.shm_.alloc_id_ = hipc::AllocatorId(major, minor);
+      ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId(major, minor);
     }
   }
 
@@ -819,14 +819,14 @@ class GpuSaveTaskArchive {
 
   /** GPU bulk: ShmPtr copied as-is (same address space) */
   template <typename T>
-  CTP_CROSS_FUN void bulk(hipc::ShmPtr<T> ptr, size_t size, uint32_t flags) {
+  CTP_CROSS_FUN void bulk(ctp::ipc::ShmPtr<T> ptr, size_t size, uint32_t flags) {
     (void)size; (void)flags;
     serializer_.write_binary(reinterpret_cast<const char *>(&ptr), sizeof(ptr));
   }
 
   /** GPU bulk: FullPtr copied as-is */
   template <typename T>
-  CTP_CROSS_FUN void bulk(const hipc::FullPtr<T> &ptr, size_t size,
+  CTP_CROSS_FUN void bulk(const ctp::ipc::FullPtr<T> &ptr, size_t size,
                            uint32_t flags) {
     (void)size; (void)flags;
     serializer_.write_binary(reinterpret_cast<const char *>(&ptr), sizeof(ptr));
@@ -914,7 +914,7 @@ class GpuLoadTaskArchive {
 
   /** GPU bulk: ShmPtr copied as-is (same address space) */
   template <typename T>
-  CTP_CROSS_FUN void bulk(hipc::ShmPtr<T> &ptr, size_t size,
+  CTP_CROSS_FUN void bulk(ctp::ipc::ShmPtr<T> &ptr, size_t size,
                            uint32_t flags) {
     (void)size; (void)flags;
     deserializer_.read_binary(reinterpret_cast<char *>(&ptr), sizeof(ptr));
@@ -922,7 +922,7 @@ class GpuLoadTaskArchive {
 
   /** GPU bulk: FullPtr copied as-is */
   template <typename T>
-  CTP_CROSS_FUN void bulk(hipc::FullPtr<T> &ptr, size_t size,
+  CTP_CROSS_FUN void bulk(ctp::ipc::FullPtr<T> &ptr, size_t size,
                            uint32_t flags) {
     (void)size; (void)flags;
     deserializer_.read_binary(reinterpret_cast<char *>(&ptr), sizeof(ptr));

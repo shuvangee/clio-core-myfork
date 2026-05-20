@@ -372,7 +372,7 @@ chi::TaskStat Runtime::GetTaskStats(const chi::Task *task) const {
   }
 }
 
-chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
+chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
                                 chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -542,7 +542,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::AllocateBlocks(hipc::FullPtr<AllocateBlocksTask> task,
+chi::TaskResume Runtime::AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> task,
                                         chi::RunContext &ctx) {
   chi::RunContext& rctx = ctx;
   CHI_TASK_BODY_BEGIN
@@ -652,7 +652,7 @@ chi::TaskResume Runtime::AllocateBlocks(hipc::FullPtr<AllocateBlocksTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::FreeBlocks(hipc::FullPtr<FreeBlocksTask> task,
+chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
                                     chi::RunContext &ctx) {
   chi::RunContext& rctx = ctx;
   CHI_TASK_BODY_BEGIN
@@ -703,7 +703,7 @@ chi::TaskResume Runtime::FreeBlocks(hipc::FullPtr<FreeBlocksTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Write(hipc::FullPtr<WriteTask> task,
+chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
                                chi::RunContext &ctx) {
   chi::RunContext& rctx = ctx;
   CHI_TASK_BODY_BEGIN
@@ -733,7 +733,7 @@ chi::TaskResume Runtime::Write(hipc::FullPtr<WriteTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Read(hipc::FullPtr<ReadTask> task,
+chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
                               chi::RunContext &ctx) {
   chi::RunContext& rctx = ctx;
   CHI_TASK_BODY_BEGIN
@@ -763,7 +763,7 @@ chi::TaskResume Runtime::Read(hipc::FullPtr<ReadTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::WriteToFile(hipc::FullPtr<WriteTask> task,
+chi::TaskResume Runtime::WriteToFile(ctp::ipc::FullPtr<WriteTask> task,
                                      chi::RunContext &ctx) {
   chi::RunContext& rctx = ctx;
   CHI_TASK_BODY_BEGIN
@@ -771,7 +771,7 @@ chi::TaskResume Runtime::WriteToFile(hipc::FullPtr<WriteTask> task,
   WorkerIOContext *io_ctx = GetWorkerIOContext(worker_id);
 
   auto *ipc_mgr = CHI_IPC;
-  hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
+  ctp::ipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
 
   // libaio / POSIX-AIO can't dereference device USM, so stage through
   // a host buffer when the data lives on device. The host staging
@@ -842,7 +842,7 @@ chi::TaskResume Runtime::WriteToFile(hipc::FullPtr<WriteTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReadFromFile(hipc::FullPtr<ReadTask> task,
+chi::TaskResume Runtime::ReadFromFile(ctp::ipc::FullPtr<ReadTask> task,
                                       chi::RunContext &ctx) {
   chi::RunContext& rctx = ctx;
   CHI_TASK_BODY_BEGIN
@@ -850,7 +850,7 @@ chi::TaskResume Runtime::ReadFromFile(hipc::FullPtr<ReadTask> task,
   WorkerIOContext *io_ctx = GetWorkerIOContext(worker_id);
 
   auto *ipc_mgr = CHI_IPC;
-  hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
+  ctp::ipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
 
   // libaio / POSIX-AIO can't write into device USM. When the dest is
   // device, allocate a host staging buffer, AIO into it, then
@@ -925,7 +925,7 @@ chi::TaskResume Runtime::ReadFromFile(hipc::FullPtr<ReadTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Update(hipc::FullPtr<UpdateTask> task,
+chi::TaskResume Runtime::Update(ctp::ipc::FullPtr<UpdateTask> task,
                                 chi::RunContext &ctx) {
   // UpdateTask is meant for the GPU container only.
   // The CPU runtime receives it as a no-op.
@@ -935,7 +935,7 @@ chi::TaskResume Runtime::Update(hipc::FullPtr<UpdateTask> task,
 }
 
 
-chi::TaskResume Runtime::GetStats(hipc::FullPtr<GetStatsTask> task,
+chi::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
                                   chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -978,7 +978,7 @@ chi::TaskResume Runtime::GetStats(hipc::FullPtr<GetStatsTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
+chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1070,14 +1070,14 @@ char* Runtime::GetRamPage(size_t page_idx) const {
   return ram_pages_[page_idx].get();
 }
 
-void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
+void Runtime::WriteToRam(ctp::ipc::FullPtr<WriteTask> task) {
   static thread_local size_t ram_write_count = 0;
   static thread_local double t_resolve_ms = 0, t_memcpy_ms = 0;
   ctp::Timer timer;
 
   timer.Resume();
   auto *ipc_mgr = CHI_IPC;
-  hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
+  ctp::ipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
   timer.Pause();
   t_resolve_ms += timer.GetMsec();
   timer.Reset();
@@ -1158,14 +1158,14 @@ void Runtime::WriteToRam(hipc::FullPtr<WriteTask> task) {
   }
 }
 
-void Runtime::ReadFromRam(hipc::FullPtr<ReadTask> task) {
+void Runtime::ReadFromRam(ctp::ipc::FullPtr<ReadTask> task) {
   static thread_local size_t ram_read_count = 0;
   static thread_local double tr_resolve_ms = 0, tr_memcpy_ms = 0;
   ctp::Timer rtimer;
 
   rtimer.Resume();
   auto *ipc_mgr = CHI_IPC;
-  hipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
+  ctp::ipc::FullPtr<char> data_ptr = ipc_mgr->ToFullPtr(task->data_).Cast<char>();
   rtimer.Pause();
   tr_resolve_ms += rtimer.GetMsec();
   rtimer.Reset();
@@ -1258,7 +1258,7 @@ void Runtime::ReadFromRam(hipc::FullPtr<ReadTask> task) {
 
 chi::u64 Runtime::GetWorkRemaining() const { return 0; }
 
-chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
+chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   (void)rctx;

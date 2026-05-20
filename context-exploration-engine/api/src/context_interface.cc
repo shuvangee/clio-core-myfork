@@ -66,7 +66,7 @@ bool ContextInterface::EnsureInitialized() {
   }
 
   // Initialize CAE client (which initializes CTE internally)
-  if (!WRP_CAE_CLIENT_INIT()) {
+  if (!CLIO_CAE_CLIENT_INIT()) {
     HLOG(kError, "Failed to initialize CAE client");
     return false;
   }
@@ -136,7 +136,7 @@ std::vector<std::string> ContextInterface::ContextQuery(
 
   try {
     // Get the CTE client singleton
-    auto* cte_client = WRP_CTE_CLIENT;
+    auto* cte_client = CLIO_CTE_CLIENT;
     if (!cte_client) {
       HLOG(kError, "CTE client not initialized");
       return std::vector<std::string>();
@@ -178,7 +178,7 @@ std::vector<std::string> ContextInterface::ContextRetrieve(
 
   try {
     // Get the CTE client singleton
-    auto* cte_client = WRP_CTE_CLIENT;
+    auto* cte_client = CLIO_CTE_CLIENT;
     if (!cte_client) {
       HLOG(kError, "CTE client not initialized");
       return std::vector<std::string>();
@@ -214,7 +214,7 @@ std::vector<std::string> ContextInterface::ContextRetrieve(
     HLOG(kInfo, "ContextRetrieve: Found {} matching blobs", query_results.size());
 
     // Allocate buffer for packed context
-    hipc::FullPtr<char> context_buffer = ipc_manager->AllocateBuffer(max_context_size);
+    ctp::ipc::FullPtr<char> context_buffer = ipc_manager->AllocateBuffer(max_context_size);
     if (context_buffer.IsNull()) {
       HLOG(kError, "Failed to allocate context buffer");
       return std::vector<std::string>();
@@ -261,7 +261,7 @@ std::vector<std::string> ContextInterface::ContextRetrieve(
         }
 
         // Calculate buffer pointer for this blob
-        hipc::ShmPtr<> blob_buffer_ptr;
+        ctp::ipc::ShmPtr<> blob_buffer_ptr;
         blob_buffer_ptr.alloc_id_ = context_buffer.shm_.alloc_id_;
         blob_buffer_ptr.off_ = context_buffer.shm_.off_.load() + buffer_offset;
 
@@ -340,7 +340,7 @@ int ContextInterface::ContextDestroy(
 
   try {
     // Get the CTE client singleton
-    auto* cte_client = WRP_CTE_CLIENT;
+    auto* cte_client = CLIO_CTE_CLIENT;
     if (!cte_client) {
       HLOG(kError, "CTE client not initialized");
       return 1;

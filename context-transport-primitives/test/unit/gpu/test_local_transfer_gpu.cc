@@ -85,15 +85,15 @@ __global__ void DiagnoseContainsPtrKernel(GpuAllocT *alloc, size_t test_offset,
     diag->test_offset   = test_offset;
 
     // Test 1: ContainsPtr(OffsetPtrBase) directly
-    hipc::OffsetPtr<void> ptr(test_offset);
+    ctp::ipc::OffsetPtr<void> ptr(test_offset);
     diag->contains_result = alloc->ContainsPtr(ptr);
 
     // Test 2: FullPtr via OffsetPtr overload (the original broken path)
-    hipc::FullPtr<void> fp_offset(alloc, hipc::OffsetPtr<void>(test_offset));
+    ctp::ipc::FullPtr<void> fp_offset(alloc, ctp::ipc::OffsetPtr<void>(test_offset));
     diag->fullptr_offset_null = fp_offset.IsNull();
 
     // Test 3: FullPtr via size_t overload (the fixed path)
-    hipc::FullPtr<void> fp_size(alloc, test_offset);
+    ctp::ipc::FullPtr<void> fp_size(alloc, test_offset);
     diag->fullptr_size_null = fp_size.IsNull();
   }
 }
@@ -122,7 +122,7 @@ __global__ void GpuSendSimpleKernel(GpuAllocT *alloc, const char *src_buffer,
     GpuMeta meta(alloc);
     Bulk bulk;
     bulk.data.ptr_ = const_cast<char *>(src_buffer);
-    bulk.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+    bulk.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
     bulk.data.shm_.off_ = 0;
     bulk.size = data_size;
     bulk.flags = ctp::bitfield32_t(BULK_XFER);
@@ -423,7 +423,7 @@ __global__ void GpuSendKernel(GpuAllocT *alloc, char *data_buf,
     // Create bulk descriptor for the data buffer (private memory)
     Bulk bulk;
     bulk.data.ptr_ = data_buf;
-    bulk.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+    bulk.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
     bulk.data.shm_.off_ = 0;
     bulk.size = data_size;
     bulk.flags = ctp::bitfield32_t(BULK_XFER);

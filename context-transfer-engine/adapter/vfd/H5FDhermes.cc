@@ -245,7 +245,7 @@ static herr_t H5FD__hermes_term(void) {
  */
 static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr) {
-  clio_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::CLIO_CTE_CLIENT_INIT();
   H5FD_hermes_t *file = NULL; /* hermes VFD info          */
   int fd = -1;
   int o_flags = 0;
@@ -263,7 +263,7 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
   }
 
 #ifdef USE_HERMES
-  auto fs_api = WRP_CTE_POSIX_FS;
+  auto fs_api = CLIO_CTE_POSIX_FS;
   bool stat_exists;
   AdapterStat stat;
   stat.flags_ = o_flags;
@@ -317,7 +317,7 @@ static herr_t H5FD__hermes_close(H5FD_t *_file) {
   herr_t ret_value = SUCCEED; /* Return value */
   assert(file);
 #ifdef USE_HERMES
-  auto fs_api = WRP_CTE_POSIX_FS;
+  auto fs_api = CLIO_CTE_POSIX_FS;
   File f;
   f.hermes_fd_ = file->fd;
   bool stat_exists;
@@ -476,7 +476,7 @@ static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
 
 #ifdef USE_HERMES
   bool stat_exists;
-  auto fs_api = WRP_CTE_POSIX_FS;
+  auto fs_api = CLIO_CTE_POSIX_FS;
   File f;
   f.hermes_fd_ = file->fd;
   IoStatus io_status;
@@ -514,7 +514,7 @@ static herr_t H5FD__hermes_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
   herr_t ret_value = SUCCEED;
 #ifdef USE_HERMES
   bool stat_exists;
-  auto fs_api = WRP_CTE_POSIX_FS;
+  auto fs_api = CLIO_CTE_POSIX_FS;
   File f;
   f.hermes_fd_ = file->fd;
   IoStatus io_status;
@@ -539,7 +539,7 @@ const void *H5PLget_plugin_info(void) { return &H5FD_hermes_g; }
 /** Initialize Hermes */
 /*static __attribute__((constructor(101))) void init_hermes_in_vfd(void) {
   std::cout << "IN VFD" << std::endl;
-  clio_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::CLIO_CTE_CLIENT_INIT();
 }*/
 
 } // extern C

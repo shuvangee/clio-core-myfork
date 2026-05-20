@@ -3,9 +3,9 @@ IOWarp transparent compression service for the CTE stack.
 
 Generates a chimaera-compose YAML that places the clio_cte_compressor
 module at the configured ``pool_id`` (default 512.0 — the CTE entrypoint
-that adapters target via WRP_CTE_CLIENT_INIT) and points it at the
+that adapters target via CLIO_CTE_CLIENT_INIT) and points it at the
 downstream clio_cte_core via ``next_pool_id`` (default 513.0). Pairs
-naturally with jarvis_iowarp.clio_cte configured at 513.0.
+naturally with jarvis_clio_core.clio_cte configured at 513.0.
 
 This package only configures the pipeline-side compose entry. The
 underlying chimod (clio_cte_compressor) is built and installed as part of
@@ -42,7 +42,7 @@ class ClioCompress(Service):
                 'name': 'pool_id',
                 'msg': ('Pool ID for the compressor (this should be the '
                         'entrypoint pool — i.e., the same ID adapters '
-                        'target via WRP_CTE_CLIENT_INIT, default 512.0)'),
+                        'target via CLIO_CTE_CLIENT_INIT, default 512.0)'),
                 'type': float,
                 'default': 512.0,
             },
@@ -196,13 +196,13 @@ class ClioCompress(Service):
         # forward-compatible pass-through rather than a hard requirement.
         compress_lib = self.config.get('compress_lib', 'snappy').lower()
         compress_preset = self.config.get('compress_preset', 'default').lower()
-        self.setenv('WRP_CTE_COMPRESS_DEFAULT_LIB', compress_lib)
-        self.setenv('WRP_CTE_COMPRESS_DEFAULT_PRESET', compress_preset)
+        self.setenv('CLIO_CTE_COMPRESS_DEFAULT_LIB', compress_lib)
+        self.setenv('CLIO_CTE_COMPRESS_DEFAULT_PRESET', compress_preset)
         if compress_lib in self._COMPRESS_LIB_IDS:
-            self.setenv('WRP_CTE_COMPRESS_DEFAULT_LIB_ID',
+            self.setenv('CLIO_CTE_COMPRESS_DEFAULT_LIB_ID',
                         str(self._COMPRESS_LIB_IDS[compress_lib]))
         if compress_preset in self._COMPRESS_PRESET_IDS:
-            self.setenv('WRP_CTE_COMPRESS_DEFAULT_PRESET_ID',
+            self.setenv('CLIO_CTE_COMPRESS_DEFAULT_PRESET_ID',
                         str(self._COMPRESS_PRESET_IDS[compress_preset]))
 
         self.log(f"clio_compress: compose written to {self.compose_config_path} "

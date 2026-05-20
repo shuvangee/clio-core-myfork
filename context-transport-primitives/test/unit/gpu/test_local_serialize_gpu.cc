@@ -150,7 +150,7 @@ TEST_CASE("LocalSerialize GPU", "[gpu][serialize]") {
     REQUIRE(init_success);
 
     // Step 2: Create an ArenaAllocator on that backend
-    using AllocT = hipc::ArenaAllocator<false>;
+    using AllocT = ctp::ipc::ArenaAllocator<false>;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 
@@ -235,7 +235,7 @@ TEST_CASE("LocalSerialize GPU", "[gpu][serialize]") {
         backend.shm_init(backend_id, kBackendSize, kUrl + "_large", kGpuId);
     REQUIRE(init_success);
 
-    using AllocT = hipc::ArenaAllocator<false>;
+    using AllocT = ctp::ipc::ArenaAllocator<false>;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 
@@ -309,7 +309,7 @@ TEST_CASE("LocalSerialize GPU", "[gpu][serialize]") {
         backend.shm_init(backend_id, kBackendSize, kUrl + "_mixed", kGpuId);
     REQUIRE(init_success);
 
-    using AllocT = hipc::ArenaAllocator<false>;
+    using AllocT = ctp::ipc::ArenaAllocator<false>;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 

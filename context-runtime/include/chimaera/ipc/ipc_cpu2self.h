@@ -69,7 +69,7 @@ struct IpcCpu2Self {
    * @return Future wrapping the task pointer (no serialization)
    */
   static Future<Task> ClientSend(IpcManager *ipc,
-                                 const hipc::FullPtr<Task> &task_ptr);
+                                 const ctp::ipc::FullPtr<Task> &task_ptr);
 
   /**
    * Runtime receives a self-sent task.
@@ -80,7 +80,7 @@ struct IpcCpu2Self {
    * @param future Future containing the task pointer
    * @return FullPtr to the task (same pointer from ClientSend)
    */
-  static hipc::FullPtr<Task> RuntimeRecv(Future<Task> &future);
+  static ctp::ipc::FullPtr<Task> RuntimeRecv(Future<Task> &future);
 
   /**
    * Runtime sends the response after task execution.
@@ -112,7 +112,7 @@ struct IpcCpu2Self {
    */
   template <typename TaskT, typename AllocT>
   static bool ClientRecv(Future<TaskT, AllocT> &future, float max_sec,
-                         hipc::FullPtr<FutureShm> future_full) {
+                         ctp::ipc::FullPtr<FutureShm> future_full) {
     // Poll FUTURE_COMPLETE in shared memory
     ctp::abitfield32_t &flags = future_full->flags_;
     auto start = std::chrono::steady_clock::now();

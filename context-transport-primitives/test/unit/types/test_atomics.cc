@@ -79,11 +79,11 @@ class AtomicTest {
 };
 
 TEST_CASE("NonAtomic") {
-  AtomicTest<hipc::nonatomic<int>> test;
+  AtomicTest<ctp::ipc::nonatomic<int>> test;
   test.Test();
 }
 
 TEST_CASE("Atomic") {
-  AtomicTest<hipc::atomic<int>> test;
+  AtomicTest<ctp::ipc::atomic<int>> test;
   test.Test();
 }

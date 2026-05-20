@@ -22,7 +22,7 @@ namespace chi {
  * pointer in a chi::Future<Task> (for kDeviceMem the wrapped pointer
  * is a host scratch copy of the device POD). We just hand it back.
  */
-hipc::FullPtr<Task> IpcGpu2Cpu::RuntimeRecv(
+ctp::ipc::FullPtr<Task> IpcGpu2Cpu::RuntimeRecv(
     IpcManager *ipc, Future<Task> &future, Container *container,
     u32 method_id, ctp::lbm::Transport *recv_transport) {
   (void)ipc; (void)container; (void)method_id; (void)recv_transport;

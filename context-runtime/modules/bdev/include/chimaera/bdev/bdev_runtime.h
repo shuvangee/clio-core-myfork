@@ -250,48 +250,48 @@ class Runtime : public chi::Container {
    * Create the container (Method::kCreate)
    * This method both creates and initializes the container
    */
-  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext& ctx);
+  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext& ctx);
 
   /**
    * Allocate multiple blocks (Method::kAllocateBlocks)
    */
-  chi::TaskResume AllocateBlocks(hipc::FullPtr<AllocateBlocksTask> task, chi::RunContext& ctx);
+  chi::TaskResume AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> task, chi::RunContext& ctx);
 
   /**
    * Free data blocks (Method::kFreeBlocks)
    */
-  chi::TaskResume FreeBlocks(hipc::FullPtr<FreeBlocksTask> task, chi::RunContext& ctx);
+  chi::TaskResume FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task, chi::RunContext& ctx);
 
   /**
    * Write data to a block (Method::kWrite)
    */
-  chi::TaskResume Write(hipc::FullPtr<WriteTask> task, chi::RunContext& ctx);
+  chi::TaskResume Write(ctp::ipc::FullPtr<WriteTask> task, chi::RunContext& ctx);
 
   /**
    * Read data from a block (Method::kRead)
    */
-  chi::TaskResume Read(hipc::FullPtr<ReadTask> task, chi::RunContext& ctx);
+  chi::TaskResume Read(ctp::ipc::FullPtr<ReadTask> task, chi::RunContext& ctx);
 
   /**
    * Get performance statistics (Method::kGetStats)
    */
-  chi::TaskResume GetStats(hipc::FullPtr<GetStatsTask> task, chi::RunContext& ctx);
+  chi::TaskResume GetStats(ctp::ipc::FullPtr<GetStatsTask> task, chi::RunContext& ctx);
 
   /**
    * Update GPU container with device/pinned memory pointers (Method::kUpdate)
    * No-op on the CPU side; UpdateTask is primarily handled by GpuRuntime.
    */
-  chi::TaskResume Update(hipc::FullPtr<UpdateTask> task, chi::RunContext& ctx);
+  chi::TaskResume Update(ctp::ipc::FullPtr<UpdateTask> task, chi::RunContext& ctx);
 
   /**
    * Monitor container state (Method::kMonitor)
    */
-  chi::TaskResume Monitor(hipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
+  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
 
   /**
    * Destroy the container (Method::kDestroy)
    */
-  chi::TaskResume Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext& ctx);
+  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext& ctx);
 
   /**
    * REQUIRED VIRTUAL METHODS FROM chi::Container
@@ -312,7 +312,7 @@ class Runtime : public chi::Container {
   /**
    * Execute a method on a task - using autogen dispatcher
    */
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr,
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr,
                       chi::RunContext& rctx) override;
 
   /**
@@ -324,49 +324,49 @@ class Runtime : public chi::Container {
    * Serialize task parameters for network transfer (unified method)
    */
   void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Deserialize task parameters into an existing task from network transfer
    */
   void LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Allocate and deserialize task parameters from network transfer
    */
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
 
   /**
    * Deserialize task input parameters into an existing task using LocalSerialize
    */
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Allocate and deserialize task input parameters using LocalSerialize
    */
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
 
   /**
    * Serialize task output parameters using LocalSerialize (for local transfers)
    */
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Create a new copy of a task (deep copy for distributed execution)
    */
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr,
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
                                         bool deep) override;
 
   /**
    * Create a new task of the specified method type
    */
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
  private:
   // Client for making calls to this ChiMod
@@ -472,16 +472,16 @@ class Runtime : public chi::Container {
   /**
    * Backend-specific file operations (coroutines that yield on I/O)
    */
-  chi::TaskResume WriteToFile(hipc::FullPtr<WriteTask> task, chi::RunContext &ctx);
-  chi::TaskResume ReadFromFile(hipc::FullPtr<ReadTask> task, chi::RunContext &ctx);
+  chi::TaskResume WriteToFile(ctp::ipc::FullPtr<WriteTask> task, chi::RunContext &ctx);
+  chi::TaskResume ReadFromFile(ctp::ipc::FullPtr<ReadTask> task, chi::RunContext &ctx);
 
   /**
    * Backend-specific RAM operations (synchronous, no coroutine needed).
    * Uses chi::DeviceAwareMemcpy so the data ShmPtr may resolve to either
    * a host or a device-USM pointer.
    */
-  void WriteToRam(hipc::FullPtr<WriteTask> task);
-  void ReadFromRam(hipc::FullPtr<ReadTask> task);
+  void WriteToRam(ctp::ipc::FullPtr<WriteTask> task);
+  void ReadFromRam(ctp::ipc::FullPtr<ReadTask> task);
 
   // BdevType::kHbm / BdevType::kPinned tiers were removed. PutBlob /
   // GetBlob with HBM-resident ShmPtr data buffers route through kRam

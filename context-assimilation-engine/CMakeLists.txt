@@ -3,7 +3,7 @@ project(cae VERSION 1.0.0)
 # CMAKE_CXX_STANDARD is set by root CMakeLists.txt
 
 # Set root directory for this component
-set(WRP_CAE_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+set(CLIO_CAE_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 # -----------------------------------------------------------------------------
 # Set CAE Version Variables
@@ -20,11 +20,11 @@ set(CAE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 include(CTest)
 
 # CAE Feature Options - External Library Support
-# WRP_CAE_ENABLE_HDF5 is set from WRP_CORE_ENABLE_HDF5 (defined in root CMakeLists.txt)
-set(WRP_CAE_ENABLE_HDF5 ${WRP_CORE_ENABLE_HDF5} CACHE BOOL "Enable HDF5 format support in CAE (controlled by WRP_CORE_ENABLE_HDF5)" FORCE)
+# CLIO_CAE_ENABLE_HDF5 is set from CLIO_CORE_ENABLE_HDF5 (defined in root CMakeLists.txt)
+set(CLIO_CAE_ENABLE_HDF5 ${CLIO_CORE_ENABLE_HDF5} CACHE BOOL "Enable HDF5 format support in CAE (controlled by CLIO_CORE_ENABLE_HDF5)" FORCE)
 # CAE_ENABLE_GLOBUS is defined in root CMakeLists.txt
 
-# Coverage is controlled by WRP_CORE_ENABLE_COVERAGE in root CMakeLists.txt
+# Coverage is controlled by CLIO_CORE_ENABLE_COVERAGE in root CMakeLists.txt
 # Root CMakeLists already applies coverage flags globally via add_compile_options/add_link_options
 
 # -----------------------------------------------------------------------------
@@ -70,8 +70,8 @@ add_subdirectory(core)
 # Build Benchmarks
 # -----------------------------------------------------------------------------
 # Add benchmarks if enabled (currently CAE has no benchmark directory)
-# Benchmarks are controlled by WRP_CORE_ENABLE_BENCHMARKS
-# if(WRP_CORE_ENABLE_BENCHMARKS)
+# Benchmarks are controlled by CLIO_CORE_ENABLE_BENCHMARKS
+# if(CLIO_CORE_ENABLE_BENCHMARKS)
 #   add_subdirectory(benchmark)
 #   message(STATUS "CAE benchmarks enabled - added benchmark subdirectory")
 # endif()

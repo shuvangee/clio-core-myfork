@@ -35,8 +35,8 @@
 // Created by lukemartinlogan on 1/27/26.
 //
 
-#ifndef WRP_CTE_COMPRESSOR_MODELS_DATA_STATS_H_
-#define WRP_CTE_COMPRESSOR_MODELS_DATA_STATS_H_
+#ifndef CLIO_CTE_COMPRESSOR_MODELS_DATA_STATS_H_
+#define CLIO_CTE_COMPRESSOR_MODELS_DATA_STATS_H_
 
 #include <array>
 #include <chrono>
@@ -939,4 +939,4 @@ class BlockSamplerFactory {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_MODELS_DATA_STATS_H_
+#endif  // CLIO_CTE_COMPRESSOR_MODELS_DATA_STATS_H_

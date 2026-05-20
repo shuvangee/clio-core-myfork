@@ -20,7 +20,7 @@ name: ior_posix_baremetal
 install_manager: default
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: cte_runtime
     ipc_mode: shm
 
@@ -32,7 +32,7 @@ pkgs:
   #
   # Sized at 16 GiB: comfortably fits the 12 GiB workload (4G block x
   # 3 reps) and stays under /dev/shm capacity on this node (24 GiB).
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte
     devices:
       - ["ram::cte_ram", "25G", 1.0]
@@ -59,6 +59,6 @@ pkgs:
     interceptors: [cte_posix]
 
 interceptors:
-  - pkg_type: jarvis_iowarp.clio_adapters
+  - pkg_type: jarvis_clio_core.clio_adapters
     pkg_name: cte_posix
     posix: true

@@ -50,7 +50,7 @@
 #include "clio_ctp/memory/backend/gpu_shm_mmap.h"
 #include "clio_ctp/util/gpu_api.h"
 
-using hipc::PrivateBuddyAllocator;
+using ctp::ipc::PrivateBuddyAllocator;
 using ctp::ipc::GpuMalloc;
 using ctp::ipc::GpuShmMmap;
 using ctp::ipc::MemoryBackend;
@@ -94,7 +94,7 @@ struct TestObj {
  *  >0   number of successful allocations (on success path)
  */
 __global__ void StackBuddyAllocSharedKernel(
-    const hipc::MemoryBackend backend,
+    const ctp::ipc::MemoryBackend backend,
     int *d_results,
     int *d_alloc_count) {
   __shared__ char alloc_bytes[sizeof(PrivateBuddyAllocator)];
@@ -139,7 +139,7 @@ __global__ void StackBuddyAllocSharedKernel(
  * in __shared__ memory over that slice.
  */
 __global__ void StackBuddyAllocMultiBlockKernel(
-    const hipc::MemoryBackend backend,
+    const ctp::ipc::MemoryBackend backend,
     size_t per_block_size,
     int *d_results,
     int *d_alloc_counts) {
@@ -155,7 +155,7 @@ __global__ void StackBuddyAllocMultiBlockKernel(
 
     // Clip the backend to this block's slice
     size_t block_off = static_cast<size_t>(bid) * per_block_size;
-    hipc::MemoryBackend clip = backend.Clip(block_off, per_block_size);
+    ctp::ipc::MemoryBackend clip = backend.Clip(block_off, per_block_size);
 
     alloc.shm_init(clip, 0, /*shifted=*/true);
 
@@ -192,7 +192,7 @@ __global__ void StackBuddyAllocMultiBlockKernel(
  * Verifies that freed memory can be reused by the shifted allocator.
  */
 __global__ void StackBuddyAllocFreeKernel(
-    const hipc::MemoryBackend backend,
+    const ctp::ipc::MemoryBackend backend,
     int *d_results) {
   __shared__ char alloc_bytes[sizeof(PrivateBuddyAllocator)];
   PrivateBuddyAllocator &alloc =
@@ -208,7 +208,7 @@ __global__ void StackBuddyAllocFreeKernel(
     }
 
     // Phase 1: Allocate 100 objects
-    hipc::FullPtr<TestObj> ptrs[100];
+    ctp::ipc::FullPtr<TestObj> ptrs[100];
     for (int i = 0; i < 100; ++i) {
       ptrs[i] = alloc.template AllocateObjs<TestObj>(1);
       if (ptrs[i].IsNull()) {

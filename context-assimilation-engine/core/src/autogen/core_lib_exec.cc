@@ -31,42 +31,42 @@ void Runtime::Init(const chi::PoolId &pool_id, const std::string &pool_name,
   SetMethodNames(Method::GetMethodNames());
 }
 
-chi::TaskResume Runtime::Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) {
+chi::TaskResume Runtime::Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) {
   CHI_TASK_BODY_BEGIN
   switch (method) {
     case Method::kCreate: {
       // Cast task FullPtr to specific type
-      hipc::FullPtr<CreateTask> typed_task = task_ptr.template Cast<CreateTask>();
+      ctp::ipc::FullPtr<CreateTask> typed_task = task_ptr.template Cast<CreateTask>();
       CHI_CO_AWAIT(Create(typed_task, rctx));
       break;
     }
     case Method::kDestroy: {
       // Cast task FullPtr to specific type
-      hipc::FullPtr<DestroyTask> typed_task = task_ptr.template Cast<DestroyTask>();
+      ctp::ipc::FullPtr<DestroyTask> typed_task = task_ptr.template Cast<DestroyTask>();
       CHI_CO_AWAIT(Destroy(typed_task, rctx));
       break;
     }
     case Method::kMonitor: {
       // Cast task FullPtr to specific type
-      hipc::FullPtr<MonitorTask> typed_task = task_ptr.template Cast<MonitorTask>();
+      ctp::ipc::FullPtr<MonitorTask> typed_task = task_ptr.template Cast<MonitorTask>();
       CHI_CO_AWAIT(Monitor(typed_task, rctx));
       break;
     }
     case Method::kParseOmni: {
       // Cast task FullPtr to specific type
-      hipc::FullPtr<ParseOmniTask> typed_task = task_ptr.template Cast<ParseOmniTask>();
+      ctp::ipc::FullPtr<ParseOmniTask> typed_task = task_ptr.template Cast<ParseOmniTask>();
       CHI_CO_AWAIT(ParseOmni(typed_task, rctx));
       break;
     }
     case Method::kProcessHdf5Dataset: {
       // Cast task FullPtr to specific type
-      hipc::FullPtr<ProcessHdf5DatasetTask> typed_task = task_ptr.template Cast<ProcessHdf5DatasetTask>();
+      ctp::ipc::FullPtr<ProcessHdf5DatasetTask> typed_task = task_ptr.template Cast<ProcessHdf5DatasetTask>();
       CHI_CO_AWAIT(ProcessHdf5Dataset(typed_task, rctx));
       break;
     }
     case Method::kExportData: {
       // Cast task FullPtr to specific type
-      hipc::FullPtr<ExportDataTask> typed_task = task_ptr.template Cast<ExportDataTask>();
+      ctp::ipc::FullPtr<ExportDataTask> typed_task = task_ptr.template Cast<ExportDataTask>();
       CHI_CO_AWAIT(ExportData(typed_task, rctx));
       break;
     }
@@ -80,7 +80,7 @@ chi::TaskResume Runtime::Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr,
 }
 
 void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, 
-                        hipc::FullPtr<chi::Task> task_ptr) {
+                        ctp::ipc::FullPtr<chi::Task> task_ptr) {
   switch (method) {
     case Method::kCreate: {
       auto typed_task = task_ptr.template Cast<CreateTask>();
@@ -120,7 +120,7 @@ void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
 }
 
 void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
-                        hipc::FullPtr<chi::Task> task_ptr) {
+                        ctp::ipc::FullPtr<chi::Task> task_ptr) {
   switch (method) {
     case Method::kCreate: {
       auto typed_task = task_ptr.template Cast<CreateTask>();
@@ -159,8 +159,8 @@ void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
   }
 }
 
-hipc::FullPtr<chi::Task> Runtime::AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) {
-  hipc::FullPtr<chi::Task> task_ptr = NewTask(method);
+ctp::ipc::FullPtr<chi::Task> Runtime::AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) {
+  ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);
   if (!task_ptr.IsNull()) {
     LoadTask(method, archive, task_ptr);
   }
@@ -168,7 +168,7 @@ hipc::FullPtr<chi::Task> Runtime::AllocLoadTask(chi::u32 method, chi::LoadTaskAr
 }
 
 void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
-                            hipc::FullPtr<chi::Task> task_ptr) {
+                            ctp::ipc::FullPtr<chi::Task> task_ptr) {
   switch (method) {
     case Method::kCreate: {
       auto typed_task = task_ptr.template Cast<CreateTask>();
@@ -213,8 +213,8 @@ void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
   }
 }
 
-hipc::FullPtr<chi::Task> Runtime::LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) {
-  hipc::FullPtr<chi::Task> task_ptr = NewTask(method);
+ctp::ipc::FullPtr<chi::Task> Runtime::LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) {
+  ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);
   if (!task_ptr.IsNull()) {
     LocalLoadTask(method, archive, task_ptr);
   }
@@ -222,7 +222,7 @@ hipc::FullPtr<chi::Task> Runtime::LocalAllocLoadTask(chi::u32 method, chi::Defau
 }
 
 void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive, 
-                             hipc::FullPtr<chi::Task> task_ptr) {
+                             ctp::ipc::FullPtr<chi::Task> task_ptr) {
   switch (method) {
     case Method::kCreate: {
       auto typed_task = task_ptr.template Cast<CreateTask>();
@@ -267,10 +267,10 @@ void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
   }
 }
 
-hipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr, bool deep) {
+ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr, bool deep) {
   auto* ipc_manager = CHI_IPC;
   if (!ipc_manager) {
-    return hipc::FullPtr<chi::Task>();
+    return ctp::ipc::FullPtr<chi::Task>();
   }
   
   switch (method) {
@@ -352,13 +352,13 @@ hipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, hipc::FullPtr<chi
   }
   
   (void)deep;    // Deep copy parameter reserved for future use
-  return hipc::FullPtr<chi::Task>();
+  return ctp::ipc::FullPtr<chi::Task>();
 }
 
-hipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
+ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
   auto* ipc_manager = CHI_IPC;
   if (!ipc_manager) {
-    return hipc::FullPtr<chi::Task>();
+    return ctp::ipc::FullPtr<chi::Task>();
   }
   
   switch (method) {
@@ -388,13 +388,13 @@ hipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
     }
     default: {
       // For unknown methods, return null pointer
-      return hipc::FullPtr<chi::Task>();
+      return ctp::ipc::FullPtr<chi::Task>();
     }
   }
 }
 
-void Runtime::Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                        const hipc::FullPtr<chi::Task>& replica_task) {
+void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                        const ctp::ipc::FullPtr<chi::Task>& replica_task) {
   switch (method) {
     case Method::kCreate: {
       auto typed_task = orig_task.template Cast<CreateTask>();
@@ -433,7 +433,7 @@ void Runtime::Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
   }
 }
 
-void Runtime::DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) {
+void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {
   auto* ipc_manager = CHI_IPC;
   if (!ipc_manager) return;
   switch (method) {

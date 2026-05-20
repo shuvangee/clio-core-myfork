@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CAE_CORE_CONSTANTS_H_
-#define WRP_CAE_CORE_CONSTANTS_H_
+#ifndef CLIO_CAE_CORE_CONSTANTS_H_
+#define CLIO_CAE_CORE_CONSTANTS_H_
 
 #include <chimaera/chimaera.h>
 
@@ -44,4 +44,4 @@ constexpr chi::PoolId kCaePoolId(400, 0);
 
 }  // namespace clio_cae::core
 
-#endif  // WRP_CAE_CORE_CONSTANTS_H_
+#endif  // CLIO_CAE_CORE_CONSTANTS_H_

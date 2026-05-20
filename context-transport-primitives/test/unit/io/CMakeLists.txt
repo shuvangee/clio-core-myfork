@@ -17,7 +17,7 @@ add_dependencies(test_async_io_exec clio_ctp_host)
 target_link_libraries(test_async_io_exec
         clio_ctp_host ctp::aio Catch2::Catch2)
 
-if(WRP_CORE_ENABLE_NIXL)
+if(CLIO_CORE_ENABLE_NIXL)
   target_link_libraries(test_async_io_exec ctp::nixl)
 endif()
 

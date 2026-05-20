@@ -181,11 +181,11 @@ int main(int argc, char* argv[]) {
 
     // Connect to CTE
     HLOG(kInfo, "[SETUP] Connecting to CTE...");
-    clio_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::CLIO_CTE_CLIENT_INIT();
 
     // Initialize CAE client
     HLOG(kInfo, "[SETUP] Initializing CAE client...");
-    WRP_CAE_CLIENT_INIT();
+    CLIO_CAE_CLIENT_INIT();
 
     // Create CAE pool
     HLOG(kInfo, "[SETUP] Creating CAE pool...");

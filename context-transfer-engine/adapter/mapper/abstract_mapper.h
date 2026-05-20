@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ABSTRACT_MAPPER_H
-#define WRP_CTE_ABSTRACT_MAPPER_H
+#ifndef CLIO_CTE_ABSTRACT_MAPPER_H
+#define CLIO_CTE_ABSTRACT_MAPPER_H
 
 #include "chimaera/chimaera.h"
 
@@ -76,7 +76,7 @@ struct BlobPlacement {
   /** decode \a blob_name BLOB name to index.  */
   template<typename StringT>
   void DecodeBlobName(const StringT &blob_name, size_t page_size) {
-    hipc::LocalDeserialize srl(blob_name);
+    ctp::ipc::LocalDeserialize srl(blob_name);
     srl >> page_;
     bucket_off_ = page_ * page_size;
     blob_off_ = 0;
@@ -107,4 +107,4 @@ class AbstractMapper {
 };
 }  // namespace clio::cae
 
-#endif  // WRP_CTE_ABSTRACT_MAPPER_H
+#endif  // CLIO_CTE_ABSTRACT_MAPPER_H

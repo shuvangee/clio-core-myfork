@@ -40,7 +40,7 @@ TEST_CASE("GPU producer-only stress: kernel submits N tasks (SYCL)",
   const chi::u32 gpu_id = 0;
 
   char *base = nullptr;
-  hipc::AllocatorId alloc_id = ipc->AllocateAndRegisterGpuBackend(
+  ctp::ipc::AllocatorId alloc_id = ipc->AllocateAndRegisterGpuBackend(
       gpu_id, chi::gpu::IpcManager::MemKind::kPinnedHost, kBackendBytes,
       &base);
   REQUIRE(!alloc_id.IsNull());
@@ -72,7 +72,7 @@ TEST_CASE("GPU producer-only stress: kernel submits N tasks (SYCL)",
   new (ipc_storage) chi::gpu::IpcManager();
 
   auto *handle_storage =
-      sycl::malloc_shared<hipc::FullPtr<TaskT>>(kNumTasks, q);
+      sycl::malloc_shared<ctp::ipc::FullPtr<TaskT>>(kNumTasks, q);
   REQUIRE(handle_storage != nullptr);
   for (chi::u32 i = 0; i < kNumTasks; ++i) handle_storage[i] = handles[i];
 

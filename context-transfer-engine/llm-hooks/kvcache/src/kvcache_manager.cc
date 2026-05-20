@@ -124,10 +124,10 @@ bool KVCacheManager::Init() {
   if (impl_->ready) return true;
 
   // Initialize the global CTE client if not already done.
-  // WRP_CTE_CLIENT_INIT is idempotent — safe to call multiple times.
+  // CLIO_CTE_CLIENT_INIT is idempotent — safe to call multiple times.
   try {
-    if (!clio_cte::core::WRP_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
-      fprintf(stderr, "kvcache_manager: WRP_CTE_CLIENT_INIT() failed — "
+    if (!clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+      fprintf(stderr, "kvcache_manager: CLIO_CTE_CLIENT_INIT() failed — "
                       "is the IOWarp runtime running?\n");
       return false;
     }

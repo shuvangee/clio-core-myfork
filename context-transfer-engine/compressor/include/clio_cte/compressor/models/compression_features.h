@@ -39,8 +39,8 @@
  * Dense Neural Network predictors for compression performance prediction.
  */
 
-#ifndef WRP_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_
-#define WRP_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_
+#ifndef CLIO_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_
+#define CLIO_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_
 
 #include <vector>
 #include <string>
@@ -446,4 +446,4 @@ class CompressionPredictor {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_
+#endif  // CLIO_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_

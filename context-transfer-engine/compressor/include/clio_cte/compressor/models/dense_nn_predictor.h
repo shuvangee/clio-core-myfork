@@ -41,8 +41,8 @@
  * Uses MiniDNN (header-only library based on Eigen) for neural network operations.
  */
 
-#ifndef WRP_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_
-#define WRP_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_
+#ifndef CLIO_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_
+#define CLIO_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_
 
 #include "compression_features.h"
 #include <Eigen/Core>
@@ -349,4 +349,4 @@ class DenseNNPredictor : public CompressionPredictor {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_
+#endif  // CLIO_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_

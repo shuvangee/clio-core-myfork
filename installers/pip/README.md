@@ -18,7 +18,7 @@ On RHEL/CentOS/manylinux:
 yum install yaml-cpp-devel yaml-cpp-static zeromq-devel libaio-devel
 ```
 
-The `pip-release` CMake preset enables `WRP_CORE_STATIC_DEPS=ON`, which links
+The `pip-release` CMake preset enables `CLIO_CORE_STATIC_DEPS=ON`, which links
 these dependencies statically so the resulting wheel is self-contained.
 
 ### Build and Install
@@ -41,7 +41,7 @@ The GitHub Actions workflow `.github/workflows/build-pip.yml` uses
 [cibuildwheel](https://cibuildwheel.readthedocs.io/) to produce manylinux_2_28
 wheels for CPython 3.10-3.13.
 
-External deps are linked statically via `WRP_CORE_STATIC_DEPS=ON` (set in the
+External deps are linked statically via `CLIO_CORE_STATIC_DEPS=ON` (set in the
 `pip-release` preset), so the wheel only contains IOWarp's own `.so` files.
 
 ### Manual cibuildwheel
@@ -89,9 +89,9 @@ pip install -v . --config-settings=cmake.args="-DWRP_CORE_ENABLE_CAE=OFF"
 
 ### Static vs Shared Dependencies
 
-The `pip-release` preset enables `WRP_CORE_STATIC_DEPS=ON`. To use shared
+The `pip-release` preset enables `CLIO_CORE_STATIC_DEPS=ON`. To use shared
 dependencies instead (e.g., for development):
 
 ```bash
-pip install -v . --config-settings=cmake.define.WRP_CORE_STATIC_DEPS=OFF
+pip install -v . --config-settings=cmake.define.CLIO_CORE_STATIC_DEPS=OFF
 ```

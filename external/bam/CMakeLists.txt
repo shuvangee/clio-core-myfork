@@ -3,7 +3,7 @@ project(bam LANGUAGES C CXX)
 
 # Strip code coverage flags — gcov's hidden symbol visibility is incompatible
 # with CUDA separable compilation shared library linking.
-if(WRP_CORE_ENABLE_COVERAGE)
+if(CLIO_CORE_ENABLE_COVERAGE)
   string(REPLACE "--coverage" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   string(REPLACE "--coverage" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   string(REPLACE "-fprofile-arcs" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")

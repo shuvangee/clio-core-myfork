@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
-#define WRP_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
+#ifndef CLIO_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
+#define CLIO_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
 
 #include "clio_ctp/util/singleton.h"
 #include <chimaera/chimaera.h>
@@ -119,4 +119,4 @@ CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_cte::core::ContentTransferEngine, g_cte_manager
 // Macro for accessing the ContentTransferEngine singleton using global pointer variable
 #define CTE_MANAGER (CTP_GET_GLOBAL_PTR_VAR(clio_cte::core::ContentTransferEngine, g_cte_manager))
 
-#endif  // WRP_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_
+#endif  // CLIO_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_

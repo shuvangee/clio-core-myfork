@@ -10,9 +10,9 @@ from jarvis_cd.shell.process import Mkdir, Rm
 from jarvis_cd.util.config_parser import JsonFile
 import os
 
-# Container build is delegated to jarvis_iowarp.clio_runtime: every pipeline
+# Container build is delegated to jarvis_clio_core.clio_runtime: every pipeline
 # that uses adios2_gray_scott also instantiates clio_runtime, whose build.sh
-# compiles IOWarp with WRP_CORE_ENABLE_GRAY_SCOTT=ON (enabled by the
+# compiles IOWarp with CLIO_CORE_ENABLE_GRAY_SCOTT=ON (enabled by the
 # 'release-adapter' preset), producing /usr/local/bin/gray-scott in the
 # shared build image. So this package contributes no build or deploy
 # content of its own; see clio_runtime/build.sh + Dockerfile.deploy.
@@ -210,7 +210,7 @@ class Adios2GrayScott(Application):
     # ------------------------------------------------------------------
     # Every pipeline that uses adios2_gray_scott in container mode also
     # spins up clio_runtime, whose build.sh compiles IOWarp with
-    # WRP_CORE_ENABLE_GRAY_SCOTT=ON. That produces /usr/local/bin/gray-scott
+    # CLIO_CORE_ENABLE_GRAY_SCOTT=ON. That produces /usr/local/bin/gray-scott
     # in the committed build image, which clio_runtime's Dockerfile.deploy
     # copies into the final deploy image. So no separate build/deploy
     # content is emitted here.

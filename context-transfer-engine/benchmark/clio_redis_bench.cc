@@ -46,7 +46,7 @@
  *
  * Connection (env, defaults): REDIS_HOST=127.0.0.1  REDIS_PORT=6379
  *
- * Built only when WRP_CORE_ENABLE_REDIS=ON (needs hiredis).
+ * Built only when CLIO_CORE_ENABLE_REDIS=ON (needs hiredis).
  */
 
 #include "bench_common.h"

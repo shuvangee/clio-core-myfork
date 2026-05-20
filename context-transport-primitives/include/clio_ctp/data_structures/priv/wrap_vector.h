@@ -49,16 +49,16 @@ namespace ctp::priv {
  */
 class wrap_vector {
  public:
-  hipc::FullPtr<char> data_;
+  ctp::ipc::FullPtr<char> data_;
   size_t size_ = 0;
   size_t capacity_ = 0;
 
   CTP_CROSS_FUN wrap_vector() = default;
 
-  CTP_CROSS_FUN wrap_vector(hipc::FullPtr<char> data, size_t capacity)
+  CTP_CROSS_FUN wrap_vector(ctp::ipc::FullPtr<char> data, size_t capacity)
       : data_(data), size_(0), capacity_(capacity) {}
 
-  CTP_CROSS_FUN void set(hipc::FullPtr<char> data, size_t capacity) {
+  CTP_CROSS_FUN void set(ctp::ipc::FullPtr<char> data, size_t capacity) {
     data_ = data;
     size_ = 0;
     capacity_ = capacity;
@@ -84,8 +84,8 @@ class wrap_vector {
   CTP_CROSS_FUN const char *begin() const { return data_.ptr_; }
   CTP_CROSS_FUN const char *end() const { return data_.ptr_ + size_; }
 
-  CTP_CROSS_FUN hipc::FullPtr<char> &GetFullPtr() { return data_; }
-  CTP_CROSS_FUN const hipc::FullPtr<char> &GetFullPtr() const { return data_; }
+  CTP_CROSS_FUN ctp::ipc::FullPtr<char> &GetFullPtr() { return data_; }
+  CTP_CROSS_FUN const ctp::ipc::FullPtr<char> &GetFullPtr() const { return data_; }
 
   /** Serialize (save) — write size + data bytes */
   template <class Archive>

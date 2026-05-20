@@ -127,7 +127,7 @@ clio_cte:
 
 ## File Locations
 
-- **Package Source**: `test/jarvis_iowarp/clio_cte/pkg.py`
+- **Package Source**: `test/jarvis_clio_core/clio_cte/pkg.py`
 - **Configuration Output**: `{shared_dir}/cte_config.yaml`
 - **Template Reference**: `config/cte_example.yaml`
 

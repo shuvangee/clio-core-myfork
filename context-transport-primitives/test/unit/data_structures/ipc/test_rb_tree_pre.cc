@@ -151,7 +151,7 @@ TEST_CASE("rb_tree_pre - Basic Operations", "[rb_tree_pre]") {
     node_ptr.ptr_->value_ = 100;
 
     // Insert the node (TestRBNode inherits from rb_node, so we can cast)
-    hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
     tree.emplace(alloc, test_ptr);
@@ -176,7 +176,7 @@ TEST_CASE("rb_tree_pre - Basic Operations", "[rb_tree_pre]") {
       node_ptr.ptr_->key = i;
       node_ptr.ptr_->value_ = i * 10;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -203,7 +203,7 @@ TEST_CASE("rb_tree_pre - Basic Operations", "[rb_tree_pre]") {
       node_ptr.ptr_->key = i;
       node_ptr.ptr_->value_ = i * 10;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -224,7 +224,7 @@ TEST_CASE("rb_tree_pre - Basic Operations", "[rb_tree_pre]") {
       node_ptr.ptr_->key = key;
       node_ptr.ptr_->value_ = key;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -250,7 +250,7 @@ TEST_CASE("rb_tree_pre - Basic Operations", "[rb_tree_pre]") {
     node1_ptr.ptr_->key = 42;
     node1_ptr.ptr_->value_ = 100;
 
-    hipc::ShmPtrBase<TestRBNode<int>> test_shm1(node1_ptr.shm_.alloc_id_, node1_ptr.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm1(node1_ptr.shm_.alloc_id_, node1_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr1(alloc, test_shm1);
     test_ptr1.ptr_ = node1_ptr.ptr_;
     tree.emplace(alloc, test_ptr1);
@@ -262,7 +262,7 @@ TEST_CASE("rb_tree_pre - Basic Operations", "[rb_tree_pre]") {
     node2_ptr.ptr_->key = 42;
     node2_ptr.ptr_->value_ = 200;
 
-    hipc::ShmPtrBase<TestRBNode<int>> test_shm2(node2_ptr.shm_.alloc_id_, node2_ptr.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm2(node2_ptr.shm_.alloc_id_, node2_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr2(alloc, test_shm2);
     test_ptr2.ptr_ = node2_ptr.ptr_;
     tree.emplace(alloc, test_ptr2);
@@ -300,7 +300,7 @@ TEST_CASE("rb_tree_pre - Deletion", "[rb_tree_pre]") {
     node_ptr.ptr_->key = 42;
     node_ptr.ptr_->value_ = 100;
 
-    hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
     tree.emplace(alloc, test_ptr);
@@ -325,7 +325,7 @@ TEST_CASE("rb_tree_pre - Deletion", "[rb_tree_pre]") {
       node_ptr.ptr_->key = i * 10;
       node_ptr.ptr_->value_ = i;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -351,7 +351,7 @@ TEST_CASE("rb_tree_pre - Deletion", "[rb_tree_pre]") {
       node_ptr.ptr_->key = key;
       node_ptr.ptr_->value_ = key;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -386,7 +386,7 @@ TEST_CASE("rb_tree_pre - Deletion", "[rb_tree_pre]") {
       node_ptr.ptr_->key = i;
       node_ptr.ptr_->value_ = i;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -404,7 +404,7 @@ TEST_CASE("rb_tree_pre - Deletion", "[rb_tree_pre]") {
       node_ptr.ptr_->key = i;
       node_ptr.ptr_->value_ = i;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -444,7 +444,7 @@ TEST_CASE("rb_tree_pre - Large Tree", "[rb_tree_pre]") {
       node_ptr.ptr_->key = i;
       node_ptr.ptr_->value_ = i;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -485,7 +485,7 @@ TEST_CASE("rb_tree_pre - Atomic Version", "[rb_tree_pre][atomic]") {
       node_ptr.ptr_->key = i;
       node_ptr.ptr_->value_ = i * 2;
 
-      hipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> test_shm(node_ptr.shm_.alloc_id_, node_ptr.shm_.off_.load());
     FullPtr<TestRBNode<int>> test_ptr(alloc, test_shm);
     test_ptr.ptr_ = node_ptr.ptr_;
       tree.emplace(alloc, test_ptr);
@@ -516,21 +516,21 @@ TEST_CASE("rb_tree_pre - Deletion Edge Cases", "[rb_tree_pre][deletion]") {
     // Insert root and two children
     auto root = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
     root.ptr_->key = 50;
-    hipc::ShmPtrBase<TestRBNode<int>> root_shm(root.shm_.alloc_id_, root.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> root_shm(root.shm_.alloc_id_, root.shm_.off_.load());
     FullPtr<TestRBNode<int>> root_ptr(alloc, root_shm);
     root_ptr.ptr_ = root.ptr_;
     tree.emplace(alloc, root_ptr);
 
     auto left = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
     left.ptr_->key = 25;
-    hipc::ShmPtrBase<TestRBNode<int>> left_shm(left.shm_.alloc_id_, left.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> left_shm(left.shm_.alloc_id_, left.shm_.off_.load());
     FullPtr<TestRBNode<int>> left_ptr(alloc, left_shm);
     left_ptr.ptr_ = left.ptr_;
     tree.emplace(alloc, left_ptr);
 
     auto right = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
     right.ptr_->key = 75;
-    hipc::ShmPtrBase<TestRBNode<int>> right_shm(right.shm_.alloc_id_, right.shm_.off_.load());
+    ctp::ipc::ShmPtrBase<TestRBNode<int>> right_shm(right.shm_.alloc_id_, right.shm_.off_.load());
     FullPtr<TestRBNode<int>> right_ptr(alloc, right_shm);
     right_ptr.ptr_ = right.ptr_;
     tree.emplace(alloc, right_ptr);
@@ -558,7 +558,7 @@ TEST_CASE("rb_tree_pre - Deletion Edge Cases", "[rb_tree_pre][deletion]") {
     for (int key : keys) {
       auto node = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
       node.ptr_->key = key;
-      hipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
       FullPtr<TestRBNode<int>> ptr(alloc, shm);
       ptr.ptr_ = node.ptr_;
       tree.emplace(alloc, ptr);
@@ -583,7 +583,7 @@ TEST_CASE("rb_tree_pre - Deletion Edge Cases", "[rb_tree_pre][deletion]") {
     for (int key : keys) {
       auto node = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
       node.ptr_->key = key;
-      hipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
       FullPtr<TestRBNode<int>> ptr(alloc, shm);
       ptr.ptr_ = node.ptr_;
       tree.emplace(alloc, ptr);
@@ -608,7 +608,7 @@ TEST_CASE("rb_tree_pre - Deletion Edge Cases", "[rb_tree_pre][deletion]") {
     for (int key : keys) {
       auto node = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
       node.ptr_->key = key;
-      hipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
       FullPtr<TestRBNode<int>> ptr(alloc, shm);
       ptr.ptr_ = node.ptr_;
       tree.emplace(alloc, ptr);
@@ -629,7 +629,7 @@ TEST_CASE("rb_tree_pre - Deletion Edge Cases", "[rb_tree_pre][deletion]") {
     for (int key : keys) {
       auto node = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
       node.ptr_->key = key;
-      hipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
       FullPtr<TestRBNode<int>> ptr(alloc, shm);
       ptr.ptr_ = node.ptr_;
       tree.emplace(alloc, ptr);
@@ -656,7 +656,7 @@ TEST_CASE("rb_tree_pre - Deletion Edge Cases", "[rb_tree_pre][deletion]") {
       keys.push_back(i);
       auto node = alloc->Allocate<TestRBNode<int>>(sizeof(TestRBNode<int>));
       node.ptr_->key = i;
-      hipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<int>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
       FullPtr<TestRBNode<int>> ptr(alloc, shm);
       ptr.ptr_ = node.ptr_;
       tree.emplace(alloc, ptr);
@@ -692,7 +692,7 @@ TEST_CASE("rb_tree_pre - String Keys", "[rb_tree_pre][string_keys]") {
     for (const auto& key : keys) {
       auto node = alloc->Allocate<TestRBNode<std::string>>(sizeof(TestRBNode<std::string>));
       new (node.ptr_) TestRBNode<std::string>(key, 0);
-      hipc::ShmPtrBase<TestRBNode<std::string>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
+      ctp::ipc::ShmPtrBase<TestRBNode<std::string>> shm(node.shm_.alloc_id_, node.shm_.off_.load());
       FullPtr<TestRBNode<std::string>> ptr(alloc, shm);
       ptr.ptr_ = node.ptr_;
       tree.emplace(alloc, ptr);

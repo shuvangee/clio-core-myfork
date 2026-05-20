@@ -60,7 +60,7 @@ void TestZeroMQ() {
   // Client creates metadata and sends
   LbmMeta<> send_meta;
   Bulk send_bulk = client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(magic.data())),
+      ctp::ipc::FullPtr<char>(const_cast<char*>(magic.data())),
       magic.size(), BULK_XFER);
   send_meta.send.push_back(send_bulk);
 

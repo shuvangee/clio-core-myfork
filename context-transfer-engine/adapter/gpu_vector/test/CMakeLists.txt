@@ -2,7 +2,7 @@
 # GPU Vector tests — CUDA / ROCm only.
 #-----------------------------------------------------------------------------
 
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
     add_cuda_executable(test_gpu_vector FALSE
         test_gpu_vector_gpu.cc
         INCLUDE_DIRS
@@ -35,7 +35,7 @@ if(WRP_CORE_ENABLE_CUDA)
     )
 endif()
 
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
     add_rocm_gpu_executable(test_gpu_vector FALSE
         test_gpu_vector_gpu.cc
     )

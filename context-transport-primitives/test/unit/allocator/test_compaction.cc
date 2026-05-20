@@ -39,11 +39,11 @@
 #include "clio_ctp/memory/allocator/buddy_allocator.h"
 #include "clio_ctp/memory/backend/malloc_backend.h"
 
-using hipc::BuddyAllocator;
-using hipc::ForwardingTable;
-using hipc::MallocBackend;
-using hipc::MemoryBackendId;
-using hipc::OffsetPtr;
+using ctp::ipc::BuddyAllocator;
+using ctp::ipc::ForwardingTable;
+using ctp::ipc::MallocBackend;
+using ctp::ipc::MemoryBackendId;
+using ctp::ipc::OffsetPtr;
 
 /** Helper: make a fresh BuddyAllocator backed by a MallocBackend */
 static BuddyAllocator *MakeAlloc(MallocBackend &backend, size_t heap_mb = 128) {

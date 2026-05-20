@@ -207,8 +207,8 @@ class ring_buffer : public ShmContainer<AllocT> {
   static constexpr bool IsAtomic = IsMPSC;
 
   using entry_vector = vector<entry_type, AllocT>;
-  using head_type = hipc::opt_atomic<u64, IsAtomic>;
-  using tail_type = hipc::opt_atomic<u64, IsAtomic>;
+  using head_type = ctp::ipc::opt_atomic<u64, IsAtomic>;
+  using tail_type = ctp::ipc::opt_atomic<u64, IsAtomic>;
 
  private:
   entry_vector queue_;     /**< Internal vector storing entries */
@@ -218,7 +218,7 @@ class ring_buffer : public ShmContainer<AllocT> {
                               orchestrator) */
   int signal_fd_;          /**< Signal file descriptor for awakening worker */
   pid_t tid_;              /**< Thread ID of the worker owning this lane */
-  hipc::opt_atomic<bool, IsAtomic>
+  ctp::ipc::opt_atomic<bool, IsAtomic>
       active_; /**< Whether worker is accepting tasks (true) or blocked in
                   epoll_wait (false) */
 
@@ -531,7 +531,7 @@ class ring_buffer : public ShmContainer<AllocT> {
     // the ready flag. Without this, a consumer on a different SM (or
     // a different concurrent kernel) could see the atomicOr on the
     // ready flag but read stale data.
-    hipc::threadfence();
+    ctp::ipc::threadfence();
     entry.SetReady();  // Mark as ready with release semantics
 
     return true;
@@ -604,7 +604,7 @@ class ring_buffer : public ShmContainer<AllocT> {
     }
     // Device-scope fence: ensure we read the latest entry.data_ from L2
     // after successfully claiming the entry via CAS.
-    hipc::threadfence();
+    ctp::ipc::threadfence();
     val = entry.data_;
     head_.store(head + 1);
     return true;
@@ -695,7 +695,7 @@ class ring_buffer : public ShmContainer<AllocT> {
  * making it suitable for scenarios where size cannot be predicted upfront.
  * NOT thread-safe for multiple producers.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using ext_ring_buffer =
     ring_buffer<T, AllocT, (RING_BUFFER_SPSC_FLAGS | RING_BUFFER_DYNAMIC_SIZE)>;
 
@@ -705,7 +705,7 @@ using ext_ring_buffer =
  * This ring buffer is optimized for single-threaded scenarios and will
  * return an error when attempting to push beyond capacity.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using spsc_ring_buffer =
     ring_buffer<T, AllocT,
                 (RING_BUFFER_SPSC_FLAGS | RING_BUFFER_FIXED_SIZE |
@@ -718,7 +718,7 @@ using spsc_ring_buffer =
  * but only one thread consumes. Uses atomic operations for thread-safe
  * multi-producer access while supporting single consumer.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using mpsc_ring_buffer =
     ring_buffer<T, AllocT,
                 (RING_BUFFER_MPSC_FLAGS | RING_BUFFER_FIXED_SIZE |
@@ -733,7 +733,7 @@ using mpsc_ring_buffer =
  * multi-producer access while supporting single consumer. Wraps around
  * when full instead of waiting.
  */
-template <typename T, typename AllocT = hipc::Allocator>
+template <typename T, typename AllocT = ctp::ipc::Allocator>
 using circular_mpsc_ring_buffer =
     ring_buffer<T, AllocT, (RING_BUFFER_MPSC_FLAGS | RING_BUFFER_FIXED_SIZE)>;
 

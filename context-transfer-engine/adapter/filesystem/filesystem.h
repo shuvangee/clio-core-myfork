@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_
-#define WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_
+#ifndef CLIO_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_
+#define CLIO_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_
 
 #ifndef O_TMPFILE
 #define O_TMPFILE 0x0
@@ -190,7 +190,7 @@ public:
 public:
   /** Constructor */
   explicit Filesystem(AdapterType type) : type_(type) {
-    clio_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::CLIO_CTE_CLIENT_INIT();
   }
 
   /**
@@ -204,7 +204,7 @@ public:
   File Open(AdapterStat &stat, const std::string &path) {
     File f;
     std::string clean_path = StripClioPrefix(path);
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     if (stat.adapter_mode_ == AdapterMode::kNone) {
       stat.adapter_mode_ = mdm->GetAdapterMode(clean_path);
     }
@@ -218,7 +218,7 @@ public:
 
   /** open \a f File in \a path */
   void Open(AdapterStat &stat, File &f, const std::string &path) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
 
     // Lazily reap up to 3 completed close-time AsyncDelTag futures
     // before issuing this open. Wait(0) is non-blocking so this is at
@@ -236,17 +236,17 @@ public:
       // op (Read/Write/GetSize/...) will call AwaitPendingOpen to
       // resolve it. This removes the sync RPC from the open critical
       // path entirely.
-      auto *cte_client = WRP_CTE_CLIENT;
+      auto *cte_client = CLIO_CTE_CLIENT;
       stat.pending_open_fut_ = cte_client->AsyncGetOrCreateTag(stat.path_);
       stat.open_pending_ = true;
       stat.tag_id_ = clio_cte::core::TagId();  // sentinel; filled on first wait
 
-      if (stat.hflags_.Any(WRP_CTE_FS_TRUNC)) {
+      if (stat.hflags_.Any(CLIO_CTE_FS_TRUNC)) {
         stat.file_size_ = 0;
       } else {
         stat.file_size_ = GetBackendSize(stat.path_);
       }
-      if (stat.hflags_.Any(WRP_CTE_FS_APPEND)) {
+      if (stat.hflags_.Any(CLIO_CTE_FS_APPEND)) {
         stat.st_ptr_ = std::numeric_limits<size_t>::max();
       } else {
         stat.st_ptr_ = 0;
@@ -293,8 +293,8 @@ public:
     // Populate file_size_ from the CTE tag (unless we're truncating,
     // in which case the file is logically empty anyway).
     if (stat.adapter_mode_ != AdapterMode::kBypass &&
-        !stat.hflags_.Any(WRP_CTE_FS_TRUNC)) {
-      auto *cte_client = WRP_CTE_CLIENT;
+        !stat.hflags_.Any(CLIO_CTE_FS_TRUNC)) {
+      auto *cte_client = CLIO_CTE_CLIENT;
       auto size_fut = cte_client->AsyncGetTagSize(stat.tag_id_);
       if (size_fut.Wait() && size_fut->GetReturnCode() == 0) {
         size_t cte_size = size_fut.get()->tag_size_;
@@ -421,7 +421,7 @@ public:
       if (depth == 0) depth = 1;
 
       struct Slot {
-        hipc::FullPtr<char> shm;
+        ctp::ipc::FullPtr<char> shm;
         chi::Future<clio_cte::core::PutBlobTask> fut;
         bool in_flight = false;
       };
@@ -471,7 +471,7 @@ public:
 
         // Dispatch async, do not wait.
         std::string blob_name = std::to_string(page_index);
-        hipc::ShmPtr<> shm_ptr(s.shm.shm_);
+        ctp::ipc::ShmPtr<> shm_ptr(s.shm.shm_);
         try {
           s.fut = file_tag.AsyncPutBlob(blob_name, shm_ptr,
                                         bytes_to_write, page_offset);
@@ -564,7 +564,7 @@ public:
     }
 
     // Read bit must be set
-    if (!stat.hflags_.Any(WRP_CTE_FS_READ)) {
+    if (!stat.hflags_.Any(CLIO_CTE_FS_READ)) {
       io_status.size_ = 0;
       UpdateIoStatus(opts, io_status);
       return -1;
@@ -732,7 +732,7 @@ public:
 
   /** seek */
   size_t Seek(File &f, AdapterStat &stat, SeekMode whence, off64_t offset) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     switch (whence) {
     case SeekMode::kSet: {
       stat.st_ptr_ = offset;
@@ -777,7 +777,7 @@ public:
       // current API is AsyncGetTagSize + Future.Wait(), with the result
       // surfacing on the task's tag_size_ field via the Future's
       // task_ptr_.
-      auto *cte_client = WRP_CTE_CLIENT;
+      auto *cte_client = CLIO_CTE_CLIENT;
       auto fut = cte_client->AsyncGetTagSize(stat.tag_id_);
       fut.Wait();
       size_t cte_tag_size = fut.get()->tag_size_;
@@ -824,7 +824,7 @@ public:
   /** close */
   int Close(File &f, AdapterStat &stat) {
     Sync(f, stat);
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     FilesystemIoClientState fs_ctx(&mdm->fs_mdm_, (void *)&stat);
     HermesClose(f, stat, fs_ctx);
     RealClose(f, stat);
@@ -839,7 +839,7 @@ public:
 
   /** remove */
   int Remove(const std::string &pathname) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     int ret = RealRemove(pathname);
 
     // CTE tag cleanup — async fire-and-forget. The AsyncDelTag future
@@ -848,7 +848,7 @@ public:
     // (non-blocking) to reap completed ones. This keeps the close-time
     // round-trip off the caller's critical path.
     std::string canon_path = stdfs::absolute(pathname).string();
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
     PendingCloses::Get().Push(cte_client->AsyncDelTag(canon_path));
     HLOG(kDebug, "Queued CTE tag delete for file: {}", pathname);
 
@@ -919,7 +919,7 @@ public:
   /** write */
   size_t Write(File &f, bool &stat_exists, const void *ptr, size_t total_size,
                IoStatus &io_status, FsIoOptions opts = FsIoOptions()) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -932,7 +932,7 @@ public:
   /** read */
   size_t Read(File &f, bool &stat_exists, void *ptr, size_t total_size,
               IoStatus &io_status, FsIoOptions opts = FsIoOptions()) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -946,7 +946,7 @@ public:
   size_t Write(File &f, bool &stat_exists, const void *ptr, size_t off,
                size_t total_size, IoStatus &io_status,
                FsIoOptions opts = FsIoOptions()) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -961,7 +961,7 @@ public:
   size_t Read(File &f, bool &stat_exists, void *ptr, size_t off,
               size_t total_size, IoStatus &io_status,
               FsIoOptions opts = FsIoOptions()) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -976,9 +976,9 @@ public:
   FsAsyncTask *
   AWrite(File &f, bool &stat_exists, const void *ptr, size_t total_size,
          size_t req_id,
-         std::vector<hipc::FullPtr<clio_cte::core::PutBlobTask>> &tasks,
+         std::vector<ctp::ipc::FullPtr<clio_cte::core::PutBlobTask>> &tasks,
          IoStatus &io_status, FsIoOptions opts) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -991,7 +991,7 @@ public:
   /** read asynchronously */
   FsAsyncTask *ARead(File &f, bool &stat_exists, void *ptr, size_t total_size,
                      size_t req_id, IoStatus &io_status, FsIoOptions opts) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1005,7 +1005,7 @@ public:
   FsAsyncTask *AWrite(File &f, bool &stat_exists, const void *ptr, size_t off,
                       size_t total_size, size_t req_id, IoStatus &io_status,
                       FsIoOptions opts) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1020,7 +1020,7 @@ public:
   FsAsyncTask *ARead(File &f, bool &stat_exists, void *ptr, size_t off,
                      size_t total_size, size_t req_id, IoStatus &io_status,
                      FsIoOptions opts) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1033,7 +1033,7 @@ public:
 
   /** seek */
   size_t Seek(File &f, bool &stat_exists, SeekMode whence, size_t offset) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1045,7 +1045,7 @@ public:
 
   /** file sizes */
   size_t GetSize(File &f, bool &stat_exists) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1057,7 +1057,7 @@ public:
 
   /** tell */
   size_t Tell(File &f, bool &stat_exists) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1069,7 +1069,7 @@ public:
 
   /** sync */
   int Sync(File &f, bool &stat_exists) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1081,7 +1081,7 @@ public:
 
   /** truncate */
   int Truncate(File &f, bool &stat_exists, size_t new_size) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1093,7 +1093,7 @@ public:
 
   /** close */
   int Close(File &f, bool &stat_exists) {
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     auto stat = mdm->Find(f);
     if (!stat) {
       stat_exists = false;
@@ -1125,4 +1125,4 @@ public:
 
 } // namespace clio::cae
 
-#endif // WRP_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_
+#endif // CLIO_CTE_ADAPTER_FILESYSTEM_FILESYSTEM_H_

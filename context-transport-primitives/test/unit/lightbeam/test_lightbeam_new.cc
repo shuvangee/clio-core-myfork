@@ -82,9 +82,9 @@ void TestBasicTransfer() {
   send_meta.operation = "test_op";
 
   Bulk bulk1 = client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data1)), size1, BULK_XFER);
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data1)), size1, BULK_XFER);
   Bulk bulk2 = client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data2)), size2, BULK_XFER);
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data2)), size2, BULK_XFER);
 
   send_meta.send.push_back(bulk1);
   send_meta.send.push_back(bulk2);
@@ -153,7 +153,7 @@ void TestMultipleBulks() {
   LbmMeta<> send_meta;
   for (const auto& chunk : data_chunks) {
     Bulk bulk = client->Expose(
-        hipc::FullPtr<char>(const_cast<char*>(chunk.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(chunk.data())),
         chunk.size(), BULK_XFER);
     send_meta.send.push_back(bulk);
   }

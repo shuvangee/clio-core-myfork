@@ -32,7 +32,7 @@ namespace chi {
  */
 template <typename TaskT>
 CTP_GPU_FUN gpu::Future<TaskT> IpcGpu2Cpu::ClientSend(
-    gpu::IpcManager *ipc, const hipc::FullPtr<TaskT> &task_ptr) {
+    gpu::IpcManager *ipc, const ctp::ipc::FullPtr<TaskT> &task_ptr) {
   gpu::Future<TaskT> future;
 
 #if CTP_IS_GPU_COMPILER
@@ -55,13 +55,13 @@ CTP_GPU_FUN gpu::Future<TaskT> IpcGpu2Cpu::ClientSend(
   // dereferences off_ directly without per-backend resolution math. When
   // kDeviceMem is wired up the worker will branch on `kind` and issue a
   // cudaMemcpy of size sizeof(FutureShm) from device_ptr+task_off instead.
-  hipc::ShmPtr<gpu::FutureShm> fshmptr;
+  ctp::ipc::ShmPtr<gpu::FutureShm> fshmptr;
   fshmptr.alloc_id_ = task_ptr.shm_.alloc_id_;
   fshmptr.off_ = reinterpret_cast<size_t>(fshm);
 
   // Mirror raw addressing for the task ShmPtr in the queue entry so the
   // CPU worker can dereference the task pointer the same way.
-  hipc::FullPtr<Task> task_for_queue;
+  ctp::ipc::FullPtr<Task> task_for_queue;
   task_for_queue.shm_.alloc_id_ = task_ptr.shm_.alloc_id_;
   task_for_queue.shm_.off_ = reinterpret_cast<size_t>(task_ptr.ptr_);
   task_for_queue.ptr_ = static_cast<Task *>(task_ptr.ptr_);

@@ -81,7 +81,7 @@ bool initializeRuntime() {
   INFO("✓ Chimaera runtime initialized");
 
   INFO("Initializing CTE runtime...");
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
     INFO("CTE initialization failed - continuing without CTE tracking");
     initialized = true;
     return true;
@@ -89,9 +89,9 @@ bool initializeRuntime() {
   INFO("✓ CTE runtime initialized");
 
   INFO("Registering test target with CTE...");
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   chi::u32 result = cte_client->RegisterTarget(
-      hipc::MemContext(),
+      ctp::ipc::MemContext(),
       kTestBackendFile,                  // target_name (backend file path)
       chimaera::bdev::BdevType::kFile,   // bdev_type
       kTestFileSize * 10                 // total_size

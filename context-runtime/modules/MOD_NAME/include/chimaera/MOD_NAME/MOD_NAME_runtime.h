@@ -94,7 +94,7 @@ public:
   /**
    * Execute a method on a task
    */
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) override;
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) override;
 
   //===========================================================================
   // Method implementations
@@ -104,57 +104,57 @@ public:
    * Handle Create task
    * Returns TaskResume for consistency with Run method
    */
-  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext& rctx);
+  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext& rctx);
 
   /**
    * Handle Custom task
    * Returns TaskResume for consistency with Run method
    */
-  chi::TaskResume Custom(hipc::FullPtr<CustomTask> task, chi::RunContext& rctx);
+  chi::TaskResume Custom(ctp::ipc::FullPtr<CustomTask> task, chi::RunContext& rctx);
 
   /**
    * Handle CoMutexTest task
    * Returns TaskResume for consistency with Run method
    */
-  chi::TaskResume CoMutexTest(hipc::FullPtr<CoMutexTestTask> task, chi::RunContext& rctx);
+  chi::TaskResume CoMutexTest(ctp::ipc::FullPtr<CoMutexTestTask> task, chi::RunContext& rctx);
 
   /**
    * Handle CoRwLockTest task
    * Returns TaskResume for consistency with Run method
    */
-  chi::TaskResume CoRwLockTest(hipc::FullPtr<CoRwLockTestTask> task, chi::RunContext& rctx);
+  chi::TaskResume CoRwLockTest(ctp::ipc::FullPtr<CoRwLockTestTask> task, chi::RunContext& rctx);
 
   /**
    * Handle WaitTest task
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume WaitTest(hipc::FullPtr<WaitTestTask> task, chi::RunContext& rctx);
+  chi::TaskResume WaitTest(ctp::ipc::FullPtr<WaitTestTask> task, chi::RunContext& rctx);
 
   /**
    * Handle TestLargeOutput task
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume TestLargeOutput(hipc::FullPtr<TestLargeOutputTask> task, chi::RunContext& rctx);
+  chi::TaskResume TestLargeOutput(ctp::ipc::FullPtr<TestLargeOutputTask> task, chi::RunContext& rctx);
 
   /**
    * Handle GpuSubmit task (GPU-compatible task for Part 3 testing)
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume GpuSubmit(hipc::FullPtr<GpuSubmitTask> task, chi::RunContext& rctx);
+  chi::TaskResume GpuSubmit(ctp::ipc::FullPtr<GpuSubmitTask> task, chi::RunContext& rctx);
 
-  chi::TaskResume SubtaskTest(hipc::FullPtr<SubtaskTestTask> task, chi::RunContext& rctx);
+  chi::TaskResume SubtaskTest(ctp::ipc::FullPtr<SubtaskTestTask> task, chi::RunContext& rctx);
 
   /**
    * Handle Monitor task - return msgpack-encoded test data
    * Part of the unified kMonitor:9 interface
    */
-  chi::TaskResume Monitor(hipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
+  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
 
   /**
    * Handle Destroy task - Alias for DestroyPool (DestroyTask = DestroyPoolTask)
    * Returns TaskResume for consistency with Run method
    */
-  chi::TaskResume Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext& rctx);
+  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext& rctx);
 
   /**
    * Get remaining work count for this container
@@ -169,49 +169,49 @@ public:
   /**
    * Serialize task parameters for network transfer (unified method)
    */
-  void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, hipc::FullPtr<chi::Task> task_ptr) override;
+  void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Deserialize task parameters into an existing task from network transfer
    */
   void LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Allocate and deserialize task parameters from network transfer
    */
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
 
   /**
    * Deserialize task input parameters into an existing task using LocalSerialize
    */
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Allocate and deserialize task input parameters using LocalSerialize
    */
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
 
   /**
    * Serialize task output parameters using LocalSerialize (for local transfers)
    */
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Create a new copy of a task (deep copy for distributed execution)
    */
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method,
-                                        hipc::FullPtr<chi::Task> orig_task_ptr, bool deep) override;
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method,
+                                        ctp::ipc::FullPtr<chi::Task> orig_task_ptr, bool deep) override;
 
   /**
    * Create a new task of the specified method type
    */
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
 };
 

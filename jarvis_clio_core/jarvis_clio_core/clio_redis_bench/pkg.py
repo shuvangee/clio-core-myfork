@@ -8,7 +8,7 @@ class ClioRedisBench(Application):
     Redis throughput benchmark — apples-to-apples mirror of clio_cte_bench.
 
     Drives the `clio_redis_bench` executable (built when
-    WRP_CORE_ENABLE_REDIS=ON) which shares its CLI/metrics with
+    CLIO_CORE_ENABLE_REDIS=ON) which shares its CLI/metrics with
     clio_cte_bench via bench_common.h. Each client thread holds its own
     hiredis connection and issues SET (Put) / GET (Get) with --depth
     pipelining, mirroring CTE PutBlob/GetBlob. Supports --time-limit

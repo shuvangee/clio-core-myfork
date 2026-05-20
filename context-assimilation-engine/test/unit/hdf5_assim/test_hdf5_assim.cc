@@ -323,7 +323,7 @@ bool VerifyDatasetData(const std::string& file_path,
     auto blob_buffer = CHI_IPC->AllocateBuffer(blob_size);
 
     // Read blob into shared memory buffer
-    hipc::ShmPtr<> blob_shm_ptr = blob_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> blob_shm_ptr = blob_buffer.shm_.template Cast<void>();
     auto get_blob_task = cte_client->AsyncGetBlob(tag_id, blob_name, 0, blob_size, 0, blob_shm_ptr);
     get_blob_task.Wait();
     bool success = (get_blob_task->GetReturnCode() == 0);
@@ -501,12 +501,12 @@ int main(int argc, char* argv[]) {
 
     // Step 2: Connect to CTE
     HLOG(kInfo, "[STEP 2] Connecting to CTE...");
-    clio_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::CLIO_CTE_CLIENT_INIT();
     HLOG(kSuccess, "CTE client initialized");
 
     // Step 2.5: Initialize CAE client
     HLOG(kInfo, "[STEP 2.5] Initializing CAE client...");
-    WRP_CAE_CLIENT_INIT();
+    CLIO_CAE_CLIENT_INIT();
     HLOG(kSuccess, "CAE client initialized");
 
     // Step 3: Create CAE pool
@@ -567,7 +567,7 @@ int main(int argc, char* argv[]) {
     HLOG(kInfo, "[STEP 7] Verifying datasets in CTE...");
 
     // Get CTE client
-    auto cte_client = WRP_CTE_CLIENT;
+    auto cte_client = CLIO_CTE_CLIENT;
 
     // Expected dataset names (based on HDF5 file structure)
     std::vector<std::string> expected_datasets = {

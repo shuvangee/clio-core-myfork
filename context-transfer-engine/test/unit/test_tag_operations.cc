@@ -96,11 +96,11 @@ class TagTestFixture {
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       // Initialize CTE client subsystem (required for Tag API)
-      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
       REQUIRE(success);
 
       // Get the global CTE client and initialize it with kCtePoolId
-      auto *cte_client = WRP_CTE_CLIENT;
+      auto *cte_client = CLIO_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
 
       // Initialize the client's pool_id (required for Tag operations)
@@ -143,7 +143,7 @@ class TagTestFixture {
       return;
     }
 
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
     REQUIRE(cte_client != nullptr);
 
     // Create test storage target using bdev client
@@ -312,14 +312,14 @@ TEST_CASE("Tag - PutBlob SHM Version", "[cte][tag][putblob]") {
 
   // Allocate shared memory
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_fullptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_fullptr = ipc->AllocateBuffer(data.size());
   REQUIRE(!shm_fullptr.IsNull());
 
   // Copy data to shared memory
   memcpy(shm_fullptr.ptr_, data.data(), data.size());
 
   // Convert to ShmPtr and call SHM version
-  hipc::ShmPtr<> shm_ptr(shm_fullptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ptr(shm_fullptr.shm_);
   tag.PutBlob("shm_blob", shm_ptr, data.size());
 
   // Free shared memory
@@ -397,11 +397,11 @@ TEST_CASE("Tag - GetBlob SHM Version", "[cte][tag][getblob]") {
 
   // Allocate shared memory for retrieval
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_fullptr = ipc->AllocateBuffer(original_data.size());
+  ctp::ipc::FullPtr<char> shm_fullptr = ipc->AllocateBuffer(original_data.size());
   REQUIRE(!shm_fullptr.IsNull());
 
   // Get blob using SHM version
-  hipc::ShmPtr<> shm_ptr(shm_fullptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ptr(shm_fullptr.shm_);
   tag.GetBlob("shm_get_blob", shm_ptr, original_data.size());
 
   // Free shared memory
@@ -458,7 +458,7 @@ TEST_CASE("Tag - GetBlob SHM Null Pointer", "[cte][tag][errors]") {
   clio_cte::core::Tag tag("error_shm_null");
 
   // Try to get blob with null ShmPtr
-  hipc::ShmPtr<> null_ptr;
+  ctp::ipc::ShmPtr<> null_ptr;
   bool caught_exception = false;
   try {
     tag.GetBlob("any_blob", null_ptr, fixture.kSmallDataSize);
@@ -605,12 +605,12 @@ TEST_CASE("Tag - AsyncPutBlob", "[cte][tag][async]") {
 
   // Allocate shared memory (must remain alive until task completes)
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_fullptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_fullptr = ipc->AllocateBuffer(data.size());
   REQUIRE(!shm_fullptr.IsNull());
   memcpy(shm_fullptr.ptr_, data.data(), data.size());
 
   // Call async version
-  hipc::ShmPtr<> shm_ptr(shm_fullptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ptr(shm_fullptr.shm_);
   auto future = tag.AsyncPutBlob("async_blob", shm_ptr, data.size());
 
   // Wait for completion

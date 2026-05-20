@@ -146,7 +146,7 @@ __global__ void PushStructsKernel(
  */
 template <typename AllocT>
 __global__ void SerializeStringStructKernel(AllocT *alloc,
-                                            hipc::vector<char, AllocT> *vec) {
+                                            ctp::ipc::vector<char, AllocT> *vec) {
   // Demonstrate manual serialization of StringStruct format:
   // The format would be: [string_length][string_data][float_value]
 
@@ -205,7 +205,7 @@ TEST_CASE("GpuShmMmap", "[gpu][backend]") {
     // Step 2: Create an allocator on that backend (on the host)
     // Since GpuShmMmap provides unified memory, we can create the allocator on
     // the host
-    using AllocT = hipc::BuddyAllocator;
+    using AllocT = ctp::ipc::BuddyAllocator;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 
@@ -271,12 +271,12 @@ TEST_CASE("GpuShmMmap", "[gpu][backend]") {
     REQUIRE(init_success);
 
     // Step 2: Create a BuddyAllocator on the backend
-    using AllocT = hipc::BuddyAllocator;
+    using AllocT = ctp::ipc::BuddyAllocator;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 
-    // Step 3: Allocate a hipc::vector<char> from allocator
-    using CharVector = hipc::vector<char, AllocT>;
+    // Step 3: Allocate a ctp::ipc::vector<char> from allocator
+    using CharVector = ctp::ipc::vector<char, AllocT>;
     CharVector *vec_ptr = alloc_ptr->NewObj<CharVector>(alloc_ptr).ptr_;
     REQUIRE(vec_ptr != nullptr);
 
@@ -331,7 +331,7 @@ TEST_CASE("GpuShmMmap", "[gpu][backend]") {
     REQUIRE(init_success);
 
     // Create allocator on backend
-    using AllocT = hipc::BuddyAllocator;
+    using AllocT = ctp::ipc::BuddyAllocator;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 
@@ -366,7 +366,7 @@ TEST_CASE("GpuShmMmap", "[gpu][backend]") {
         backend.shm_init(backend_id, kBackendSize, kUrl + "_async_rb", kGpuId);
     REQUIRE(init_success);
 
-    using AllocT = hipc::BuddyAllocator;
+    using AllocT = ctp::ipc::BuddyAllocator;
     AllocT *alloc_ptr = backend.MakeAlloc<AllocT>();
     REQUIRE(alloc_ptr != nullptr);
 

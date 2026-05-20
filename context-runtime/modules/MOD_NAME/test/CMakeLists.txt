@@ -144,7 +144,7 @@ set_target_properties(${STREAMING_TEST_TARGET} PROPERTIES
 )
 
 # Enable CTest integration if testing is enabled
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
   # Each binary is registered once and runs all its Catch2 sections in a single
   # chimaera init/finalize cycle.  The previous setup added ~22 filtered ctest
   # entries over the same 4 binaries, which forced ~22 init/finalize cycles

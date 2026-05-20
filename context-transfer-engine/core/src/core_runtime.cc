@@ -112,7 +112,7 @@ chi::u64 Runtime::ParseCapacityToBytes(const std::string &capacity_str) {
 }
 
 void Runtime::FixupAfterCopy(chi::u32 method,
-                              hipc::FullPtr<chi::Task> task_ptr) {
+                              ctp::ipc::FullPtr<chi::Task> task_ptr) {
   switch (method) {
     case Method::kRegisterTarget:
       task_ptr.template Cast<RegisterTargetTask>().ptr_->FixupAfterCopy();
@@ -132,7 +132,7 @@ void Runtime::FixupAfterCopy(chi::u32 method,
   }
 }
 
-chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
+chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
                                 chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -169,7 +169,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
 
   // Initialize telemetry ring buffer using unique_ptr with CTP_MALLOC
   telemetry_log_ = std::make_unique<
-      hipc::circular_mpsc_ring_buffer<CteTelemetry, hipc::MallocAllocator>>(
+      ctp::ipc::circular_mpsc_ring_buffer<CteTelemetry, ctp::ipc::MallocAllocator>>(
       CTP_MALLOC, kTelemetryRingSize);
 
   // Initialize atomic counters
@@ -369,7 +369,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
+chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -418,7 +418,7 @@ chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
+chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
   using namespace clio_cte::core;
   switch (task->method_) {
     // Methods that route locally
@@ -488,7 +488,7 @@ chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
   }
 }
 
-chi::TaskResume Runtime::RegisterTarget(hipc::FullPtr<RegisterTargetTask> task,
+chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> task,
                                         chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -641,7 +641,7 @@ chi::TaskResume Runtime::RegisterTarget(hipc::FullPtr<RegisterTargetTask> task,
 }
 
 chi::TaskResume Runtime::UnregisterTarget(
-    hipc::FullPtr<UnregisterTargetTask> task, chi::RunContext &ctx) {
+    ctp::ipc::FullPtr<UnregisterTargetTask> task, chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
@@ -692,7 +692,7 @@ chi::TaskResume Runtime::UnregisterTarget(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ListTargets(hipc::FullPtr<ListTargetsTask> task,
+chi::TaskResume Runtime::ListTargets(ctp::ipc::FullPtr<ListTargetsTask> task,
                                      chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -721,7 +721,7 @@ chi::TaskResume Runtime::ListTargets(hipc::FullPtr<ListTargetsTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::StatTargets(hipc::FullPtr<StatTargetsTask> task,
+chi::TaskResume Runtime::StatTargets(ctp::ipc::FullPtr<StatTargetsTask> task,
                                      chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -813,7 +813,7 @@ chi::TaskResume Runtime::StatTargets(hipc::FullPtr<StatTargetsTask> task,
 
 template <typename CreateParamsT>
 chi::TaskResume Runtime::GetOrCreateTag(
-    hipc::FullPtr<GetOrCreateTagTask<CreateParamsT>> task,
+    ctp::ipc::FullPtr<GetOrCreateTagTask<CreateParamsT>> task,
     chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -867,7 +867,7 @@ chi::TaskResume Runtime::GetOrCreateTag(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetTargetInfo(hipc::FullPtr<GetTargetInfoTask> task,
+chi::TaskResume Runtime::GetTargetInfo(ctp::ipc::FullPtr<GetTargetInfoTask> task,
                                        chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -912,7 +912,7 @@ chi::TaskResume Runtime::GetTargetInfo(hipc::FullPtr<GetTargetInfoTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::PutBlob(hipc::FullPtr<PutBlobTask> task,
+chi::TaskResume Runtime::PutBlob(ctp::ipc::FullPtr<PutBlobTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -995,7 +995,7 @@ chi::TaskResume Runtime::PutBlob(hipc::FullPtr<PutBlobTask> task,
     }
     chi::u64 offset = task->offset_;
     chi::u64 size = task->size_;
-    hipc::ShmPtr<> blob_data = task->blob_data_;
+    ctp::ipc::ShmPtr<> blob_data = task->blob_data_;
     float blob_score = task->score_;
 
     // Validate inputs
@@ -1156,7 +1156,7 @@ chi::TaskResume Runtime::PutBlob(hipc::FullPtr<PutBlobTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetBlob(hipc::FullPtr<GetBlobTask> task,
+chi::TaskResume Runtime::GetBlob(ctp::ipc::FullPtr<GetBlobTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1200,7 +1200,7 @@ chi::TaskResume Runtime::GetBlob(hipc::FullPtr<GetBlobTask> task,
     }
 
     // Use the pre-provided data pointer from the task
-    hipc::ShmPtr<> blob_data_ptr = task->blob_data_;
+    ctp::ipc::ShmPtr<> blob_data_ptr = task->blob_data_;
 
     // Step 2: Read data from blob blocks (no lock held during I/O)
     chi::u32 read_result = 0;
@@ -1231,7 +1231,7 @@ chi::TaskResume Runtime::GetBlob(hipc::FullPtr<GetBlobTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReorganizeBlob(hipc::FullPtr<ReorganizeBlobTask> task,
+chi::TaskResume Runtime::ReorganizeBlob(ctp::ipc::FullPtr<ReorganizeBlobTask> task,
                                         chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1301,7 +1301,7 @@ chi::TaskResume Runtime::ReorganizeBlob(hipc::FullPtr<ReorganizeBlobTask> task,
 
     // Step 5: Allocate buffer for blob data
     auto *ipc_manager = CHI_IPC;
-    hipc::FullPtr<char> blob_data_buffer =
+    ctp::ipc::FullPtr<char> blob_data_buffer =
         ipc_manager->AllocateBuffer(blob_size);
     if (blob_data_buffer.IsNull()) {
       HLOG(kError, "Failed to allocate buffer for blob during reorganization");
@@ -1351,7 +1351,7 @@ chi::TaskResume Runtime::ReorganizeBlob(hipc::FullPtr<ReorganizeBlobTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::DelBlob(hipc::FullPtr<DelBlobTask> task,
+chi::TaskResume Runtime::DelBlob(ctp::ipc::FullPtr<DelBlobTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1441,7 +1441,7 @@ chi::TaskResume Runtime::DelBlob(hipc::FullPtr<DelBlobTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::DelTag(hipc::FullPtr<DelTagTask> task,
+chi::TaskResume Runtime::DelTag(ctp::ipc::FullPtr<DelTagTask> task,
                                 chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1594,7 +1594,7 @@ chi::TaskResume Runtime::DelTag(hipc::FullPtr<DelTagTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetTagSize(hipc::FullPtr<GetTagSizeTask> task,
+chi::TaskResume Runtime::GetTagSize(ctp::ipc::FullPtr<GetTagSizeTask> task,
                                     chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1726,7 +1726,7 @@ TagId Runtime::GetOrAssignTagId(const std::string &tag_name,
   return tag_id;
 }
 
-chi::TaskResume Runtime::FlushMetadata(hipc::FullPtr<FlushMetadataTask> task,
+chi::TaskResume Runtime::FlushMetadata(ctp::ipc::FullPtr<FlushMetadataTask> task,
                                        chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1859,7 +1859,7 @@ chi::TaskResume Runtime::FlushMetadata(hipc::FullPtr<FlushMetadataTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::FlushData(hipc::FullPtr<FlushDataTask> task,
+chi::TaskResume Runtime::FlushData(ctp::ipc::FullPtr<FlushDataTask> task,
                                    chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -1952,7 +1952,7 @@ chi::TaskResume Runtime::FlushData(hipc::FullPtr<FlushDataTask> task,
 
     // Step 1: Allocate buffer and read data from current blocks
     auto *ipc_manager = CHI_IPC;
-    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(total_size);
+    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(total_size);
     if (buffer.IsNull()) {
       HLOG(kError,
            "FlushData: Failed to allocate buffer of size {} for blob {}",
@@ -1960,7 +1960,7 @@ chi::TaskResume Runtime::FlushData(hipc::FullPtr<FlushDataTask> task,
       continue;
     }
 
-    hipc::ShmPtr<> shm_ptr(buffer.shm_);
+    ctp::ipc::ShmPtr<> shm_ptr(buffer.shm_);
     chi::u32 read_error = 0;
     CHI_CO_AWAIT(ReadData(blob_info_ptr->blocks_, shm_ptr, total_size, 0,
                       read_error));
@@ -2427,7 +2427,7 @@ TagId Runtime::GenerateNewTagId() {
 
 // Explicit template instantiations for required template methods
 template chi::TaskResume Runtime::GetOrCreateTag<CreateParams>(
-    hipc::FullPtr<GetOrCreateTagTask<CreateParams>> task, chi::RunContext &ctx);
+    ctp::ipc::FullPtr<GetOrCreateTagTask<CreateParams>> task, chi::RunContext &ctx);
 
 // Blob management helper functions
 BlobInfo *Runtime::CheckBlobExists(const std::string &blob_name,
@@ -2635,7 +2635,7 @@ chi::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, chi::u64 offset,
 }
 
 chi::TaskResume Runtime::ModifyExistingData(
-    const chi::priv::vector<BlobBlock> &blocks, hipc::ShmPtr<> data, size_t data_size,
+    const chi::priv::vector<BlobBlock> &blocks, ctp::ipc::ShmPtr<> data, size_t data_size,
     size_t data_offset_in_blob, chi::u32 &error_code) {
 #ifdef __NVCOMPILER
   thread_local chi::RunContext _fb_rctx;
@@ -2694,7 +2694,7 @@ chi::TaskResume Runtime::ModifyExistingData(
 
       chimaera::bdev::Block bdev_block(
           block.target_offset_ + write_start_in_block, write_size, 0);
-      hipc::ShmPtr<> data_ptr = data + data_buffer_offset;
+      ctp::ipc::ShmPtr<> data_ptr = data + data_buffer_offset;
       timer.Pause();
       t_setup_ms += timer.GetMsec();
       timer.Reset();
@@ -2754,7 +2754,7 @@ chi::TaskResume Runtime::ModifyExistingData(
 }
 
 chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
-                                  hipc::ShmPtr<> data, size_t data_size,
+                                  ctp::ipc::ShmPtr<> data, size_t data_size,
                                   size_t data_offset_in_blob,
                                   chi::u32 &error_code) {
 #ifdef __NVCOMPILER
@@ -2817,7 +2817,7 @@ chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
       // Step 5: Perform async read on the range
       chimaera::bdev::Block bdev_block(
           block.target_offset_ + read_start_in_block, read_size, 0);
-      hipc::ShmPtr<> data_ptr = data + data_buffer_offset;
+      ctp::ipc::ShmPtr<> data_ptr = data + data_buffer_offset;
 
       // Wrap single block in chi::priv::vector for AsyncRead
       chi::priv::vector<chimaera::bdev::Block> blocks(CTP_MALLOC);
@@ -3106,7 +3106,7 @@ size_t Runtime::GetTelemetryEntries(std::vector<CteTelemetry> &entries,
 }
 
 chi::TaskResume Runtime::PollTelemetryLog(
-    hipc::FullPtr<PollTelemetryLogTask> task, chi::RunContext &ctx) {
+    ctp::ipc::FullPtr<PollTelemetryLogTask> task, chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
@@ -3143,7 +3143,7 @@ chi::TaskResume Runtime::PollTelemetryLog(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetBlobScore(hipc::FullPtr<GetBlobScoreTask> task,
+chi::TaskResume Runtime::GetBlobScore(ctp::ipc::FullPtr<GetBlobScoreTask> task,
                                       chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -3194,7 +3194,7 @@ chi::TaskResume Runtime::GetBlobScore(hipc::FullPtr<GetBlobScoreTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetBlobSize(hipc::FullPtr<GetBlobSizeTask> task,
+chi::TaskResume Runtime::GetBlobSize(ctp::ipc::FullPtr<GetBlobSizeTask> task,
                                      chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -3244,7 +3244,7 @@ chi::TaskResume Runtime::GetBlobSize(hipc::FullPtr<GetBlobSizeTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetBlobInfo(hipc::FullPtr<GetBlobInfoTask> task,
+chi::TaskResume Runtime::GetBlobInfo(ctp::ipc::FullPtr<GetBlobInfoTask> task,
                                      chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -3304,7 +3304,7 @@ chi::TaskResume Runtime::GetBlobInfo(hipc::FullPtr<GetBlobInfoTask> task,
 }
 
 chi::TaskResume Runtime::GetContainedBlobs(
-    hipc::FullPtr<GetContainedBlobsTask> task, chi::RunContext &ctx) {
+    ctp::ipc::FullPtr<GetContainedBlobsTask> task, chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
@@ -3360,7 +3360,7 @@ chi::TaskResume Runtime::GetContainedBlobs(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::TagQuery(hipc::FullPtr<TagQueryTask> task,
+chi::TaskResume Runtime::TagQuery(ctp::ipc::FullPtr<TagQueryTask> task,
                                   chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -3411,7 +3411,7 @@ chi::TaskResume Runtime::TagQuery(hipc::FullPtr<TagQueryTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::BlobQuery(hipc::FullPtr<BlobQueryTask> task,
+chi::TaskResume Runtime::BlobQuery(ctp::ipc::FullPtr<BlobQueryTask> task,
                                    chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -3508,7 +3508,7 @@ chi::PoolQuery Runtime::HashBlobToContainer(const TagId &tag_id,
   return chi::PoolQuery::DirectHash(hash_value);
 }
 
-chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
+chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
   task->SetReturnCode(0);
   (void)rctx;

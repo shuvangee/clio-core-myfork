@@ -4,7 +4,7 @@
 # All dependencies are installed via apt or built from source.
 # Core IOWarp deps (yaml-cpp, zeromq, libsodium, cereal, libaio) are built
 # from source with both shared and static libraries (-fPIC) so that
-# WRP_CORE_STATIC_DEPS=ON works for self-contained pip wheels.
+# CLIO_CORE_STATIC_DEPS=ON works for self-contained pip wheels.
 #
 # Source-built libraries install to /usr/local (shared+static with -fPIC).
 # Apt libraries install to /usr (shared+static, static without -fPIC).
@@ -157,9 +157,9 @@ RUN echo '#!/bin/bash\n\
     if [ -S /var/run/docker.sock ]; then\n\
     sudo chmod 666 /var/run/docker.sock\n\
     fi\n\
-    # Register jarvis_iowarp repo if workspace is mounted and not already added\n\
-    if [ -d /workspace/jarvis_iowarp ]; then\n\
-    jarvis repo add /workspace/jarvis_iowarp --force 2>/dev/null\n\
+    # Register jarvis_clio_core repo if workspace is mounted and not already added\n\
+    if [ -d /workspace/jarvis_clio_core ]; then\n\
+    jarvis repo add /workspace/jarvis_clio_core --force 2>/dev/null\n\
     fi\n\
     exec "$@"' > /usr/local/bin/docker-entrypoint.sh \
     && chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -176,7 +176,7 @@ ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 #------------------------------------------------------------
 # These are built with BOTH shared and static libraries, with -fPIC
 # on static archives so they can be linked into IOWarp's shared objects
-# when WRP_CORE_STATIC_DEPS=ON (for pip wheels).
+# when CLIO_CORE_STATIC_DEPS=ON (for pip wheels).
 #
 # Install prefix: /usr/local (takes precedence over /usr in default search)
 

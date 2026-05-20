@@ -48,7 +48,7 @@ scheduler:
     - 'mkdir -p /home/llogan/iowarp_prte_tmp'
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -60,7 +60,7 @@ pkgs:
     sleep: 4
     swim_enabled: false
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       # 24 ranks/node x 64 MiB block = 1.5 GiB/node own writes; hash
@@ -73,7 +73,7 @@ pkgs:
     pool_query: "local"
     # No compressor: iowarp_compress stays 'none' (default).
 
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     mountpoint: ${HOME}/cte_libfuse_sbatch_16n
     sleep: 2

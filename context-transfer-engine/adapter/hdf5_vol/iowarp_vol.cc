@@ -62,7 +62,7 @@ struct iowarp_dataset_t {
   std::string dataset_path;
   /* Pending async writes flushed on close */
   std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_puts;
-  std::vector<hipc::FullPtr<char>> pending_buffers;
+  std::vector<ctp::ipc::FullPtr<char>> pending_buffers;
 };
 
 /* ========================================================================
@@ -70,7 +70,7 @@ struct iowarp_dataset_t {
  * ======================================================================== */
 
 static clio_cte::core::Client *get_cte_client() {
-  return WRP_CTE_CLIENT;
+  return CLIO_CTE_CLIENT;
 }
 
 /* ========================================================================
@@ -376,7 +376,7 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
       if (buffer.IsNull()) return -1;
       std::memcpy(buffer.ptr_, src + offset, this_size);
 
-      hipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
+      ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
       std::string blob_name = dataset->dataset_path + "/chunk_" +
                               std::to_string(i);
 
@@ -446,7 +446,7 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
 
     /* Submit async GetBlob for each chunk */
     std::vector<chi::Future<clio_cte::core::GetBlobTask>> futures;
-    std::vector<hipc::FullPtr<char>> buffers;
+    std::vector<ctp::ipc::FullPtr<char>> buffers;
 
     for (size_t i = 0; i < num_chunks; ++i) {
       size_t offset = i * chunk_size;
@@ -455,7 +455,7 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
       auto buffer = CHI_IPC->AllocateBuffer(this_size);
       if (buffer.IsNull()) return -1;
 
-      hipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
+      ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
       std::string blob_name = dataset->dataset_path + "/chunk_" +
                               std::to_string(i);
 

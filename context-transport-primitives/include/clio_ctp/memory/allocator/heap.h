@@ -51,7 +51,7 @@ namespace ctp::ipc {
 template<bool ATOMIC>
 class Heap {
  private:
-  hipc::opt_atomic<size_t, ATOMIC> heap_;  /// Current heap offset
+  ctp::ipc::opt_atomic<size_t, ATOMIC> heap_;  /// Current heap offset
   size_t max_offset_;                      /// Maximum heap offset (initial_offset + max_size)
 
  public:

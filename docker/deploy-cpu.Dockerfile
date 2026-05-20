@@ -52,7 +52,7 @@ RUN sudo chown -R $(whoami):$(whoami) /workspace && \
     pip install -e . && \
     jarvis init && \
     jarvis rg build && \
-    jarvis repo add /workspace/jarvis_iowarp && \
+    jarvis repo add /workspace/jarvis_clio_core && \
     cd /workspace && \
     mkdir -p build && \
     cd build && \
@@ -86,9 +86,9 @@ COPY --from=builder /usr/local/share /usr/local/share
 # Copy default config for runtime auto-discovery
 COPY --from=builder --chown=iowarp:iowarp /home/iowarp/.chimaera /home/iowarp/.chimaera
 
-# Copy Jarvis-CD and jarvis_iowarp from builder
+# Copy Jarvis-CD and jarvis_clio_core from builder
 COPY --from=builder /workspace/external/jarvis-cd /opt/jarvis-cd
-COPY --from=builder /workspace/jarvis_iowarp /opt/jarvis_iowarp
+COPY --from=builder /workspace/jarvis_clio_core /opt/jarvis_clio_core
 
 # Set up library paths
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu
@@ -112,7 +112,7 @@ WORKDIR /home/iowarp
 
 # Initialize jarvis and register the iowarp package repo
 RUN jarvis init && \
-    jarvis repo add /opt/jarvis_iowarp
+    jarvis repo add /opt/jarvis_clio_core
 
 # Set up environment in bashrc
 RUN echo 'export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH' >> /home/iowarp/.bashrc

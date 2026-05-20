@@ -79,7 +79,7 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
     size_t queue_backend_size = kQueueBackendBytes;
     q.submit([&](sycl::handler &cgh) {
       cgh.single_task<chimaera_sycl_init_queue_kernel>([=]() {
-        hipc::MemoryBackend proxy;
+        ctp::ipc::MemoryBackend proxy;
         proxy.data_ = queue_backend_ptr;
         proxy.data_capacity_ = queue_backend_size;
         CHI_QUEUE_ALLOC_T *alloc = proxy.MakeAlloc<CHI_QUEUE_ALLOC_T>();
@@ -87,7 +87,7 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
           *out_off = static_cast<size_t>(-1);
           return;
         }
-        hipc::FullPtr<chi::GpuTaskQueue> queue =
+        ctp::ipc::FullPtr<chi::GpuTaskQueue> queue =
             alloc->NewObj<chi::GpuTaskQueue>(
                 alloc, /*num_lanes=*/1u, /*num_prio=*/2u, queue_depth);
         *out_off = queue.IsNull() ? static_cast<size_t>(-1)
@@ -104,7 +104,7 @@ bool gpu::IpcManager::ServerInitGpuQueues(u32 queue_depth) {
       return false;
     }
     dev.gpu2cpu_queue.shm_.off_ = queue_off;
-    dev.gpu2cpu_queue.shm_.alloc_id_ = hipc::AllocatorId{0, 0};
+    dev.gpu2cpu_queue.shm_.alloc_id_ = ctp::ipc::AllocatorId{0, 0};
     dev.gpu2cpu_queue.ptr_ = reinterpret_cast<chi::GpuTaskQueue *>(
         dev.queue_backend + queue_off);
 
@@ -137,7 +137,7 @@ void gpu::IpcManager::FinalizeGpuQueues() {
       sycl::free(dev.queue_backend, q);
       dev.queue_backend = nullptr;
     }
-    dev.gpu2cpu_queue = hipc::FullPtr<chi::GpuTaskQueue>::GetNull();
+    dev.gpu2cpu_queue = ctp::ipc::FullPtr<chi::GpuTaskQueue>::GetNull();
     dev.client_backends.clear();
   }
   per_gpu_devices_.clear();
@@ -152,7 +152,7 @@ bool gpu::IpcManager::RegisterClientBackend(const ClientBackend &b) {
 }
 
 void gpu::IpcManager::UnregisterClientBackend(
-    u32 gpu_id, const hipc::AllocatorId &alloc_id) {
+    u32 gpu_id, const ctp::ipc::AllocatorId &alloc_id) {
   if (gpu_id >= per_gpu_devices_.size()) return;
   u64 key = (static_cast<u64>(alloc_id.major_) << 32) |
             static_cast<u64>(alloc_id.minor_);

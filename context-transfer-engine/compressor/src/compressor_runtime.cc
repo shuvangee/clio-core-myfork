@@ -88,7 +88,7 @@ struct CompressionHeader {
 static_assert(sizeof(CompressionHeader) == 24,
               "CompressionHeader must be 24 bytes");
 
-chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
+chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
                                 chi::RunContext& ctx) {
   // Load configuration from compose YAML (or direct CreateParams)
   config_ = task->GetParams();
@@ -156,7 +156,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
          "required)");
   }
 
-#ifdef WRP_COMPRESSOR_ENABLE_DENSE_NN
+#ifdef CLIO_COMPRESSOR_ENABLE_DENSE_NN
   // Load DNN model weights as fallback if Q-table not available
   if (!qtable_predictor_ && !config_.dnn_model_weights_path_.empty()) {
     try {
@@ -175,7 +175,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
       nn_predictor_.reset();
     }
   }
-#endif  // WRP_COMPRESSOR_ENABLE_DENSE_NN
+#endif  // CLIO_COMPRESSOR_ENABLE_DENSE_NN
 
   if (!qtable_predictor_ && !linreg_predictor_) {
     HLOG(kDebug,
@@ -194,7 +194,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   CHI_CO_RETURN;
 }
 
-chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
+chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
                                  chi::RunContext& ctx) {
   try {
     // Reset predictors
@@ -202,7 +202,7 @@ chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
     linreg_predictor_.reset();
     // No distribution_classifier_ to reset
 
-#ifdef WRP_COMPRESSOR_ENABLE_DENSE_NN
+#ifdef CLIO_COMPRESSOR_ENABLE_DENSE_NN
     nn_predictor_.reset();
 #endif
 
@@ -216,7 +216,7 @@ chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
   CHI_CO_RETURN;
 }
 
-chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
+chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
   // Compress placement: consult per-tag consumer tracking (when enabled)
   // so the compressed copy lands on the node that most recently read
   // the tag. Falls through to DirectHash(tag_id) when tracking is off
@@ -238,7 +238,7 @@ chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
   return chi::PoolQuery::Local();
 }
 
-chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
+chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -360,7 +360,7 @@ std::vector<CompressionStats> Runtime::EstCompressionStats(
 
       pred = qtable_predictor_->Predict(features);
     }
-#ifdef WRP_COMPRESSOR_ENABLE_DENSE_NN
+#ifdef CLIO_COMPRESSOR_ENABLE_DENSE_NN
     // Fallback to DNN if Q-table not available
     else if (nn_predictor_ && nn_predictor_->IsReady()) {
       CompressionFeatures features;
@@ -376,7 +376,7 @@ std::vector<CompressionStats> Runtime::EstCompressionStats(
       features.data_type_float = (context.data_type_ == 1) ? 1 : 0;
       pred = nn_predictor_->Predict(features);
     }
-#endif  // WRP_COMPRESSOR_ENABLE_DENSE_NN
+#endif  // CLIO_COMPRESSOR_ENABLE_DENSE_NN
     else {
       // Heuristic fallback if no predictor available
       pred.compression_ratio = 2.0;
@@ -555,7 +555,7 @@ static void WriteTraceLog(const std::string& trace_folder,
 }
 
 chi::TaskResume Runtime::DynamicSchedule(
-    hipc::FullPtr<DynamicScheduleTask> task, chi::RunContext& ctx) {
+    ctp::ipc::FullPtr<DynamicScheduleTask> task, chi::RunContext& ctx) {
   try {
     // Extract task parameters (same as PutBlobTask)
     chi::u64 chunk_size = task->size_;
@@ -647,7 +647,7 @@ chi::TaskResume Runtime::DynamicSchedule(
   CHI_CO_RETURN;
 }
 
-chi::TaskResume Runtime::Compress(hipc::FullPtr<CompressTask> task,
+chi::TaskResume Runtime::Compress(ctp::ipc::FullPtr<CompressTask> task,
                                   chi::RunContext& ctx) {
   try {
     // Extract task parameters (same as PutBlobTask)
@@ -775,7 +775,7 @@ chi::TaskResume Runtime::Compress(hipc::FullPtr<CompressTask> task,
                   compressed_size);
 
       // Call PutBlob with header + compressed data
-      hipc::ShmPtr<> compressed_shm_ptr =
+      ctp::ipc::ShmPtr<> compressed_shm_ptr =
           compressed_shm.shm_.template Cast<void>();
       auto put_task = core_client_->AsyncPutBlob(
           task->tag_id_, task->blob_name_.str(), task->offset_,
@@ -825,7 +825,7 @@ chi::TaskResume Runtime::Compress(hipc::FullPtr<CompressTask> task,
   CHI_CO_RETURN;
 }
 
-chi::TaskResume Runtime::Decompress(hipc::FullPtr<DecompressTask> task,
+chi::TaskResume Runtime::Decompress(ctp::ipc::FullPtr<DecompressTask> task,
                                     chi::RunContext& ctx) {
   try {
     // Record the originating node (the consumer that issued this Decompress)
@@ -862,7 +862,7 @@ chi::TaskResume Runtime::Decompress(hipc::FullPtr<DecompressTask> task,
       task->return_code_ = 2;  // Memory allocation failed
       CHI_CO_RETURN;
     }
-    hipc::ShmPtr<> temp_buffer_ptr = temp_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> temp_buffer_ptr = temp_buffer.shm_.template Cast<void>();
 
     // Call GetBlob to retrieve the (potentially compressed) data
     auto get_task = core_client_->AsyncGetBlob(
@@ -1081,7 +1081,7 @@ bool Runtime::PickConsumerForTag(const clio_cte::core::TagId &tag_id,
 // Node Load Sampling
 // ==============================================================================
 
-chi::TaskResume Runtime::PollNodeLoad(hipc::FullPtr<PollNodeLoadTask> task,
+chi::TaskResume Runtime::PollNodeLoad(ctp::ipc::FullPtr<PollNodeLoadTask> task,
                                       chi::RunContext& ctx) {
   (void)ctx;
   NodeLoadSample sample;
@@ -1121,7 +1121,7 @@ chi::TaskResume Runtime::PollNodeLoad(hipc::FullPtr<PollNodeLoadTask> task,
   CHI_CO_RETURN;
 }
 
-chi::TaskResume Runtime::PollConsumers(hipc::FullPtr<PollConsumersTask> task,
+chi::TaskResume Runtime::PollConsumers(ctp::ipc::FullPtr<PollConsumersTask> task,
                                        chi::RunContext& ctx) {
   (void)task;
   (void)ctx;

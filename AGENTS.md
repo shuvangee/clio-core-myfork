@@ -82,7 +82,7 @@ task and push it onto the per-device gpu2cpu_queue.
 ### Lifecycle (kernel)
 ```cpp
 __global__ void MyKernel(IpcManagerGpuInfo info,
-                         hipc::FullPtr<MyTaskT> task) {
+                         ctp::ipc::FullPtr<MyTaskT> task) {
   CHIMAERA_GPU_INIT(info, /*ipc_ptr=*/nullptr);
   if (threadIdx.x == 0) {
     // Mutate POD task fields. No NewTask, no AllocateBuffer.
@@ -261,10 +261,10 @@ NEVER DO MOCK CODE OR STUB CODE UNLESS SPECIFICALLY STATED OTHERWISE. ALWAYS IMP
 
 ### Component Build Options
 The unified IOWarp Core build system provides options to enable/disable components:
-- `WRP_CORE_ENABLE_RUNTIME`: Enable runtime component (default: ON)
-- `WRP_CORE_ENABLE_CTE`: Enable context-transfer-engine component (default: ON)
-- `WRP_CORE_ENABLE_CAE`: Enable context-assimilation-engine component (default: ON)
-- `WRP_CORE_ENABLE_CEE`: Enable context-exploration-engine component (default: ON)
+- `CLIO_CORE_ENABLE_RUNTIME`: Enable runtime component (default: ON)
+- `CLIO_CORE_ENABLE_CTE`: Enable context-transfer-engine component (default: ON)
+- `CLIO_CORE_ENABLE_CAE`: Enable context-assimilation-engine component (default: ON)
+- `CLIO_CORE_ENABLE_CEE`: Enable context-exploration-engine component (default: ON)
 
 Example:
 ```bash
@@ -280,7 +280,7 @@ cmake --preset=debug -DWRP_CORE_ENABLE_CTE=ON -DWRP_CORE_ENABLE_CAE=OFF
 
 ### RPATH Configuration
 The build system uses **relative RPATHs** (`$ORIGIN`) for portable, relocatable binaries (enabled by default):
-- **Enable/Disable**: Controlled by `WRP_CORE_ENABLE_RPATH` option (default: ON)
+- **Enable/Disable**: Controlled by `CLIO_CORE_ENABLE_RPATH` option (default: ON)
 - **Linux**: Uses `$ORIGIN` and `$ORIGIN/../lib` so libraries and binaries find siblings at runtime
 - **macOS**: Uses `@loader_path` and `@loader_path/../lib` (equivalent to `$ORIGIN`)
 - Works for all deployment targets: system installs, pip wheels, conda packages, and relocatable builds
@@ -409,7 +409,7 @@ void Task::Yield(double block_time_us = 0.0);
 
 Use the `WorkQueue` typedef for worker queue types:
 ```cpp
-using WorkQueue = chi::ipc::mpsc_ring_buffer<hipc::TypedPointer<TaskLane>>;
+using WorkQueue = chi::ipc::mpsc_ring_buffer<ctp::ipc::TypedPointer<TaskLane>>;
 ```
 
 This simplifies code readability and maintenance for worker queue operations.
@@ -417,7 +417,7 @@ This simplifies code readability and maintenance for worker queue operations.
 **TaskLane Typedef:**
 The `TaskLane` typedef is defined globally in the `chi` namespace:
 ```cpp
-using TaskLane = chi::ipc::multi_mpsc_ring_buffer<hipc::TypedPointer<Task>, TaskQueueHeader>::queue_t;
+using TaskLane = chi::ipc::multi_mpsc_ring_buffer<ctp::ipc::TypedPointer<Task>, TaskQueueHeader>::queue_t;
 ```
 
 Use `TaskLane*` for all lane pointers in RunContext and other interfaces. Avoid `void*` and explicit type casts.
@@ -523,8 +523,8 @@ find_package(iowarp-core REQUIRED)
 #     - chimaera::bdev_client, chimaera::bdev_runtime
 #
 #   Optional ChiMods (if enabled at build time):
-#     - clio_cte::core_client, clio_cte::core_runtime (if WRP_CORE_ENABLE_CTE=ON)
-#     - clio_cae::core_client, clio_cae::core_runtime (if WRP_CORE_ENABLE_CAE=ON)
+#     - clio_cte::core_client, clio_cte::core_runtime (if CLIO_CORE_ENABLE_CTE=ON)
+#     - clio_cae::core_client, clio_cae::core_runtime (if CLIO_CORE_ENABLE_CAE=ON)
 
 # Then link to the ChiMod libraries you need
 target_link_libraries(your_target
@@ -613,13 +613,13 @@ HSHM (ClioCtp/context-transport-primitives) provides modular INTERFACE library t
   - Provides: NIXL-backed data movement (DRAM→FILE via POSIX, DRAM→DRAM via memcpy)
   - Use for: High-performance CPU→storage transfers and future GPU→storage (GDS)
   - Compile definitions: `CTP_ENABLE_NIXL=1`
-  - Build option: `WRP_CORE_ENABLE_NIXL=ON`
+  - Build option: `CLIO_CORE_ENABLE_NIXL=ON`
   - Note: Requires NIXL installed at `/usr/local` (built with POSIX backend)
 
 - **`ctp::nvshmem`** - NVSHMEM GPU-to-GPU communication
   - Provides: NVSHMEM compile definitions for GPU peer-to-peer communication
   - Compile definitions: `CTP_ENABLE_NVSHMEM=1`
-  - Build option: `WRP_CORE_ENABLE_NVSHMEM=ON`
+  - Build option: `CLIO_CORE_ENABLE_NVSHMEM=ON`
   - Note: Requires NVSHMEM from NVIDIA developer portal
 
 **Linking Guidelines:**

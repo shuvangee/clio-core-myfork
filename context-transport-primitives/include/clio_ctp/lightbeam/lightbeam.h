@@ -62,7 +62,7 @@ struct ShmTransferInfo;
 
 // --- Types ---
 struct Bulk {
-  hipc::FullPtr<char> data;
+  ctp::ipc::FullPtr<char> data;
   size_t size;
   ctp::bitfield32_t flags;  // BULK_EXPOSE or BULK_XFER
   void* desc = nullptr;      // For RDMA memory registration
@@ -200,7 +200,7 @@ class Transport {
   bool IsClient() const { return mode_ == TransportMode::kClient; }
 
   // Shared APIs (both client and server)
-  Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size, u32 flags);
+  Bulk Expose(const ctp::ipc::FullPtr<char>& ptr, size_t data_size, u32 flags);
 
   template <typename MetaT>
   int Send(MetaT& meta, const LbmContext& ctx = LbmContext());

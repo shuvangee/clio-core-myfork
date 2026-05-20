@@ -255,7 +255,7 @@ NB_MODULE(clio_cte_core_ext, m) {
   // Module-level convenience functions
   m.def(
       "get_cte_client",
-      []() -> clio_cte::core::Client { return *WRP_CTE_CLIENT; },
+      []() -> clio_cte::core::Client { return *CLIO_CTE_CLIENT; },
       "Get a copy of the global CTE client instance");
 
   // Chimaera initialization function (unified)
@@ -276,7 +276,7 @@ NB_MODULE(clio_cte_core_ext, m) {
   // Note: Lambda wrapper used to avoid chi::PoolQuery::Dynamic() evaluation at import
   m.def("initialize_cte",
         [](const std::string &config_path, const chi::PoolQuery &pool_query) {
-          return clio_cte::core::WRP_CTE_CLIENT_INIT(config_path, pool_query);
+          return clio_cte::core::CLIO_CTE_CLIENT_INIT(config_path, pool_query);
         },
         "config_path"_a, "pool_query"_a,
         "Initialize the CTE subsystem");

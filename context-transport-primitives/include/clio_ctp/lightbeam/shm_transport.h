@@ -55,9 +55,9 @@ namespace ctp::lbm {
 // The copy space is treated as a ring buffer indexed by total_written_ and
 // total_read_ modulo copy_space_size_.
 struct ShmTransferInfo {
-  hipc::atomic<size_t> total_written_;   // Total bytes written by producer
-  hipc::atomic<size_t> total_read_;      // Total bytes read by consumer
-  hipc::atomic<size_t> copy_space_size_; // Ring buffer capacity (atomic for
+  ctp::ipc::atomic<size_t> total_written_;   // Total bytes written by producer
+  ctp::ipc::atomic<size_t> total_read_;      // Total bytes read by consumer
+  ctp::ipc::atomic<size_t> copy_space_size_; // Ring buffer capacity (atomic for
                                          // cross-SM L2 visibility on GPU)
 
   CTP_CROSS_FUN ShmTransferInfo() {
@@ -80,7 +80,7 @@ class ShmTransport
 
   ~ShmTransport() = default;
 
-  Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size,
+  Bulk Expose(const ctp::ipc::FullPtr<char>& ptr, size_t data_size,
               u32 flags) {
     Bulk bulk;
     bulk.data = ptr;
@@ -194,7 +194,7 @@ class ShmTransport
       Bulk recv_bulk;
       recv_bulk.size = meta.send[i].size;
       recv_bulk.flags = meta.send[i].flags;
-      recv_bulk.data = hipc::FullPtr<char>::GetNull();
+      recv_bulk.data = ctp::ipc::FullPtr<char>::GetNull();
       meta.recv.push_back(recv_bulk);
     }
 
@@ -251,12 +251,12 @@ class ShmTransport
   static int RecvBulksImplDevice(MetaT& meta, const LbmContext& ctx) {
     for (size_t i = 0; i < meta.recv.size(); ++i) {
       if (meta.recv[i].flags.Any(BULK_EXPOSE)) {
-        hipc::ShmPtr<char> shm;
+        ctp::ipc::ShmPtr<char> shm;
         ReadTransferDevice(reinterpret_cast<char*>(&shm), sizeof(shm), ctx);
         meta.recv[i].data.shm_ = shm;
         meta.recv[i].data.ptr_ = nullptr;
       } else if (meta.recv[i].flags.Any(BULK_XFER)) {
-        hipc::ShmPtr<char> shm;
+        ctp::ipc::ShmPtr<char> shm;
         ReadTransferDevice(reinterpret_cast<char*>(&shm), sizeof(shm), ctx);
 
         if (!shm.alloc_id_.IsNull()) {
@@ -278,7 +278,7 @@ class ShmTransport
           ReadTransferDevice(buf, meta.recv[i].size, ctx);
           if (allocated) {
             meta.recv[i].data.ptr_ = buf;
-            meta.recv[i].data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+            meta.recv[i].data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
             meta.recv[i].data.shm_.off_ = reinterpret_cast<size_t>(buf);
           }
         }
@@ -297,13 +297,13 @@ class ShmTransport
     for (size_t i = 0; i < meta.recv.size(); ++i) {
       if (meta.recv[i].flags.Any(BULK_EXPOSE)) {
         // BULK_EXPOSE: Read only the ShmPtr (no data transfer)
-        hipc::ShmPtr<char> shm;
+        ctp::ipc::ShmPtr<char> shm;
         ReadTransfer(reinterpret_cast<char*>(&shm), sizeof(shm), ctx);
         meta.recv[i].data.shm_ = shm;
         meta.recv[i].data.ptr_ = nullptr;
       } else if (meta.recv[i].flags.Any(BULK_XFER)) {
         // BULK_XFER: Read ShmPtr first, then data if private memory
-        hipc::ShmPtr<char> shm;
+        ctp::ipc::ShmPtr<char> shm;
         ReadTransfer(reinterpret_cast<char*>(&shm), sizeof(shm), ctx);
 
         if (!shm.alloc_id_.IsNull()) {
@@ -329,7 +329,7 @@ class ShmTransport
 
           if (allocated) {
             meta.recv[i].data.ptr_ = buf;
-            meta.recv[i].data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+            meta.recv[i].data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
             meta.recv[i].data.shm_.off_ = reinterpret_cast<size_t>(buf);
           }
         }

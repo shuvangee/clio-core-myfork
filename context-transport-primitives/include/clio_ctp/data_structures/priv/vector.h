@@ -559,7 +559,7 @@ class vector {
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
  private:
-  hipc::FullPtr<T> data_;  /**< FullPtr to the data array (both private and shared) */
+  ctp::ipc::FullPtr<T> data_;  /**< FullPtr to the data array (both private and shared) */
   size_type size_;         /**< Current number of elements */
   size_type capacity_;     /**< Allocated capacity */
   AllocT* alloc_;          /**< Pointer to allocator for memory management */
@@ -593,7 +593,7 @@ class vector {
    */
   CTP_INLINE_CROSS_FUN
   void InitSvo() {
-    data_ = hipc::FullPtr<T>::GetNull();
+    data_ = ctp::ipc::FullPtr<T>::GetNull();
     data_.ptr_ = svo_data();
     capacity_ = SVO_SIZE;
   }
@@ -1262,7 +1262,7 @@ class vector {
           }
         }
         alloc_->Free(data_);
-        data_ = hipc::FullPtr<T>::GetNull();
+        data_ = ctp::ipc::FullPtr<T>::GetNull();
         data_.ptr_ = svo_data();
         capacity_ = SVO_SIZE;
       } else if (!IsUsingSvo() && size_ < capacity_) {

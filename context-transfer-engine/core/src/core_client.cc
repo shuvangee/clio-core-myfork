@@ -41,7 +41,7 @@ namespace clio_cte::core {
 // Define global pointer variable for CTE client in source file
 CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cte::core::Client, g_cte_client);
 
-bool WRP_CTE_CLIENT_INIT(const std::string &config_path,
+bool CLIO_CTE_CLIENT_INIT(const std::string &config_path,
                          const chi::PoolQuery &pool_query) {
   // Static guard to prevent double initialization
   static bool s_initialized = false;

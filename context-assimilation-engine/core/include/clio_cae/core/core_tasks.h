@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CAE_CORE_TASKS_H_
-#define WRP_CAE_CORE_TASKS_H_
+#ifndef CLIO_CAE_CORE_TASKS_H_
+#define CLIO_CAE_CORE_TASKS_H_
 
 #include <chimaera/admin/admin_tasks.h>
 #include <chimaera/chimaera.h>
@@ -143,7 +143,7 @@ struct ParseOmniTask : public chi::Task {
   }
 
   // Copy method for distributed execution (optional)
-  void Copy(const hipc::FullPtr<ParseOmniTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<ParseOmniTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     serialized_ctx_ = other->serialized_ctx_;
@@ -156,7 +156,7 @@ struct ParseOmniTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<ParseOmniTask>());
   }
@@ -222,7 +222,7 @@ struct ProcessHdf5DatasetTask : public chi::Task {
   }
 
   // Copy method for distributed execution
-  void Copy(const hipc::FullPtr<ProcessHdf5DatasetTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<ProcessHdf5DatasetTask> &other) {
     Task::Copy(other.template Cast<Task>());
     file_path_ = other->file_path_;
     dataset_path_ = other->dataset_path_;
@@ -234,7 +234,7 @@ struct ProcessHdf5DatasetTask : public chi::Task {
   /**
    * Aggregate replica results into this task
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     auto other = other_base.template Cast<ProcessHdf5DatasetTask>();
     // Keep the first error if any
@@ -299,7 +299,7 @@ struct ExportDataTask : public chi::Task {
     ar(result_code_, error_message_, bytes_exported_);
   }
 
-  void Copy(const hipc::FullPtr<ExportDataTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<ExportDataTask> &other) {
     Task::Copy(other.template Cast<Task>());
     tag_name_ = other->tag_name_;
     output_path_ = other->output_path_;
@@ -309,7 +309,7 @@ struct ExportDataTask : public chi::Task {
     bytes_exported_ = other->bytes_exported_;
   }
 
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<ExportDataTask>());
   }
@@ -317,4 +317,4 @@ struct ExportDataTask : public chi::Task {
 
 }  // namespace clio_cae::core
 
-#endif  // WRP_CAE_CORE_TASKS_H_
+#endif  // CLIO_CAE_CORE_TASKS_H_

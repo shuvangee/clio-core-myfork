@@ -56,8 +56,8 @@
  *   --help
  */
 
-#ifndef WRP_BENCH_COMMON_H_
-#define WRP_BENCH_COMMON_H_
+#ifndef CLIO_BENCH_COMMON_H_
+#define CLIO_BENCH_COMMON_H_
 
 #include <clio_ctp/util/logging.h>
 
@@ -258,4 +258,4 @@ inline void PrintResults(const std::string &label, const BenchArgs &a,
 
 }  // namespace clio_bench
 
-#endif  // WRP_BENCH_COMMON_H_
+#endif  // CLIO_BENCH_COMMON_H_

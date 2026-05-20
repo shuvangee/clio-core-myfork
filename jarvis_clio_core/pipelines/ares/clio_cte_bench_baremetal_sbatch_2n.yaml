@@ -8,7 +8,7 @@
 #
 # Usage:
 #   jarvis ppl submit \
-#     ${IOWARP}/jarvis_iowarp/pipelines/ares/clio_cte_bench_baremetal_sbatch_2n.yaml
+#     ${IOWARP}/jarvis_clio_core/pipelines/ares/clio_cte_bench_baremetal_sbatch_2n.yaml
 
 name: clio_cte_bench_baremetal_sbatch_2n
 
@@ -46,7 +46,7 @@ scheduler:
     - 'module load openmpi/5.0.5-x2kvx5l/gcc/11.4.0/ior'
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -55,7 +55,7 @@ pkgs:
     log_level: "info"
     sleep: 4
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       - ["ram::cte_ram_tier1", "8GB", 1.0]
@@ -68,7 +68,7 @@ pkgs:
     # configured clio_cte_core container.
     pool_query: "local"
 
-  - pkg_type: jarvis_iowarp.clio_cte_bench
+  - pkg_type: jarvis_clio_core.clio_cte_bench
     pkg_name: bench
     # 1 thread x depth-8 in-flight x 4096 ops of 1 MiB = 4 GiB per node.
     # nprocs == nodes * ppn so the clio_cte_bench process fans 1-per-node

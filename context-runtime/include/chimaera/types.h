@@ -464,7 +464,7 @@ constexpr PoolId kAdminPoolId =
 //   GPU: CHI_TASK_ALLOC_T   / CHI_IPC->GetMainAllocator()
 //        (task constructors are never called from GPU kernels, so the GPU
 //         CHI_PRIV_ALLOC is only used for dynamic chi::priv operations in kernels)
-#define CHI_QUEUE_ALLOC_T hipc::BuddyAllocator
+#define CHI_QUEUE_ALLOC_T ctp::ipc::BuddyAllocator
 
 /** Allocator scope for NewObj: private (warp-local) or shared (cross-warp) */
 enum class AllocScope { kPrivate, kShared };
@@ -476,33 +476,33 @@ enum class AllocScope { kPrivate, kShared };
 // avoid the host-only MallocAllocatorSingleton (whose function-local
 // static is rejected by SYCL kernels).
 #if !CTP_IS_DEVICE_PASS
-#define CHI_TASK_ALLOC_T  hipc::MultiProcessAllocator
-#define CHI_PRIV_ALLOC_T  hipc::MallocAllocator
+#define CHI_TASK_ALLOC_T  ctp::ipc::MultiProcessAllocator
+#define CHI_PRIV_ALLOC_T  ctp::ipc::MallocAllocator
 #define CHI_PRIV_ALLOC    CTP_MALLOC
 // On CPU, shared == private (single-threaded MallocAllocator)
-#define CHI_PRIV_SHARED_ALLOC_T hipc::MallocAllocator
+#define CHI_PRIV_SHARED_ALLOC_T ctp::ipc::MallocAllocator
 #define CHI_PRIV_SHARED_ALLOC   CTP_MALLOC
 #else
-#define CHI_TASK_ALLOC_T  hipc::BuddyAllocator
+#define CHI_TASK_ALLOC_T  ctp::ipc::BuddyAllocator
 // GPU: CHI_PRIV_ALLOC uses a cached PrivateBuddyAllocator* per warp.
 // The pointer is resolved once during GPU init (from PartitionedAllocator) and
 // cached in IpcManager::warp_priv_alloc_[], eliminating the per-allocation
 // PartitionedAllocator indirection (GetAutoTid + LazyInitThread + GetThreadBlock).
-#define CHI_PRIV_ALLOC_T  hipc::PrivateBuddyAllocator
+#define CHI_PRIV_ALLOC_T  ctp::ipc::PrivateBuddyAllocator
 /**
  * Get the GPU private allocator (cached PrivateBuddyAllocator for this warp).
  * Declared here; defined in ipc_manager.h after CHI_IPC is available.
  *
  * @return Pointer to the warp's cached BuddyAllocator
  */
-CTP_GPU_FUN hipc::PrivateBuddyAllocator *GetPrivAllocGpu();
+CTP_GPU_FUN ctp::ipc::PrivateBuddyAllocator *GetPrivAllocGpu();
 #define CHI_PRIV_ALLOC    (::chi::GetPrivAllocGpu())
 // GPU: CHI_PRIV_SHARED_ALLOC returns the PartitionedAllocator (PartitionedAllocator)
 // which dispatches allocations to the calling warp's partition via GetAutoTid().
 // Use for cross-warp data structures (shared maps, vectors) where multiple warps
 // may allocate/free concurrently.
-#define CHI_PRIV_SHARED_ALLOC_T hipc::RoundRobinAllocator
-CTP_GPU_FUN hipc::RoundRobinAllocator *GetSharedAllocGpu();
+#define CHI_PRIV_SHARED_ALLOC_T ctp::ipc::RoundRobinAllocator
+CTP_GPU_FUN ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu();
 #define CHI_PRIV_SHARED_ALLOC   (::chi::GetSharedAllocGpu())
 #endif
 
@@ -565,7 +565,7 @@ inline CTP_CROSS_FUN TaskId CreateTaskId() {
 
 // Template aliases for full pointers using HSHM
 template <typename T>
-using FullPtr = hipc::FullPtr<T>;
+using FullPtr = ctp::ipc::FullPtr<T>;
 
 /**
  * Migration descriptor for container migration between nodes
@@ -642,13 +642,13 @@ namespace chi::ipc {
 // Queue structures use CHI_QUEUE_ALLOC_T (BuddyAllocator)
 template <typename T>
 using multi_mpsc_ring_buffer =
-    hipc::multi_mpsc_ring_buffer<T, CHI_QUEUE_ALLOC_T>;
+    ctp::ipc::multi_mpsc_ring_buffer<T, CHI_QUEUE_ALLOC_T>;
 
 template <typename T>
-using mpsc_ring_buffer = hipc::mpsc_ring_buffer<T, CHI_QUEUE_ALLOC_T>;
+using mpsc_ring_buffer = ctp::ipc::mpsc_ring_buffer<T, CHI_QUEUE_ALLOC_T>;
 
 template <typename T>
-using vector = hipc::vector<T, CHI_QUEUE_ALLOC_T>;
+using vector = ctp::ipc::vector<T, CHI_QUEUE_ALLOC_T>;
 }  // namespace chi::ipc
 
 // Hash function specializations for std::unordered_map

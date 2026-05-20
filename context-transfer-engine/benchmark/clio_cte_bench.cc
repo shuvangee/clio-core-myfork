@@ -115,13 +115,13 @@ class CTEBenchmark {
 
   void Worker(Mode mode, size_t tid, std::atomic<bool> &err,
               std::vector<long long> &times, std::vector<clio_bench::u64> &ops) {
-    auto *cte = WRP_CTE_CLIENT;
+    auto *cte = CLIO_CTE_CLIENT;
     auto put_shm = CHI_IPC->AllocateBuffer(a_.io_size);
     auto get_shm = CHI_IPC->AllocateBuffer(a_.io_size);
     std::memset(put_shm.ptr_, static_cast<int>(tid & 0xFF), a_.io_size);
     std::memset(get_shm.ptr_, 0, a_.io_size);  // pre-fault dest pages
-    hipc::ShmPtr<> put_ptr = put_shm.shm_.template Cast<void>();
-    hipc::ShmPtr<> get_ptr = get_shm.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> put_ptr = put_shm.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> get_ptr = get_shm.shm_.template Cast<void>();
 
     std::string tag_name = "tag_n" + node_id_ + "_t" + std::to_string(tid);
     auto tag_task = cte->AsyncGetOrCreateTag(tag_name);
@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
     }
   } finalize_guard;
   std::this_thread::sleep_for(milliseconds(500));
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
     HLOG(kError, "Failed to initialize CTE client");
     return 1;
   }

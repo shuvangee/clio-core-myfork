@@ -93,9 +93,9 @@ TEST_CASE("LocalTaskArchive: Serialize and deserialize basic types", "[local_tas
 
 TEST_CASE("LocalTaskArchive: Serialize ShmPtr with bulk()", "[local_task_archive][bulk]") {
   // Create a ShmPtr
-  hipc::ShmPtr<char> shm_ptr;
+  ctp::ipc::ShmPtr<char> shm_ptr;
   shm_ptr.off_ = 12345;
-  shm_ptr.alloc_id_ = hipc::AllocatorId(1, 2);
+  shm_ptr.alloc_id_ = ctp::ipc::AllocatorId(1, 2);
 
   size_t data_size = 1024;
   uint32_t flags = 0;
@@ -107,7 +107,7 @@ TEST_CASE("LocalTaskArchive: Serialize ShmPtr with bulk()", "[local_task_archive
 
   // Deserialize with bulk
   DefaultLoadArchive load_archive(save_buf);
-  hipc::ShmPtr<char> restored_ptr;
+  ctp::ipc::ShmPtr<char> restored_ptr;
   load_archive.bulk(restored_ptr, data_size, flags);
 
   // Verify the ShmPtr was correctly serialized
@@ -118,9 +118,9 @@ TEST_CASE("LocalTaskArchive: Serialize ShmPtr with bulk()", "[local_task_archive
 
 TEST_CASE("LocalTaskArchive: Serialize FullPtr with bulk()", "[local_task_archive][bulk]") {
   // Create a FullPtr
-  hipc::FullPtr<char> full_ptr;
+  ctp::ipc::FullPtr<char> full_ptr;
   full_ptr.shm_.off_ = 54321;
-  full_ptr.shm_.alloc_id_ = hipc::AllocatorId(3, 4);
+  full_ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId(3, 4);
   full_ptr.ptr_ = reinterpret_cast<char *>(0xDEADBEEF);
 
   size_t data_size = 2048;
@@ -133,7 +133,7 @@ TEST_CASE("LocalTaskArchive: Serialize FullPtr with bulk()", "[local_task_archiv
 
   // Deserialize with bulk (only shm_ part is serialized)
   DefaultLoadArchive load_archive(save_buf);
-  hipc::FullPtr<char> restored_ptr;
+  ctp::ipc::FullPtr<char> restored_ptr;
   load_archive.bulk(restored_ptr, data_size, flags);
 
   // Verify only the ShmPtr part was serialized (ptr_ is not serialized)
@@ -234,19 +234,19 @@ TEST_CASE("LocalTaskArchive: Message types", "[local_task_archive]") {
 
 TEST_CASE("LocalTaskArchive: Multiple bulk transfers", "[local_task_archive][bulk]") {
   // Create multiple different pointer types
-  hipc::ShmPtr<char> shm_ptr1;
+  ctp::ipc::ShmPtr<char> shm_ptr1;
   shm_ptr1.off_ = 100;
-  shm_ptr1.alloc_id_ = hipc::AllocatorId(1, 1);
+  shm_ptr1.alloc_id_ = ctp::ipc::AllocatorId(1, 1);
 
-  hipc::FullPtr<char> full_ptr;
+  ctp::ipc::FullPtr<char> full_ptr;
   full_ptr.shm_.off_ = 200;
-  full_ptr.shm_.alloc_id_ = hipc::AllocatorId(2, 2);
+  full_ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId(2, 2);
 
   char raw_data[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 
-  hipc::ShmPtr<char> shm_ptr2;
+  ctp::ipc::ShmPtr<char> shm_ptr2;
   shm_ptr2.off_ = 300;
-  shm_ptr2.alloc_id_ = hipc::AllocatorId(3, 3);
+  shm_ptr2.alloc_id_ = ctp::ipc::AllocatorId(3, 3);
 
   // Serialize all bulk transfers
   chi::priv::vector<char> save_buf;
@@ -258,10 +258,10 @@ TEST_CASE("LocalTaskArchive: Multiple bulk transfers", "[local_task_archive][bul
 
   // Deserialize all bulk transfers
   DefaultLoadArchive load_archive(save_buf);
-  hipc::ShmPtr<char> restored_shm1;
-  hipc::FullPtr<char> restored_full;
+  ctp::ipc::ShmPtr<char> restored_shm1;
+  ctp::ipc::FullPtr<char> restored_full;
   char restored_raw[8];
-  hipc::ShmPtr<char> restored_shm2;
+  ctp::ipc::ShmPtr<char> restored_shm2;
 
   load_archive.bulk(restored_shm1, 10, 0);
   load_archive.bulk(restored_full, 20, 1);

@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_METADATA_MANAGER_H
-#define WRP_CTE_ADAPTER_METADATA_MANAGER_H
+#ifndef CLIO_CTE_ADAPTER_METADATA_MANAGER_H
+#define CLIO_CTE_ADAPTER_METADATA_MANAGER_H
 
 #include <cstdio>
 #include <unordered_map>
@@ -229,7 +229,7 @@ namespace clio::cae {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(MetadataManager, g_fs_metadata_manager);
 }
 
-#define WRP_CTE_FS_METADATA_MANAGER (CTP_GET_GLOBAL_PTR_VAR(clio::cae::MetadataManager, clio::cae::g_fs_metadata_manager))
-#define WRP_CTE_FS_METADATA_MANAGER_T clio::cae::MetadataManager *
+#define CLIO_CTE_FS_METADATA_MANAGER (CTP_GET_GLOBAL_PTR_VAR(clio::cae::MetadataManager, clio::cae::g_fs_metadata_manager))
+#define CLIO_CTE_FS_METADATA_MANAGER_T clio::cae::MetadataManager *
 
-#endif // WRP_CTE_ADAPTER_METADATA_MANAGER_H
+#endif // CLIO_CTE_ADAPTER_METADATA_MANAGER_H

@@ -6,8 +6,8 @@
  * BSD 3-Clause License. See LICENSE file.
  */
 
-#ifndef WRP_CTE_GPU_VECTOR_VIEW_H_
-#define WRP_CTE_GPU_VECTOR_VIEW_H_
+#ifndef CLIO_CTE_GPU_VECTOR_VIEW_H_
+#define CLIO_CTE_GPU_VECTOR_VIEW_H_
 
 #include <chimaera/types.h>
 #include <chimaera/gpu/future.h>
@@ -80,10 +80,10 @@ struct DeviceViewBase {
    * blob_data_ ShmPtrs via chi::g_device_aware_memcpy; pinned-host
    * pages decode the same way (cudaMemcpyDefault auto-detects).
    */
-  hipc::AllocatorId pages_alloc_id;
-  hipc::AllocatorId host_pages_alloc_id;  /**< null in legacy. */
-  hipc::AllocatorId put_pool_alloc_id;
-  hipc::AllocatorId get_pool_alloc_id;
+  ctp::ipc::AllocatorId pages_alloc_id;
+  ctp::ipc::AllocatorId host_pages_alloc_id;  /**< null in legacy. */
+  ctp::ipc::AllocatorId put_pool_alloc_id;
+  ctp::ipc::AllocatorId get_pool_alloc_id;
   /** Tag the kernel writes blobs against. Set once at Vector ctor. */
   clio_cte::core::TagId tag_id;
   chi::u32 nblocks;
@@ -108,7 +108,7 @@ CTP_INLINE_CROSS_FUN chi::u32 TotalPagesPerBlock(const DeviceViewBase &v) {
 
 /**
  * Strongly-typed view captured by user kernels. Trivially copyable POD.
- * The kernel side macro WRP_GPU_VECTOR_KERNEL_INIT(view) sets up the
+ * The kernel side macro CLIO_GPU_VECTOR_KERNEL_INIT(view) sets up the
  * per-warp last-page cache so the operator[]() fast path works.
  */
 template <typename T>
@@ -166,4 +166,4 @@ CTP_INLINE_CROSS_FUN chi::gpu::FutureShm *GetGetFutureShm(
 
 }  // namespace clio_cte::gpu_vector
 
-#endif  // WRP_CTE_GPU_VECTOR_VIEW_H_
+#endif  // CLIO_CTE_GPU_VECTOR_VIEW_H_

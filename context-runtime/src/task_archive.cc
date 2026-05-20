@@ -49,8 +49,8 @@ namespace chi {
  * @param size Size of the data in bytes
  * @param flags Transfer flags (BULK_XFER or BULK_EXPOSE)
  */
-void SaveTaskArchive::bulk(hipc::ShmPtr<> ptr, size_t size, uint32_t flags) {
-  hipc::FullPtr<char> full_ptr = CHI_IPC->ToFullPtr(ptr).template Cast<char>();
+void SaveTaskArchive::bulk(ctp::ipc::ShmPtr<> ptr, size_t size, uint32_t flags) {
+  ctp::ipc::FullPtr<char> full_ptr = CHI_IPC->ToFullPtr(ptr).template Cast<char>();
   ctp::lbm::Bulk bulk;
   bulk.data = full_ptr;
   bulk.size = size;
@@ -76,7 +76,7 @@ void SaveTaskArchive::bulk(hipc::ShmPtr<> ptr, size_t size, uint32_t flags) {
  * @param size Size of the data in bytes
  * @param flags Transfer flags (BULK_XFER or BULK_EXPOSE)
  */
-void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
+void LoadTaskArchive::bulk(ctp::ipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
   if (msg_type_ == MsgType::kSerializeIn) {
     // SerializeIn mode (input) - Get pointer from recv vector at current index
     // The task itself doesn't have a valid pointer during deserialization,
@@ -98,7 +98,7 @@ void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
           // immediately after AllocLoadTask. One extra 1 MiB memcpy on
           // the TCP path (which already memcpys); SHM path (desc==null)
           // stays zero-copy and untouched.
-          hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(size);
+          ctp::ipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(size);
           char *src = recv[current_bulk_index_].data.ptr_;
           if (buf.ptr_ && src) {
             memcpy(buf.ptr_, src, size);
@@ -117,7 +117,7 @@ void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
         // This buffer is owned by the daemon and must be freed when the
         // task is deleted (see daemon_allocated_bulk_count_ usage in
         // admin_runtime.cc RecvIn / SendOut).
-        hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(size);
+        ctp::ipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(size);
         ptr = buf.shm_.template Cast<void>();
         recv[current_bulk_index_].data = buf;
         ++daemon_allocated_bulk_count_;
@@ -125,7 +125,7 @@ void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
       current_bulk_index_++;
     } else {
       // Error: not enough bulk transfers in recv vector
-      ptr = hipc::ShmPtr<>::GetNull();
+      ptr = ctp::ipc::ShmPtr<>::GetNull();
       HLOG(kError, "[LoadTaskArchive::bulk] SerializeIn - recv vector empty or exhausted");
     }
   } else if (msg_type_ == MsgType::kSerializeOut) {
@@ -139,7 +139,7 @@ void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
         // Note: MallocAllocator uses null alloc_id_, so check IsNull() on
         // the ShmPtr (which checks offset) rather than alloc_id_.
         if (!ptr.IsNull()) {
-          hipc::FullPtr<char> dst = CHI_IPC->ToFullPtr(ptr).template Cast<char>();
+          ctp::ipc::FullPtr<char> dst = CHI_IPC->ToFullPtr(ptr).template Cast<char>();
           char *src = recv[current_bulk_index_].data.ptr_;
           size_t copy_size = recv[current_bulk_index_].size;
           if (dst.ptr_ && src) {
@@ -153,7 +153,7 @@ void LoadTaskArchive::bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags) {
       current_bulk_index_++;
     } else if (lbm_transport_) {
       // Pre-receive: expose task's buffer for RecvBulks (existing RecvOut pattern)
-      hipc::FullPtr<char> buffer = CHI_IPC->ToFullPtr(ptr).template Cast<char>();
+      ctp::ipc::FullPtr<char> buffer = CHI_IPC->ToFullPtr(ptr).template Cast<char>();
       ctp::lbm::Bulk bulk = lbm_transport_->Expose(buffer, size, flags);
       recv.push_back(bulk);
       if (flags & BULK_XFER) {

@@ -184,7 +184,7 @@ TEST_CASE("Per-process shared memory AllocateBuffer medium sizes",
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Allocate 100MB buffer") {
-    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
+    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
 
     REQUIRE_FALSE(buffer.IsNull());
     REQUIRE(buffer.ptr_ != nullptr);
@@ -200,7 +200,7 @@ TEST_CASE("Per-process shared memory AllocateBuffer medium sizes",
   }
 
   SECTION("Allocate 500MB buffer") {
-    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k500MB);
+    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k500MB);
 
     REQUIRE_FALSE(buffer.IsNull());
     REQUIRE(buffer.ptr_ != nullptr);
@@ -231,7 +231,7 @@ TEST_CASE("Per-process shared memory AllocateBuffer exceeding 1GB",
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k1_5GB);
+    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k1_5GB);
 
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -264,7 +264,7 @@ TEST_CASE("Per-process shared memory multiple large allocations",
 
   SECTION("Multiple allocations spanning segments") {
     // Allocate multiple buffers that together exceed the initial segment
-    std::vector<hipc::FullPtr<char>> buffers;
+    std::vector<ctp::ipc::FullPtr<char>> buffers;
 
     // First allocation: 600MB
     INFO("Allocating first 600MB buffer");
@@ -309,8 +309,8 @@ TEST_CASE("Per-process shared memory allocation patterns",
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Mixed small and large allocations") {
-    std::vector<hipc::FullPtr<char>> small_buffers;
-    std::vector<hipc::FullPtr<char>> large_buffers;
+    std::vector<ctp::ipc::FullPtr<char>> small_buffers;
+    std::vector<ctp::ipc::FullPtr<char>> large_buffers;
 
     // Allocate some small buffers first
     for (int i = 0; i < 5; ++i) {
@@ -366,7 +366,7 @@ TEST_CASE("Per-process shared memory FreeBuffer",
 
   SECTION("Free allocated buffer") {
     // Allocate a buffer
-    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
+    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
     REQUIRE_FALSE(buffer.IsNull());
 
     // Write some data
@@ -383,14 +383,14 @@ TEST_CASE("Per-process shared memory FreeBuffer",
 
   SECTION("Allocate-free-allocate cycle") {
     // Allocate
-    hipc::FullPtr<char> buffer1 = ipc_manager->AllocateBuffer(k100MB);
+    ctp::ipc::FullPtr<char> buffer1 = ipc_manager->AllocateBuffer(k100MB);
     REQUIRE_FALSE(buffer1.IsNull());
 
     // Free
     ipc_manager->FreeBuffer(buffer1);
 
     // Allocate again - should work
-    hipc::FullPtr<char> buffer2 = ipc_manager->AllocateBuffer(k100MB);
+    ctp::ipc::FullPtr<char> buffer2 = ipc_manager->AllocateBuffer(k100MB);
     REQUIRE_FALSE(buffer2.IsNull());
 
     // Verify new buffer is usable
@@ -410,14 +410,14 @@ TEST_CASE("Per-process shared memory ToFullPtr conversion",
 
   SECTION("ToFullPtr from raw pointer") {
     // Allocate a buffer
-    hipc::FullPtr<char> original = ipc_manager->AllocateBuffer(k1MB);
+    ctp::ipc::FullPtr<char> original = ipc_manager->AllocateBuffer(k1MB);
     REQUIRE_FALSE(original.IsNull());
 
     // Get the raw pointer
     char* raw_ptr = original.ptr_;
 
     // Convert back to FullPtr
-    hipc::FullPtr<char> converted = ipc_manager->ToFullPtr(raw_ptr);
+    ctp::ipc::FullPtr<char> converted = ipc_manager->ToFullPtr(raw_ptr);
 
     // Should get the same pointer back
     REQUIRE_FALSE(converted.IsNull());
@@ -445,7 +445,7 @@ TEST_CASE("Per-process shared memory stress test",
   SECTION("Many small allocations") {
     const size_t num_allocs = 100;
     const size_t alloc_size = 10 * k1MB;  // 10MB each = 1GB total
-    std::vector<hipc::FullPtr<char>> buffers;
+    std::vector<ctp::ipc::FullPtr<char>> buffers;
 
     INFO("Allocating " << num_allocs << " buffers of " << (alloc_size / k1MB) << "MB each");
 
@@ -492,7 +492,7 @@ TEST_CASE("Per-process shared memory ClientShmInfo",
     info.owner_pid = getpid();
     info.shm_index = 0;
     info.size = k100MB;
-    info.alloc_id = hipc::AllocatorId(static_cast<chi::u32>(getpid()), 0);
+    info.alloc_id = ctp::ipc::AllocatorId(static_cast<chi::u32>(getpid()), 0);
 
     REQUIRE(info.shm_name == "test_shm");
     REQUIRE(info.owner_pid == getpid());

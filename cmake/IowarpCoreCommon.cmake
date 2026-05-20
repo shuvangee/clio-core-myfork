@@ -56,8 +56,8 @@ macro(wrp_core_enable_cuda CXX_STANDARD)
     # When code coverage is enabled, add_link_options(--coverage) causes the
     # CUDA device link stub to reference __gcov_* symbols. Set a flag so
     # add_cuda_library/add_cuda_executable can link libgcov to resolve them.
-    if(WRP_CORE_ENABLE_COVERAGE)
-        set(WRP_CORE_CUDA_NEEDS_GCOV TRUE CACHE INTERNAL "")
+    if(CLIO_CORE_ENABLE_COVERAGE)
+        set(CLIO_CORE_CUDA_NEEDS_GCOV TRUE CACHE INTERNAL "")
     endif()
 
     # Cache critical CUDA platform variables so they survive any nested
@@ -97,16 +97,16 @@ macro(wrp_core_enable_rocm GPU_RUNTIME CXX_STANDARD)
     # NVIDIA-backed builds (HIP_PLATFORM=nvidia, e.g. dev container with
     # only CUDA hardware) through nvcc instead of clang/HIP-AMD. The env
     # var is what hipconfig and hipcc use; mirror it into a cache var.
-    if(NOT DEFINED WRP_ROCM_HIP_PLATFORM)
+    if(NOT DEFINED CLIO_ROCM_HIP_PLATFORM)
         if(DEFINED ENV{HIP_PLATFORM})
-            set(WRP_ROCM_HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING
+            set(CLIO_ROCM_HIP_PLATFORM "$ENV{HIP_PLATFORM}" CACHE STRING
                 "HIP platform (amd|nvidia)")
         else()
-            set(WRP_ROCM_HIP_PLATFORM "amd" CACHE STRING
+            set(CLIO_ROCM_HIP_PLATFORM "amd" CACHE STRING
                 "HIP platform (amd|nvidia)")
         endif()
     endif()
-    message(STATUS "ROCm enabled: HIP_PLATFORM=${WRP_ROCM_HIP_PLATFORM}")
+    message(STATUS "ROCm enabled: HIP_PLATFORM=${CLIO_ROCM_HIP_PLATFORM}")
 
     set(ROCM_ROOT
         "/opt/rocm"
@@ -114,7 +114,7 @@ macro(wrp_core_enable_rocm GPU_RUNTIME CXX_STANDARD)
         "Root directory of the ROCm installation"
     )
 
-    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+    if(CLIO_ROCM_HIP_PLATFORM STREQUAL "nvidia")
         # HIP-NVCC: hipcc internally invokes nvcc. Reuse CMake's CUDA
         # language so the GPU sources are compiled with nvcc + the HIP
         # runtime headers. The add_rocm_* helpers below set
@@ -179,7 +179,7 @@ endmacro()
 
 # Enable Intel GPU / SYCL (oneAPI icpx -fsycl, or AdaptiveCpp acpp)
 #
-# Detects the SYCL compiler flavor and sets WRP_SYCL_COMPILER (DPCPP|ACPP).
+# Detects the SYCL compiler flavor and sets CLIO_SYCL_COMPILER (DPCPP|ACPP).
 # Configures default values for SYCL_TARGET / SYCL_DEVICE / SYCL_CUDA_ARCH
 # that callers can override on the CMake command line.
 #
@@ -192,15 +192,15 @@ macro(wrp_core_enable_sycl CXX_STANDARD)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
     # Compiler flavor detection. Override with -DWRP_SYCL_COMPILER=DPCPP|ACPP.
-    if(NOT DEFINED WRP_SYCL_COMPILER)
+    if(NOT DEFINED CLIO_SYCL_COMPILER)
         get_filename_component(_wrp_cxx_name "${CMAKE_CXX_COMPILER}" NAME)
         if(_wrp_cxx_name MATCHES "^(acpp|syclcc|hipsycl)" OR
            CMAKE_CXX_COMPILER_ID STREQUAL "AdaptiveCpp")
-            set(WRP_SYCL_COMPILER "ACPP" CACHE STRING
+            set(CLIO_SYCL_COMPILER "ACPP" CACHE STRING
                 "SYCL compiler flavor (DPCPP|ACPP)")
         else()
             # Default to DPC++ for icpx, dpcpp, and clang++ with -fsycl.
-            set(WRP_SYCL_COMPILER "DPCPP" CACHE STRING
+            set(CLIO_SYCL_COMPILER "DPCPP" CACHE STRING
                 "SYCL compiler flavor (DPCPP|ACPP)")
         endif()
     endif()
@@ -226,11 +226,11 @@ macro(wrp_core_enable_sycl CXX_STANDARD)
     # Opt-in flag for SYCL device-side virtual functions.
     # -fsycl-allow-virtual-functions is supported by recent DPC++ nightlies;
     # leave OFF unless you have confirmed your toolchain accepts it.
-    option(WRP_SYCL_ALLOW_VIRTUAL_FUNCTIONS
+    option(CLIO_SYCL_ALLOW_VIRTUAL_FUNCTIONS
         "Pass -fsycl-allow-virtual-functions to DPC++ (recent compiler only)"
         OFF)
 
-    message(STATUS "SYCL enabled: compiler=${WRP_SYCL_COMPILER} target=${SYCL_TARGET} device=${SYCL_DEVICE}")
+    message(STATUS "SYCL enabled: compiler=${CLIO_SYCL_COMPILER} target=${SYCL_TARGET} device=${SYCL_DEVICE}")
 endmacro()
 
 # Apply SYCL compile and link flags to a specific target.
@@ -240,22 +240,22 @@ endmacro()
 # Flags applied:
 #   DPCPP  -fsycl, -fsycl-targets=<target>, -fsycl-allow-func-ptr
 #          -fsycl-unnamed-lambda, plus AOT/CUDA backend args when applicable.
-#          -fsycl-allow-virtual-functions if WRP_SYCL_ALLOW_VIRTUAL_FUNCTIONS=ON.
+#          -fsycl-allow-virtual-functions if CLIO_SYCL_ALLOW_VIRTUAL_FUNCTIONS=ON.
 #   ACPP   --acpp-targets=<target>.
 #
 # -fsycl-allow-func-ptr is required by chi::gpu::Container's function-pointer
 # dispatch table; without it DPC++ rejects taking the address of device
 # functions.
 function(wrp_core_apply_sycl_flags target)
-    if(NOT DEFINED WRP_SYCL_COMPILER)
+    if(NOT DEFINED CLIO_SYCL_COMPILER)
         message(FATAL_ERROR
-            "WRP_SYCL_COMPILER is not set; call wrp_core_enable_sycl(<CXX_STANDARD>) "
+            "CLIO_SYCL_COMPILER is not set; call wrp_core_enable_sycl(<CXX_STANDARD>) "
             "before defining SYCL targets")
     endif()
 
     target_compile_definitions(${target} PRIVATE CTP_ENABLE_SYCL=1)
 
-    if(WRP_SYCL_COMPILER STREQUAL "DPCPP")
+    if(CLIO_SYCL_COMPILER STREQUAL "DPCPP")
         # -fsycl-allow-func-ptr is a Clang -cc1 flag in current DPC++
         # nightlies, so pass it through with -Xclang. Ditto for the
         # virtual-functions opt-in.
@@ -290,13 +290,13 @@ function(wrp_core_apply_sycl_flags target)
             )
         endif()
 
-        if(WRP_SYCL_ALLOW_VIRTUAL_FUNCTIONS)
+        if(CLIO_SYCL_ALLOW_VIRTUAL_FUNCTIONS)
             target_compile_options(${target} PRIVATE
                 -Xclang -fsycl-allow-virtual-functions)
             target_link_options(${target} PRIVATE
                 -Xclang -fsycl-allow-virtual-functions)
         endif()
-    elseif(WRP_SYCL_COMPILER STREQUAL "ACPP")
+    elseif(CLIO_SYCL_COMPILER STREQUAL "ACPP")
         target_compile_options(${target} PRIVATE
             --acpp-targets=${SYCL_TARGET}
         )
@@ -304,7 +304,7 @@ function(wrp_core_apply_sycl_flags target)
             --acpp-targets=${SYCL_TARGET}
         )
     else()
-        message(FATAL_ERROR "Unknown WRP_SYCL_COMPILER='${WRP_SYCL_COMPILER}' (expected DPCPP or ACPP)")
+        message(FATAL_ERROR "Unknown CLIO_SYCL_COMPILER='${CLIO_SYCL_COMPILER}' (expected DPCPP or ACPP)")
     endif()
 endfunction()
 
@@ -317,7 +317,7 @@ function(set_rocm_sources MODE DO_COPY SRC_FILES ROCM_SOURCE_FILES_VAR)
     # HIP-NVCC mode (HIP_PLATFORM=nvidia) we route through nvcc via
     # CMake's CUDA language; otherwise stick with the requested HIP
     # runtime (typically HIP for AMD).
-    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+    if(CLIO_ROCM_HIP_PLATFORM STREQUAL "nvidia")
         set(_wrp_rocm_lang CUDA)
     else()
         set(_wrp_rocm_lang ${GPU_RUNTIME})
@@ -363,7 +363,7 @@ endfunction()
 # language) and link cudart instead, with the ROCm include directory
 # in the path so `hip/hip_runtime.h` resolves to the HIP-NVCC headers.
 function(_wrp_apply_rocm_flags TARGET)
-    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+    if(CLIO_ROCM_HIP_PLATFORM STREQUAL "nvidia")
         target_compile_definitions(${TARGET} PUBLIC
             __HIP_PLATFORM_NVIDIA__=1
             __HIP_PLATFORM_NVCC__=1)
@@ -425,7 +425,7 @@ function(add_rocm_gpu_executable TARGET DO_COPY)
     set(ROCM_SOURCE_FILES "")
     set_rocm_sources(exec "${DO_COPY}" "${SRC_FILES}" ROCM_SOURCE_FILES)
     add_executable(${TARGET} ${ROCM_SOURCE_FILES})
-    if(WRP_ROCM_HIP_PLATFORM STREQUAL "nvidia")
+    if(CLIO_ROCM_HIP_PLATFORM STREQUAL "nvidia")
         # On NVIDIA hardware no AMD runtime libs to link.
     else()
         target_link_libraries(${TARGET} PUBLIC amdhip64 amd_comgr)
@@ -485,7 +485,7 @@ function(add_cuda_library TARGET SHARED DO_COPY)
     endif()
 
     # Resolve __gcov_* symbols from CUDA device link stubs when coverage is on
-    if(WRP_CORE_CUDA_NEEDS_GCOV)
+    if(CLIO_CORE_CUDA_NEEDS_GCOV)
         set_property(TARGET ${TARGET} APPEND PROPERTY LINK_LIBRARIES gcov)
     endif()
 
@@ -531,7 +531,7 @@ function(add_cuda_executable TARGET DO_COPY)
     endif()
 
     # Resolve __gcov_* symbols from CUDA device link stubs when coverage is on
-    if(WRP_CORE_CUDA_NEEDS_GCOV)
+    if(CLIO_CORE_CUDA_NEEDS_GCOV)
         set_property(TARGET ${TARGET} APPEND PROPERTY LINK_LIBRARIES gcov)
     endif()
 
@@ -570,7 +570,7 @@ endfunction()
 #
 # Compiles via the configured CXX compiler with SYCL flags applied through
 # wrp_core_apply_sycl_flags(). wrp_core_enable_sycl(<CXX_STANDARD>) must be
-# called before use so WRP_SYCL_COMPILER and SYCL_TARGET are set.
+# called before use so CLIO_SYCL_COMPILER and SYCL_TARGET are set.
 #
 # Usage:
 #   add_sycl_library(TARGET SHARED|STATIC DO_COPY source1.cc ...

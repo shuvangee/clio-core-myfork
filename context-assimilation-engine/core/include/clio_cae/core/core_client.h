@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CAE_CORE_CLIENT_H_
-#define WRP_CAE_CORE_CLIENT_H_
+#ifndef CLIO_CAE_CORE_CLIENT_H_
+#define CLIO_CAE_CORE_CLIENT_H_
 
 #include <chimaera/chimaera.h>
 #include <clio_cae/core/core_tasks.h>
@@ -166,22 +166,22 @@ CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_cae::core::Client, g_cae_client);
 
 /**
  * Initialize CAE client singleton
- * Calls WRP_CTE_CLIENT_INIT internally to ensure CTE is initialized
+ * Calls CLIO_CTE_CLIENT_INIT internally to ensure CTE is initialized
  * Creates and initializes a global CAE client singleton
  *
  * @param config_path Path to configuration file (optional)
  * @param pool_query Pool query for CAE pool creation (default: Dynamic)
  * @return true on success, false on failure
  */
-bool WRP_CAE_CLIENT_INIT(const std::string &config_path = "",
+bool CLIO_CAE_CLIENT_INIT(const std::string &config_path = "",
                          const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic());
 
 /**
  * Global CAE client singleton accessor macro
  * Returns pointer to the global CAE client instance
  */
-#define WRP_CAE_CLIENT                                                         \
+#define CLIO_CAE_CLIENT                                                         \
   (&(*CTP_GET_GLOBAL_PTR_VAR(clio_cae::core::Client,                         \
                               g_cae_client)))
 
-#endif  // WRP_CAE_CORE_CLIENT_H_
+#endif  // CLIO_CAE_CORE_CLIENT_H_

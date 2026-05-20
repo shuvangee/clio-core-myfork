@@ -29,7 +29,7 @@ scheduler:
     - 'mkdir -p /home/llogan/iowarp_prte_tmp'
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -39,7 +39,7 @@ pkgs:
     sleep: 4
     swim_enabled: false
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       - ["ram::cte_ram_tier1", "2GB", 1.0]
@@ -50,7 +50,7 @@ pkgs:
     poll_period_ms: 5000
     pool_query: "local"
 
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     mountpoint: ${HOME}/cte_tiering_dram_nvme_1n
     sleep: 2

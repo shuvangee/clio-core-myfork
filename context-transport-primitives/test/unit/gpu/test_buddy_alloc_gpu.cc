@@ -60,7 +60,7 @@
 #include "clio_ctp/memory/backend/gpu_shm_mmap.h"
 #include "clio_ctp/util/gpu_api.h"
 
-using hipc::BuddyAllocator;
+using ctp::ipc::BuddyAllocator;
 using ctp::ipc::GpuShmMmap;
 using ctp::ipc::MemoryBackendId;
 
@@ -119,7 +119,7 @@ __global__ void BuddyAllocKernel(
     char                   *backend_base,
     size_t                  total_capacity,
     size_t                  per_thread_bytes,
-    hipc::MemoryBackendId   backend_id,
+    ctp::ipc::MemoryBackendId   backend_id,
     int                    *d_results) {
 
   int tid = static_cast<int>(threadIdx.x + blockIdx.x * blockDim.x);
@@ -133,7 +133,7 @@ __global__ void BuddyAllocKernel(
 
   // Sub-backend: data_ = full backend base so every OffsetPtr offset is
   // a valid index into the entire 32 MB region (matches ClientInitGpu pattern).
-  hipc::MemoryBackend sub_backend;
+  ctp::ipc::MemoryBackend sub_backend;
   sub_backend.data_          = backend_base;
   sub_backend.data_capacity_ = total_capacity;
   sub_backend.id_            = backend_id;

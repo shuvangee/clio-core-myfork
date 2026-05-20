@@ -10,7 +10,7 @@
 
 namespace chi {
 
-hipc::FullPtr<Task> IpcCpu2Cpu::RuntimeRecv(
+ctp::ipc::FullPtr<Task> IpcCpu2Cpu::RuntimeRecv(
     IpcManager *ipc, Future<Task> &future, Container *container,
     u32 method_id, ctp::lbm::Transport *recv_transport) {
   auto future_shm = future.GetFutureShm();

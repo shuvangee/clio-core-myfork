@@ -129,11 +129,11 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
     std::fprintf(stderr, "[INIT] CHIMAERA_INIT failed\n");
     std::exit(2);
   }
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
-    std::fprintf(stderr, "[INIT] WRP_CTE_CLIENT_INIT failed\n");
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+    std::fprintf(stderr, "[INIT] CLIO_CTE_CLIENT_INIT failed\n");
     std::exit(2);
   }
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->Init(clio_cte::core::kCtePoolId);
   clio_cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(
@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
 
   EnsureInit(opts, bdev_capacity_bytes);
 
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   // One-page-per-block working set on device, plus matching pinned host buf.
   chi::u64 workspace_bytes =
@@ -357,7 +357,7 @@ int main(int argc, char *argv[]) {
       for (chi::u32 b = 0; b < opts.nblocks; ++b) {
         std::string blob_name = "trad_b" + std::to_string(b) +
                                 "_pi" + std::to_string(p);
-        hipc::ShmPtr<> ptr;
+        ctp::ipc::ShmPtr<> ptr;
         ptr.alloc_id_.SetNull();
         ptr.off_ = reinterpret_cast<chi::u64>(host_buf + b * elems_per_page);
         auto fut = cte_client->AsyncPutBlob(
@@ -381,7 +381,7 @@ int main(int argc, char *argv[]) {
         for (chi::u32 b = 0; b < opts.nblocks; ++b) {
           std::string blob_name = "trad_b" + std::to_string(b) +
                                   "_pi" + std::to_string(p);
-          hipc::ShmPtr<> ptr;
+          ctp::ipc::ShmPtr<> ptr;
           ptr.alloc_id_.SetNull();
           ptr.off_ = reinterpret_cast<chi::u64>(host_buf + b * elems_per_page);
           auto fut = cte_client->AsyncGetBlob(

@@ -5,7 +5,7 @@
 # Flow:
 #   Node 1 (primary):
 #     - Sets up SSH key pair (shared via workspace volume)
-#     - Initialises Jarvis and adds the jarvis_iowarp package repository
+#     - Initialises Jarvis and adds the jarvis_clio_core package repository
 #     - Runs: jarvis ppl run yaml cte_integration_test.yaml
 #       which starts the IOWarp runtime on both nodes (via pssh/SSH),
 #       deploys CTE pools (via chimaera compose on all nodes),

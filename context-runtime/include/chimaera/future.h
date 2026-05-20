@@ -93,8 +93,8 @@ struct FutureShm {
    * whose offset is a raw pinned-host address (not an SHM offset).
    * @return AllocatorId sentinel {UINT32_MAX-1, 0}
    */
-  CTP_CROSS_FUN static hipc::AllocatorId GetCpu2GpuAllocId() {
-    hipc::AllocatorId id;
+  CTP_CROSS_FUN static ctp::ipc::AllocatorId GetCpu2GpuAllocId() {
+    ctp::ipc::AllocatorId id;
     id.major_ = UINT32_MAX - 1;
     id.minor_ = 0;
     return id;
@@ -144,7 +144,7 @@ struct FutureShm {
   void *parent_gpu_rctx_;
 
   /** Cross-warp: warps increment on done */
-  hipc::atomic<u32> completion_counter_;
+  ctp::ipc::atomic<u32> completion_counter_;
   /** Number of warps sharing this FutureShm */
   u32 total_warps_;
 
@@ -250,10 +250,10 @@ class Future {
 
  private:
   /** FullPtr to the task (wraps private memory with null allocator) */
-  hipc::FullPtr<TaskT> task_ptr_;
+  ctp::ipc::FullPtr<TaskT> task_ptr_;
 
   /** ShmPtr to the shared FutureShm object */
-  hipc::ShmPtr<FutureT> future_shm_;
+  ctp::ipc::ShmPtr<FutureT> future_shm_;
 
   /** Parent task RunContext pointer (nullptr if no parent waiting) */
   RunContext* parent_task_;
@@ -282,8 +282,8 @@ class Future {
    * @param task_ptr FullPtr to the task (wraps private memory with null
    * allocator)
    */
-  CTP_CROSS_FUN Future(hipc::ShmPtr<FutureT> future_shm,
-                        const hipc::FullPtr<TaskT>& task_ptr)
+  CTP_CROSS_FUN Future(ctp::ipc::ShmPtr<FutureT> future_shm,
+                        const ctp::ipc::FullPtr<TaskT>& task_ptr)
       : future_shm_(future_shm), parent_task_(nullptr), consumed_(false) {
     // Manually initialize task_ptr_ to avoid FullPtr copy constructor bug on
     // GPU Copy shm_ directly, then reconstruct ptr_ from it
@@ -301,7 +301,7 @@ class Future {
    * Task pointer will be null and must be set later
    * @param future_shm_ptr ShmPtr to FutureShm object
    */
-  CTP_CROSS_FUN explicit Future(const hipc::ShmPtr<FutureT>& future_shm_ptr)
+  CTP_CROSS_FUN explicit Future(const ctp::ipc::ShmPtr<FutureT>& future_shm_ptr)
       : future_shm_(future_shm_ptr), parent_task_(nullptr), consumed_(false) {
     // Task pointer starts null - will be set in ProcessNewTasks
     task_ptr_.SetNull();
@@ -402,13 +402,13 @@ class Future {
    * Get the FullPtr to the task (non-const version)
    * @return FullPtr to the task object
    */
-  hipc::FullPtr<TaskT>& GetTaskPtr() { return task_ptr_; }
+  ctp::ipc::FullPtr<TaskT>& GetTaskPtr() { return task_ptr_; }
 
   /**
    * Get the FullPtr to the task (const version)
    * @return FullPtr to the task object
    */
-  const hipc::FullPtr<TaskT>& GetTaskPtr() const { return task_ptr_; }
+  const ctp::ipc::FullPtr<TaskT>& GetTaskPtr() const { return task_ptr_; }
 
   /**
    * Dereference operator - access task members
@@ -561,7 +561,7 @@ class Future {
    * Get the internal ShmPtr to FutureShm (for internal use)
    * @return ShmPtr to the FutureShm object
    */
-  CTP_CROSS_FUN hipc::ShmPtr<FutureT> GetFutureShmPtr() const {
+  CTP_CROSS_FUN ctp::ipc::ShmPtr<FutureT> GetFutureShmPtr() const {
     return future_shm_;
   }
 
@@ -571,7 +571,7 @@ class Future {
    * @return FullPtr to the FutureShm object
    * Note: Implementation provided in ipc_manager.h where CHI_IPC is defined
    */
-  CTP_CROSS_FUN hipc::FullPtr<FutureT> GetFutureShm() const;
+  CTP_CROSS_FUN ctp::ipc::FullPtr<FutureT> GetFutureShm() const;
 
   /**
    * Get the pool ID from the FutureShm

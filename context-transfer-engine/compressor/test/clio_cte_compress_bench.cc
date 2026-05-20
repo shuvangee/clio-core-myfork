@@ -582,7 +582,7 @@ class CTECompressBenchmark {
       error_flag.store(true);
       return;
     }
-    hipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
     // Create compression context
     clio_cte::core::Context ctx = CreateCompressionContext();
@@ -779,7 +779,7 @@ class CTECompressBenchmark {
       error_flag.store(true);
       return;
     }
-    hipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
     // Create compression context
     clio_cte::core::Context ctx = CreateCompressionContext();
@@ -987,7 +987,7 @@ int main(int argc, char **argv) {
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
   // Initialize CTE client
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
     HLOG(kError, "Failed to initialize CTE client");
     return 1;
   }

@@ -187,7 +187,7 @@ class AllocatorBenchmarkWorker {
    */
   void Run() {
     const size_t kMaxAllocations = 1000;
-    std::vector<hipc::FullPtr<char>> ptrs;
+    std::vector<ctp::ipc::FullPtr<char>> ptrs;
     ptrs.reserve(kMaxAllocations);
 
     std::uniform_int_distribution<size_t> size_dist(min_size_, max_size_);
@@ -355,17 +355,17 @@ void BenchmarkMultiProcessAllocator(int num_threads,
   size_t min_size = size_range.min_size;
   size_t max_size = size_range.max_size;
   // Initialize backend with sufficient memory
-  hipc::PosixShmMmap backend;
+  ctp::ipc::PosixShmMmap backend;
   size_t heap_size = 2ULL * 1024 * 1024 * 1024;  // 2 GB heap
   std::string shm_url = "/allocator_benchmark_mp";
 
-  if (!backend.shm_init(hipc::MemoryBackendId(0, 0), heap_size, shm_url)) {
+  if (!backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), heap_size, shm_url)) {
     std::cerr << "Error: Failed to initialize PosixShmMmap backend\n";
     return;
   }
 
   // Initialize allocator
-  auto* alloc = backend.MakeAlloc<hipc::MultiProcessAllocator>();
+  auto* alloc = backend.MakeAlloc<ctp::ipc::MultiProcessAllocator>();
   if (alloc == nullptr) {
     std::cerr << "Error: Failed to initialize MultiProcessAllocator\n";
     backend.shm_destroy();
@@ -383,7 +383,7 @@ void BenchmarkMultiProcessAllocator(int num_threads,
 
   for (int i = 0; i < num_threads; ++i) {
     threads.emplace_back([alloc, min_size, max_size, duration_sec, &counter]() {
-      AllocatorBenchmarkWorker<hipc::MultiProcessAllocator> worker(
+      AllocatorBenchmarkWorker<ctp::ipc::MultiProcessAllocator> worker(
           alloc, min_size, max_size, duration_sec, &counter);
       worker.Run();
     });
@@ -433,13 +433,13 @@ void BenchmarkBuddyAllocator(int num_threads, const SizeRange& size_range,
   size_t min_size = size_range.min_size;
   size_t max_size = size_range.max_size;
   // Initialize backend with sufficient memory
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   size_t heap_size = 2ULL * 1024 * 1024 * 1024;  // 2 GB heap
-  size_t alloc_size = sizeof(hipc::BuddyAllocator);
-  backend.shm_init(hipc::MemoryBackendId(0, 0), alloc_size + heap_size);
+  size_t alloc_size = sizeof(ctp::ipc::BuddyAllocator);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), alloc_size + heap_size);
 
   // Initialize allocator
-  auto* alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  auto* alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
   // Create operation counter
   OperationCounter counter;
@@ -452,7 +452,7 @@ void BenchmarkBuddyAllocator(int num_threads, const SizeRange& size_range,
 
   for (int i = 0; i < num_threads; ++i) {
     threads.emplace_back([alloc, min_size, max_size, duration_sec, &counter]() {
-      AllocatorBenchmarkWorker<hipc::BuddyAllocator> worker(
+      AllocatorBenchmarkWorker<ctp::ipc::BuddyAllocator> worker(
           alloc, min_size, max_size, duration_sec, &counter);
       worker.Run();
     });

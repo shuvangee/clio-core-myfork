@@ -145,7 +145,7 @@ class Client : public chi::ContainerClient {
    */
   chi::Future<chimaera::bdev::WriteTask> AsyncWrite(
       const chi::PoolQuery& pool_query,
-      const chi::priv::vector<Block>& blocks, hipc::ShmPtr<> data, size_t length) {
+      const chi::priv::vector<Block>& blocks, ctp::ipc::ShmPtr<> data, size_t length) {
     auto* ipc_manager = CHI_CPU_IPC;
 
     auto task = ipc_manager->NewTask<chimaera::bdev::WriteTask>(
@@ -164,7 +164,7 @@ class Client : public chi::ContainerClient {
    */
   chi::Future<chimaera::bdev::ReadTask> AsyncRead(
       const chi::PoolQuery& pool_query,
-      const chi::priv::vector<Block>& blocks, hipc::ShmPtr<> data,
+      const chi::priv::vector<Block>& blocks, ctp::ipc::ShmPtr<> data,
       size_t buffer_size) {
     auto* ipc_manager = CHI_CPU_IPC;
 

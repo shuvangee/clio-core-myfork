@@ -69,7 +69,7 @@
 #include <vector>
 #include <cstdio>
 
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
 #include <hdf5.h>
 #endif
 
@@ -92,9 +92,9 @@ class ExportDataFixture {
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     // Step 2: CTE client + pool
-    ok = clio_cte::core::WRP_CTE_CLIENT_INIT();
-    if (!ok) throw std::runtime_error("WRP_CTE_CLIENT_INIT failed");
-    auto *cte = WRP_CTE_CLIENT;
+    ok = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    if (!ok) throw std::runtime_error("CLIO_CTE_CLIENT_INIT failed");
+    auto *cte = CLIO_CTE_CLIENT;
     cte->Init(clio_cte::core::kCtePoolId);
 
     clio_cte::core::CreateParams cte_params;
@@ -104,7 +104,7 @@ class ExportDataFixture {
     cte_fut.Wait();
 
     // Step 3: CAE client + pool
-    WRP_CAE_CLIENT_INIT();
+    CLIO_CAE_CLIENT_INIT();
     clio_cae::core::Client cae_client;
     clio_cae::core::CreateParams cae_params;
     auto cae_fut = cae_client.AsyncCreate(chi::PoolQuery::Local(),
@@ -122,7 +122,7 @@ class ExportDataFixture {
   clio_cte::core::TagId PutBlob(const std::string &tag_name,
                                 const std::string &blob_name,
                                 const std::vector<uint8_t> &data) {
-    auto *cte = WRP_CTE_CLIENT;
+    auto *cte = CLIO_CTE_CLIENT;
 
     auto tag_fut = cte->AsyncGetOrCreateTag(tag_name);
     tag_fut.Wait();
@@ -130,7 +130,7 @@ class ExportDataFixture {
 
     auto buf = CHI_IPC->AllocateBuffer(data.size());
     std::memcpy(buf.ptr_, data.data(), data.size());
-    hipc::ShmPtr<> shm_ptr = buf.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> shm_ptr = buf.shm_.template Cast<void>();
 
     auto put_fut = cte->AsyncPutBlob(tag_id, blob_name, 0,
                                      static_cast<chi::u64>(data.size()),
@@ -395,7 +395,7 @@ TEST_CASE("ExportData - Binary bad output path returns -2",
   INFO("ExportData binary bad path: result_code=" << fut->result_code_);
 }
 
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
 
 TEST_CASE("ExportData - HDF5 export roundtrip", "[cae][export][runtime][hdf5]") {
   ExportDataFixture f;
@@ -442,7 +442,7 @@ TEST_CASE("ExportData - HDF5 bad output path returns -2",
   INFO("ExportData HDF5 bad path: result_code=" << fut->result_code_);
 }
 
-#else  // !WRP_CAE_ENABLE_HDF5
+#else  // !CLIO_CAE_ENABLE_HDF5
 
 TEST_CASE("ExportData - HDF5 not compiled returns -3",
           "[cae][export][runtime][hdf5]") {
@@ -459,7 +459,7 @@ TEST_CASE("ExportData - HDF5 not compiled returns -3",
   INFO("ExportData HDF5 not compiled: result_code=" << fut->result_code_);
 }
 
-#endif  // WRP_CAE_ENABLE_HDF5
+#endif  // CLIO_CAE_ENABLE_HDF5
 
 // ---------------------------------------------------------------------------
 // ParseOmniTask struct tests

@@ -46,7 +46,7 @@
 #include "clio_ctp/memory/allocator/round_robin_allocator.h"
 #include "clio_ctp/util/gpu_api.h"
 
-using hipc::RoundRobinAllocator;
+using ctp::ipc::RoundRobinAllocator;
 
 // ============================================================================
 // CDP child kernel: allocate, write pattern, read back, verify, free
@@ -137,7 +137,7 @@ __global__ void RrChildKernel(
 
   // Free the buffer
   if (threadIdx.x == 0) {
-    hipc::OffsetPtr<> off;
+    ctp::ipc::OffsetPtr<> off;
     off = s_off;
     alloc->FreeOffset(off);
   }
@@ -176,10 +176,10 @@ __global__ void RrParentKernel(
   auto *alloc = reinterpret_cast<RoundRobinAllocator *>(alloc_base);
   new (alloc) RoundRobinAllocator();
 
-  hipc::MemoryBackend backend;
+  ctp::ipc::MemoryBackend backend;
   backend.data_ = alloc_base;
   backend.data_capacity_ = alloc_capacity;
-  backend.id_ = hipc::MemoryBackendId(999, 0);
+  backend.id_ = ctp::ipc::MemoryBackendId(999, 0);
 
   alloc->shm_init(backend, 0, num_partitions, 0);
   alloc->MarkReady();

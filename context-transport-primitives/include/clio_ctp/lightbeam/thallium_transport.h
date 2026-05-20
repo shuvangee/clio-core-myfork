@@ -203,7 +203,7 @@ class ThalliumTransport : public Transport {
   // Register the buffer with thallium's engine so the peer can RDMA-read
   // from it. The tl::bulk handle is heap-allocated and stowed in
   // Bulk::desc; Send() takes ownership and frees it after the RPC.
-  Bulk Expose(const hipc::FullPtr<char> &ptr, size_t data_size, u32 flags) {
+  Bulk Expose(const ctp::ipc::FullPtr<char> &ptr, size_t data_size, u32 flags) {
     Bulk bulk;
     bulk.data = ptr;
     bulk.size = data_size;
@@ -345,7 +345,7 @@ class ThalliumTransport : public Transport {
       Bulk recv_bulk;
       recv_bulk.size = send_bulk.size;
       recv_bulk.flags = send_bulk.flags;
-      recv_bulk.data = hipc::FullPtr<char>::GetNull();
+      recv_bulk.data = ctp::ipc::FullPtr<char>::GetNull();
       if (send_bulk.flags.Any(BULK_XFER)) {
         if (bulk_idx >= entry.local_bulks.size()) {
           HLOG(kError,
@@ -361,7 +361,7 @@ class ThalliumTransport : public Transport {
         char *buf = entry.local_bulks[bulk_idx].first;
         size_t sz = entry.local_bulks[bulk_idx].second;
         recv_bulk.data.ptr_ = buf;
-        recv_bulk.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+        recv_bulk.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
         recv_bulk.data.shm_.off_ = reinterpret_cast<size_t>(buf);
         recv_bulk.size = sz;
         ++bulk_idx;

@@ -199,7 +199,7 @@ struct CTETestFixture {
   /**
    * Allocate shared memory and copy data to it
    */
-  hipc::FullPtr<char> AllocateAndCopyData(const std::vector<char>& data) {
+  ctp::ipc::FullPtr<char> AllocateAndCopyData(const std::vector<char>& data) {
     auto shm_buffer = CHI_IPC->AllocateBuffer(data.size());
     if (!shm_buffer.IsNull()) {
       std::memcpy(shm_buffer.ptr_, data.data(), data.size());
@@ -210,7 +210,7 @@ struct CTETestFixture {
   /**
    * Read data from shared memory
    */
-  std::vector<char> ReadFromSharedMemory(hipc::FullPtr<char>& buffer, size_t size) {
+  std::vector<char> ReadFromSharedMemory(ctp::ipc::FullPtr<char>& buffer, size_t size) {
     std::vector<char> data(size);
     if (!buffer.IsNull()) {
       std::memcpy(data.data(), buffer.ptr_, size);
@@ -234,7 +234,7 @@ TEST_CASE("Basic Compress and Store", "[compressor][functional][basic]") {
   auto shm_buffer = fixture.AllocateAndCopyData(test_data);
   REQUIRE(!shm_buffer.IsNull());
 
-  hipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
 
   Context context;
   context.compress_lib_ = CompLib::LZ4;
@@ -274,7 +274,7 @@ TEST_CASE("Decompress and Retrieve", "[compressor][functional][basic]") {
   auto put_buffer = fixture.AllocateAndCopyData(original_data);
   REQUIRE(!put_buffer.IsNull());
 
-  hipc::ShmPtr<> put_blob_data = put_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> put_blob_data = put_buffer.shm_.template Cast<void>();
 
   Context context;
   context.compress_lib_ = CompLib::LZ4;
@@ -300,7 +300,7 @@ TEST_CASE("Decompress and Retrieve", "[compressor][functional][basic]") {
   auto get_buffer = CHI_IPC->AllocateBuffer(original_data.size());
   REQUIRE(!get_buffer.IsNull());
 
-  hipc::ShmPtr<> get_blob_data = get_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> get_blob_data = get_buffer.shm_.template Cast<void>();
 
   auto decompress_task = fixture.compressor_client_.AsyncDecompressExplicit(
       chi::PoolQuery::Local(),
@@ -336,7 +336,7 @@ TEST_CASE("Dynamic Schedule Compression", "[compressor][functional][dynamic]") {
   auto shm_buffer = fixture.AllocateAndCopyData(test_data);
   REQUIRE(!shm_buffer.IsNull());
 
-  hipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
 
   Context context;
   context.dynamic_compress_ = 0;  // Enable dynamic compression selection
@@ -382,7 +382,7 @@ TEST_CASE("Multiple Compression Libraries", "[compressor][functional][libraries]
       auto shm_buffer = fixture.AllocateAndCopyData(test_data);
       REQUIRE(!shm_buffer.IsNull());
 
-      hipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
+      ctp::ipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
 
       Context context;
       context.compress_lib_ = lib_id;
@@ -422,7 +422,7 @@ TEST_CASE("No Compression Passthrough", "[compressor][functional][passthrough]")
   auto shm_buffer = fixture.AllocateAndCopyData(test_data);
   REQUIRE(!shm_buffer.IsNull());
 
-  hipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
 
   Context context;
   context.compress_lib_ = 0;  // No compression
@@ -464,7 +464,7 @@ TEST_CASE("Error Handling - Invalid Parameters", "[compressor][functional][error
         "test_blob_null",
         0,
         test_data.size(),
-        hipc::ShmPtr<>::GetNull(),  // Null data
+        ctp::ipc::ShmPtr<>::GetNull(),  // Null data
         0.5f,
         context,
         0,
@@ -480,7 +480,7 @@ TEST_CASE("Error Handling - Invalid Parameters", "[compressor][functional][error
     auto shm_buffer = fixture.AllocateAndCopyData(test_data);
     REQUIRE(!shm_buffer.IsNull());
 
-    hipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> blob_data = shm_buffer.shm_.template Cast<void>();
 
     Context context;
     context.compress_lib_ = CompLib::LZ4;

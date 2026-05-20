@@ -94,7 +94,7 @@ class BlockReuseFixture {
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
@@ -157,7 +157,7 @@ TEST_CASE("BlockReuse - Put(1MB)+Del(1MB) frees back to its partition",
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto *cte = WRP_CTE_CLIENT;
+  auto *cte = CLIO_CTE_CLIENT;
   REQUIRE(cte != nullptr);
 
   clio_cte::core::Tag tag("block_reuse_tag");
@@ -166,7 +166,7 @@ TEST_CASE("BlockReuse - Put(1MB)+Del(1MB) frees back to its partition",
   auto shm = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm.IsNull());
   std::memset(shm.ptr_, 0xAB, kBlobSize);
-  hipc::ShmPtr<> shm_ptr = shm.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> shm_ptr = shm.shm_.template Cast<void>();
 
   int put_fail = 0;
   int del_fail = 0;

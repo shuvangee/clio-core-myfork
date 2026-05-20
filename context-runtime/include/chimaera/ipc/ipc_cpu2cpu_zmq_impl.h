@@ -14,7 +14,7 @@ namespace chi {
 
 template <typename TaskT>
 Future<TaskT> IpcCpu2CpuZmq::ClientSend(IpcManager *ipc,
-                                          const hipc::FullPtr<TaskT> &task_ptr,
+                                          const ctp::ipc::FullPtr<TaskT> &task_ptr,
                                           IpcMode mode) {
   if (task_ptr.IsNull()) return Future<TaskT>();
 
@@ -28,7 +28,7 @@ Future<TaskT> IpcCpu2CpuZmq::ClientSend(IpcManager *ipc,
 
   // Allocate FutureShm via CTP_MALLOC (no copy_space needed)
   size_t alloc_size = sizeof(FutureShm);
-  hipc::FullPtr<char> buffer = CTP_MALLOC->AllocateObjs<char>(alloc_size);
+  ctp::ipc::FullPtr<char> buffer = CTP_MALLOC->AllocateObjs<char>(alloc_size);
   if (buffer.IsNull()) {
     HLOG(kError, "SendZmq: Failed to allocate FutureShm ({} bytes)",
          alloc_size);
@@ -54,7 +54,7 @@ Future<TaskT> IpcCpu2CpuZmq::ClientSend(IpcManager *ipc,
     ipc->zmq_transport_->Send(archive, ctp::lbm::LbmContext());
   }
 
-  hipc::ShmPtr<FutureShm> future_shm_shmptr =
+  ctp::ipc::ShmPtr<FutureShm> future_shm_shmptr =
       buffer.shm_.template Cast<FutureShm>();
   return Future<TaskT>(future_shm_shmptr, task_ptr);
 }

@@ -27,7 +27,7 @@ container_extensions:
   security_opt:
     - seccomp=unconfined
   volumes:
-    - /mnt/common/llogan/iowarp/core/jarvis_iowarp/pipelines/container:/mnt/common/llogan/iowarp/core/jarvis_iowarp/pipelines/container:ro
+    - /mnt/common/llogan/iowarp/core/jarvis_clio_core/pipelines/container:/mnt/common/llogan/iowarp/core/jarvis_clio_core/pipelines/container:ro
 
 pkgs:
   # See iowarp_container_test.yaml for the Library-injection explanation.
@@ -38,14 +38,14 @@ pkgs:
   - pkg_type: builtin.compress_libs
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     deploy_mode: container
     git_branch: transparent-compress
     cmake_preset: release-adapter
     port: 9413
     sleep: 2
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     deploy_mode: container
 
   - pkg_type: builtin.lammps
@@ -53,12 +53,12 @@ pkgs:
     nprocs: 1
     ppn: 1
     kokkos_gpu: false
-    script: /mnt/common/llogan/iowarp/core/jarvis_iowarp/pipelines/container/lammps_h5md.in
+    script: /mnt/common/llogan/iowarp/core/jarvis_clio_core/pipelines/container/lammps_h5md.in
     out: /tmp/lammps_h5md
     base_image: ubuntu:24.04
 
 interceptors:
-  - pkg_type: jarvis_iowarp.clio_adapters
+  - pkg_type: jarvis_clio_core.clio_adapters
     vol: true
     include:
       - ".*lammps_h5md.*"

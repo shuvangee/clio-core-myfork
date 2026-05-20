@@ -117,7 +117,7 @@ class DramDefaultTieringFixture {
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
@@ -240,14 +240,14 @@ TEST_CASE("DramDefault - Put 96MB into 0g RAM tier",
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   clio_cte::core::Tag tag("dram_default_tag");
 
   auto shm_buffer = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm_buffer.IsNull());
-  hipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
   int success_count = 0;
   int failure_count = 0;
@@ -286,7 +286,7 @@ TEST_CASE("DramDefault - Reorganize down to file then up to 0g RAM",
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   clio_cte::core::Tag tag("dram_default_tag");
@@ -359,7 +359,7 @@ TEST_CASE("DramDefault - Cleanup", "[tiered][dram-default][cleanup]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   clio_cte::core::Tag tag("dram_default_tag");

@@ -51,8 +51,8 @@ void EnsureInit() {
   if (g_initialized) return;
   std::fprintf(stderr, "[INIT] Starting Chimaera server (gpu_vector test)\n");
   REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer));
-  REQUIRE(clio_cte::core::WRP_CTE_CLIENT_INIT());
-  auto *cte_client = WRP_CTE_CLIENT;
+  REQUIRE(clio_cte::core::CLIO_CTE_CLIENT_INIT());
+  auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
   cte_client->Init(clio_cte::core::kCtePoolId);
   clio_cte::core::CreateParams params;

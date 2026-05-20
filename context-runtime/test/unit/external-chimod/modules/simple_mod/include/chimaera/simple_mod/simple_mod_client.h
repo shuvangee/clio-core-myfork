@@ -62,7 +62,7 @@ class Client : public chi::ContainerClient {
    * @param pool_query Pool routing information
    * @return Future for the CreateTask
    */
-  chi::Future<CreateTask> AsyncCreate(const hipc::MemContext& mctx,
+  chi::Future<CreateTask> AsyncCreate(const ctp::ipc::MemContext& mctx,
                                        const chi::PoolQuery& pool_query) {
     (void)mctx;  // Memory context not needed for task creation
     auto* ipc_manager = CHI_IPC;
@@ -83,7 +83,7 @@ class Client : public chi::ContainerClient {
    * @param pool_query Pool routing information
    * @return Future for the DestroyTask
    */
-  chi::Future<DestroyTask> AsyncDestroy(const hipc::MemContext& mctx,
+  chi::Future<DestroyTask> AsyncDestroy(const ctp::ipc::MemContext& mctx,
                                          const chi::PoolQuery& pool_query) {
     (void)mctx;  // Memory context not needed for task creation
     auto* ipc_manager = CHI_IPC;
@@ -100,7 +100,7 @@ class Client : public chi::ContainerClient {
    * @param pool_query Pool routing information
    * @return Future for the FlushTask
    */
-  chi::Future<FlushTask> AsyncFlush(const hipc::MemContext& mctx,
+  chi::Future<FlushTask> AsyncFlush(const ctp::ipc::MemContext& mctx,
                                      const chi::PoolQuery& pool_query) {
     (void)mctx;  // Memory context not needed for task creation
     auto* ipc_manager = CHI_IPC;

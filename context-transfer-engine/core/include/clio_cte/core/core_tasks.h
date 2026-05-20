@@ -347,7 +347,7 @@ struct RegisterTargetTask : public chi::Task {
    * Copy from another RegisterTargetTask
    * Used when creating replicas for remote execution
    */
-  void Copy(const hipc::FullPtr<RegisterTargetTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<RegisterTargetTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // Copy RegisterTargetTask-specific fields
@@ -362,7 +362,7 @@ struct RegisterTargetTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<RegisterTargetTask>());
   }
@@ -413,7 +413,7 @@ struct UnregisterTargetTask : public chi::Task {
   /**
    * Copy from another UnregisterTargetTask
    */
-  void Copy(const hipc::FullPtr<UnregisterTargetTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<UnregisterTargetTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     target_name_ = other->target_name_;
@@ -423,7 +423,7 @@ struct UnregisterTargetTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<UnregisterTargetTask>());
   }
@@ -472,7 +472,7 @@ struct ListTargetsTask : public chi::Task {
   /**
    * Copy from another ListTargetsTask
    */
-  void Copy(const hipc::FullPtr<ListTargetsTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<ListTargetsTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     target_names_ = other->target_names_;
@@ -482,7 +482,7 @@ struct ListTargetsTask : public chi::Task {
    * Aggregate entries from another ListTargetsTask
    * Appends all target names from the other task to this one
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     auto other = other_base.template Cast<ListTargetsTask>();
     for (const auto &target_name : other->target_names_) {
@@ -531,7 +531,7 @@ struct StatTargetsTask : public chi::Task {
   /**
    * Copy from another StatTargetsTask
    */
-  void Copy(const hipc::FullPtr<StatTargetsTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<StatTargetsTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // No task-specific fields to copy
@@ -542,7 +542,7 @@ struct StatTargetsTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<StatTargetsTask>());
   }
@@ -614,7 +614,7 @@ struct GetTargetInfoTask : public chi::Task {
   /**
    * Copy from another GetTargetInfoTask
    */
-  void Copy(const hipc::FullPtr<GetTargetInfoTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetTargetInfoTask> &other) {
     Task::Copy(other.template Cast<Task>());
     target_name_ = other->target_name_;
     target_score_ = other->target_score_;
@@ -628,7 +628,7 @@ struct GetTargetInfoTask : public chi::Task {
   /**
    * Aggregate replica results
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     // For target info, just copy (should be same across replicas)
     Copy(other_base.template Cast<GetTargetInfoTask>());
@@ -1016,7 +1016,7 @@ struct GetOrCreateTagTask : public chi::Task {
   /**
    * Copy from another GetOrCreateTagTask
    */
-  void Copy(const hipc::FullPtr<GetOrCreateTagTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetOrCreateTagTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_name_ = other->tag_name_;
@@ -1027,7 +1027,7 @@ struct GetOrCreateTagTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetOrCreateTagTask>());
   }
@@ -1041,7 +1041,7 @@ struct PutBlobTask : public chi::Task {
   INOUT chi::priv::string blob_name_;  // Blob name (required)
   IN chi::u64 offset_;                 // Offset within blob
   IN chi::u64 size_;                   // Size of blob data
-  IN hipc::ShmPtr<> blob_data_;        // Blob data (shared memory pointer)
+  IN ctp::ipc::ShmPtr<> blob_data_;        // Blob data (shared memory pointer)
   IN float score_;         // Score for placement: -1.0=unknown (use defaults),
                            // 0.0-1.0=explicit
   INOUT Context context_;  // Context for compression control and statistics
@@ -1074,7 +1074,7 @@ struct PutBlobTask : public chi::Task {
         blob_name_(CHI_PRIV_ALLOC),
         offset_(0),
         size_(0),
-        blob_data_(hipc::ShmPtr<>::GetNull()),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()),
         score_(-1.0f),
         context_(),
         flags_(0),
@@ -1088,7 +1088,7 @@ struct PutBlobTask : public chi::Task {
                                       const TagId &tag_id,
                                       const std::string &blob_name,
                                       chi::u64 offset, chi::u64 size,
-                                      hipc::ShmPtr<> blob_data, float score,
+                                      ctp::ipc::ShmPtr<> blob_data, float score,
                                       const Context &context, chi::u32 flags)
       : chi::Task(task_id, pool_id, pool_query, Method::kPutBlob),
         tag_id_(tag_id),
@@ -1114,7 +1114,7 @@ struct PutBlobTask : public chi::Task {
                                       const chi::PoolQuery &pool_query,
                                       const TagId &tag_id,
                                       const char *blob_name, chi::u64 offset,
-                                      chi::u64 size, hipc::ShmPtr<> blob_data,
+                                      chi::u64 size, ctp::ipc::ShmPtr<> blob_data,
                                       float score, const Context &context,
                                       chi::u32 flags)
       : chi::Task(task_id, pool_id, pool_query, Method::kPutBlob),
@@ -1196,7 +1196,7 @@ struct PutBlobTask : public chi::Task {
   /**
    * Copy from another PutBlobTask
    */
-  void Copy(const hipc::FullPtr<PutBlobTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<PutBlobTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1215,7 +1215,7 @@ struct PutBlobTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<PutBlobTask>());
   }
@@ -1230,7 +1230,7 @@ struct GetBlobTask : public chi::Task {
   IN chi::u64 offset_;              // Offset within blob
   IN chi::u64 size_;                // Size of data to retrieve
   IN chi::u32 flags_;               // Operation flags
-  IN hipc::ShmPtr<>
+  IN ctp::ipc::ShmPtr<>
       blob_data_;  // Input buffer for blob data (shared memory pointer)
   /**
    * Optional page index appended to blob_name_ at handler time as
@@ -1247,7 +1247,7 @@ struct GetBlobTask : public chi::Task {
         offset_(0),
         size_(0),
         flags_(0),
-        blob_data_(hipc::ShmPtr<>::GetNull()),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()),
         gpu_page_idx_(kNoPageIdx) {}
 
   // Emplace constructor
@@ -1257,7 +1257,7 @@ struct GetBlobTask : public chi::Task {
                                       const TagId &tag_id,
                                       const std::string &blob_name,
                                       chi::u64 offset, chi::u64 size,
-                                      chi::u32 flags, hipc::ShmPtr<> blob_data)
+                                      chi::u32 flags, ctp::ipc::ShmPtr<> blob_data)
       : chi::Task(task_id, pool_id, pool_query, Method::kGetBlob),
         tag_id_(tag_id),
         blob_name_(CHI_PRIV_ALLOC, blob_name),
@@ -1310,7 +1310,7 @@ struct GetBlobTask : public chi::Task {
                                       const TagId &tag_id,
                                       const char *blob_name, chi::u64 offset,
                                       chi::u64 size, chi::u32 flags,
-                                      hipc::ShmPtr<> blob_data)
+                                      ctp::ipc::ShmPtr<> blob_data)
       : chi::Task(task_id, pool_id, pool_query, Method::kGetBlob),
         tag_id_(tag_id),
         blob_name_(CHI_PRIV_ALLOC, blob_name),
@@ -1356,7 +1356,7 @@ struct GetBlobTask : public chi::Task {
   /**
    * Copy from another GetBlobTask
    */
-  void Copy(const hipc::FullPtr<GetBlobTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetBlobTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1372,7 +1372,7 @@ struct GetBlobTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetBlobTask>());
   }
@@ -1432,7 +1432,7 @@ struct ReorganizeBlobTask : public chi::Task {
   /**
    * Copy from another ReorganizeBlobTask
    */
-  void Copy(const hipc::FullPtr<ReorganizeBlobTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<ReorganizeBlobTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1444,7 +1444,7 @@ struct ReorganizeBlobTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<ReorganizeBlobTask>());
   }
@@ -1498,7 +1498,7 @@ struct DelBlobTask : public chi::Task {
   /**
    * Copy from another DelBlobTask
    */
-  void Copy(const hipc::FullPtr<DelBlobTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<DelBlobTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1509,7 +1509,7 @@ struct DelBlobTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<DelBlobTask>());
   }
@@ -1578,7 +1578,7 @@ struct DelTagTask : public chi::Task {
   /**
    * Copy from another DelTagTask
    */
-  void Copy(const hipc::FullPtr<DelTagTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<DelTagTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1589,7 +1589,7 @@ struct DelTagTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<DelTagTask>());
   }
@@ -1641,7 +1641,7 @@ struct GetTagSizeTask : public chi::Task {
   /**
    * Copy from another GetTagSizeTask
    */
-  void Copy(const hipc::FullPtr<GetTagSizeTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetTagSizeTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1652,7 +1652,7 @@ struct GetTagSizeTask : public chi::Task {
    * Aggregate results from a replica task
    * Sums the tag_size_ values from multiple nodes
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     auto replica = other_base.template Cast<GetTagSizeTask>();
     tag_size_ += replica->tag_size_;
@@ -1710,7 +1710,7 @@ struct PollTelemetryLogTask : public chi::Task {
   /**
    * Copy from another PollTelemetryLogTask
    */
-  void Copy(const hipc::FullPtr<PollTelemetryLogTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<PollTelemetryLogTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     minimum_logical_time_ = other->minimum_logical_time_;
@@ -1722,7 +1722,7 @@ struct PollTelemetryLogTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<PollTelemetryLogTask>());
   }
@@ -1781,7 +1781,7 @@ struct GetBlobScoreTask : public chi::Task {
   /**
    * Copy from another GetBlobScoreTask
    */
-  void Copy(const hipc::FullPtr<GetBlobScoreTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetBlobScoreTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1793,7 +1793,7 @@ struct GetBlobScoreTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetBlobScoreTask>());
   }
@@ -1852,7 +1852,7 @@ struct GetBlobSizeTask : public chi::Task {
   /**
    * Copy from another GetBlobSizeTask
    */
-  void Copy(const hipc::FullPtr<GetBlobSizeTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetBlobSizeTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -1864,7 +1864,7 @@ struct GetBlobSizeTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetBlobSizeTask>());
   }
@@ -1954,7 +1954,7 @@ struct GetBlobInfoTask : public chi::Task {
   /**
    * Copy from another GetBlobInfoTask
    */
-  void Copy(const hipc::FullPtr<GetBlobInfoTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetBlobInfoTask> &other) {
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
     blob_name_ = other->blob_name_;
@@ -1966,7 +1966,7 @@ struct GetBlobInfoTask : public chi::Task {
   /**
    * Aggregate replica results into this task
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetBlobInfoTask>());
   }
@@ -2016,7 +2016,7 @@ struct GetContainedBlobsTask : public chi::Task {
   /**
    * Copy from another GetContainedBlobsTask
    */
-  void Copy(const hipc::FullPtr<GetContainedBlobsTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetContainedBlobsTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
@@ -2027,7 +2027,7 @@ struct GetContainedBlobsTask : public chi::Task {
    * Aggregate results from a replica task
    * Merges the blob_names_ vectors from multiple nodes
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     auto replica = other_base.template Cast<GetContainedBlobsTask>();
     // Merge blob names from replica into this task's blob_names_
@@ -2097,7 +2097,7 @@ struct TagQueryTask : public chi::Task {
   /**
    * Copy from another TagQueryTask
    */
-  void Copy(const hipc::FullPtr<TagQueryTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<TagQueryTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_regex_ = other->tag_regex_;
@@ -2109,7 +2109,7 @@ struct TagQueryTask : public chi::Task {
   /**
    * Aggregate results from multiple nodes
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     auto other = other_base.template Cast<TagQueryTask>();
     // Sum total matched tags across replicas
@@ -2190,7 +2190,7 @@ struct BlobQueryTask : public chi::Task {
   /**
    * Copy from another BlobQueryTask
    */
-  void Copy(const hipc::FullPtr<BlobQueryTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<BlobQueryTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     tag_regex_ = other->tag_regex_;
@@ -2204,7 +2204,7 @@ struct BlobQueryTask : public chi::Task {
   /**
    * Aggregate results from multiple nodes
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     auto other = other_base.template Cast<BlobQueryTask>();
     // Sum total matched blobs across replicas
@@ -2255,12 +2255,12 @@ struct FlushMetadataTask : public chi::Task {
     ar(entries_flushed_);
   }
 
-  void Copy(const hipc::FullPtr<FlushMetadataTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<FlushMetadataTask> &other) {
     Task::Copy(other.template Cast<Task>());
     entries_flushed_ = other->entries_flushed_;
   }
 
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<FlushMetadataTask>());
   }
@@ -2310,14 +2310,14 @@ struct FlushDataTask : public chi::Task {
     ar(bytes_flushed_, blobs_flushed_);
   }
 
-  void Copy(const hipc::FullPtr<FlushDataTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<FlushDataTask> &other) {
     Task::Copy(other.template Cast<Task>());
     target_persistence_level_ = other->target_persistence_level_;
     bytes_flushed_ = other->bytes_flushed_;
     blobs_flushed_ = other->blobs_flushed_;
   }
 
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<FlushDataTask>());
   }

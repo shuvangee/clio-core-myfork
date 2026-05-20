@@ -326,7 +326,7 @@ struct nonatomic {
  * Guarded by CTP_IS_GPU_COMPILER because CUDA device builtins (atomicAdd,
  * atomicExch, atomicCAS, etc.) are only available when compiling with nvcc/hipcc.
  * Regular g++/clang++ compilations with CTP_ENABLE_CUDA set should not parse
- * this class since it's only used as hipc::atomic<T> inside device code. */
+ * this class since it's only used as ctp::ipc::atomic<T> inside device code. */
 #if CTP_IS_GPU_COMPILER
 template <typename T>
 struct rocm_atomic {

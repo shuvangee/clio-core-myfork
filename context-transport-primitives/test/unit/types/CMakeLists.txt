@@ -28,7 +28,7 @@ set(INSTALLS ${INSTALLS} test_types_exec)
 #------------------------------------------------------------------------------
 # Build Timer Tests
 #------------------------------------------------------------------------------
-if (WRP_CORE_ENABLE_MPI AND WRP_CORE_ENABLE_OPENMP)
+if (CLIO_CORE_ENABLE_MPI AND CLIO_CORE_ENABLE_OPENMP)
     add_executable(test_timers_exec
             ${TEST_MAIN}/main_mpi.cc
             test_init.cc

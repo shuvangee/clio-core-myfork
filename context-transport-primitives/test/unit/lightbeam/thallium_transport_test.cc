@@ -86,9 +86,9 @@ void TestBulkTransfer() {
   for (size_t i = 0; i < payload.size(); ++i) {
     payload[i] = static_cast<char>(i & 0xff);
   }
-  hipc::FullPtr<char> ptr;
+  ctp::ipc::FullPtr<char> ptr;
   ptr.ptr_ = payload.data();
-  ptr.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+  ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
   ptr.shm_.off_ = reinterpret_cast<size_t>(payload.data());
 
   TestMeta send_meta;

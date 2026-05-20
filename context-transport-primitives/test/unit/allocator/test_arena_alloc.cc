@@ -39,14 +39,14 @@
 using ctp::testing::AllocatorTest;
 
 TEST_CASE("ArenaAllocator<false> - Allocate and Free Immediate", "[ArenaAllocator<false>]") {
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   size_t heap_size = 128 * 1024 * 1024;  // 128 MB heap
-  size_t alloc_size = sizeof(hipc::ArenaAllocator<false>);
-  backend.shm_init(hipc::MemoryBackendId(0, 0), alloc_size + heap_size);
+  size_t alloc_size = sizeof(ctp::ipc::ArenaAllocator<false>);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), alloc_size + heap_size);
 
-  auto *alloc = backend.MakeAlloc<hipc::ArenaAllocator<false>>();
+  auto *alloc = backend.MakeAlloc<ctp::ipc::ArenaAllocator<false>>();
 
-  AllocatorTest<hipc::ArenaAllocator<false>> tester(alloc);
+  AllocatorTest<ctp::ipc::ArenaAllocator<false>> tester(alloc);
 
   SECTION("Small allocations (1KB)") {
     REQUIRE_NOTHROW(tester.TestAllocFreeImmediate(100, 1024));

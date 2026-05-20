@@ -52,7 +52,7 @@ TEST_CASE("MemorySlot") {
   if (rank == 0) {
     {
       std::cout << "Creating SHMEM (rank 0)" << std::endl;
-      if (!backend.shm_init(hipc::MemoryBackendId::GetRoot(),
+      if (!backend.shm_init(ctp::ipc::MemoryBackendId::GetRoot(),
                             ctp::Unit<size_t>::Megabytes(1), shm_url)) {
         throw std::runtime_error("Couldn't create backend");
       }

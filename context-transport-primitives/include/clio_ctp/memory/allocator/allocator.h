@@ -77,7 +77,7 @@ struct ShmPtrBase;
  * Allocators inherit from this.
  * */
 struct AllocatorHeader {
-  hipc::atomic<ctp::big_uint> total_alloc_;
+  ctp::ipc::atomic<ctp::big_uint> total_alloc_;
 
   AllocatorHeader() = default;
 
@@ -337,10 +337,10 @@ class Allocator {
  * */
 template <typename T, bool ATOMIC>
 struct OffsetPtrBase : public ShmPointer {
-  hipc::opt_atomic<ctp::big_uint, ATOMIC>
+  ctp::ipc::opt_atomic<ctp::big_uint, ATOMIC>
       off_; /**< Offset within the allocator's slot */
 
-  /** Serialize an hipc::OffsetPtrBase */
+  /** Serialize an ctp::ipc::OffsetPtrBase */
   template <typename Ar>
   CTP_INLINE_CROSS_FUN void serialize(Ar &ar) {
     ar & off_;
@@ -360,7 +360,7 @@ struct OffsetPtrBase : public ShmPointer {
 
   /** Full constructor */
   CTP_INLINE_CROSS_FUN explicit OffsetPtrBase(
-      hipc::opt_atomic<ctp::big_uint, ATOMIC> off)
+      ctp::ipc::opt_atomic<ctp::big_uint, ATOMIC> off)
       : off_(off.load()) {}
 
   /** Copy constructor from different type */
@@ -764,19 +764,19 @@ struct FullPtr : public ShmPointer {
   T *ptr_;
   PointerT shm_;
 
-  /** Serialize hipc::FullPtr */
+  /** Serialize ctp::ipc::FullPtr */
   template <typename Ar>
   CTP_INLINE_CROSS_FUN void serialize(Ar &ar) {
     ar & shm_;
   }
 
-  // /** Serialize an hipc::FullPtr */
+  // /** Serialize an ctp::ipc::FullPtr */
   // template <typename Ar>
   // CTP_INLINE_CROSS_FUN void save(Ar &ar) const {
   //   ar & shm_;
   // }
 
-  // /** Deserialize an hipc::FullPtr */
+  // /** Deserialize an ctp::ipc::FullPtr */
   // template <typename Ar>
   // CTP_INLINE_CROSS_FUN void load(Ar &ar) {
   //   ar & shm_;
@@ -1561,6 +1561,6 @@ struct hash<ctp::ipc::MemoryBackendId> {
 
 }  // namespace ctp
 
-#define IS_SHM_POINTER(T) std::is_base_of_v<hipc::ShmPointer, T>
+#define IS_SHM_POINTER(T) std::is_base_of_v<ctp::ipc::ShmPointer, T>
 
 #endif  // CTP_MEMORY_ALLOCATOR_ALLOCATOR_H_

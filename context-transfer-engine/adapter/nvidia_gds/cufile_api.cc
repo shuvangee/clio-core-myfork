@@ -52,23 +52,23 @@ CUfileError_t cuFileHandleRegister(CUfileHandle_t *fh, CUfileDescr_t *descr) {
   CUfileError_t ret;
   ret.err = CU_FILE_SUCCESS;
   return ret;
-  // return WRP_CTE_CUFILE_API->cuFileHandleRegister(fh, descr);
+  // return CLIO_CTE_CUFILE_API->cuFileHandleRegister(fh, descr);
 }
 
 void cuFileHandleDeregister(CUfileHandle_t fh) {
   //    printf("Intercepted the REAL API\n");
   close(((CUfileDescr_t *)fh)->handle.fd);
-  // WRP_CTE_CUFILE_API->cuFileHandleDeregister(fh);
+  // CLIO_CTE_CUFILE_API->cuFileHandleDeregister(fh);
 }
 
 CUfileError_t cuFileBufRegister(const void *buf, size_t size, int flags) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileBufRegister(buf, size, flags);
+  return CLIO_CTE_CUFILE_API->cuFileBufRegister(buf, size, flags);
 }
 
 CUfileError_t cuFileBufDeregister(const void *buf) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileBufDeregister(buf);
+  return CLIO_CTE_CUFILE_API->cuFileBufDeregister(buf);
 }
 
 ssize_t cuFileRead(CUfileHandle_t fh, void *buf, size_t size, off_t offset,
@@ -80,7 +80,7 @@ ssize_t cuFileRead(CUfileHandle_t fh, void *buf, size_t size, off_t offset,
   cudaMemcpy(buf, host_data, size, cudaMemcpyHostToDevice);
   free(host_data);
   return ret;
-  // return WRP_CTE_CUFILE_API->cuFileRead(fh, buf, size, offset, offset2);
+  // return CLIO_CTE_CUFILE_API->cuFileRead(fh, buf, size, offset, offset2);
 }
 
 ssize_t cuFileWrite(CUfileHandle_t fh, const void *buf, size_t size,
@@ -95,51 +95,51 @@ ssize_t cuFileWrite(CUfileHandle_t fh, const void *buf, size_t size,
   ssize_t ret = write(descr->handle.fd, host_data, size);
   free(host_data);
   return ret;
-  // return WRP_CTE_CUFILE_API->cuFileWrite(fh, buf, size, offset, offset2);
+  // return CLIO_CTE_CUFILE_API->cuFileWrite(fh, buf, size, offset, offset2);
 }
 
 long cuFileUseCount() {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileUseCount();
+  return CLIO_CTE_CUFILE_API->cuFileUseCount();
 }
 
 CUfileError_t cuFileDriverGetProperties(CUfileDrvProps_t *props) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileDriverGetProperties(props);
+  return CLIO_CTE_CUFILE_API->cuFileDriverGetProperties(props);
 }
 
 CUfileError_t cuFileDriverSetPollMode(bool poll_mode,
                                       size_t poll_threshold_size) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileDriverSetPollMode(poll_mode,
+  return CLIO_CTE_CUFILE_API->cuFileDriverSetPollMode(poll_mode,
                                                     poll_threshold_size);
 }
 
 CUfileError_t cuFileDriverSetMaxDirectIOSize(size_t size) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileDriverSetMaxDirectIOSize(size);
+  return CLIO_CTE_CUFILE_API->cuFileDriverSetMaxDirectIOSize(size);
 }
 
 CUfileError_t cuFileDriverSetMaxCacheSize(size_t size) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileDriverSetMaxCacheSize(size);
+  return CLIO_CTE_CUFILE_API->cuFileDriverSetMaxCacheSize(size);
 }
 
 CUfileError_t cuFileDriverSetMaxPinnedMemSize(size_t size) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileDriverSetMaxPinnedMemSize(size);
+  return CLIO_CTE_CUFILE_API->cuFileDriverSetMaxPinnedMemSize(size);
 }
 
 CUfileError_t cuFileBatchIOSetUp(CUfileBatchHandle_t *handle, unsigned flags) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileBatchIOSetUp(handle, flags);
+  return CLIO_CTE_CUFILE_API->cuFileBatchIOSetUp(handle, flags);
 }
 
 CUfileError_t cuFileBatchIOSubmit(CUfileBatchHandle_t handle, unsigned num_ios,
                                   CUfileIOParams_t *io_params,
                                   unsigned int flags) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileBatchIOSubmit(handle, num_ios, io_params,
+  return CLIO_CTE_CUFILE_API->cuFileBatchIOSubmit(handle, num_ios, io_params,
                                                 flags);
 }
 
@@ -148,17 +148,17 @@ CUfileError_t cuFileBatchIOGetStatus(CUfileBatchHandle_t handle,
                                      CUfileIOEvents_t *events,
                                      struct timespec *timeout) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileBatchIOGetStatus(
+  return CLIO_CTE_CUFILE_API->cuFileBatchIOGetStatus(
       handle, num_ios, num_completed, events, timeout);
 }
 
 CUfileError_t cuFileBatchIOCancel(CUfileBatchHandle_t handle) {
   //    printf("Intercepted the REAL API\n");
-  return WRP_CTE_CUFILE_API->cuFileBatchIOCancel(handle);
+  return CLIO_CTE_CUFILE_API->cuFileBatchIOCancel(handle);
 }
 
 void cuFileBatchIODestroy(CUfileBatchHandle_t handle) {
   //    printf("Intercepted the REAL API\n");
-  WRP_CTE_CUFILE_API->cuFileBatchIODestroy(handle);
+  CLIO_CTE_CUFILE_API->cuFileBatchIODestroy(handle);
 }
 }  // extern C

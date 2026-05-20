@@ -23,7 +23,7 @@
 config:
   name: bam_vs_cte_cache
   pkgs:
-    - pkg_type: jarvis_iowarp.clio_cte_gpu_bench
+    - pkg_type: jarvis_clio_core.clio_cte_gpu_bench
       pkg_name: bench
       test_case: "synthetic"
       workload_mode: "hbm"

@@ -115,10 +115,10 @@ inline void EnsureInit() {
  *                formula and used by the chimod).
  * @return        Vector of task FullPtrs (each carries {alloc_id, off}).
  */
-inline std::vector<hipc::FullPtr<chimaera::MOD_NAME::GpuSubmitTask>>
-PlaceTaskSlots(char *base, hipc::AllocatorId alloc_id, chi::u32 gpu_id) {
+inline std::vector<ctp::ipc::FullPtr<chimaera::MOD_NAME::GpuSubmitTask>>
+PlaceTaskSlots(char *base, ctp::ipc::AllocatorId alloc_id, chi::u32 gpu_id) {
   using TaskT = chimaera::MOD_NAME::GpuSubmitTask;
-  std::vector<hipc::FullPtr<TaskT>> handles;
+  std::vector<ctp::ipc::FullPtr<TaskT>> handles;
   handles.reserve(kNumTasks);
   for (chi::u32 i = 0; i < kNumTasks; ++i) {
     size_t task_off = static_cast<size_t>(i) * kSlotBytes;
@@ -130,7 +130,7 @@ PlaceTaskSlots(char *base, hipc::AllocatorId alloc_id, chi::u32 gpu_id) {
     task->pod_size_ = static_cast<chi::u32>(sizeof(TaskT));
     new (fshm_addr) chi::gpu::FutureShm();
 
-    hipc::FullPtr<TaskT> fp;
+    ctp::ipc::FullPtr<TaskT> fp;
     fp.shm_.alloc_id_ = alloc_id;
     fp.shm_.off_ = task_off;
     fp.ptr_ = task;
@@ -145,7 +145,7 @@ PlaceTaskSlots(char *base, hipc::AllocatorId alloc_id, chi::u32 gpu_id) {
  * Returns the index of the first mismatch, or kNumTasks on success.
  */
 inline chi::u32 VerifyResults(
-    const std::vector<hipc::FullPtr<chimaera::MOD_NAME::GpuSubmitTask>>
+    const std::vector<ctp::ipc::FullPtr<chimaera::MOD_NAME::GpuSubmitTask>>
         &handles,
     chi::u32 gpu_id) {
   for (chi::u32 i = 0; i < handles.size(); ++i) {

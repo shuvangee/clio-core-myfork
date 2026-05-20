@@ -91,9 +91,9 @@ void TestTcpBasic() {
   send_meta.request_id = 42;
   send_meta.operation = "tcp_test";
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data1)), size1, BULK_XFER));
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data1)), size1, BULK_XFER));
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data2)), size2, BULK_XFER));
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data2)), size2, BULK_XFER));
   send_meta.send_bulks = 2;
 
   int rc = client->Send(send_meta);
@@ -133,7 +133,7 @@ void TestMultipleBulks() {
   LbmMeta<> send_meta;
   for (const auto& chunk : data_chunks) {
     send_meta.send.push_back(client->Expose(
-        hipc::FullPtr<char>(const_cast<char*>(chunk.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(chunk.data())),
         chunk.size(), BULK_XFER));
     send_meta.send_bulks++;
   }
@@ -173,7 +173,7 @@ void TestUnixDomain() {
   send_meta.request_id = 99;
   send_meta.operation = "ipc_test";
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER));
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER));
   send_meta.send_bulks = 1;
 
   int rc = client->Send(send_meta);
@@ -238,7 +238,7 @@ void TestBulkExpose() {
 
   LbmMeta<> send_meta;
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_EXPOSE));
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_EXPOSE));
   send_meta.send_bulks = 0;
 
   int rc = client->Send(send_meta);
@@ -274,7 +274,7 @@ void TestLargeTransfer() {
 
   LbmMeta<> send_meta;
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(large_data.data()), large_size, BULK_XFER));
+      ctp::ipc::FullPtr<char>(large_data.data()), large_size, BULK_XFER));
   send_meta.send_bulks = 1;
 
   // Send in thread to avoid TCP buffer deadlock with large data
@@ -334,7 +334,7 @@ void TestClearRecvHandles() {
 
   LbmMeta<> send_meta;
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER));
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data)), size, BULK_XFER));
   send_meta.send_bulks = 1;
 
   int rc = client->Send(send_meta);
@@ -371,7 +371,7 @@ void TestBidirectional() {
   send_meta.request_id = 1;
   send_meta.operation = "request";
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(request_data)),
+      ctp::ipc::FullPtr<char>(const_cast<char*>(request_data)),
       strlen(request_data), BULK_XFER));
   send_meta.send_bulks = 1;
 
@@ -396,7 +396,7 @@ void TestBidirectional() {
   resp_meta.operation = "response";
   resp_meta.client_info_.fd_ = info.fd_;
   resp_meta.send.push_back(server->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(response_data)),
+      ctp::ipc::FullPtr<char>(const_cast<char*>(response_data)),
       strlen(response_data), BULK_XFER));
   resp_meta.send_bulks = 1;
 
@@ -447,7 +447,7 @@ void TestMultiClient() {
     send_meta.request_id = i;
     send_meta.operation = "multi";
     send_meta.send.push_back(client->Expose(
-        hipc::FullPtr<char>(const_cast<char*>(payload.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(payload.data())),
         payload.size(), BULK_XFER));
     send_meta.send_bulks = 1;
     int rc = client->Send(send_meta);
@@ -504,7 +504,7 @@ void TestMultiClientWithEM() {
     send_meta.request_id = i;
     send_meta.operation = "em_multi";
     send_meta.send.push_back(client->Expose(
-        hipc::FullPtr<char>(const_cast<char*>(payload.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(payload.data())),
         payload.size(), BULK_XFER));
     send_meta.send_bulks = 1;
     int rc = client->Send(send_meta);
@@ -620,7 +620,7 @@ void TestAcceptNewClient() {
   send_meta.request_id = 77;
   send_meta.operation = "accept";
   send_meta.send.push_back(client->Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data)), strlen(data), BULK_XFER));
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data)), strlen(data), BULK_XFER));
   send_meta.send_bulks = 1;
 
   int rc = client->Send(send_meta);

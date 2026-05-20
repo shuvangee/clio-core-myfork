@@ -108,7 +108,7 @@ class TieredStorageStressFixture {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Initialize CTE client
-    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
     REQUIRE(success);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -216,7 +216,7 @@ TEST_CASE("TieredStorage - Put 128MB with 64MB DRAM", "[tiered][stress][put]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   // Create a tag for our test blobs
@@ -229,7 +229,7 @@ TEST_CASE("TieredStorage - Put 128MB with 64MB DRAM", "[tiered][stress][put]") {
   // Allocate shared memory buffer (reuse for all blobs)
   auto shm_buffer = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm_buffer.IsNull());
-  hipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
   int success_count = 0;
   int failure_count = 0;
@@ -278,7 +278,7 @@ TEST_CASE("TieredStorage - ReorganizeBlob to score 0",
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   // Get the tag we created in the previous test
@@ -377,7 +377,7 @@ TEST_CASE("TieredStorage - Cleanup", "[tiered][stress][cleanup]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "stress_test_tag";

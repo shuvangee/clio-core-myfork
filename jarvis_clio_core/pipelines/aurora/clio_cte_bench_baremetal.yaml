@@ -1,5 +1,5 @@
 # Pipeline: WRP CTE benchmark — Aurora baremetal variant
-# Purpose: Run jarvis_iowarp.clio_cte_bench end-to-end against an IOWarp
+# Purpose: Run jarvis_clio_core.clio_cte_bench end-to-end against an IOWarp
 # runtime + CTE deployment installed via the `iowarp` conda env (i.e.
 # `conda build` of clio-core's iowarp-core recipe). No containers.
 #
@@ -17,13 +17,13 @@
 #   conda activate iowarp
 #   jarvis hostfile set ~/hostfile.txt
 #   jarvis ppl run yaml \
-#       /home/llogan/clio-core/jarvis_iowarp/pipelines/aurora/clio_cte_bench_baremetal.yaml
+#       /home/llogan/clio-core/jarvis_clio_core/pipelines/aurora/clio_cte_bench_baremetal.yaml
 
 name: clio_cte_bench_aurora_baremetal
 
 pkgs:
   # Stage 1: chimaera runtime (parallel SSH launch on every host).
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -33,7 +33,7 @@ pkgs:
     sleep: 4
 
   # Stage 2: CTE pool deployment — RAM-only single tier per Aurora node.
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       - ["ram::cte_ram_tier1", "64GB", 1.0]
@@ -43,7 +43,7 @@ pkgs:
     poll_period_ms: 5000
 
   # Stage 3: benchmark — 128 ranks across 8 nodes (16 ppn).
-  - pkg_type: jarvis_iowarp.clio_cte_bench
+  - pkg_type: jarvis_clio_core.clio_cte_bench
     pkg_name: cte_bench
     test_case: "PutGet"
     num_threads: 1

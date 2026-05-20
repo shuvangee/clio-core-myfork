@@ -22,10 +22,10 @@ struct IpcCpu2Cpu {
   /** Serialize task into SHM ring buffer and enqueue to worker. */
   template <typename TaskT>
   static Future<TaskT> ClientSend(IpcManager *ipc,
-                                   const hipc::FullPtr<TaskT> &task_ptr);
+                                   const ctp::ipc::FullPtr<TaskT> &task_ptr);
 
   /** Deserialize task from SHM ring buffer on runtime side. */
-  static hipc::FullPtr<Task> RuntimeRecv(
+  static ctp::ipc::FullPtr<Task> RuntimeRecv(
       IpcManager *ipc, Future<Task> &future, Container *container,
       u32 method_id, ctp::lbm::Transport *recv_transport);
 

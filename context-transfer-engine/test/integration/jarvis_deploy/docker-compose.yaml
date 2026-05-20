@@ -5,7 +5,7 @@
 #   - Sets up SSH key pair and shares public key via the workspace volume
 #   - Installs workspace jarvis-cd (ensures version compatibility)
 #   - Initializes Jarvis with a shared_dir on the workspace volume (accessible to all nodes)
-#   - Adds jarvis_iowarp package repository
+#   - Adds jarvis_clio_core package repository
 #   - Sets the hostfile and runs the pipeline via `jarvis ppl run yaml`
 #
 # Node 2 (secondary):

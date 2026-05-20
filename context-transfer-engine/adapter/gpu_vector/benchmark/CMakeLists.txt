@@ -7,7 +7,7 @@
 # --bdev-capacity-mib, --gpu-id.
 #-----------------------------------------------------------------------------
 
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
     # Baseline cudaMemcpy bench (pure CUDA runtime; no chimaera deps).
     add_cuda_executable(clio_memcpy_d2h_bench FALSE
         clio_memcpy_d2h_bench.cc
@@ -99,7 +99,7 @@ if(WRP_CORE_ENABLE_CUDA)
     install(TARGETS clio_uvm_bench RUNTIME DESTINATION bin)
 endif()
 
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
     add_rocm_gpu_executable(clio_memcpy_d2h_bench FALSE
         clio_memcpy_d2h_bench.cc
     )

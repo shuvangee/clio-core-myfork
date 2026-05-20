@@ -64,7 +64,7 @@ endif()
 list(APPEND CLIO_CTP_LIBS cxx)
 
 # BUILD HSHM FOR CUDA ONLY
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
     add_cuda_library(clio_ctp_cuda SHARED TRUE ${SRC_FILES}
       INCLUDE_DIRS
         ${CLIO_CTP_ROOT}/include
@@ -105,7 +105,7 @@ if(WRP_CORE_ENABLE_CUDA)
 endif()
 
 # BUILD HSHM FOR ROCM ONLY
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
     add_rocm_gpu_library(clio_ctp_rocm_gpu SHARED TRUE ${SRC_FILES})
     target_link_libraries(clio_ctp_rocm_gpu PUBLIC host_deps)
     target_compile_definitions(clio_ctp_rocm_gpu PUBLIC CTP_ENABLE_ROCM=1)

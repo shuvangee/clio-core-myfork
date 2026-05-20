@@ -20,7 +20,7 @@ def test_module_imports():
         print("  ✅ clio_cee module imported successfully")
     except ImportError as e:
         print(f"  ❌ Failed to import clio_cee module: {e}")
-        print("     Make sure WRP_CORE_ENABLE_PYTHON=ON and nanobind is installed")
+        print("     Make sure CLIO_CORE_ENABLE_PYTHON=ON and nanobind is installed")
         return False
 
     try:

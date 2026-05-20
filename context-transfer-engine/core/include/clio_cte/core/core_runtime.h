@@ -73,108 +73,108 @@ public:
    * path on the worker before Run.
    */
   void FixupAfterCopy(chi::u32 method,
-                      hipc::FullPtr<chi::Task> task_ptr) override;
+                      ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Create the container (Method::kCreate)
    * This method both creates and initializes the container
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext &ctx);
+  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &ctx);
 
   /**
    * Monitor container state (Method::kMonitor)
    */
-  chi::TaskResume Monitor(hipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
+  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
 
   /**
    * Destroy the container (Method::kDestroy)
    */
-  chi::TaskResume Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext &ctx);
+  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &ctx);
 
   /**
    * Register a target (Method::kRegisterTarget)
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume RegisterTarget(hipc::FullPtr<RegisterTargetTask> task,
+  chi::TaskResume RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> task,
                                  chi::RunContext &ctx);
 
   /**
    * Unregister a target (Method::kUnregisterTarget)
    */
-  chi::TaskResume UnregisterTarget(hipc::FullPtr<UnregisterTargetTask> task,
+  chi::TaskResume UnregisterTarget(ctp::ipc::FullPtr<UnregisterTargetTask> task,
                         chi::RunContext &ctx);
 
   /**
    * List registered targets (Method::kListTargets)
    */
-  chi::TaskResume ListTargets(hipc::FullPtr<ListTargetsTask> task, chi::RunContext &ctx);
+  chi::TaskResume ListTargets(ctp::ipc::FullPtr<ListTargetsTask> task, chi::RunContext &ctx);
 
   /**
    * Update target statistics (Method::kStatTargets)
    */
-  chi::TaskResume StatTargets(hipc::FullPtr<StatTargetsTask> task, chi::RunContext &ctx);
+  chi::TaskResume StatTargets(ctp::ipc::FullPtr<StatTargetsTask> task, chi::RunContext &ctx);
 
   /**
    * Get target information (Method::kGetTargetInfo)
    * Returns target score, remaining space, and performance metrics
    */
-  chi::TaskResume GetTargetInfo(hipc::FullPtr<GetTargetInfoTask> task, chi::RunContext &ctx);
+  chi::TaskResume GetTargetInfo(ctp::ipc::FullPtr<GetTargetInfoTask> task, chi::RunContext &ctx);
 
   /**
    * Get or create a tag (Method::kGetOrCreateTag)
    */
   template <typename CreateParamsT = CreateParams>
-  chi::TaskResume GetOrCreateTag(hipc::FullPtr<GetOrCreateTagTask<CreateParamsT>> task,
+  chi::TaskResume GetOrCreateTag(ctp::ipc::FullPtr<GetOrCreateTagTask<CreateParamsT>> task,
                       chi::RunContext &ctx);
 
   /**
    * Put blob (Method::kPutBlob) - allocates and writes data to blob
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume PutBlob(hipc::FullPtr<PutBlobTask> task, chi::RunContext &ctx);
+  chi::TaskResume PutBlob(ctp::ipc::FullPtr<PutBlobTask> task, chi::RunContext &ctx);
 
   /**
    * Get blob (Method::kGetBlob) - reads data from existing blob
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume GetBlob(hipc::FullPtr<GetBlobTask> task, chi::RunContext &ctx);
+  chi::TaskResume GetBlob(ctp::ipc::FullPtr<GetBlobTask> task, chi::RunContext &ctx);
 
   /**
    * Reorganize single blob (Method::kReorganizeBlob) - update score for single
    * blob. Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume ReorganizeBlob(hipc::FullPtr<ReorganizeBlobTask> task,
+  chi::TaskResume ReorganizeBlob(ctp::ipc::FullPtr<ReorganizeBlobTask> task,
                                  chi::RunContext &ctx);
 
   /**
    * Delete blob operation - removes blob and decrements tag size
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume DelBlob(hipc::FullPtr<DelBlobTask> task, chi::RunContext &ctx);
+  chi::TaskResume DelBlob(ctp::ipc::FullPtr<DelBlobTask> task, chi::RunContext &ctx);
 
   /**
    * Delete tag operation - removes all blobs from tag and removes tag
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume DelTag(hipc::FullPtr<DelTagTask> task, chi::RunContext &ctx);
+  chi::TaskResume DelTag(ctp::ipc::FullPtr<DelTagTask> task, chi::RunContext &ctx);
 
   /**
    * Get tag size operation - returns total size of all blobs in tag
    */
-  chi::TaskResume GetTagSize(hipc::FullPtr<GetTagSizeTask> task, chi::RunContext &ctx);
+  chi::TaskResume GetTagSize(ctp::ipc::FullPtr<GetTagSizeTask> task, chi::RunContext &ctx);
 
   /**
    * Schedule a task by resolving Dynamic pool queries.
    */
-  chi::PoolQuery ScheduleTask(const hipc::FullPtr<chi::Task> &task) override;
+  chi::PoolQuery ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) override;
 
   // Pure virtual methods - implementations are in autogen/core_lib_exec.cc
   void Init(const chi::PoolId &pool_id, const std::string &pool_name,
             chi::u32 container_id = 0) override;
   void Restart(const chi::PoolId &pool_id, const std::string &pool_name,
                chi::u32 container_id = 0) override;
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr,
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr,
                       chi::RunContext &rctx) override;
   chi::u64 GetWorkRemaining() const override;
 
@@ -189,22 +189,22 @@ public:
 
   // Container virtual method implementations (defined in autogen/core_lib_exec.cc)
   void SaveTask(chi::u32 method, chi::SaveTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
   void LoadTask(chi::u32 method, chi::LoadTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override;
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr,
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override;
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
                                         bool deep) override;
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method,
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method,
                                                chi::DefaultLoadArchive &archive) override;
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
 private:
   // Queue ID constants (REQUIRED: Use semantic names, not raw integers)
@@ -338,7 +338,7 @@ private:
 
   // Telemetry ring buffer for performance monitoring
   static inline constexpr size_t kTelemetryRingSize = 1024; // Ring buffer size
-  std::unique_ptr<hipc::circular_mpsc_ring_buffer<CteTelemetry, hipc::MallocAllocator>> telemetry_log_;
+  std::unique_ptr<ctp::ipc::circular_mpsc_ring_buffer<CteTelemetry, ctp::ipc::MallocAllocator>> telemetry_log_;
   std::atomic<std::uint64_t>
       telemetry_counter_; // Atomic counter for logical time
 
@@ -466,7 +466,7 @@ private:
    * Returns TaskResume for coroutine-based async operations
    */
   chi::TaskResume ModifyExistingData(const chi::priv::vector<BlobBlock> &blocks,
-                                     hipc::ShmPtr<> data, size_t data_size,
+                                     ctp::ipc::ShmPtr<> data, size_t data_size,
                                      size_t data_offset_in_blob, chi::u32 &error_code);
 
   /**
@@ -478,7 +478,7 @@ private:
    * @param error_code Output: 0 for success, 1 for failure
    * Returns TaskResume for coroutine-based async operations
    */
-  chi::TaskResume ReadData(const chi::priv::vector<BlobBlock> &blocks, hipc::ShmPtr<> data,
+  chi::TaskResume ReadData(const chi::priv::vector<BlobBlock> &blocks, ctp::ipc::ShmPtr<> data,
                            size_t data_size, size_t data_offset_in_blob, chi::u32 &error_code);
 
   /**
@@ -530,7 +530,7 @@ private:
    * @param task PollTelemetryLog task containing parameters and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume PollTelemetryLog(hipc::FullPtr<PollTelemetryLogTask> task,
+  chi::TaskResume PollTelemetryLog(ctp::ipc::FullPtr<PollTelemetryLogTask> task,
                         chi::RunContext &ctx);
 
   /**
@@ -538,21 +538,21 @@ private:
    * @param task GetBlobScore task containing blob lookup parameters and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume GetBlobScore(hipc::FullPtr<GetBlobScoreTask> task, chi::RunContext &ctx);
+  chi::TaskResume GetBlobScore(ctp::ipc::FullPtr<GetBlobScoreTask> task, chi::RunContext &ctx);
 
   /**
    * Get blob size operation - returns the size of a blob in bytes
    * @param task GetBlobSize task containing blob lookup parameters and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume GetBlobSize(hipc::FullPtr<GetBlobSizeTask> task, chi::RunContext &ctx);
+  chi::TaskResume GetBlobSize(ctp::ipc::FullPtr<GetBlobSizeTask> task, chi::RunContext &ctx);
 
   /**
    * Get contained blobs operation - returns all blob names in a tag
    * @param task GetContainedBlobs task containing tag ID and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume GetContainedBlobs(hipc::FullPtr<GetContainedBlobsTask> task,
+  chi::TaskResume GetContainedBlobs(ctp::ipc::FullPtr<GetContainedBlobsTask> task,
                          chi::RunContext &ctx);
 
   /**
@@ -560,14 +560,14 @@ private:
    * @param task TagQuery task containing regex pattern and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume TagQuery(hipc::FullPtr<TagQueryTask> task, chi::RunContext &ctx);
+  chi::TaskResume TagQuery(ctp::ipc::FullPtr<TagQueryTask> task, chi::RunContext &ctx);
 
   /**
    * Query blobs by tag and blob regex patterns (Method::kBlobQuery)
    * @param task BlobQuery task containing regex patterns and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume BlobQuery(hipc::FullPtr<BlobQueryTask> task, chi::RunContext &ctx);
+  chi::TaskResume BlobQuery(ctp::ipc::FullPtr<BlobQueryTask> task, chi::RunContext &ctx);
 
   /**
    * Get comprehensive blob metadata (Method::kGetBlobInfo)
@@ -575,17 +575,17 @@ private:
    * @param task GetBlobInfo task containing blob lookup parameters and results
    * @param ctx Runtime context for task execution
    */
-  chi::TaskResume GetBlobInfo(hipc::FullPtr<GetBlobInfoTask> task, chi::RunContext &ctx);
+  chi::TaskResume GetBlobInfo(ctp::ipc::FullPtr<GetBlobInfoTask> task, chi::RunContext &ctx);
 
   /**
    * Flush metadata to durable storage (Method::kFlushMetadata)
    */
-  chi::TaskResume FlushMetadata(hipc::FullPtr<FlushMetadataTask> task, chi::RunContext &ctx);
+  chi::TaskResume FlushMetadata(ctp::ipc::FullPtr<FlushMetadataTask> task, chi::RunContext &ctx);
 
   /**
    * Flush data from volatile to non-volatile targets (Method::kFlushData)
    */
-  chi::TaskResume FlushData(hipc::FullPtr<FlushDataTask> task, chi::RunContext &ctx);
+  chi::TaskResume FlushData(ctp::ipc::FullPtr<FlushDataTask> task, chi::RunContext &ctx);
 
 private:
   /**

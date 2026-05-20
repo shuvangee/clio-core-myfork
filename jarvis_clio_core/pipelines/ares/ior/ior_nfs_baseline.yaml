@@ -9,7 +9,7 @@
 #     uses the same network as the iowarp run for the control plane
 #
 # Usage:
-#   jarvis ppl submit ${IOWARP}/jarvis_iowarp/pipelines/ares/ior_nfs_baseline.yaml
+#   jarvis ppl submit ${IOWARP}/jarvis_clio_core/pipelines/ares/ior_nfs_baseline.yaml
 
 name: ior_nfs_baseline
 

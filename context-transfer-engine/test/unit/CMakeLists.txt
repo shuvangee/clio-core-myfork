@@ -259,7 +259,7 @@ target_link_libraries(test_reorganize_blob
 # GPU-runtime-era link rules removed.
 
 # Note: Include directories are provided automatically via linked ChiMod targets
-# clio_cte_core_client provides ${WRP_CTE_ROOT}/core/include via transitive includes
+# clio_cte_core_client provides ${CLIO_CTE_ROOT}/core/include via transitive includes
 
 # Manual test registration for specific test cases
 add_test(NAME cte_core_pool_creation
@@ -528,7 +528,7 @@ set_tests_properties(
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
 )
 
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM)
 # GPU coroutine subtask tests (gpu2gpu dispatch + coroutine suspend/resume)
 add_test(NAME cte_gpu_coroutine
     COMMAND test_cte_gpu_coroutine)
@@ -565,7 +565,7 @@ set_tests_properties(
         LABELS "gpu;cte;create;msan_skip"
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
 )
-endif()  # WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM
+endif()  # CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM
 
 # Mark all CTE tests as msan_skip (they use ZMQ via chimaera runtime which is uninstrumented)
 set_tests_properties(
@@ -615,7 +615,7 @@ set_tests_properties(
     cte_reorganize_all
     PROPERTIES LABELS "msan_skip"
 )
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM)
 set_tests_properties(
     cte_gpu_coroutine
     cte_gpu_core_all
@@ -657,7 +657,7 @@ set_tests_properties(
     cte_reorganize_all
     PROPERTIES RESOURCE_LOCK "chimaera_runtime"
 )
-if(WRP_CORE_ENABLE_CUDA OR WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM)
 set_tests_properties(
     cte_gpu_coroutine
     cte_gpu_core_all
@@ -698,7 +698,7 @@ install(TARGETS ${_CTE_TEST_TARGETS}
 # AND blob payload data that live entirely in kDeviceMem (no pinned
 # host fallback).
 # ------------------------------------------------------------------------------
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
   add_cuda_executable(test_cte_devmem_putget FALSE
     gpu/test_cte_devmem_putget.cc
     INCLUDE_DIRS
@@ -729,7 +729,7 @@ if(WRP_CORE_ENABLE_CUDA)
   )
 endif()
 
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
   add_rocm_gpu_executable(test_cte_devmem_putget FALSE
     gpu/test_cte_devmem_putget.cc
   )

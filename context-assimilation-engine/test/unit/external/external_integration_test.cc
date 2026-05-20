@@ -56,7 +56,7 @@ public:
             clio_cae::core::CreateParams create_params;
 
             try {
-                cae_client_->Create(hipc::MemContext(), chi::PoolQuery::Dynamic(),
+                cae_client_->Create(ctp::ipc::MemContext(), chi::PoolQuery::Dynamic(),
                                    "cae_test_pool",
                                    clio_cae::core::kCaePoolId, create_params);
                 HLOG(kSuccess, "CAE container created successfully");

@@ -15,7 +15,7 @@ target_link_libraries(allocator_benchmark
 # Build ZMQ IPC Latency Benchmark
 #------------------------------------------------------------------------------
 
-if(WRP_CORE_ENABLE_ZMQ)
+if(CLIO_CORE_ENABLE_ZMQ)
   add_executable(zmq_ipc_latency_benchmark
           zmq_ipc_latency_benchmark.cc)
   add_dependencies(zmq_ipc_latency_benchmark clio_ctp_host)

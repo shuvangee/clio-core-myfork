@@ -41,14 +41,14 @@
 using ctp::testing::AllocatorTest;
 
 TEST_CASE("BuddyAllocator - Allocate and Free Immediate", "[BuddyAllocator]") {
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   size_t heap_size = 128 * 1024 * 1024;  // 128 MB heap
-  size_t alloc_size = sizeof(hipc::BuddyAllocator);
-  backend.shm_init(hipc::MemoryBackendId(0, 0), alloc_size + heap_size);
+  size_t alloc_size = sizeof(ctp::ipc::BuddyAllocator);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), alloc_size + heap_size);
 
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
-  AllocatorTest<hipc::BuddyAllocator> tester(alloc);
+  AllocatorTest<ctp::ipc::BuddyAllocator> tester(alloc);
 
   SECTION("Small allocations (1KB)") {
     REQUIRE_NOTHROW(tester.TestAllocFreeImmediate(10000, 1024));
@@ -65,14 +65,14 @@ TEST_CASE("BuddyAllocator - Allocate and Free Immediate", "[BuddyAllocator]") {
 }
 
 TEST_CASE("BuddyAllocator - Batch Allocate and Free", "[BuddyAllocator]") {
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   size_t heap_size = 128 * 1024 * 1024;  // 128 MB heap
-  size_t alloc_size = sizeof(hipc::BuddyAllocator);
-  backend.shm_init(hipc::MemoryBackendId(0, 0), alloc_size + heap_size);
+  size_t alloc_size = sizeof(ctp::ipc::BuddyAllocator);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), alloc_size + heap_size);
 
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
-  AllocatorTest<hipc::BuddyAllocator> tester(alloc);
+  AllocatorTest<ctp::ipc::BuddyAllocator> tester(alloc);
 
   SECTION("Small batches (10 allocations of 4KB)") {
     REQUIRE_NOTHROW(tester.TestAllocFreeBatch(1000, 10, 4096));
@@ -89,14 +89,14 @@ TEST_CASE("BuddyAllocator - Batch Allocate and Free", "[BuddyAllocator]") {
 }
 
 TEST_CASE("BuddyAllocator - Random Allocation", "[BuddyAllocator]") {
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   size_t heap_size = 128 * 1024 * 1024;  // 128 MB heap
-  size_t alloc_size = sizeof(hipc::BuddyAllocator);
-  backend.shm_init(hipc::MemoryBackendId(0, 0), alloc_size + heap_size);
+  size_t alloc_size = sizeof(ctp::ipc::BuddyAllocator);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), alloc_size + heap_size);
 
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
-  AllocatorTest<hipc::BuddyAllocator> tester(alloc);
+  AllocatorTest<ctp::ipc::BuddyAllocator> tester(alloc);
 
   SECTION("16 iterations of random allocations"){
     try {
@@ -117,14 +117,14 @@ TEST_CASE("BuddyAllocator - Random Allocation", "[BuddyAllocator]") {
 }
 
 TEST_CASE("BuddyAllocator - Large Then Small", "[BuddyAllocator]") {
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   size_t heap_size = 128 * 1024 * 1024;  // 128 MB heap
-  size_t alloc_size = sizeof(hipc::BuddyAllocator);
-  backend.shm_init(hipc::MemoryBackendId(0, 0), alloc_size + heap_size);
+  size_t alloc_size = sizeof(ctp::ipc::BuddyAllocator);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), alloc_size + heap_size);
 
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
-  AllocatorTest<hipc::BuddyAllocator> tester(alloc);
+  AllocatorTest<ctp::ipc::BuddyAllocator> tester(alloc);
 
   SECTION("10 iterations: 100 x 1MB then 1000 x 128B") {
     REQUIRE_NOTHROW(tester.TestLargeThenSmall(10, 100, 1024 * 1024, 1000, 128));
@@ -138,14 +138,14 @@ TEST_CASE("BuddyAllocator - Large Then Small", "[BuddyAllocator]") {
 
 TEST_CASE("BuddyAllocator - Weird Offset Allocation", "[BuddyAllocator]") {
   // Test allocator instantiation at a weird offset in the backend
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   constexpr size_t kOffsetFromData = 256UL * 1024UL;  // 256KB offset
   constexpr size_t kHeapSize = 128UL * 1024UL * 1024UL;  // 128 MB heap
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
 
   // Create backend with enough space for offset + allocator + heap
   size_t total_size = kOffsetFromData + kAllocSize + kHeapSize;
-  backend.shm_init(hipc::MemoryBackendId(0, 0), total_size);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), total_size);
   memset(backend.data_, 0, backend.data_capacity_);
 
   // Get pointer to data at weird offset
@@ -153,8 +153,8 @@ TEST_CASE("BuddyAllocator - Weird Offset Allocation", "[BuddyAllocator]") {
   char *alloc_ptr = data_ptr + kOffsetFromData;
 
   // Placement new to construct allocator at weird offset
-  hipc::BuddyAllocator *alloc =
-      new (alloc_ptr) hipc::BuddyAllocator();
+  ctp::ipc::BuddyAllocator *alloc =
+      new (alloc_ptr) ctp::ipc::BuddyAllocator();
 
   // Initialize allocator with available space after allocator object
   // Region size should account for remaining space after allocator placement
@@ -165,7 +165,7 @@ TEST_CASE("BuddyAllocator - Weird Offset Allocation", "[BuddyAllocator]") {
   }
 
   // Create allocator tester and run tests
-  AllocatorTest<hipc::BuddyAllocator> tester(alloc);
+  AllocatorTest<ctp::ipc::BuddyAllocator> tester(alloc);
 
   SECTION("Random allocation at offset") {
     try {
@@ -201,22 +201,22 @@ TEST_CASE("BuddyAllocator - Weird Offset Allocation", "[BuddyAllocator]") {
  */
 TEST_CASE("BuddyAllocator Regression - Fix1: AllocateLarge searches higher size classes",
           "[BuddyAllocator][regression]") {
-  hipc::MallocBackend backend;
+  ctp::ipc::MallocBackend backend;
   // Use a small heap so the heap runs out after the first large allocation,
   // forcing the allocator to rely on the free lists for the second request.
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
   // Reserve 4 MB: just enough for the 512 KB block + overhead; the 300 KB
   // follow-up MUST come from the freed 512 KB block, not fresh heap space.
   constexpr size_t kHeapSize = 4UL * 1024UL * 1024UL;
-  backend.shm_init(hipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
   // Drain the heap with a single 512 KB allocation, leaving very little room.
   constexpr size_t k512KB = 512UL * 1024UL;
   constexpr size_t k300KB = 300UL * 1024UL;
 
   // Allocate several blocks to exhaust most of the heap
-  std::vector<hipc::FullPtr<char>> drain_ptrs;
+  std::vector<ctp::ipc::FullPtr<char>> drain_ptrs;
   {
     // Drain the heap by allocating 512 KB blocks until we can't any more
     while (true) {
@@ -259,16 +259,16 @@ TEST_CASE("BuddyAllocator Regression - Fix1: AllocateLarge searches higher size 
  */
 TEST_CASE("BuddyAllocator Regression - Fix2: Heap rollback on failed allocation",
           "[BuddyAllocator][regression]") {
-  hipc::MallocBackend backend;
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  ctp::ipc::MallocBackend backend;
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
   // A modest heap — large enough for a handful of normal allocs.
   constexpr size_t kHeapSize = 8UL * 1024UL * 1024UL;  // 8 MB
-  backend.shm_init(hipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
   // Drain most of the heap
   constexpr size_t k1MB = 1UL * 1024UL * 1024UL;
-  std::vector<hipc::FullPtr<char>> drain_ptrs;
+  std::vector<ctp::ipc::FullPtr<char>> drain_ptrs;
   while (true) {
     auto p = alloc->template Allocate<char>(k1MB);
     if (p.IsNull()) break;
@@ -332,11 +332,11 @@ TEST_CASE("BuddyAllocator Regression - Fix2: Heap rollback on failed allocation"
  */
 TEST_CASE("BuddyAllocator Regression - Fix3: Small remainder does not corrupt state",
           "[BuddyAllocator][regression]") {
-  hipc::MallocBackend backend;
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  ctp::ipc::MallocBackend backend;
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
   constexpr size_t kHeapSize = 16UL * 1024UL * 1024UL;  // 16 MB
-  backend.shm_init(hipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
   // sizeof(BuddyPage) == 16 bytes (slist_node next_ 8B + size_ 8B)
   constexpr size_t kBuddyPageHdr = 16;
@@ -387,16 +387,16 @@ TEST_CASE("BuddyAllocator Regression - Fix3: Small remainder does not corrupt st
  */
 TEST_CASE("BuddyAllocator Regression - Fix4: RepopulateSmallArena does not leak remainder",
           "[BuddyAllocator][regression]") {
-  hipc::MallocBackend backend;
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  ctp::ipc::MallocBackend backend;
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
   // Use a moderately sized heap to keep the test fast.
   constexpr size_t kHeapSize = 8UL * 1024UL * 1024UL;  // 8 MB
-  backend.shm_init(hipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
   // Drain the heap with large (1 MB) allocations.
   constexpr size_t k1MB = 1UL * 1024UL * 1024UL;
-  std::vector<hipc::FullPtr<char>> large_ptrs;
+  std::vector<ctp::ipc::FullPtr<char>> large_ptrs;
   while (true) {
     auto p = alloc->template Allocate<char>(k1MB);
     if (p.IsNull()) break;
@@ -416,7 +416,7 @@ TEST_CASE("BuddyAllocator Regression - Fix4: RepopulateSmallArena does not leak 
   // remainder is silently discarded (leaked).
   constexpr size_t kSmall = 64;
   constexpr size_t kNumSmall = 50;
-  std::vector<hipc::FullPtr<char>> small_ptrs;
+  std::vector<ctp::ipc::FullPtr<char>> small_ptrs;
   for (size_t i = 0; i < kNumSmall; ++i) {
     auto p = alloc->template Allocate<char>(kSmall);
     // Must succeed — memory was returned via the freed large blocks.
@@ -461,12 +461,12 @@ TEST_CASE("BuddyAllocator Regression - Fix4: RepopulateSmallArena does not leak 
  */
 TEST_CASE("BuddyAllocator Regression - Fix5: Expand with tiny region does not crash",
           "[BuddyAllocator][regression]") {
-  hipc::MallocBackend backend;
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  ctp::ipc::MallocBackend backend;
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
   // MallocBackend always allocates at least 1 MB, so data_capacity_ >= 1 MB
   // minus 3 * 4KB headers. We use a 1 MB backend request.
   constexpr size_t kBackendReq = 1024UL * 1024UL;
-  backend.shm_init(hipc::MemoryBackendId(0, 0), kBackendReq);
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), kBackendReq);
 
   // Place the allocator object so that only kTinyExtra bytes remain in the
   // data region after it. kTinyExtra < sizeof(BuddyPage) == 16 bytes.
@@ -481,7 +481,7 @@ TEST_CASE("BuddyAllocator Regression - Fix5: Expand with tiny region does not cr
   char *alloc_ptr = backend.data_ + alloc_offset;
 
   // Use placement new to construct the allocator at this offset.
-  hipc::BuddyAllocator *alloc = new (alloc_ptr) hipc::BuddyAllocator();
+  ctp::ipc::BuddyAllocator *alloc = new (alloc_ptr) ctp::ipc::BuddyAllocator();
 
   // shm_init will compute:
   //   this_ = alloc_offset
@@ -537,12 +537,12 @@ TEST_CASE("BuddyAllocator Regression - Fix5: Expand with tiny region does not cr
  */
 TEST_CASE("BuddyAllocator Regression - Fix7and8: AllocateSmall finds larger free pages",
           "[BuddyAllocator][regression]") {
-  hipc::MallocBackend backend;
-  constexpr size_t kAllocSize = sizeof(hipc::BuddyAllocator);
+  ctp::ipc::MallocBackend backend;
+  constexpr size_t kAllocSize = sizeof(ctp::ipc::BuddyAllocator);
   // Use a small heap so we can exhaust it before the critical test step.
   constexpr size_t kHeapSize = 4UL * 1024UL * 1024UL;  // 4 MB
-  backend.shm_init(hipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
-  auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), kAllocSize + kHeapSize);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
   // Step 1: Allocate one 512-byte block to later free.
   constexpr size_t k512B = 512;
@@ -552,7 +552,7 @@ TEST_CASE("BuddyAllocator Regression - Fix7and8: AllocateSmall finds larger free
 
   // Step 2: Exhaust the heap and arena with 64-byte allocations.
   constexpr size_t k64B = 64;
-  std::vector<hipc::FullPtr<char>> drain_ptrs;
+  std::vector<ctp::ipc::FullPtr<char>> drain_ptrs;
   while (true) {
     auto p = alloc->template Allocate<char>(k64B);
     if (p.IsNull()) break;

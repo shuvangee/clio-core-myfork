@@ -100,11 +100,11 @@ class CoreClientConfigFixture {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
       REQUIRE(success);
 
       // Initialize global client
-      auto *cte_client = WRP_CTE_CLIENT;
+      auto *cte_client = CLIO_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
       cte_client->Init(clio_cte::core::kCtePoolId);
 
@@ -141,7 +141,7 @@ class CoreClientConfigFixture {
       return;
     }
 
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
 
     // Create bdev pool
     chi::PoolId bdev_pool_id(900, 0);
@@ -260,7 +260,7 @@ TEST_CASE("Config - Load from Invalid YAML", "[core][config]") {
 
 TEST_CASE("Config - Load from Environment", "[core][config]") {
   // Test with unset environment variable (should succeed with defaults)
-  unsetenv("WRP_CTE_CONFIG");
+  unsetenv("CLIO_CTE_CONFIG");
 
   clio_cte::core::Config config;
   bool success = config.LoadFromEnvironment();
@@ -288,7 +288,7 @@ TEST_CASE("Client - AsyncListTargets", "[core][client][target]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
   auto task = client->AsyncListTargets();
   task.Wait();
 
@@ -302,7 +302,7 @@ TEST_CASE("Client - AsyncStatTargets", "[core][client][target]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
   auto task = client->AsyncStatTargets();
   task.Wait();
 
@@ -314,7 +314,7 @@ TEST_CASE("Client - AsyncGetTargetInfo", "[core][client][target]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
   auto task = client->AsyncGetTargetInfo(fixture.test_storage_path_);
   task.Wait();
 
@@ -326,7 +326,7 @@ TEST_CASE("Client - AsyncUnregisterTarget", "[core][client][target]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Unregister the target
   auto unreg_task = client->AsyncUnregisterTarget(fixture.test_storage_path_);
@@ -345,7 +345,7 @@ TEST_CASE("Client - AsyncGetOrCreateTag Direct", "[core][client][tag]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
   auto task = client->AsyncGetOrCreateTag("direct_test_tag");
   task.Wait();
 
@@ -358,7 +358,7 @@ TEST_CASE("Client - AsyncDelTag by ID", "[core][client][tag]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create a tag first
   auto create_task = client->AsyncGetOrCreateTag("tag_to_delete");
@@ -378,7 +378,7 @@ TEST_CASE("Client - AsyncDelTag by Name", "[core][client][tag]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create a tag first
   auto create_task = client->AsyncGetOrCreateTag("tag_to_delete_by_name");
@@ -397,7 +397,7 @@ TEST_CASE("Client - AsyncGetTagSize", "[core][client][tag]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create a tag
   auto create_task = client->AsyncGetOrCreateTag("sized_tag");
@@ -420,7 +420,7 @@ TEST_CASE("Client - AsyncPutBlob Direct", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag
   auto tag_task = client->AsyncGetOrCreateTag("blob_test_tag");
@@ -430,12 +430,12 @@ TEST_CASE("Client - AsyncPutBlob Direct", "[core][client][blob]") {
   // Create test data in SHM
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
   REQUIRE(!shm_ptr.IsNull());
   memcpy(shm_ptr.ptr_, data.data(), data.size());
 
   // Put blob
-  hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "test_blob", 0,
                                        data.size(), shm_ref, 1.0f);
   put_task.Wait();
@@ -450,7 +450,7 @@ TEST_CASE("Client - AsyncGetBlob Direct", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag and put blob
   auto tag_task = client->AsyncGetOrCreateTag("get_blob_tag");
@@ -459,9 +459,9 @@ TEST_CASE("Client - AsyncGetBlob Direct", "[core][client][blob]") {
 
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> put_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> put_ptr = ipc->AllocateBuffer(data.size());
   memcpy(put_ptr.ptr_, data.data(), data.size());
-  hipc::ShmPtr<> put_ref(put_ptr.shm_);
+  ctp::ipc::ShmPtr<> put_ref(put_ptr.shm_);
 
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "get_test_blob", 0,
                                        data.size(), put_ref, 1.0f);
@@ -471,8 +471,8 @@ TEST_CASE("Client - AsyncGetBlob Direct", "[core][client][blob]") {
   ipc->FreeBuffer(put_ptr);
 
   // Now get blob
-  hipc::FullPtr<char> get_ptr = ipc->AllocateBuffer(data.size());
-  hipc::ShmPtr<> get_ref(get_ptr.shm_);
+  ctp::ipc::FullPtr<char> get_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::ShmPtr<> get_ref(get_ptr.shm_);
 
   auto get_task = client->AsyncGetBlob(tag_task->tag_id_, "get_test_blob", 0,
                                        data.size(), 0, get_ref);
@@ -488,7 +488,7 @@ TEST_CASE("Client - AsyncDelBlob", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag and put blob
   auto tag_task = client->AsyncGetOrCreateTag("del_blob_tag");
@@ -497,9 +497,9 @@ TEST_CASE("Client - AsyncDelBlob", "[core][client][blob]") {
 
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
   memcpy(shm_ptr.ptr_, data.data(), data.size());
-  hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
 
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "blob_to_delete", 0,
                                        data.size(), shm_ref, 1.0f);
@@ -519,7 +519,7 @@ TEST_CASE("Client - AsyncReorganizeBlob Direct", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag and put blob
   auto tag_task = client->AsyncGetOrCreateTag("reorg_tag");
@@ -528,9 +528,9 @@ TEST_CASE("Client - AsyncReorganizeBlob Direct", "[core][client][blob]") {
 
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
   memcpy(shm_ptr.ptr_, data.data(), data.size());
-  hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
 
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "reorg_blob", 0,
                                        data.size(), shm_ref, 0.2f);
@@ -552,7 +552,7 @@ TEST_CASE("Client - AsyncGetBlobScore Direct", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag and put blob with specific score
   auto tag_task = client->AsyncGetOrCreateTag("score_tag");
@@ -561,9 +561,9 @@ TEST_CASE("Client - AsyncGetBlobScore Direct", "[core][client][blob]") {
 
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
   memcpy(shm_ptr.ptr_, data.data(), data.size());
-  hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
 
   float expected_score = 0.35f;
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "scored_blob", 0,
@@ -586,7 +586,7 @@ TEST_CASE("Client - AsyncGetBlobSize Direct", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag and put blob
   auto tag_task = client->AsyncGetOrCreateTag("size_test_tag");
@@ -595,9 +595,9 @@ TEST_CASE("Client - AsyncGetBlobSize Direct", "[core][client][blob]") {
 
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
   memcpy(shm_ptr.ptr_, data.data(), data.size());
-  hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
 
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "sized_blob", 0,
                                        data.size(), shm_ref, 1.0f);
@@ -619,7 +619,7 @@ TEST_CASE("Client - AsyncGetContainedBlobs Direct", "[core][client][blob]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag
   auto tag_task = client->AsyncGetOrCreateTag("contained_tag");
@@ -630,9 +630,9 @@ TEST_CASE("Client - AsyncGetContainedBlobs Direct", "[core][client][blob]") {
   auto *ipc = CHI_IPC;
   for (int i = 0; i < 3; ++i) {
     auto data = fixture.CreateTestData(fixture.kTestDataSize);
-    hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+    ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
     memcpy(shm_ptr.ptr_, data.data(), data.size());
-    hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+    ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
 
     std::string blob_name = "blob_" + std::to_string(i);
     auto put_task = client->AsyncPutBlob(tag_task->tag_id_, blob_name, 0,
@@ -661,7 +661,7 @@ TEST_CASE("Client - AsyncTagQuery", "[core][client][query]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create some tags
   auto tag1 = client->AsyncGetOrCreateTag("query_tag_1");
@@ -681,7 +681,7 @@ TEST_CASE("Client - AsyncBlobQuery", "[core][client][query]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Create tag and blob
   auto tag_task = client->AsyncGetOrCreateTag("query_blob_tag");
@@ -690,9 +690,9 @@ TEST_CASE("Client - AsyncBlobQuery", "[core][client][query]") {
 
   auto data = fixture.CreateTestData(fixture.kTestDataSize);
   auto *ipc = CHI_IPC;
-  hipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
+  ctp::ipc::FullPtr<char> shm_ptr = ipc->AllocateBuffer(data.size());
   memcpy(shm_ptr.ptr_, data.data(), data.size());
-  hipc::ShmPtr<> shm_ref(shm_ptr.shm_);
+  ctp::ipc::ShmPtr<> shm_ref(shm_ptr.shm_);
 
   auto put_task = client->AsyncPutBlob(tag_task->tag_id_, "queryable_blob", 0,
                                        data.size(), shm_ref, 1.0f);
@@ -718,7 +718,7 @@ TEST_CASE("Client - AsyncPollTelemetryLog", "[core][client][telemetry]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
 
   // Poll telemetry log
   auto telemetry_task = client->AsyncPollTelemetryLog(0);

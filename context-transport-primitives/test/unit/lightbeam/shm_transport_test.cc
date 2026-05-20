@@ -92,9 +92,9 @@ void TestBasicShmTransfer() {
   send_meta.request_id = 42;
   send_meta.operation = "shm_test";
 
-  Bulk bulk1 = client.Expose(hipc::FullPtr<char>(const_cast<char*>(data1)),
+  Bulk bulk1 = client.Expose(ctp::ipc::FullPtr<char>(const_cast<char*>(data1)),
                              size1, BULK_XFER);
-  Bulk bulk2 = client.Expose(hipc::FullPtr<char>(const_cast<char*>(data2)),
+  Bulk bulk2 = client.Expose(ctp::ipc::FullPtr<char>(const_cast<char*>(data2)),
                              size2, BULK_XFER);
   send_meta.send.push_back(bulk1);
   send_meta.send.push_back(bulk2);
@@ -146,7 +146,7 @@ void TestMultipleBulks() {
   LbmMeta<> send_meta;
   for (const auto& chunk : data_chunks) {
     Bulk bulk = client.Expose(
-        hipc::FullPtr<char>(const_cast<char*>(chunk.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(chunk.data())),
         chunk.size(), BULK_XFER);
     send_meta.send.push_back(bulk);
     send_meta.send_bulks++;
@@ -226,7 +226,7 @@ void TestLargeTransfer() {
 
   LbmMeta<> send_meta;
   Bulk bulk = client.Expose(
-      hipc::FullPtr<char>(const_cast<char*>(large_data.data())),
+      ctp::ipc::FullPtr<char>(const_cast<char*>(large_data.data())),
       large_data.size(), BULK_XFER);
   send_meta.send.push_back(bulk);
   send_meta.send_bulks = 1;
@@ -266,9 +266,9 @@ void TestShmPtrPassthrough() {
   LbmContext ctx = MakeCtx(shared);
 
   // Simulate a bulk whose data lives in shared memory (non-null alloc_id)
-  hipc::FullPtr<char> shm_ptr;
+  ctp::ipc::FullPtr<char> shm_ptr;
   shm_ptr.ptr_ = reinterpret_cast<char*>(0xDEADBEEF);
-  shm_ptr.shm_.alloc_id_ = hipc::AllocatorId(1, 2);
+  shm_ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId(1, 2);
   shm_ptr.shm_.off_ = 0x1234;
 
   LbmMeta<> send_meta;
@@ -294,7 +294,7 @@ void TestShmPtrPassthrough() {
 
   // Verify: ptr_ should be nullptr, shm_ should carry the original ShmPtr
   assert(recv_meta.recv[0].data.ptr_ == nullptr);
-  assert(recv_meta.recv[0].data.shm_.alloc_id_ == hipc::AllocatorId(1, 2));
+  assert(recv_meta.recv[0].data.shm_.alloc_id_ == ctp::ipc::AllocatorId(1, 2));
   assert(recv_meta.recv[0].data.shm_.off_.load() == 0x1234);
 
   std::cout << "ShmPtr passed through: alloc_id=("
@@ -318,15 +318,15 @@ void TestMixedBulks() {
   size_t private_size = strlen(private_data);
 
   // Bulk 1: shared memory (ShmPtr passthrough)
-  hipc::FullPtr<char> shm_ptr;
+  ctp::ipc::FullPtr<char> shm_ptr;
   shm_ptr.ptr_ = reinterpret_cast<char*>(0xCAFEBABE);
-  shm_ptr.shm_.alloc_id_ = hipc::AllocatorId(3, 4);
+  shm_ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId(3, 4);
   shm_ptr.shm_.off_ = 0x5678;
 
   LbmMeta<> send_meta;
   // Private bulk
   Bulk bulk0 = client.Expose(
-      hipc::FullPtr<char>(const_cast<char*>(private_data)),
+      ctp::ipc::FullPtr<char>(const_cast<char*>(private_data)),
       private_size, BULK_XFER);
   send_meta.send.push_back(bulk0);
   // ShmPtr bulk
@@ -359,7 +359,7 @@ void TestMixedBulks() {
 
   // Verify bulk 1: ShmPtr passthrough
   assert(recv_meta.recv[1].data.ptr_ == nullptr);
-  assert(recv_meta.recv[1].data.shm_.alloc_id_ == hipc::AllocatorId(3, 4));
+  assert(recv_meta.recv[1].data.shm_.alloc_id_ == ctp::ipc::AllocatorId(3, 4));
   assert(recv_meta.recv[1].data.shm_.off_.load() == 0x5678);
   std::cout << "Bulk 1 (ShmPtr): alloc_id=("
             << recv_meta.recv[1].data.shm_.alloc_id_.major_ << ","
@@ -389,7 +389,7 @@ void TestFactory() {
   TestMeta send_meta;
   send_meta.request_id = 100;
   send_meta.operation = "factory";
-  Bulk bulk = client->Expose(hipc::FullPtr<char>(const_cast<char*>(data)),
+  Bulk bulk = client->Expose(ctp::ipc::FullPtr<char>(const_cast<char*>(data)),
                              size, BULK_XFER);
   send_meta.send.push_back(bulk);
   send_meta.send_bulks = 1;
@@ -443,7 +443,7 @@ void TestShmClearRecvHandles() {
 
   LbmMeta<> send_meta;
   Bulk bulk = client.Expose(
-      hipc::FullPtr<char>(const_cast<char*>(data.data())),
+      ctp::ipc::FullPtr<char>(const_cast<char*>(data.data())),
       data.size(), BULK_XFER);
   send_meta.send.push_back(bulk);
   send_meta.send_bulks = 1;
@@ -478,9 +478,9 @@ void TestShmBulkExposeFlag() {
   LbmContext ctx = MakeCtx(shared);
 
   // Create a BULK_EXPOSE entry with a ShmPtr
-  hipc::FullPtr<char> shm_ptr;
+  ctp::ipc::FullPtr<char> shm_ptr;
   shm_ptr.ptr_ = reinterpret_cast<char*>(0xBAADF00D);
-  shm_ptr.shm_.alloc_id_ = hipc::AllocatorId(5, 6);
+  shm_ptr.shm_.alloc_id_ = ctp::ipc::AllocatorId(5, 6);
   shm_ptr.shm_.off_ = 0xABCD;
 
   LbmMeta<> send_meta;
@@ -506,7 +506,7 @@ void TestShmBulkExposeFlag() {
   // BULK_EXPOSE: only ShmPtr is sent, no data
   assert(recv_meta.recv.size() == 1);
   assert(recv_meta.recv[0].data.ptr_ == nullptr);
-  assert(recv_meta.recv[0].data.shm_.alloc_id_ == hipc::AllocatorId(5, 6));
+  assert(recv_meta.recv[0].data.shm_.alloc_id_ == ctp::ipc::AllocatorId(5, 6));
   assert(recv_meta.recv[0].data.shm_.off_.load() == 0xABCD);
   assert(recv_meta.recv[0].size == 2048);
 

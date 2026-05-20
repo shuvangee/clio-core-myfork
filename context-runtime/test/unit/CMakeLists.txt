@@ -238,7 +238,7 @@ set_target_properties(${PER_PROCESS_SHM_TEST_TARGET} PROPERTIES
 )
 
 # Create Autogen Coverage test executable (requires CAE)
-if(WRP_CORE_ENABLE_CAE)
+if(CLIO_CORE_ENABLE_CAE)
 add_executable(${AUTOGEN_COVERAGE_TEST_TARGET} ${AUTOGEN_COVERAGE_TEST_SOURCES})
 
   target_include_directories(${AUTOGEN_COVERAGE_TEST_TARGET} PRIVATE
@@ -273,7 +273,7 @@ add_executable(${AUTOGEN_COVERAGE_TEST_TARGET} ${AUTOGEN_COVERAGE_TEST_SOURCES})
 set_target_properties(${AUTOGEN_COVERAGE_TEST_TARGET} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
-endif()  # WRP_CORE_ENABLE_CAE
+endif()  # CLIO_CORE_ENABLE_CAE
 
 # Create Streaming test executable
 add_executable(${STREAMING_TEST_TARGET} ${STREAMING_TEST_SOURCES})
@@ -460,7 +460,7 @@ endif()
 # (allocate registered backend -> place N tasks -> launch a kernel
 # that submits all N concurrently via gpu2cpu_queue -> CPU worker
 # dispatches MOD_NAME::Runtime::GpuSubmit -> verify formula).
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
   add_cuda_executable(test_gpu_kernel_stress FALSE
     gpu/test_gpu_kernel_stress_gpu.cc
     INCLUDE_DIRS
@@ -489,7 +489,7 @@ if(WRP_CORE_ENABLE_CUDA)
   )
 endif()
 
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
   add_rocm_gpu_executable(test_gpu_kernel_stress FALSE
     gpu/test_gpu_kernel_stress_gpu.cc
   )
@@ -520,7 +520,7 @@ if(WRP_CORE_ENABLE_ROCM)
   )
 endif()
 
-if(WRP_CORE_ENABLE_SYCL)
+if(CLIO_CORE_ENABLE_SYCL)
   add_sycl_executable(test_gpu_kernel_stress FALSE
     gpu/test_gpu_kernel_stress_sycl.cc
     INCLUDE_DIRS
@@ -556,7 +556,7 @@ endif()
 # GPU coroutine test removed along with the GPU runtime concept.
 
 # Enable CTest integration if testing is enabled
-if(WRP_CORE_ENABLE_TESTS)
+if(CLIO_CORE_ENABLE_TESTS)
   # Core Runtime Tests
   # Single ctest entry runs the whole binary in one chimaera init/finalize cycle.
   # Previously 8 redundant entries each invoked the full unfiltered binary, which
@@ -658,7 +658,7 @@ if(WRP_CORE_ENABLE_TESTS)
   )
 
   # Autogen Coverage Tests (requires CAE)
-  if(WRP_CORE_ENABLE_CAE)
+  if(CLIO_CORE_ENABLE_CAE)
   add_test(
     NAME cr_autogen_coverage_tests
     COMMAND ${AUTOGEN_COVERAGE_TEST_TARGET}
@@ -669,7 +669,7 @@ if(WRP_CORE_ENABLE_TESTS)
     TIMEOUT 300
     LABELS "msan_skip"
   )
-  endif()  # WRP_CORE_ENABLE_CAE
+  endif()  # CLIO_CORE_ENABLE_CAE
 
   # Streaming Tests
   add_test(
@@ -1014,7 +1014,7 @@ set(_install_test_targets
   ${IPC_TRANSPORT_MODES_TEST_TARGET}
   ${CLIENT_RETRY_TEST_TARGET}
 )
-if(WRP_CORE_ENABLE_CAE)
+if(CLIO_CORE_ENABLE_CAE)
   list(APPEND _install_test_targets ${AUTOGEN_COVERAGE_TEST_TARGET})
 endif()
 install(TARGETS ${_install_test_targets} RUNTIME DESTINATION bin)
@@ -1024,7 +1024,7 @@ install(TARGETS ${_install_test_targets} RUNTIME DESTINATION bin)
 # See test/unit/distributed/docker-compose.yml and run_tests.sh for distributed test execution
 
 # MPI BDev Transport Integration Test
-if(WRP_CORE_ENABLE_MPI)
+if(CLIO_CORE_ENABLE_MPI)
   set(MPI_BDEV_TRANSPORT_TEST_TARGET chimaera_mpi_bdev_transport_tests)
   add_executable(${MPI_BDEV_TRANSPORT_TEST_TARGET} test_mpi_bdev_transport.cc)
 
@@ -1054,7 +1054,7 @@ if(WRP_CORE_ENABLE_MPI)
     RUNTIME DESTINATION bin
   )
 
-  if(WRP_CORE_ENABLE_TESTS)
+  if(CLIO_CORE_ENABLE_TESTS)
     # 4-rank test: server + SHM + TCP + IPC clients
     add_test(
       NAME cr_mpi_bdev_transport_all_modes
@@ -1093,7 +1093,7 @@ message(STATUS "  Test target: ${TEST_TARGET}")
 message(STATUS "  Test sources: ${TEST_SOURCES}")
 message(STATUS "  IPC AllocateBuffer test target: ${IPC_ALLOCATE_BUFFER_TEST_TARGET}")
 message(STATUS "  Per-Process SHM test target: ${PER_PROCESS_SHM_TEST_TARGET}")
-message(STATUS "  CTest enabled: ${WRP_CORE_ENABLE_TESTS}")
+message(STATUS "  CTest enabled: ${CLIO_CORE_ENABLE_TESTS}")
 message(STATUS "  Output directory: ${CMAKE_BINARY_DIR}/bin")
 message(STATUS "")
 message(STATUS "Module-specific tests are in:")

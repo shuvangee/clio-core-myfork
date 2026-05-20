@@ -4,7 +4,7 @@
 #
 # Pool layout:
 #   clio_compress (clio_cte_compressor) at 512.0 — entrypoint targeted by
-#                                                 WRP_CTE_CLIENT_INIT
+#                                                 CLIO_CTE_CLIENT_INIT
 #   clio_cte      (clio_cte_core)       at 513.0 — downstream storage
 #
 # Stack:
@@ -18,7 +18,7 @@
 name: iowarp_ior_libfuse_compress_ares_1n
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -27,7 +27,7 @@ pkgs:
     log_level: "info"
     sleep: 4
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     pool_name: clio_cte_core_storage
     pool_id: 513.0
@@ -39,7 +39,7 @@ pkgs:
     poll_period_ms: 5000
     iowarp_compress: "none"
 
-  - pkg_type: jarvis_iowarp.clio_compress
+  - pkg_type: jarvis_clio_core.clio_compress
     pkg_name: cte_compress
     pool_name: clio_cte_compressor
     pool_id: 512.0
@@ -48,7 +48,7 @@ pkgs:
     compress_lib: snappy
     compress_preset: default
 
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     mountpoint: /tmp/libfuse_compress
     sleep: 2

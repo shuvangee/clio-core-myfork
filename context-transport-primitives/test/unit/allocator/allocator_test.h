@@ -90,7 +90,7 @@ class AllocatorTest {
    * @param alloc_size Size of each allocation
    */
   void TestAllocFreeBatch(size_t iterations, size_t batch_size, size_t alloc_size) {
-    std::vector<hipc::FullPtr<char>> ptrs;
+    std::vector<ctp::ipc::FullPtr<char>> ptrs;
     ptrs.reserve(batch_size);
 
     for (size_t iter = 0; iter < iterations; ++iter) {
@@ -131,7 +131,7 @@ class AllocatorTest {
     const size_t kMaxAllocations = 5000;
 
     std::uniform_int_distribution<size_t> size_dist(1, kMaxAllocSize);
-    std::vector<std::pair<hipc::FullPtr<char>, size_t>> ptrs;
+    std::vector<std::pair<ctp::ipc::FullPtr<char>, size_t>> ptrs;
     ptrs.reserve(kMaxAllocations);
 
     for (size_t iter = 0; iter < iterations; ++iter) {
@@ -186,7 +186,7 @@ class AllocatorTest {
     const size_t kMaxAllocations = 5000;
 
     std::uniform_int_distribution<size_t> size_dist(min_alloc_size, max_alloc_size);
-    std::vector<std::pair<hipc::FullPtr<char>, size_t>> ptrs;
+    std::vector<std::pair<ctp::ipc::FullPtr<char>, size_t>> ptrs;
     ptrs.reserve(kMaxAllocations);
 
     for (size_t iter = 0; iter < iterations; ++iter) {
@@ -284,8 +284,8 @@ class AllocatorTest {
    */
   void TestLargeThenSmall(size_t iterations, size_t num_large_allocs, size_t large_size,
                           size_t num_small_allocs, size_t small_size) {
-    std::vector<hipc::FullPtr<char>> large_ptrs;
-    std::vector<hipc::FullPtr<char>> small_ptrs;
+    std::vector<ctp::ipc::FullPtr<char>> large_ptrs;
+    std::vector<ctp::ipc::FullPtr<char>> small_ptrs;
     large_ptrs.reserve(num_large_allocs);
     small_ptrs.reserve(num_small_allocs);
 

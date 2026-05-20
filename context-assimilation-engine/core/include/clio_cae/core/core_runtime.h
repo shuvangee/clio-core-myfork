@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CAE_CORE_RUNTIME_H_
-#define WRP_CAE_CORE_RUNTIME_H_
+#ifndef CLIO_CAE_CORE_RUNTIME_H_
+#define CLIO_CAE_CORE_RUNTIME_H_
 
 #include <chimaera/chimaera.h>
 #include <clio_cae/core/core_tasks.h>
@@ -55,21 +55,21 @@ class Runtime : public chi::Container {
   ~Runtime() override = default;
 
   // Virtual methods implemented in autogen/core_lib_exec.cc
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) override;
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) override;
   chi::u64 GetWorkRemaining() const override;
-  void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, hipc::FullPtr<chi::Task> task_ptr) override;
+  void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
   void LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
-  void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive, hipc::FullPtr<chi::Task> task_ptr) override;
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr, bool deep) override;
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
+  void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr, bool deep) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
   /**
    * Initialize container with pool information (REQUIRED)
    * This is called by the framework before Create is called
@@ -81,19 +81,19 @@ class Runtime : public chi::Container {
   /**
    * Monitor container state (Method::kMonitor)
    */
-  chi::TaskResume Monitor(hipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
+  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
 
   /**
    * Create the container (Method::kCreate)
    * This method creates queues and sets up container resources
    * NOTE: Container is already initialized via Init() before Create is called
    */
-  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext& ctx);
+  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext& ctx);
 
   /**
    * Destroy the container (Method::kDestroy)
    */
-  chi::TaskResume Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext& ctx) {
+  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext& ctx) {
     HLOG(kInfo, "Core container destroyed for pool: {} (ID: {})",
           pool_name_, pool_id_);
 #ifdef __NVCOMPILER
@@ -109,21 +109,21 @@ class Runtime : public chi::Container {
    * This is a coroutine that uses co_await for async assimilator operations.
    * @return TaskResume for coroutine suspension/resumption
    */
-  chi::TaskResume ParseOmni(hipc::FullPtr<ParseOmniTask> task, chi::RunContext& ctx);
+  chi::TaskResume ParseOmni(ctp::ipc::FullPtr<ParseOmniTask> task, chi::RunContext& ctx);
 
   /**
    * ProcessHdf5Dataset - Process a single HDF5 dataset (Method::kProcessHdf5Dataset)
    * Used for distributed processing where each dataset task is routed to a specific node.
    * @return TaskResume for coroutine suspension/resumption
    */
-  chi::TaskResume ProcessHdf5Dataset(hipc::FullPtr<ProcessHdf5DatasetTask> task, chi::RunContext& ctx);
+  chi::TaskResume ProcessHdf5Dataset(ctp::ipc::FullPtr<ProcessHdf5DatasetTask> task, chi::RunContext& ctx);
 
   /**
    * ExportData - Export all blobs in a CTE tag to a file (Method::kExportData)
    * Supports "hdf5" and "binary" formats.
    * @return TaskResume for coroutine suspension/resumption
    */
-  chi::TaskResume ExportData(hipc::FullPtr<ExportDataTask> task, chi::RunContext& ctx);
+  chi::TaskResume ExportData(ctp::ipc::FullPtr<ExportDataTask> task, chi::RunContext& ctx);
 
  private:
   Client client_;
@@ -132,4 +132,4 @@ class Runtime : public chi::Container {
 
 }  // namespace clio_cae::core
 
-#endif  // WRP_CAE_CORE_RUNTIME_H_
+#endif  // CLIO_CAE_CORE_RUNTIME_H_

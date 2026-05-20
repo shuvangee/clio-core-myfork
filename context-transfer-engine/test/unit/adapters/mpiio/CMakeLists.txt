@@ -3,12 +3,12 @@
 # This test exercises the WRP CTE MPI-IO adapter via direct linking
 # (no LD_PRELOAD). It only builds when MPI is enabled.
 
-if(NOT WRP_CORE_ENABLE_MPI)
+if(NOT CLIO_CORE_ENABLE_MPI)
     return()
 endif()
 
 include_directories(
-    ${WRP_CTE_ROOT}
+    ${CLIO_CTE_ROOT}
     .
 )
 

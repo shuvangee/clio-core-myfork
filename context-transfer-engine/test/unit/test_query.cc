@@ -179,7 +179,7 @@ static std::string chi_test_data_dir() {
        // Wait for runtime to be fully ready
        std::this_thread::sleep_for(500ms);
 
-       success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+       success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
        if (!success) {
          throw std::runtime_error("Failed to initialize CTE client");
        }
@@ -206,7 +206,7 @@ static std::string chi_test_data_dir() {
     * Setup test data: create tags and blobs for query testing
     */
    void setupTestData() {
-     auto *cte_client = WRP_CTE_CLIENT;
+     auto *cte_client = CLIO_CTE_CLIENT;
 
      // Create test storage target using bdev client
      chi::PoolId bdev_pool_id(200, 0);  // Custom pool ID for bdev
@@ -277,7 +277,7 @@ static std::string chi_test_data_dir() {
    auto *fixture = ctp::Singleton<CTEQueryTestFixture>::GetInstance();
   (void)fixture; // Suppress unused variable warning
 
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::TagQueryAsync(cte_client, "user_data", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " tags");
@@ -302,7 +302,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing TagQuery with wildcard pattern");
 
    // Query for all tags starting with "user_"
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::TagQueryAsync(cte_client, "user_.*", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " tags");
@@ -333,7 +333,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing TagQuery with alternation pattern");
 
    // Query for tags matching either "system_config" or "system_cache"
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::TagQueryAsync(cte_client, "system_(config|cache)", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " tags");
@@ -364,7 +364,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing TagQuery with match-all pattern");
 
    // Query for all tags
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::TagQueryAsync(cte_client, ".*", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " tags");
@@ -395,7 +395,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing TagQuery with pattern that matches nothing");
 
    // Query for non-existent tag pattern
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::TagQueryAsync(cte_client, "nonexistent_tag_pattern_xyz", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " tags");
@@ -411,7 +411,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing BlobQuery with exact match patterns");
 
    // Query for specific blob in specific tag
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::BlobQueryAsync(cte_client, "user_data", "blob_001\\.dat", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " blob pairs");
@@ -437,7 +437,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing BlobQuery with wildcard patterns");
 
    // Query for all .dat blobs in user_data tag
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::BlobQueryAsync(cte_client, "user_data", "blob_.*\\.dat", 0, chi::PoolQuery::Broadcast());
 
    INFO("Total blobs matched: " << results.size());
@@ -464,7 +464,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing BlobQuery with multiple tag matches");
 
    // Query for all .txt files in any "user_" tag
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::BlobQueryAsync(cte_client, "user_.*", "file_.*\\.txt", 0, chi::PoolQuery::Broadcast());
 
    INFO("Total blobs matched: " << results.size());
@@ -489,7 +489,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing BlobQuery with match-all patterns");
 
    // Query for all blobs in all tags
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::BlobQueryAsync(cte_client, ".*", ".*", 0, chi::PoolQuery::Broadcast());
 
    INFO("Total blobs matched: " << results.size());
@@ -505,7 +505,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing BlobQuery with blob pattern that matches nothing");
 
    // Query for non-existent blob pattern in existing tag
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::BlobQueryAsync(cte_client, "user_data", "nonexistent_blob_xyz", 0, chi::PoolQuery::Broadcast());
 
    INFO("Total blobs matched: " << results.size());
@@ -521,7 +521,7 @@ static std::string chi_test_data_dir() {
    INFO("Testing BlobQuery with tag pattern that matches nothing");
 
    // Query for non-existent tag pattern
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
    auto results = CTEQueryTestFixture::BlobQueryAsync(cte_client, "nonexistent_tag_xyz", ".*", 0, chi::PoolQuery::Broadcast());
 
    INFO("Query returned " << results.size() << " blob pairs");
@@ -536,7 +536,7 @@ static std::string chi_test_data_dir() {
   (void)fixture; // Suppress unused variable warning
    INFO("Testing query APIs with Local pool query");
 
-   auto *cte_client = WRP_CTE_CLIENT;
+   auto *cte_client = CLIO_CTE_CLIENT;
 
    // TagQuery with Local should work but only return local results
    auto tag_results = CTEQueryTestFixture::TagQueryAsync(cte_client, "user_.*", 0, chi::PoolQuery::Local());

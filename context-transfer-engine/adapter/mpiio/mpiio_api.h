@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_MPIIO_H
-#define WRP_CTE_ADAPTER_MPIIO_H
+#ifndef CLIO_CTE_ADAPTER_MPIIO_H
+#define CLIO_CTE_ADAPTER_MPIIO_H
 #include <dlfcn.h>
 #include <mpi.h>
 
@@ -40,7 +40,7 @@
 #include <string>
 
 #include "clio_ctp/util/logging.h"
-#ifdef WRP_CTE_MPICH
+#ifdef CLIO_CTE_MPICH
 #include <mpio.h>
 #endif
 #include "clio_ctp/util/real_api.h"
@@ -257,8 +257,8 @@ class MpiioApi : public RealApi {
 #include "clio_ctp/util/singleton.h"
 
 /** Simplify access to the stateless MpiioFs Singleton */
-#define WRP_CTE_MPIIO_API \
+#define CLIO_CTE_MPIIO_API \
   ctp::Singleton<::clio::cae::MpiioApi>::GetInstance()
-#define WRP_CTE_MPIIO_API_T clio::cae::MpiioApi*
+#define CLIO_CTE_MPIIO_API_T clio::cae::MpiioApi*
 
-#endif  // WRP_CTE_ADAPTER_MPIIO_H
+#endif  // CLIO_CTE_ADAPTER_MPIIO_H

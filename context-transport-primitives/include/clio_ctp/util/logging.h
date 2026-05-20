@@ -103,7 +103,7 @@ namespace ctp {
 //   - The arguments (cast to (void)) need to still be parsed so callers
 //     don't accidentally rely on lazy evaluation.
 //   - Defensive HLOG calls in transitively-reachable code (e.g. inside
-//     hipc::vector growth, deserialization paths) get traced by DPC++
+//     ctp::ipc::vector growth, deserialization paths) get traced by DPC++
 //     during kernel JIT even when not executed; making this a no-op
 //     stops that trace at the HLOG seam.
 #if !CTP_IS_DEVICE_PASS

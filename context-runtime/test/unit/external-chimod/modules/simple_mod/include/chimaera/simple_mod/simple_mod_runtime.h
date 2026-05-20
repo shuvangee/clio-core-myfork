@@ -87,7 +87,7 @@ public:
   /**
    * Execute a method on a task
    */
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) override;
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) override;
 
   //===========================================================================
   // Method implementations
@@ -96,17 +96,17 @@ public:
   /**
    * Handle Create task - Initialize the Simple Mod container
    */
-  void Create(hipc::FullPtr<CreateTask> task, chi::RunContext& rctx);
+  void Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext& rctx);
 
   /**
    * Handle Destroy task - Destroy the Simple Mod container
    */
-  void Destroy(hipc::FullPtr<DestroyTask> task, chi::RunContext& rctx);
+  void Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext& rctx);
 
   /**
    * Handle Flush task - Flush simple mod operations
    */
-  void Flush(hipc::FullPtr<FlushTask> task, chi::RunContext& rctx);
+  void Flush(ctp::ipc::FullPtr<FlushTask> task, chi::RunContext& rctx);
 
   /**
    * Get remaining work count for this simple mod container
@@ -124,7 +124,7 @@ public:
    * @param task_ptr The task to serialize
    */
   void SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
-                hipc::FullPtr<chi::Task> task_ptr) override;
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Deserialize task parameters from network transfer (auto-generated)
@@ -132,33 +132,33 @@ public:
    * @param archive LoadTaskArchive for deserialization
    * @return The deserialized task
    */
-  hipc::FullPtr<chi::Task> LoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
+  ctp::ipc::FullPtr<chi::Task> LoadTask(chi::u32 method, chi::LoadTaskArchive& archive) override;
 
   /**
    * Deserialize task for local transfer (auto-generated)
    */
-  hipc::FullPtr<chi::Task> LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
+  ctp::ipc::FullPtr<chi::Task> LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) override;
 
   /**
    * Serialize task for local transfer (auto-generated)
    */
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override;
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
   /**
    * Create a new copy of a task for distributed execution (auto-generated)
    */
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method,
-                                        hipc::FullPtr<chi::Task> orig_task_ptr,
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method,
+                                        ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
                                         bool deep) override;
 
   /**
    * Create a new task of the specified method type (auto-generated)
    */
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override;
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override;
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override;
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
 };
 

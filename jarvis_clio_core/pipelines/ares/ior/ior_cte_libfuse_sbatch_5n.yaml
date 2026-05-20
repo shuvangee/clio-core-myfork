@@ -13,12 +13,12 @@
 # Usage:
 #   # Dry-run (write the SLURM script but don't submit):
 #   jarvis ppl submit \
-#     ${IOWARP}/jarvis_iowarp/pipelines/ares/ior_cte_libfuse_sbatch.yaml \
+#     ${IOWARP}/jarvis_clio_core/pipelines/ares/ior_cte_libfuse_sbatch.yaml \
 #     +no_submit
 #
 #   # Real submit:
 #   jarvis ppl submit \
-#     ${IOWARP}/jarvis_iowarp/pipelines/ares/ior_cte_libfuse_sbatch.yaml
+#     ${IOWARP}/jarvis_clio_core/pipelines/ares/ior_cte_libfuse_sbatch.yaml
 #
 # After submission, watch `squeue -u $USER` and inspect
 # ${SHARED_DIR}/slurm-<jobid>.out for progress.
@@ -121,7 +121,7 @@ scheduler:
     - 'mkdir -p /home/llogan/iowarp_prte_tmp'
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     num_threads: 4
     client_data_segment_size: "2G"
@@ -130,7 +130,7 @@ pkgs:
     log_level: "debug"
     sleep: 4
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     devices:
       # 24 ranks/node x 256 MiB block = 6 GiB written per node. With
@@ -148,7 +148,7 @@ pkgs:
     # No broadcast routing or cross-node admin propagation required.
     pool_query: "local"
 
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     mountpoint: ${HOME}/cte_libfuse_sbatch_5n
     sleep: 2

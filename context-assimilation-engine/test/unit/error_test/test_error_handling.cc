@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
 
     // Connect to CTE
     HLOG(kInfo, "[SETUP] Connecting to CTE...");
-    clio_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::CLIO_CTE_CLIENT_INIT();
 
     // Set up storage target for CTE
     HLOG(kInfo, "[SETUP] Registering storage target...");
@@ -208,7 +208,7 @@ int main(int argc, char* argv[]) {
     std::this_thread::sleep_for(100ms);
 
     // Register storage target with CTE
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
     auto reg_task = cte_client->AsyncRegisterTarget(kTestStoragePath,
                                                      chimaera::bdev::BdevType::kFile,
                                                      kTestTargetSize, chi::PoolQuery::Local(), bdev_pool_id);
@@ -218,7 +218,7 @@ int main(int argc, char* argv[]) {
 
     // Initialize CAE client
     HLOG(kInfo, "[SETUP] Initializing CAE client...");
-    WRP_CAE_CLIENT_INIT();
+    CLIO_CAE_CLIENT_INIT();
 
     // Create CAE pool
     HLOG(kInfo, "[SETUP] Creating CAE pool...");

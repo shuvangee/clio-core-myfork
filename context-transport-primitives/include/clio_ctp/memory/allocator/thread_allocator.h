@@ -53,7 +53,7 @@ typedef PartitionedAllocator ThreadAllocator;
  * is followed by its variable-size managed region.
  */
 struct TaThreadBlock {
-  hipc::atomic<int> initialized_;  /**< 0=uninitialized, 1=ready */
+  ctp::ipc::atomic<int> initialized_;  /**< 0=uninitialized, 1=ready */
   PrivateBuddyAllocator alloc_;   /**< Private buddy allocator (MUST BE LAST) */
 
   CTP_CROSS_FUN
@@ -93,7 +93,7 @@ struct TaThreadBlock {
  */
 class _PartitionedAllocator : public Allocator {
  public:
-  hipc::atomic<int> heap_ready_;  /**< 0=not ready, 1=ready (grid-level sync) */
+  ctp::ipc::atomic<int> heap_ready_;  /**< 0=not ready, 1=ready (grid-level sync) */
   volatile int max_threads_;     /**< Fixed thread count (set at init).
                                       Volatile: cross-block reads must bypass L1
                                       after WaitReady to see block 0's shm_init. */

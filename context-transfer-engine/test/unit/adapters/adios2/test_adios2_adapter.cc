@@ -86,12 +86,12 @@ public:
     REQUIRE(CHI_IPC->IsInitialized());
 
     // Initialize CTE client using singleton
-    if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
+    if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
       FAIL("Failed to initialize CTE client");
     }
 
     // Verify CTE client is accessible
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
     REQUIRE(cte_client != nullptr);
 
     // Setup test paths

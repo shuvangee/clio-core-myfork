@@ -86,10 +86,10 @@ class FuseAdapterTestFixture {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
       REQUIRE(success);
 
-      auto *cte_client = WRP_CTE_CLIENT;
+      auto *cte_client = CLIO_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
       cte_client->Init(clio_cte::core::kCtePoolId);
 
@@ -116,7 +116,7 @@ class FuseAdapterTestFixture {
       return;
     }
 
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
 
     chi::PoolId bdev_pool_id(950, 0);
     chimaera::bdev::Client bdev_client(bdev_pool_id);

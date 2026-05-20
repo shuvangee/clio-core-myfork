@@ -360,7 +360,7 @@ struct AllocateBlocksTask : public chi::Task {
    * constructed)
    * @param other Pointer to the source task to copy from
    */
-  void Copy(const hipc::FullPtr<AllocateBlocksTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<AllocateBlocksTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // Copy AllocateBlocksTask-specific fields
@@ -369,7 +369,7 @@ struct AllocateBlocksTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<AllocateBlocksTask>());
   }
@@ -436,7 +436,7 @@ struct FreeBlocksTask : public chi::Task {
    * Copy from another FreeBlocksTask (assumes this task is already constructed)
    * @param other Pointer to the source task to copy from
    */
-  void Copy(const hipc::FullPtr<FreeBlocksTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<FreeBlocksTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // Copy FreeBlocksTask-specific fields
@@ -444,7 +444,7 @@ struct FreeBlocksTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<FreeBlocksTask>());
   }
@@ -456,7 +456,7 @@ struct FreeBlocksTask : public chi::Task {
 struct WriteTask : public chi::Task {
   // Task-specific data
   IN chi::priv::vector<Block> blocks_;  // Blocks to write to
-  IN hipc::ShmPtr<> data_;              // Data to write (pointer-based)
+  IN ctp::ipc::ShmPtr<> data_;              // Data to write (pointer-based)
   IN size_t length_;                    // Size of data to write
   OUT chi::u64 bytes_written_;          // Number of bytes actually written
 
@@ -466,7 +466,7 @@ struct WriteTask : public chi::Task {
   /** Emplace constructor */
   CTP_CROSS_FUN explicit WriteTask(const chi::TaskId &task_node, const chi::PoolId &pool_id,
                      const chi::PoolQuery &pool_query,
-                     const chi::priv::vector<Block> &blocks, hipc::ShmPtr<> data,
+                     const chi::priv::vector<Block> &blocks, ctp::ipc::ShmPtr<> data,
                      size_t length)
       : chi::Task(task_node, pool_id, pool_query, Method::kWrite),
         blocks_(blocks),
@@ -510,7 +510,7 @@ struct WriteTask : public chi::Task {
   }
 
   /** Aggregate */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<WriteTask>());
   }
@@ -519,7 +519,7 @@ struct WriteTask : public chi::Task {
    * Copy from another WriteTask (assumes this task is already constructed)
    * @param other Pointer to the source task to copy from
    */
-  void Copy(const hipc::FullPtr<WriteTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<WriteTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // Copy WriteTask-specific fields
@@ -536,7 +536,7 @@ struct WriteTask : public chi::Task {
 struct ReadTask : public chi::Task {
   // Task-specific data
   IN chi::priv::vector<Block> blocks_;  // Blocks to read from
-  OUT hipc::ShmPtr<> data_;             // Read data (pointer-based)
+  OUT ctp::ipc::ShmPtr<> data_;             // Read data (pointer-based)
   INOUT size_t
       length_;  // Size of data buffer (IN: buffer size, OUT: actual size)
   OUT chi::u64 bytes_read_;  // Number of bytes actually read
@@ -547,7 +547,7 @@ struct ReadTask : public chi::Task {
   /** Emplace constructor */
   CTP_CROSS_FUN explicit ReadTask(const chi::TaskId &task_node, const chi::PoolId &pool_id,
                     const chi::PoolQuery &pool_query,
-                    const chi::priv::vector<Block> &blocks, hipc::ShmPtr<> data,
+                    const chi::priv::vector<Block> &blocks, ctp::ipc::ShmPtr<> data,
                     size_t length)
       : chi::Task(task_node, pool_id, pool_query, Method::kRead),
         blocks_(blocks),
@@ -592,7 +592,7 @@ struct ReadTask : public chi::Task {
   }
 
   /** Aggregate */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<ReadTask>());
   }
@@ -601,7 +601,7 @@ struct ReadTask : public chi::Task {
    * Copy from another ReadTask (assumes this task is already constructed)
    * @param other Pointer to the source task to copy from
    */
-  void Copy(const hipc::FullPtr<ReadTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<ReadTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // Copy ReadTask-specific fields
@@ -654,7 +654,7 @@ struct GetStatsTask : public chi::Task {
    * Copy from another GetStatsTask (assumes this task is already constructed)
    * @param other Pointer to the source task to copy from
    */
-  void Copy(const hipc::FullPtr<GetStatsTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<GetStatsTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     // Copy GetStatsTask-specific fields
@@ -663,7 +663,7 @@ struct GetStatsTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetStatsTask>());
   }
@@ -717,7 +717,7 @@ struct UpdateTask : public chi::Task {
     Task::SerializeOut(ar);
   }
 
-  void Copy(const hipc::FullPtr<UpdateTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<UpdateTask> &other) {
     Task::Copy(other.template Cast<Task>());
     hbm_ptr_     = other->hbm_ptr_;
     pinned_ptr_  = other->pinned_ptr_;
@@ -728,7 +728,7 @@ struct UpdateTask : public chi::Task {
     alignment_   = other->alignment_;
   }
 
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<UpdateTask>());
   }

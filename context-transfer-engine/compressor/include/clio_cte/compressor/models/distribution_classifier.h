@@ -39,8 +39,8 @@
  * using moment analysis and goodness-of-fit metrics without ML.
  */
 
-#ifndef WRP_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_
-#define WRP_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_
+#ifndef CLIO_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_
+#define CLIO_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_
 
 #include <cmath>
 #include <cstddef>
@@ -492,4 +492,4 @@ class DistributionClassifierFactory {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_
+#endif  // CLIO_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_

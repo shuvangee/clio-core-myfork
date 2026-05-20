@@ -72,7 +72,7 @@ class ClioDistributed(Application):
         self.output_file = os.path.join(self.config['output_dir'], 'distributed_test_results.txt')
 
         # Set test environment variables
-        self.setenv('WRP_DISTRIBUTED_OUTPUT_DIR', self.config['output_dir'])
+        self.setenv('CLIO_DISTRIBUTED_OUTPUT_DIR', self.config['output_dir'])
 
         self.log("IOWarp distributed test configured")
         self.log(f"  Num nodes: {self.config['num_nodes']}")

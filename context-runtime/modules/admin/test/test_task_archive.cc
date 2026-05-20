@@ -72,7 +72,7 @@ constexpr chi::u32 kTestWriteFlag = 0x1;  // BULK_XFER
 constexpr chi::u32 kTestExposeFlag = 0x2; // BULK_EXPOSE
 
 // Helper allocator for tests - uses CTP_MALLOC for non-IPC allocations
-hipc::MallocAllocator* GetTestAllocator() {
+ctp::ipc::MallocAllocator* GetTestAllocator() {
   return CTP_MALLOC;
 }
 
@@ -223,7 +223,7 @@ TEST_CASE("Bulk Transfer Recording", "[task_archive][bulk_transfer]") {
   SECTION("SaveTaskArchive bulk transfer recording") {
     chi::SaveTaskArchive archive(chi::MsgType::kSerializeIn);
 
-    hipc::ShmPtr<> test_ptr = hipc::ShmPtr<>::GetNull();
+    ctp::ipc::ShmPtr<> test_ptr = ctp::ipc::ShmPtr<>::GetNull();
     size_t test_size = 1024;
     uint32_t test_flags = kTestWriteFlag;
 
@@ -239,9 +239,9 @@ TEST_CASE("Bulk Transfer Recording", "[task_archive][bulk_transfer]") {
     chi::SaveTaskArchive archive(chi::MsgType::kSerializeIn);
 
     // Add multiple bulk transfers
-    archive.bulk(hipc::ShmPtr<>::GetNull(), 100, kTestWriteFlag);
-    archive.bulk(hipc::ShmPtr<>::GetNull(), 200, kTestExposeFlag);
-    archive.bulk(hipc::ShmPtr<>::GetNull(), 300, kTestWriteFlag | kTestExposeFlag);
+    archive.bulk(ctp::ipc::ShmPtr<>::GetNull(), 100, kTestWriteFlag);
+    archive.bulk(ctp::ipc::ShmPtr<>::GetNull(), 200, kTestExposeFlag);
+    archive.bulk(ctp::ipc::ShmPtr<>::GetNull(), 300, kTestWriteFlag | kTestExposeFlag);
 
     REQUIRE(archive.GetSendBulkCount() == 3);
     REQUIRE(archive.send[0].size == 100);
@@ -533,7 +533,7 @@ public:
     return 0; // Test implementation returns no work
   }
 
-  chi::TaskResume Run(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr,
+  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr,
                       chi::RunContext &rctx) override {
     // Test implementation - do nothing
     (void)method;
@@ -544,29 +544,29 @@ public:
   }
 
   void SaveTask(chi::u32 method, chi::SaveTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override {
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override {
     // Test implementation - just call task serialization
     (void)method;
     archive << *task_ptr;
   }
 
   void LoadTask(chi::u32 method, chi::LoadTaskArchive &archive,
-                hipc::FullPtr<chi::Task> task_ptr) override {
+                ctp::ipc::FullPtr<chi::Task> task_ptr) override {
     // Test implementation - just call task deserialization
     (void)method;
     archive >> *task_ptr;
   }
 
-  hipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override {
+  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(chi::u32 method, chi::LoadTaskArchive &archive) override {
     // Test implementation - allocate task and call LoadTask
-    hipc::FullPtr<chi::Task> task_ptr = NewTask(method);
+    ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);
     if (!task_ptr.IsNull()) {
       LoadTask(method, archive, task_ptr);
     }
     return task_ptr;
   }
 
-  hipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, hipc::FullPtr<chi::Task> orig_task_ptr,
+  ctp::ipc::FullPtr<chi::Task> NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
                                         bool deep) override {
     // Test implementation - create new task and copy
     (void)method;
@@ -579,30 +579,30 @@ public:
       }
       return new_task_ptr;
     }
-    return hipc::FullPtr<chi::Task>();
+    return ctp::ipc::FullPtr<chi::Task>();
   }
 
-  hipc::FullPtr<chi::Task> NewTask(chi::u32 method) override {
+  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override {
     // Test implementation - create a basic Task
     (void)method;
     auto *ipc_manager = CHI_IPC;
     if (ipc_manager) {
       return ipc_manager->NewTask<chi::Task>();
     }
-    return hipc::FullPtr<chi::Task>();
+    return ctp::ipc::FullPtr<chi::Task>();
   }
 
   void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override {
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override {
     // Test implementation - do nothing for now
     (void)method;
     (void)archive;
     (void)task_ptr;
   }
 
-  hipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive) override {
+  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive) override {
     // Test implementation - allocate task and call LocalLoadTask
-    hipc::FullPtr<chi::Task> task_ptr = NewTask(method);
+    ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);
     if (!task_ptr.IsNull()) {
       LocalLoadTask(method, archive, task_ptr);
     }
@@ -610,20 +610,20 @@ public:
   }
 
   void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive &archive,
-                     hipc::FullPtr<chi::Task> task_ptr) override {
+                     ctp::ipc::FullPtr<chi::Task> task_ptr) override {
     // Test implementation - do nothing
     (void)method;
     (void)archive;
     (void)task_ptr;
   }
 
-  void Aggregate(chi::u32 method, hipc::FullPtr<chi::Task> orig_task,
-                 const hipc::FullPtr<chi::Task>& replica_task) override {
+  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
+                 const ctp::ipc::FullPtr<chi::Task>& replica_task) override {
     (void)method;
     orig_task->Aggregate(replica_task);
   }
 
-  void DelTask(chi::u32 method, hipc::FullPtr<chi::Task> task_ptr) override {
+  void DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) override {
     (void)method;
     auto *ipc_manager = CHI_IPC;
     if (ipc_manager) {
@@ -636,7 +636,7 @@ TEST_CASE("Container Serialization Methods", "[task_archive][container]") {
   SECTION("Container SaveTask/LoadTask with SerializeIn mode") {
     TestContainer container;
     auto original_task = CreateTestTask();
-    hipc::FullPtr<chi::Task> task_ptr(original_task.get());
+    ctp::ipc::FullPtr<chi::Task> task_ptr(original_task.get());
 
     // Test SaveTask with SerializeIn mode (inputs)
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
@@ -651,14 +651,14 @@ TEST_CASE("Container Serialization Methods", "[task_archive][container]") {
     // Test AllocLoadTask with SerializeIn mode (inputs)
     chi::LoadTaskArchive load_archive(serialized_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-    hipc::FullPtr<chi::Task> new_task_ptr;
+    ctp::ipc::FullPtr<chi::Task> new_task_ptr;
     REQUIRE_NOTHROW(new_task_ptr = container.AllocLoadTask(method, load_archive));
   }
 
   SECTION("Container SaveTask/LoadTask with SerializeOut mode") {
     TestContainer container;
     auto original_task = CreateTestTask();
-    hipc::FullPtr<chi::Task> task_ptr(original_task.get());
+    ctp::ipc::FullPtr<chi::Task> task_ptr(original_task.get());
 
     // Test SaveTask with SerializeOut mode (outputs)
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
@@ -670,7 +670,7 @@ TEST_CASE("Container Serialization Methods", "[task_archive][container]") {
     // Test AllocLoadTask with SerializeOut mode (outputs)
     chi::LoadTaskArchive load_archive(serialized_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-    hipc::FullPtr<chi::Task> new_task_ptr;
+    ctp::ipc::FullPtr<chi::Task> new_task_ptr;
     REQUIRE_NOTHROW(new_task_ptr = container.AllocLoadTask(method, load_archive));
   }
 }
@@ -697,7 +697,7 @@ TEST_CASE("Error Handling and Edge Cases", "[task_archive][error_handling]") {
 
   SECTION("Bulk transfer with null pointer") {
     chi::SaveTaskArchive archive(chi::MsgType::kSerializeIn);
-    hipc::ShmPtr<> null_ptr = hipc::ShmPtr<>::GetNull();
+    ctp::ipc::ShmPtr<> null_ptr = ctp::ipc::ShmPtr<>::GetNull();
 
     REQUIRE_NOTHROW(archive.bulk(null_ptr, 0, 0));
 

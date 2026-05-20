@@ -25,7 +25,7 @@ try:
     import clio_cee as cee
 except ImportError as e:
     print(f"ERROR: Failed to import clio_cee module: {e}")
-    print("Make sure WRP_CORE_ENABLE_PYTHON=ON and the module is built/installed")
+    print("Make sure CLIO_CORE_ENABLE_PYTHON=ON and the module is built/installed")
     sys.exit(1)
 
 

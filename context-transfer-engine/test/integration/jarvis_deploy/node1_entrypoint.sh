@@ -60,9 +60,9 @@ jarvis init \
     +force
 
 echo '========================================'
-echo 'Node 1: Adding jarvis_iowarp repository'
+echo 'Node 1: Adding jarvis_clio_core repository'
 echo '========================================'
-jarvis repo add /workspace/jarvis_iowarp +force
+jarvis repo add /workspace/jarvis_clio_core +force
 
 echo '========================================'
 echo 'Node 1: Setting hostfile'

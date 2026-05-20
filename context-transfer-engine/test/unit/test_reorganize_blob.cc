@@ -110,7 +110,7 @@ class ReorganizeBlobTestFixture {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Initialize CTE client
-    success = clio_cte::core::WRP_CTE_CLIENT_INIT();
+    success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
     REQUIRE(success);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -219,7 +219,7 @@ TEST_CASE("ReorganizeBlob - PutBlob to DRAM", "[reorganize][put][dram]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   // Create a tag for our test blobs
@@ -232,7 +232,7 @@ TEST_CASE("ReorganizeBlob - PutBlob to DRAM", "[reorganize][put][dram]") {
   // Allocate shared memory buffer
   auto shm_buffer = CHI_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm_buffer.IsNull());
-  hipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
+  ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
   // Fill buffer with pattern
   auto test_data = g_fixture->CreateTestData(kBlobSize, 'D');  // 'D' for DRAM
@@ -280,7 +280,7 @@ TEST_CASE("ReorganizeBlob - Move to Disk", "[reorganize][move][disk]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "reorganize_test_tag";
@@ -358,7 +358,7 @@ TEST_CASE("ReorganizeBlob - Promote to DRAM", "[reorganize][promote][dram]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "reorganize_test_tag";
@@ -417,7 +417,7 @@ TEST_CASE("ReorganizeBlob - Cleanup", "[reorganize][cleanup]") {
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "reorganize_test_tag";

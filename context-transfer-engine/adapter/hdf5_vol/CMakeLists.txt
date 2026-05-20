@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 # IOWarp HDF5 VOL Connector
-# Requires: WRP_CTE_ENABLE_HDF5_VOL=ON and HDF5 >= 2.0
+# Requires: CLIO_CTE_ENABLE_HDF5_VOL=ON and HDF5 >= 2.0
 # ------------------------------------------------------------------------------
 
 if(NOT HDF5_FOUND)

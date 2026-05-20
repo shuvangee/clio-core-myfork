@@ -173,7 +173,7 @@ class ClioCompressBench(Application):
 
         # Set trace environment variable
         if self.config['trace']:
-            self.setenv('WRP_CTE_COMPRESS_TRACE', 'on')
+            self.setenv('CLIO_CTE_COMPRESS_TRACE', 'on')
             self.log("Compression tracing enabled")
 
         self.log(f"Configuration: io_size={self.config['io_size']}, "

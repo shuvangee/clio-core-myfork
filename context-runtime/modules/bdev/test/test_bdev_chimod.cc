@@ -909,7 +909,7 @@ TEST_CASE("bdev_ram_large_blocks", "[bdev][ram][large]") {
       REQUIRE(alloc_task->return_code_ == 0);
       REQUIRE(alloc_task->blocks_.size() > 0);
 
-      // Convert hipc::vector to std::vector for validation
+      // Convert ctp::ipc::vector to std::vector for validation
       std::vector<chimaera::bdev::Block> blocks;
       for (size_t j = 0; j < alloc_task->blocks_.size(); ++j) {
         blocks.push_back(alloc_task->blocks_[j]);
@@ -1509,7 +1509,7 @@ TEST_CASE("bdev_parallel_io_operations", "[bdev][parallel][io]") {
         REQUIRE(alloc_task->return_code_ == 0);
         REQUIRE(alloc_task->blocks_.size() > 0);
 
-        // Convert hipc::vector to std::vector for FreeBlocks
+        // Convert ctp::ipc::vector to std::vector for FreeBlocks
         std::vector<chimaera::bdev::Block> blocks;
         for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
           blocks.push_back(alloc_task->blocks_[i]);

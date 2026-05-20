@@ -1,5 +1,5 @@
 include_directories(
-        ${WRP_CTE_ROOT}
+        ${CLIO_CTE_ROOT}
         ${HERMES_SRC_DIR}
         ${HERMES_ADAPTER_DIR}
         ${HERMES_IO_CLIENT_DIR}
@@ -27,10 +27,10 @@ install(
 # -----------------------------------------------------------------------------
 # Install headers
 # -----------------------------------------------------------------------------
-file(GLOB_RECURSE WRP_CTE_HEADERS "*.h")
+file(GLOB_RECURSE CLIO_CTE_HEADERS "*.h")
 install(
         FILES
-        ${WRP_CTE_HEADERS}
+        ${CLIO_CTE_HEADERS}
         DESTINATION
         include/adapter/stdio
         COMPONENT

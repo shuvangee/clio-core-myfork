@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_STDIO_NATIVE_H_
-#define WRP_CTE_ADAPTER_STDIO_NATIVE_H_
+#ifndef CLIO_CTE_ADAPTER_STDIO_NATIVE_H_
+#define CLIO_CTE_ADAPTER_STDIO_NATIVE_H_
 
 #include <memory>
 
@@ -47,15 +47,15 @@ namespace clio::cae {
 /** A class to represent POSIX IO file system */
 class StdioFs : public clio::cae::Filesystem {
 public:
-  WRP_CTE_STDIO_API_T real_api_; /**< pointer to real APIs */
+  CLIO_CTE_STDIO_API_T real_api_; /**< pointer to real APIs */
 
 public:
-  StdioFs() : Filesystem(AdapterType::kStdio) { real_api_ = WRP_CTE_STDIO_API; }
+  StdioFs() : Filesystem(AdapterType::kStdio) { real_api_ = CLIO_CTE_STDIO_API; }
 
   /** Close an existing stream and then open with new path */
   FILE *Reopen(const std::string &user_path, const char *mode,
                AdapterStat &stat) {
-    auto real_api_ = WRP_CTE_STDIO_API;
+    auto real_api_ = CLIO_CTE_STDIO_API;
     FILE *ret;
     ret = real_api_->freopen(user_path.c_str(), mode, stat.fh_);
     if (!ret) {
@@ -69,8 +69,8 @@ public:
 
   /** fdopen */
   FILE *FdOpen(const std::string &mode, std::shared_ptr<AdapterStat> &stat) {
-    auto real_api_ = WRP_CTE_STDIO_API;
-    auto mdm = WRP_CTE_FS_METADATA_MANAGER;
+    auto real_api_ = CLIO_CTE_STDIO_API;
+    auto mdm = CLIO_CTE_FS_METADATA_MANAGER;
     stat->fh_ = real_api_->fdopen(stat->fd_, mode.c_str());
     stat->mode_str_ = mode;
     File f;
@@ -105,7 +105,7 @@ public:
     }
     clio::cae::File f;
     f.hermes_fh_ = fp;
-    stat = WRP_CTE_FS_METADATA_MANAGER->Find(f);
+    stat = CLIO_CTE_FS_METADATA_MANAGER->Find(f);
     return stat != nullptr;
   }
 
@@ -130,24 +130,24 @@ public:
   /** Allocate an fd for the file f */
   void RealOpen(File &f, AdapterStat &stat, const std::string &path) override {
     if (stat.mode_str_.find('w') != std::string::npos) {
-      stat.hflags_.SetBits(WRP_CTE_FS_TRUNC);
-      stat.hflags_.SetBits(WRP_CTE_FS_CREATE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_TRUNC);
+      stat.hflags_.SetBits(CLIO_CTE_FS_CREATE);
     }
     if (stat.mode_str_.find('a') != std::string::npos) {
-      stat.hflags_.SetBits(WRP_CTE_FS_APPEND);
-      stat.hflags_.SetBits(WRP_CTE_FS_CREATE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_APPEND);
+      stat.hflags_.SetBits(CLIO_CTE_FS_CREATE);
     }
     if (stat.mode_str_.find('r') != std::string::npos) {
-      stat.hflags_.SetBits(WRP_CTE_FS_READ);
+      stat.hflags_.SetBits(CLIO_CTE_FS_READ);
     }
     if (stat.mode_str_.find('w') != std::string::npos) {
-      stat.hflags_.SetBits(WRP_CTE_FS_WRITE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_WRITE);
     }
     if (stat.mode_str_.find('+') != std::string::npos) {
-      stat.hflags_.SetBits(WRP_CTE_FS_READ | WRP_CTE_FS_WRITE);
+      stat.hflags_.SetBits(CLIO_CTE_FS_READ | CLIO_CTE_FS_WRITE);
     }
 
-    if (stat.hflags_.Any(WRP_CTE_FS_CREATE)) {
+    if (stat.hflags_.Any(CLIO_CTE_FS_CREATE)) {
       if (stat.adapter_mode_ != AdapterMode::kScratch) {
         stat.fh_ = real_api_->fopen(path.c_str(), stat.mode_str_.c_str());
       }
@@ -156,7 +156,7 @@ public:
     }
 
     if (stat.fh_ != nullptr) {
-      stat.hflags_.SetBits(WRP_CTE_FS_EXISTS);
+      stat.hflags_.SetBits(CLIO_CTE_FS_EXISTS);
     }
     if (stat.fh_ == nullptr && stat.adapter_mode_ != AdapterMode::kScratch) {
       f.status_ = false;
@@ -276,10 +276,10 @@ public:
 };
 
 /** Simplify access to the stateless StdioFs Singleton */
-#define WRP_CTE_STDIO_FS                                                        \
+#define CLIO_CTE_STDIO_FS                                                        \
   ctp::Singleton<::clio::cae::StdioFs>::GetInstance()
-#define WRP_CTE_STDIO_FS_T clio::cae::StdioFs *
+#define CLIO_CTE_STDIO_FS_T clio::cae::StdioFs *
 
 } // namespace clio::cae
 
-#endif // WRP_CTE_ADAPTER_STDIO_NATIVE_H_
+#endif // CLIO_CTE_ADAPTER_STDIO_NATIVE_H_

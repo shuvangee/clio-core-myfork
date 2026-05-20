@@ -207,7 +207,7 @@ add_executable(clio_cte_compress_bench
 )
 
 # Add compression compile definition
-target_compile_definitions(clio_cte_compress_bench PRIVATE WRP_CORE_ENABLE_COMPRESS)
+target_compile_definitions(clio_cte_compress_bench PRIVATE CLIO_CORE_ENABLE_COMPRESS)
 
 # Link required libraries
 target_link_libraries(clio_cte_compress_bench

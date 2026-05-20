@@ -134,7 +134,7 @@ public:
    * Wait for task completion with timeout
    */
   template <typename TaskT>
-  bool waitForTaskCompletion(hipc::FullPtr<TaskT> task,
+  bool waitForTaskCompletion(ctp::ipc::FullPtr<TaskT> task,
                              chi::u32 timeout_ms = kTestTimeoutMs) {
     if (task.IsNull()) {
       return false;

@@ -247,10 +247,10 @@ struct MyCustomTask : public chi::Task {
 class Client : public chi::ContainerClient {
 public:
   // Synchronous operations
-  chi::u64 ProcessData(const hipc::MemContext& mctx, chi::u64 data);
+  chi::u64 ProcessData(const ctp::ipc::MemContext& mctx, chi::u64 data);
   
   // Asynchronous operations
-  hipc::FullPtr<MyCustomTask> AsyncProcessData(const hipc::MemContext& mctx, chi::u64 data);
+  ctp::ipc::FullPtr<MyCustomTask> AsyncProcessData(const ctp::ipc::MemContext& mctx, chi::u64 data);
 };
 ```
 
@@ -258,7 +258,7 @@ public:
 ```cpp
 class Runtime : public chi::Container {
 public:
-  void ProcessData(hipc::FullPtr<MyCustomTask> task, chi::RunContext& ctx) {
+  void ProcessData(ctp::ipc::FullPtr<MyCustomTask> task, chi::RunContext& ctx) {
     // Implement your logic here
     task->result_ = process_algorithm(task->input_data_);
     task->result_code_ = 0;  // Success

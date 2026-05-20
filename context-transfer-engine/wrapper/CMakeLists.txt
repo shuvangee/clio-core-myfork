@@ -1,9 +1,9 @@
-# Python bindings are controlled by WRP_CORE_ENABLE_PYTHON
-if(WRP_CORE_ENABLE_PYTHON)
+# Python bindings are controlled by CLIO_CORE_ENABLE_PYTHON
+if(CLIO_CORE_ENABLE_PYTHON)
     message(STATUS "CTE Python bindings enabled")
     add_subdirectory(python)
 else()
-    message(STATUS "CTE Python bindings disabled: WRP_CORE_ENABLE_PYTHON is OFF")
+    message(STATUS "CTE Python bindings disabled: CLIO_CORE_ENABLE_PYTHON is OFF")
 endif()
 
 # Rust bindings (built independently via cargo)

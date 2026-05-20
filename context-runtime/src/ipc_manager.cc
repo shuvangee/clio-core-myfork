@@ -516,7 +516,7 @@ bool IpcManager::ServerInitShm() {
 
   try {
     // Set allocator ID for main segment
-    main_allocator_id_ = hipc::AllocatorId::Get(1, 0);
+    main_allocator_id_ = ctp::ipc::AllocatorId::Get(1, 0);
 
     // Get configurable segment name
     std::string main_segment_name =
@@ -542,7 +542,7 @@ bool IpcManager::ServerInitShm() {
     }
 
     // Initialize queue segment (CHI_QUEUE_ALLOC_T = ArenaAllocator) for TaskQueues
-    queue_allocator_id_ = hipc::AllocatorId::Get(2, 0);
+    queue_allocator_id_ = ctp::ipc::AllocatorId::Get(2, 0);
     std::string queue_segment_name =
         config->GetSharedMemorySegmentName(kQueueSegment);
     size_t queue_segment_size = config->CalculateQueueSegmentSize();
@@ -569,8 +569,8 @@ bool IpcManager::ClientInitShm() {
 
   try {
     // Set allocator IDs (must match server)
-    main_allocator_id_ = hipc::AllocatorId(1, 0);
-    queue_allocator_id_ = hipc::AllocatorId(2, 0);
+    main_allocator_id_ = ctp::ipc::AllocatorId(1, 0);
+    queue_allocator_id_ = ctp::ipc::AllocatorId(2, 0);
 
     // Get configurable segment names with environment variable expansion
     std::string main_segment_name =
@@ -1446,7 +1446,7 @@ void IpcManager::FreeBuffer(FullPtr<char> buffer_ptr) {
   }
 
   // Check if allocator ID is null (private memory allocated with CTP_MALLOC)
-  if (buffer_ptr.shm_.alloc_id_ == hipc::AllocatorId::GetNull()) {
+  if (buffer_ptr.shm_.alloc_id_ == ctp::ipc::AllocatorId::GetNull()) {
     // Private memory - use CTP_MALLOC->Free() for RUNTIME-allocated buffers
     // In RUNTIME mode, AllocateBuffer uses CTP_MALLOC which adds MallocPage
     // header
@@ -1470,7 +1470,7 @@ void IpcManager::FreeBuffer(FullPtr<char> buffer_ptr) {
   // in the runtime's bdev path. Match ToFullPtr's read-locked pattern.
   u64 alloc_key = (static_cast<u64>(buffer_ptr.shm_.alloc_id_.major_) << 32) |
                   static_cast<u64>(buffer_ptr.shm_.alloc_id_.minor_);
-  hipc::MultiProcessAllocator *resolved_alloc = nullptr;
+  ctp::ipc::MultiProcessAllocator *resolved_alloc = nullptr;
   {
     allocator_map_lock_.ReadLock();
     auto it = alloc_map_.find(alloc_key);
@@ -1634,10 +1634,10 @@ bool IpcManager::IncreaseClientShm(size_t size) {
 
   try {
     // Create the shared memory backend
-    auto backend = std::make_unique<hipc::PosixShmMmap>();
+    auto backend = std::make_unique<ctp::ipc::PosixShmMmap>();
 
     // Create allocator ID: major = pid, minor = index
-    hipc::AllocatorId alloc_id(static_cast<u32>(pid), index);
+    ctp::ipc::AllocatorId alloc_id(static_cast<u32>(pid), index);
 
     // Initialize shared memory using backend's shm_init method
     if (!backend->shm_init(alloc_id, ctp::Unit<size_t>::Bytes(total_size),
@@ -1651,8 +1651,8 @@ bool IpcManager::IncreaseClientShm(size_t size) {
     }
 
     // Create allocator using backend's MakeAlloc method
-    hipc::MultiProcessAllocator *allocator =
-        backend->MakeAlloc<hipc::MultiProcessAllocator>();
+    ctp::ipc::MultiProcessAllocator *allocator =
+        backend->MakeAlloc<ctp::ipc::MultiProcessAllocator>();
 
     if (allocator == nullptr) {
       HLOG(kError,
@@ -1698,7 +1698,7 @@ bool IpcManager::IncreaseClientShm(size_t size) {
   }
 }
 
-bool IpcManager::RegisterMemory(const hipc::AllocatorId &alloc_id) {
+bool IpcManager::RegisterMemory(const ctp::ipc::AllocatorId &alloc_id) {
   HLOG(kDebug, "RegisterMemory CALLED: alloc_id=({}.{})", alloc_id.major_,
        alloc_id.minor_);
   std::lock_guard<std::mutex> lock(shm_mutex_);
@@ -1726,7 +1726,7 @@ bool IpcManager::RegisterMemory(const hipc::AllocatorId &alloc_id) {
 
   try {
     // Attach to the shared memory backend (already created by client)
-    auto backend = std::make_unique<hipc::PosixShmMmap>();
+    auto backend = std::make_unique<ctp::ipc::PosixShmMmap>();
     if (!backend->shm_attach(shm_name)) {
       HLOG(kError, "IpcManager::RegisterMemory: Failed to attach to shm {}",
            shm_name);
@@ -1736,8 +1736,8 @@ bool IpcManager::RegisterMemory(const hipc::AllocatorId &alloc_id) {
     }
 
     // Attach to the existing allocator in the backend
-    hipc::MultiProcessAllocator *allocator =
-        backend->AttachAlloc<hipc::MultiProcessAllocator>();
+    ctp::ipc::MultiProcessAllocator *allocator =
+        backend->AttachAlloc<ctp::ipc::MultiProcessAllocator>();
 
     if (allocator == nullptr) {
       HLOG(kError,
@@ -1781,8 +1781,8 @@ ClientShmInfo IpcManager::GetClientShmInfo(u32 index) const {
   std::string shm_name =
       "chimaera_" + std::to_string(pid) + "_" + std::to_string(index);
 
-  hipc::MultiProcessAllocator *allocator = alloc_vector_[index];
-  hipc::AllocatorId alloc_id = allocator->GetId();
+  ctp::ipc::MultiProcessAllocator *allocator = alloc_vector_[index];
+  ctp::ipc::AllocatorId alloc_id = allocator->GetId();
 
   // Get size from backend if available, otherwise use 0
   size_t size = 0;
@@ -1843,10 +1843,10 @@ size_t IpcManager::WreapDeadIpcs() {
       continue;
     }
 
-    hipc::MultiProcessAllocator *allocator = map_it->second;
+    ctp::ipc::MultiProcessAllocator *allocator = map_it->second;
 
     // Get the allocator ID to construct shm_name
-    hipc::AllocatorId alloc_id = allocator->GetId();
+    ctp::ipc::AllocatorId alloc_id = allocator->GetId();
     std::string shm_name = "chimaera_" + std::to_string(alloc_id.major_) + "_" +
                            std::to_string(alloc_id.minor_);
 
@@ -1928,10 +1928,10 @@ size_t IpcManager::WreapAllIpcs() {
       continue;
     }
 
-    hipc::MultiProcessAllocator *allocator = map_it->second;
+    ctp::ipc::MultiProcessAllocator *allocator = map_it->second;
 
     // Get the allocator ID to construct shm_name
-    hipc::AllocatorId alloc_id = allocator->GetId();
+    ctp::ipc::AllocatorId alloc_id = allocator->GetId();
     std::string shm_name = "chimaera_" + std::to_string(alloc_id.major_) + "_" +
                            std::to_string(alloc_id.minor_);
 
@@ -2069,8 +2069,8 @@ bool IpcManager::ReconnectToOriginalHost() {
   if (ipc_mode_ == IpcMode::kShm) {
     // Detach old shared memory (don't destroy — server owns it)
     main_allocator_ = nullptr;
-    worker_queues_ = hipc::FullPtr<TaskQueue>();
-    main_backend_ = hipc::PosixShmMmap();
+    worker_queues_ = ctp::ipc::FullPtr<TaskQueue>();
+    main_backend_ = ctp::ipc::PosixShmMmap();
 
     // Re-attach to new shared memory
     if (!ClientInitShm()) return false;
@@ -2386,10 +2386,10 @@ void IpcManager::CleanupResponseArchive(size_t net_key) {
 // gpu::IpcManager::RegisterClientBackend directly.
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
-hipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
+ctp::ipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
     u32 gpu_id, gpu::IpcManager::MemKind kind, size_t bytes,
     char **out_base) {
-  hipc::AllocatorId result;
+  ctp::ipc::AllocatorId result;
   result.SetNull();
   if (out_base) *out_base = nullptr;
 
@@ -2414,7 +2414,7 @@ hipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
 
   // Mint AllocatorId from PID + a counter (mirror IncreaseClientShm).
   u32 idx = shm_count_.fetch_add(1, std::memory_order_relaxed);
-  hipc::AllocatorId alloc_id(static_cast<u32>(getpid()), idx);
+  ctp::ipc::AllocatorId alloc_id(static_cast<u32>(getpid()), idx);
 
   // In-process registration: when this IpcManager *is* the runtime
   // (kServer mode), short-circuit the admin RegisterMemoryTask round-trip
@@ -2448,7 +2448,7 @@ hipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
         admin_kind = chimaera::admin::MemoryType::kGpuDeviceMemory;
         break;
     }
-    hipc::MemoryBackendId backend_id(alloc_id.major_, alloc_id.minor_);
+    ctp::ipc::MemoryBackendId backend_id(alloc_id.major_, alloc_id.minor_);
     char ipc_handle_bytes[64] = {0};
     std::memcpy(ipc_handle_bytes, &base, sizeof(char *));
 
@@ -2465,7 +2465,7 @@ hipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
 }
 
 void IpcManager::FreeGpuBackend(u32 gpu_id,
-                                 const hipc::AllocatorId &alloc_id) {
+                                 const ctp::ipc::AllocatorId &alloc_id) {
   if (gpu_ipc_) {
     gpu_ipc_->UnregisterClientBackend(gpu_id, alloc_id);
   }
@@ -2972,7 +2972,7 @@ std::vector<PoolQuery> IpcManager::ResolvePhysicalQuery(
   return {query};
 }
 
-hipc::FullPtr<Task> IpcManager::RecvRuntime(
+ctp::ipc::FullPtr<Task> IpcManager::RecvRuntime(
     Future<Task> &future, Container *container, u32 method_id,
     ctp::lbm::Transport *recv_transport) {
   auto future_shm = future.GetFutureShm();

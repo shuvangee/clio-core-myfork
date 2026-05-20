@@ -1,7 +1,7 @@
 config:
   name: chi_gpu_bench
   pkgs:
-    - pkg_type: jarvis_iowarp.clio_chi_gpu_bench
+    - pkg_type: jarvis_clio_core.clio_chi_gpu_bench
       pkg_name: gpu_latency
       test_case: "latency"
       rt_blocks: 1

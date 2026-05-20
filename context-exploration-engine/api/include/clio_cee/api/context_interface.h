@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CEE_API_CONTEXT_INTERFACE_H_
-#define WRP_CEE_API_CONTEXT_INTERFACE_H_
+#ifndef CLIO_CEE_API_CONTEXT_INTERFACE_H_
+#define CLIO_CEE_API_CONTEXT_INTERFACE_H_
 
 #include <string>
 #include <vector>
@@ -144,4 +144,4 @@ private:
 
 }  // namespace iowarp
 
-#endif  // WRP_CEE_API_CONTEXT_INTERFACE_H_
+#endif  // CLIO_CEE_API_CONTEXT_INTERFACE_H_

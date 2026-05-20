@@ -5,7 +5,7 @@
 template <typename ArchiveT>
 CTP_GPU_FUN void LoadTaskTmpl(
     chi::u32 method, ArchiveT &archive,
-    const hipc::FullPtr<chi::Task> &task) {
+    const ctp::ipc::FullPtr<chi::Task> &task) {
   switch (method) {
     case Method::kRegisterTarget: {
       auto typed = task.template Cast<RegisterTargetTask>();
@@ -46,7 +46,7 @@ CTP_GPU_FUN void LoadTaskTmpl(
 template <typename ArchiveT>
 CTP_GPU_FUN void SaveTaskTmpl(
     chi::u32 method, ArchiveT &archive,
-    const hipc::FullPtr<chi::Task> &task) {
+    const ctp::ipc::FullPtr<chi::Task> &task) {
   switch (method) {
     case Method::kRegisterTarget:
       task.template Cast<RegisterTargetTask>()->SerializeOut(archive);
@@ -66,7 +66,7 @@ CTP_GPU_FUN void SaveTaskTmpl(
 
 CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void RunImpl(
     chi::gpu::Container *self_, chi::u32 method,
-    hipc::FullPtr<chi::Task> task_ptr, chi::gpu::RunContext &rctx) {
+    ctp::ipc::FullPtr<chi::Task> task_ptr, chi::gpu::RunContext &rctx) {
   auto *self = static_cast<GpuRuntime *>(self_);
   switch (method) {
     case Method::kRegisterTarget:
@@ -85,7 +85,7 @@ CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void RunImpl(
   }
 }
 
-CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocTaskImpl(
+CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN ctp::ipc::FullPtr<chi::Task> AllocTaskImpl(
     chi::gpu::Container *self_, chi::u32 method) {
   // Phase 10: bind g_ipc_manager_ptr so CHI_IPC under SYCL resolves
   // to the kernel-scope IpcManager (set by the worker via
@@ -105,11 +105,11 @@ CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocTaskImp
     case Method::kGetBlob: {
       auto _tp = CHI_IPC->NewTaskBase<GetBlobTask>(0); return _tp.template Cast<chi::Task>();
     }
-    default: return hipc::FullPtr<chi::Task>::GetNull();
+    default: return ctp::ipc::FullPtr<chi::Task>::GetNull();
   }
 }
 
-CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocLoadTaskDefaultImpl(
+CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN ctp::ipc::FullPtr<chi::Task> AllocLoadTaskDefaultImpl(
     chi::gpu::Container *self_, chi::u32 method, chi::GpuLoadTaskArchive &ar) {
   auto *self = static_cast<GpuRuntime *>(self_);
   auto task_ptr = self->alloc_task_(self_, method);
@@ -119,7 +119,7 @@ CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocLoadTas
   return task_ptr;
 }
 
-CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocLoadDeserImpl(
+CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN ctp::ipc::FullPtr<chi::Task> AllocLoadDeserImpl(
     chi::gpu::Container *self_, chi::u32 method,
     chi::GpuLoadTaskArchive &ar) {
   auto *self = static_cast<GpuRuntime *>(self_);
@@ -133,27 +133,27 @@ CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN hipc::FullPtr<chi::Task> AllocLoadDes
 
 CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void LoadTaskDefaultImpl(
     chi::gpu::Container *self_, chi::u32 method,
-    chi::GpuLoadTaskArchive &ar, const hipc::FullPtr<chi::Task> &task) {
+    chi::GpuLoadTaskArchive &ar, const ctp::ipc::FullPtr<chi::Task> &task) {
   ar.SetMsgType(chi::LocalMsgType::kSerializeIn);
   static_cast<GpuRuntime *>(self_)->LoadTaskTmpl(method, ar, task);
 }
 
 CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void SaveTaskDefaultImpl(
     chi::gpu::Container *self_, chi::u32 method,
-    chi::GpuSaveTaskArchive &ar, const hipc::FullPtr<chi::Task> &task) {
+    chi::GpuSaveTaskArchive &ar, const ctp::ipc::FullPtr<chi::Task> &task) {
   static_cast<GpuRuntime *>(self_)->SaveTaskTmpl(method, ar, task);
 }
 
 CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void LoadTaskOutputImpl(
     chi::gpu::Container *self_, chi::u32 method,
-    chi::GpuLoadTaskArchive &ar, const hipc::FullPtr<chi::Task> &task) {
+    chi::GpuLoadTaskArchive &ar, const ctp::ipc::FullPtr<chi::Task> &task) {
   ar.SetMsgType(chi::LocalMsgType::kSerializeOut);
   static_cast<GpuRuntime *>(self_)->LoadTaskTmpl(method, ar, task);
 }
 
 CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void DestroyTaskImpl(
     chi::gpu::Container *self_, chi::u32 method,
-    hipc::FullPtr<chi::Task> &task) {
+    ctp::ipc::FullPtr<chi::Task> &task) {
   if (task.IsNull()) return;
   switch (method) {
     case Method::kRegisterTarget:
@@ -175,7 +175,7 @@ CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void DestroyTaskImpl(
 /** Fix up SSO/SVO pointers after cudaMemcpy for CPU→GPU POD tasks */
 CTP_INDIRECTLY_CALLABLE static CTP_GPU_FUN void FixupTaskImpl(
     chi::gpu::Container *self_, chi::u32 method,
-    hipc::FullPtr<chi::Task> task) {
+    ctp::ipc::FullPtr<chi::Task> task) {
   (void)self_;
   switch (method) {
     case Method::kRegisterTarget:

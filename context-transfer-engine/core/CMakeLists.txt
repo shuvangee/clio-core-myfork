@@ -16,7 +16,7 @@ add_chimod_runtime(
 # GpuMetadataCache helpers (which reach ctp::GpuApi::MallocManaged etc.)
 # see the matching #if CTP_ENABLE_{CUDA,ROCM,SYCL} branches. Without
 # these the GPU code paths in core_runtime.cc are no-ops.
-if(WRP_CORE_ENABLE_SYCL)
+if(CLIO_CORE_ENABLE_SYCL)
   target_compile_definitions(clio_cte_core_runtime PRIVATE CTP_ENABLE_SYCL=1)
   if(EXISTS "/opt/intel/dpcpp/include/sycl/sycl.hpp")
     target_include_directories(clio_cte_core_runtime PRIVATE
@@ -27,10 +27,10 @@ if(WRP_CORE_ENABLE_SYCL)
       /opt/adaptivecpp/include/AdaptiveCpp)
   endif()
 endif()
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
   target_compile_definitions(clio_cte_core_runtime PRIVATE CTP_ENABLE_CUDA=1)
 endif()
-if(WRP_CORE_ENABLE_ROCM)
+if(CLIO_CORE_ENABLE_ROCM)
   target_compile_definitions(clio_cte_core_runtime PRIVATE CTP_ENABLE_ROCM=1)
 endif()
 

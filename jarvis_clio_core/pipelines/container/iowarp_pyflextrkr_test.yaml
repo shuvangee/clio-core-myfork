@@ -39,7 +39,7 @@ pkgs:
     deploy_mode: container
 
   # IOWarp runtime (Chimaera storage daemon)
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     deploy_mode: container
     git_branch: transparent-compress
     cmake_preset: release-adapter
@@ -47,7 +47,7 @@ pkgs:
     sleep: 2
 
   # IOWarp Content Transfer Engine
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     deploy_mode: container
 
   # PyFLEXTRKR demo (h5py + h5netcdf; runs run_demo.sh inside container).
@@ -62,7 +62,7 @@ pkgs:
 
 interceptors:
   # IOWarp HDF5 VOL connector intercepts h5py / h5netcdf dataset I/O
-  - pkg_type: jarvis_iowarp.clio_adapters
+  - pkg_type: jarvis_clio_core.clio_adapters
     vol: true
     include:
       - ".*pyflextrkr.*"

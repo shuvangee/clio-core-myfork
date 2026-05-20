@@ -130,7 +130,7 @@ struct FlushTask : public chi::Task {
   /**
    * Copy from another FlushTask
    */
-  void Copy(const hipc::FullPtr<FlushTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<FlushTask> &other) {
     // Copy base Task fields
     Task::Copy(other.template Cast<Task>());
     total_work_done_ = other->total_work_done_;
@@ -140,7 +140,7 @@ struct FlushTask : public chi::Task {
    * Aggregate replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const hipc::FullPtr<chi::Task> &other_base) {
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<FlushTask>());
   }

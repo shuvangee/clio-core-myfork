@@ -199,7 +199,7 @@ Runtime::~Runtime() {
   if (client_recv_thread_.joinable()) client_recv_thread_.join();
 }
 
-chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
+chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
                                 chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   // Admin container creation logic (IS_ADMIN=true)
@@ -275,7 +275,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
         continue;
       }
       RecvTask dummy_recv;
-      hipc::FullPtr<RecvTask> recv_fp(&dummy_recv);
+      ctp::ipc::FullPtr<RecvTask> recv_fp(&dummy_recv);
       chi::MsgType msg_type = archive.GetMsgType();
       switch (msg_type) {
         case chi::MsgType::kSerializeIn:
@@ -321,7 +321,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
 
   // Initialize system stats ring buffer and spawn periodic monitor task
   system_stats_ring_ = std::make_unique<
-      hipc::circular_mpsc_ring_buffer<SystemStats, hipc::MallocAllocator>>(
+      ctp::ipc::circular_mpsc_ring_buffer<SystemStats, ctp::ipc::MallocAllocator>>(
       CTP_MALLOC, kSystemStatsRingSize);
   prev_cpu_times_ = ctp::SystemInfo::GetCpuTimes();
   client_.AsyncSystemMonitor(chi::PoolQuery::Local(), 1000000);  // 1s
@@ -338,7 +338,7 @@ chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
+chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
   using namespace chimaera::admin;
   switch (task->method_) {
     case Method::kGetOrCreatePool: {
@@ -357,7 +357,7 @@ chi::PoolQuery Runtime::ScheduleTask(const hipc::FullPtr<chi::Task> &task) {
 }
 
 chi::TaskResume Runtime::GetOrCreatePool(
-    hipc::FullPtr<
+    ctp::ipc::FullPtr<
         chimaera::admin::GetOrCreatePoolTask<chimaera::admin::CreateParams>>
         task,
     chi::RunContext &rctx) {
@@ -410,7 +410,7 @@ chi::TaskResume Runtime::GetOrCreatePool(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
+chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
                                  chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   // DestroyTask is aliased to DestroyPoolTask, so delegate to DestroyPool
@@ -419,7 +419,7 @@ chi::TaskResume Runtime::Destroy(hipc::FullPtr<DestroyTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::DestroyPool(hipc::FullPtr<DestroyPoolTask> task,
+chi::TaskResume Runtime::DestroyPool(ctp::ipc::FullPtr<DestroyPoolTask> task,
                                      chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "Admin: Executing DestroyPool task - Pool ID: {}",
@@ -464,7 +464,7 @@ chi::TaskResume Runtime::DestroyPool(hipc::FullPtr<DestroyPoolTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::StopRuntime(hipc::FullPtr<StopRuntimeTask> task,
+chi::TaskResume Runtime::StopRuntime(ctp::ipc::FullPtr<StopRuntimeTask> task,
                                      chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "Admin: Executing StopRuntime task - Grace period: {}ms",
@@ -504,7 +504,7 @@ void Runtime::InitiateShutdown(chi::u32 grace_period_ms) {
   std::abort();
 }
 
-chi::TaskResume Runtime::Flush(hipc::FullPtr<FlushTask> task,
+chi::TaskResume Runtime::Flush(ctp::ipc::FullPtr<FlushTask> task,
                                chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "Admin: Executing Flush task");
@@ -556,7 +556,7 @@ chi::TaskResume Runtime::Flush(hipc::FullPtr<FlushTask> task,
  * @param origin_task Task to send to remote nodes
  * @param rctx RunContext for managing subtasks
  */
-void Runtime::SendIn(hipc::FullPtr<chi::Task> origin_task,
+void Runtime::SendIn(ctp::ipc::FullPtr<chi::Task> origin_task,
                      chi::RunContext &rctx) {
   auto *ipc_manager = CHI_IPC;
   auto *pool_manager = CHI_POOL_MANAGER;
@@ -650,7 +650,7 @@ void Runtime::SendIn(hipc::FullPtr<chi::Task> origin_task,
     }
 
     // Create task copy first (needed for both send and retry)
-    hipc::FullPtr<chi::Task> task_copy =
+    ctp::ipc::FullPtr<chi::Task> task_copy =
         container->NewCopyTask(origin_task->method_, origin_task, true);
     origin_task_rctx->subtasks_[i] = task_copy;
 
@@ -769,13 +769,13 @@ void Runtime::SendIn(hipc::FullPtr<chi::Task> origin_task,
  * Helper function: Send task outputs back to origin node
  * @param origin_task Completed task whose outputs need to be sent back
  */
-void Runtime::SendOut(hipc::FullPtr<chi::Task> origin_task) {
+void Runtime::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
   auto *ipc_manager = CHI_IPC;
   auto *pool_manager = CHI_POOL_MANAGER;
 
   // Flush deferred deletes from previous invocation (zero-copy send safety).
   // SendOut runs only from net_send_worker SendPoll; static is fine.
-  static std::vector<hipc::FullPtr<chi::Task>> deferred_deletes;
+  static std::vector<ctp::ipc::FullPtr<chi::Task>> deferred_deletes;
   for (auto &t : deferred_deletes) {
     auto *del_container = pool_manager->GetStaticContainer(t->pool_id_);
     if (del_container) {
@@ -934,7 +934,7 @@ void Runtime::SendOut(hipc::FullPtr<chi::Task> origin_task) {
  *
  * Retry-queue + dead-node scans still run unconditionally each tick.
  */
-chi::TaskResume Runtime::Send(hipc::FullPtr<SendTask> task,
+chi::TaskResume Runtime::Send(ctp::ipc::FullPtr<SendTask> task,
                               chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   auto *ipc_manager = CHI_IPC;
@@ -1037,7 +1037,7 @@ chi::TaskResume Runtime::Send(hipc::FullPtr<SendTask> task,
  * @param archive Already-parsed LoadTaskArchive containing task info
  * @param lbm_transport Lightbeam server for receiving bulk data
  */
-void Runtime::RecvIn(hipc::FullPtr<RecvTask> task,
+void Runtime::RecvIn(ctp::ipc::FullPtr<RecvTask> task,
                      chi::LoadTaskArchive &archive,
                      ctp::lbm::Transport *lbm_transport) {
   auto *ipc_manager = CHI_IPC;
@@ -1068,7 +1068,7 @@ void Runtime::RecvIn(hipc::FullPtr<RecvTask> task,
     // bulk copy or by task object construction.
     uint64_t des_t0 = HrtNs();
     // Call AllocLoadTask to allocate and deserialize the task
-    hipc::FullPtr<chi::Task> task_ptr =
+    ctp::ipc::FullPtr<chi::Task> task_ptr =
         container->AllocLoadTask(task_info.method_id_, archive);
     uint64_t des_dt = HrtNs() - des_t0;
 
@@ -1190,7 +1190,7 @@ void Runtime::RecvIn(hipc::FullPtr<RecvTask> task,
  * @param archive Already-parsed LoadTaskArchive containing task info
  * @param lbm_transport Lightbeam server for receiving bulk data
  */
-void Runtime::RecvOut(hipc::FullPtr<RecvTask> task,
+void Runtime::RecvOut(ctp::ipc::FullPtr<RecvTask> task,
                       chi::LoadTaskArchive &archive,
                       ctp::lbm::Transport *lbm_transport) {
   auto *pool_manager = CHI_POOL_MANAGER;
@@ -1217,7 +1217,7 @@ void Runtime::RecvOut(hipc::FullPtr<RecvTask> task,
 
     // SendIn (net_send_worker) populates send_map_; copy the value out
     // under the lock so the rest of the work happens without holding it.
-    hipc::FullPtr<chi::Task> origin_task;
+    ctp::ipc::FullPtr<chi::Task> origin_task;
     {
       std::lock_guard<std::mutex> lk(send_map_mutex_);
       auto send_it = send_map_.find(net_key);
@@ -1247,7 +1247,7 @@ void Runtime::RecvOut(hipc::FullPtr<RecvTask> task,
       return;
     }
 
-    hipc::FullPtr<chi::Task> replica = origin_rctx->subtasks_[replica_id];
+    ctp::ipc::FullPtr<chi::Task> replica = origin_rctx->subtasks_[replica_id];
 
     // Get the container associated with the origin task
     chi::Container *container =
@@ -1285,7 +1285,7 @@ void Runtime::RecvOut(hipc::FullPtr<RecvTask> task,
     // Locate origin task from send_map using net_key. Same locking note as
     // the first pass — copy out under the lock, then process unlocked.
     size_t net_key = task_info.task_id_.net_key_;
-    hipc::FullPtr<chi::Task> origin_task;
+    ctp::ipc::FullPtr<chi::Task> origin_task;
     {
       std::lock_guard<std::mutex> lk(send_map_mutex_);
       auto send_it = send_map_.find(net_key);
@@ -1310,7 +1310,7 @@ void Runtime::RecvOut(hipc::FullPtr<RecvTask> task,
       continue;
     }
 
-    hipc::FullPtr<chi::Task> replica = origin_rctx->subtasks_[replica_id];
+    ctp::ipc::FullPtr<chi::Task> replica = origin_rctx->subtasks_[replica_id];
 
     // Get the container associated with the origin task
     chi::Container *container =
@@ -1394,7 +1394,7 @@ void Runtime::RecvOut(hipc::FullPtr<RecvTask> task,
  * Main Recv function - receives metadata and dispatches based on mode
  * Note: This is a periodic task - only logs when actual work is done
  */
-chi::TaskResume Runtime::Recv(hipc::FullPtr<RecvTask> task,
+chi::TaskResume Runtime::Recv(ctp::ipc::FullPtr<RecvTask> task,
                               chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   // Get the main server from CHI_IPC (already bound during initialization)
@@ -1477,7 +1477,7 @@ chi::TaskResume Runtime::Recv(hipc::FullPtr<RecvTask> task,
  * @param task The connect task
  * @param rctx Run context
  */
-chi::TaskResume Runtime::ClientConnect(hipc::FullPtr<ClientConnectTask> task,
+chi::TaskResume Runtime::ClientConnect(ctp::ipc::FullPtr<ClientConnectTask> task,
                                        chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   task->response_ = 0;
@@ -1504,7 +1504,7 @@ chi::TaskResume Runtime::ClientConnect(hipc::FullPtr<ClientConnectTask> task,
  * Handle ClientRecv - Receive tasks from lightbeam client servers
  * Delegates to IpcCpu2CpuZmq::RuntimeRecv for the actual transport logic.
  */
-chi::TaskResume Runtime::ClientRecv(hipc::FullPtr<ClientRecvTask> task,
+chi::TaskResume Runtime::ClientRecv(ctp::ipc::FullPtr<ClientRecvTask> task,
                                     chi::RunContext &rctx) {
   chi::u32 tasks_received = 0;
   bool did_work = chi::IpcCpu2CpuZmq::RuntimeRecv(CHI_IPC, tasks_received);
@@ -1520,9 +1520,9 @@ chi::TaskResume Runtime::ClientRecv(hipc::FullPtr<ClientRecvTask> task,
  * Handle ClientSend - Send completed task outputs to clients via lightbeam
  * Delegates to IpcCpu2CpuZmq::RuntimeSend for the actual transport logic.
  */
-chi::TaskResume Runtime::ClientSend(hipc::FullPtr<ClientSendTask> task,
+chi::TaskResume Runtime::ClientSend(ctp::ipc::FullPtr<ClientSendTask> task,
                                     chi::RunContext &rctx) {
-  static std::vector<hipc::FullPtr<chi::Task>> deferred_deletes;
+  static std::vector<ctp::ipc::FullPtr<chi::Task>> deferred_deletes;
   chi::u32 tasks_sent = 0;
   bool did_work = chi::IpcCpu2CpuZmq::RuntimeSend(
       CHI_IPC, tasks_sent, deferred_deletes);
@@ -1534,7 +1534,7 @@ chi::TaskResume Runtime::ClientSend(hipc::FullPtr<ClientSendTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
+chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   if (task->query_ == "worker_stats") {
@@ -1558,7 +1558,7 @@ chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
   CHI_TASK_BODY_END
 }
 
-void Runtime::MonitorWorkerStats(hipc::FullPtr<MonitorTask> task) {
+void Runtime::MonitorWorkerStats(ctp::ipc::FullPtr<MonitorTask> task) {
   auto *work_orchestrator = CHI_WORK_ORCHESTRATOR;
   if (!work_orchestrator) {
     task->SetReturnCode(1);
@@ -1608,7 +1608,7 @@ void Runtime::MonitorWorkerStats(hipc::FullPtr<MonitorTask> task) {
   task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
 }
 
-void Runtime::MonitorContainerStats(hipc::FullPtr<MonitorTask> task) {
+void Runtime::MonitorContainerStats(ctp::ipc::FullPtr<MonitorTask> task) {
   auto *pool_manager = CHI_POOL_MANAGER;
   if (!pool_manager) {
     task->SetReturnCode(1);
@@ -1681,7 +1681,7 @@ void Runtime::MonitorContainerStats(hipc::FullPtr<MonitorTask> task) {
   task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
 }
 
-chi::TaskResume Runtime::MonitorPoolStats(hipc::FullPtr<MonitorTask> task) {
+chi::TaskResume Runtime::MonitorPoolStats(ctp::ipc::FullPtr<MonitorTask> task) {
 #ifdef __NVCOMPILER
   chi::RunContext _dummy_rctx;
   chi::RunContext& rctx = _dummy_rctx;
@@ -1804,7 +1804,7 @@ chi::TaskResume Runtime::MonitorPoolStats(hipc::FullPtr<MonitorTask> task) {
   CHI_TASK_BODY_END
 }
 
-void Runtime::MonitorSystemStats(hipc::FullPtr<MonitorTask> task) {
+void Runtime::MonitorSystemStats(ctp::ipc::FullPtr<MonitorTask> task) {
   // system_stats or system_stats:<min_event_id>
   uint64_t min_event_id = 0;
   if (task->query_.size() > 13 && task->query_[12] == ':') {
@@ -1876,7 +1876,7 @@ void Runtime::MonitorSystemStats(hipc::FullPtr<MonitorTask> task) {
   task->SetReturnCode(0);
 }
 
-void Runtime::MonitorGetHostInfo(hipc::FullPtr<MonitorTask> task) {
+void Runtime::MonitorGetHostInfo(ctp::ipc::FullPtr<MonitorTask> task) {
   msgpack::sbuffer sbuf;
   msgpack::packer<msgpack::sbuffer> pk(sbuf);
   pk.pack_map(3);
@@ -1891,7 +1891,7 @@ void Runtime::MonitorGetHostInfo(hipc::FullPtr<MonitorTask> task) {
 }
 
 chi::TaskResume Runtime::AnnounceShutdown(
-    hipc::FullPtr<AnnounceShutdownTask> task, chi::RunContext &rctx) {
+    ctp::ipc::FullPtr<AnnounceShutdownTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   chi::u64 dead_node_id = task->shutting_down_node_id_;
   auto *ipc_manager = CHI_IPC;
@@ -1913,7 +1913,7 @@ chi::TaskResume Runtime::AnnounceShutdown(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::MonitorBdevStats(hipc::FullPtr<MonitorTask> task) {
+chi::TaskResume Runtime::MonitorBdevStats(ctp::ipc::FullPtr<MonitorTask> task) {
 #ifdef __NVCOMPILER
   chi::RunContext _dummy_rctx;
   chi::RunContext& rctx = _dummy_rctx;
@@ -1971,7 +1971,7 @@ chi::TaskResume Runtime::MonitorBdevStats(hipc::FullPtr<MonitorTask> task) {
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::SubmitBatch(hipc::FullPtr<SubmitBatchTask> task,
+chi::TaskResume Runtime::SubmitBatch(ctp::ipc::FullPtr<SubmitBatchTask> task,
                                      chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kInfo, "Admin: Executing SubmitBatch task with {} tasks",
@@ -2025,7 +2025,7 @@ chi::TaskResume Runtime::SubmitBatch(hipc::FullPtr<SubmitBatchTask> task,
       }
 
       // Deserialize and allocate the task
-      hipc::FullPtr<chi::Task> sub_task_ptr =
+      ctp::ipc::FullPtr<chi::Task> sub_task_ptr =
           container->LocalAllocLoadTask(task_info.method_id_, archive);
 
       if (sub_task_ptr.IsNull()) {
@@ -2057,7 +2057,7 @@ chi::TaskResume Runtime::SubmitBatch(hipc::FullPtr<SubmitBatchTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::RegisterMemory(hipc::FullPtr<RegisterMemoryTask> task,
+chi::TaskResume Runtime::RegisterMemory(ctp::ipc::FullPtr<RegisterMemoryTask> task,
                                         chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   auto *ipc_manager = CHI_IPC;
@@ -2066,7 +2066,7 @@ chi::TaskResume Runtime::RegisterMemory(hipc::FullPtr<RegisterMemoryTask> task,
   switch (mem_type) {
     case MemoryType::kCpuMemory: {
       // Existing path: POSIX shared memory registration
-      hipc::AllocatorId alloc_id(task->alloc_major_, task->alloc_minor_);
+      ctp::ipc::AllocatorId alloc_id(task->alloc_major_, task->alloc_minor_);
       HLOG(kInfo, "Admin::RegisterMemory: Registering CPU alloc_id ({}.{})",
            alloc_id.major_, alloc_id.minor_);
       task->success_ = ipc_manager->RegisterMemory(alloc_id);
@@ -2083,7 +2083,7 @@ chi::TaskResume Runtime::RegisterMemory(hipc::FullPtr<RegisterMemoryTask> task,
         break;
       }
       chi::gpu::IpcManager::ClientBackend b;
-      b.alloc_id = hipc::AllocatorId(task->alloc_major_, task->alloc_minor_);
+      b.alloc_id = ctp::ipc::AllocatorId(task->alloc_major_, task->alloc_minor_);
       b.gpu_id = task->gpu_id_;
       b.capacity = task->data_capacity_;
       switch (mem_type) {
@@ -2133,7 +2133,7 @@ chi::TaskResume Runtime::RegisterMemory(hipc::FullPtr<RegisterMemoryTask> task,
 }
 
 chi::TaskResume Runtime::RestartContainers(
-    hipc::FullPtr<RestartContainersTask> task, chi::RunContext &rctx) {
+    ctp::ipc::FullPtr<RestartContainersTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   HLOG(kDebug, "Admin: Executing RestartContainers task");
 
@@ -2198,7 +2198,7 @@ chi::TaskResume Runtime::RestartContainers(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::AddNode(hipc::FullPtr<AddNodeTask> task,
+chi::TaskResume Runtime::AddNode(ctp::ipc::FullPtr<AddNodeTask> task,
                                  chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   (void)rctx;
@@ -2231,7 +2231,7 @@ chi::TaskResume Runtime::AddNode(hipc::FullPtr<AddNodeTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::WreapDeadIpcs(hipc::FullPtr<WreapDeadIpcsTask> task,
+chi::TaskResume Runtime::WreapDeadIpcs(ctp::ipc::FullPtr<WreapDeadIpcsTask> task,
                                        chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   auto *ipc_manager = CHI_IPC;
@@ -2255,7 +2255,7 @@ chi::TaskResume Runtime::WreapDeadIpcs(hipc::FullPtr<WreapDeadIpcsTask> task,
 }
 
 chi::TaskResume Runtime::ChangeAddressTable(
-    hipc::FullPtr<ChangeAddressTableTask> task, chi::RunContext &rctx) {
+    ctp::ipc::FullPtr<ChangeAddressTableTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   (void)rctx;
   auto *pool_manager = CHI_POOL_MANAGER;
@@ -2288,7 +2288,7 @@ chi::TaskResume Runtime::ChangeAddressTable(
 }
 
 chi::TaskResume Runtime::MigrateContainers(
-    hipc::FullPtr<MigrateContainersTask> task, chi::RunContext &rctx) {
+    ctp::ipc::FullPtr<MigrateContainersTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   (void)rctx;
   HLOG(kInfo, "Admin: Executing MigrateContainers task");
@@ -2491,7 +2491,7 @@ void Runtime::ProcessRetryQueues() {
       // Node came back: retry by calling SendOut. SendOut may push to
       // send_out_retry_ on a fresh failure — release the lock around it
       // to avoid self-deadlock, then restart iteration from begin().
-      hipc::FullPtr<chi::Task> retry_task = it->task;
+      ctp::ipc::FullPtr<chi::Task> retry_task = it->task;
       it = send_out_retry_.erase(it);
       _rqlk.unlock();
       SendOut(retry_task);
@@ -2525,11 +2525,11 @@ void Runtime::ScanSendMapTimeouts() {
   // collected keys and may do nontrivial work, so the actual EndTask +
   // erase pass runs outside the iteration scope. This keeps the critical
   // section bounded to a hash-bucket walk.
-  std::vector<std::pair<size_t, hipc::FullPtr<chi::Task>>> to_complete;
+  std::vector<std::pair<size_t, ctp::ipc::FullPtr<chi::Task>>> to_complete;
   {
     std::lock_guard<std::mutex> lk(send_map_mutex_);
     send_map_.for_each(
-        [&](const size_t &key, hipc::FullPtr<chi::Task> &origin_task) {
+        [&](const size_t &key, ctp::ipc::FullPtr<chi::Task> &origin_task) {
           if (origin_task.IsNull() || !origin_task->GetRunCtx()) return;
 
           chi::RunContext *rctx = origin_task->GetRunCtx();
@@ -2593,7 +2593,7 @@ void Runtime::FlushStaleStateForNode(chi::u64 node_id) {
   for (auto it = send_in_retry_.begin(); it != send_in_retry_.end();) {
     if (it->target_node_id == node_id) {
       size_t net_key = it->task->task_id_.net_key_;
-      hipc::FullPtr<chi::Task> origin;
+      ctp::ipc::FullPtr<chi::Task> origin;
       {
         std::lock_guard<std::mutex> lk(send_map_mutex_);
         auto send_it = send_map_.find(net_key);
@@ -2627,7 +2627,7 @@ void Runtime::FlushStaleStateForNode(chi::u64 node_id) {
   }
 }
 
-chi::TaskResume Runtime::Heartbeat(hipc::FullPtr<HeartbeatTask> task,
+chi::TaskResume Runtime::Heartbeat(ctp::ipc::FullPtr<HeartbeatTask> task,
                                    chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   task->SetReturnCode(0);
@@ -2636,7 +2636,7 @@ chi::TaskResume Runtime::Heartbeat(hipc::FullPtr<HeartbeatTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::HeartbeatProbe(hipc::FullPtr<HeartbeatProbeTask> task,
+chi::TaskResume Runtime::HeartbeatProbe(ctp::ipc::FullPtr<HeartbeatProbeTask> task,
                                         chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   auto *ipc_manager = CHI_IPC;
@@ -2885,7 +2885,7 @@ chi::TaskResume Runtime::HeartbeatProbe(hipc::FullPtr<HeartbeatProbeTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ProbeRequest(hipc::FullPtr<ProbeRequestTask> task,
+chi::TaskResume Runtime::ProbeRequest(ctp::ipc::FullPtr<ProbeRequestTask> task,
                                       chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   // Probe the target node on behalf of the requester using cooperative yield
@@ -3037,7 +3037,7 @@ chi::TaskResume Runtime::TriggerRecovery(chi::u64 dead_node_id) {
 }
 
 chi::TaskResume Runtime::RecoverContainers(
-    hipc::FullPtr<RecoverContainersTask> task, chi::RunContext &rctx) {
+    ctp::ipc::FullPtr<RecoverContainersTask> task, chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   auto *ipc_manager = CHI_IPC;
   auto *pool_manager = CHI_POOL_MANAGER;
@@ -3089,7 +3089,7 @@ chi::TaskResume Runtime::RecoverContainers(
 // System Monitor
 //===========================================================================
 
-chi::TaskResume Runtime::SystemMonitor(hipc::FullPtr<SystemMonitorTask> task,
+chi::TaskResume Runtime::SystemMonitor(ctp::ipc::FullPtr<SystemMonitorTask> task,
                                        chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   SystemStats stats;
@@ -3136,7 +3136,7 @@ chi::TaskResume Runtime::SystemMonitor(hipc::FullPtr<SystemMonitorTask> task,
 }
 
 chi::TaskResume Runtime::RegisterGpuContainer(
-    hipc::FullPtr<RegisterGpuContainerTask> task, chi::RunContext &rctx) {
+    ctp::ipc::FullPtr<RegisterGpuContainerTask> task, chi::RunContext &rctx) {
   // This task is handled on the CPU side.
   // The GPU orchestrator's gpu::PoolManager is updated via a GPU kernel launch,
   // not directly from the admin runtime. The pool_manager.cc CreatePool

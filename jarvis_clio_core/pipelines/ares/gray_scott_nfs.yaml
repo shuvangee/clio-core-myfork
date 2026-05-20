@@ -8,7 +8,7 @@ config:
   env:
     OMPI_MCA_btl_tcp_if_include: enp47s0np0
   pkgs:
-    - pkg_type: jarvis_iowarp.adios2_gray_scott
+    - pkg_type: jarvis_clio_core.adios2_gray_scott
       pkg_name: gsbench
       L: 512
       nprocs: 64                           # Number of MPI processes
@@ -18,7 +18,7 @@ config:
 
   # Environment configuration (optional)
   # env:
-  #   WRP_CTE_LOG_LEVEL: "info"
+  #   CLIO_CTE_LOG_LEVEL: "info"
   #   CTE_DEBUG: "0"
 
 vars:

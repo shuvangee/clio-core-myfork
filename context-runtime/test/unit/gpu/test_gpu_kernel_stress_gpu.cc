@@ -22,7 +22,7 @@
  *
  * Suffix `_gpu.cc` matches the `*_gpu.cc` glob in
  * context-runtime/src/CMakeLists.txt and is compiled by NVCC (when
- * WRP_CORE_ENABLE_CUDA=ON) or HIPCC (when WRP_CORE_ENABLE_ROCM=ON).
+ * CLIO_CORE_ENABLE_CUDA=ON) or HIPCC (when CLIO_CORE_ENABLE_ROCM=ON).
  */
 
 #if (CTP_ENABLE_CUDA || CTP_ENABLE_ROCM) && !CTP_ENABLE_SYCL
@@ -43,7 +43,7 @@ namespace {
  * `threadIdx.x == 0` (other lanes get an empty future).
  */
 __global__ void ChiGpuKernelStress(chi::IpcManagerGpuInfo gpu_info,
-                                    hipc::FullPtr<TaskT> *task_handles,
+                                    ctp::ipc::FullPtr<TaskT> *task_handles,
                                     chi::u32 num_tasks) {
   CHIMAERA_GPU_INIT(gpu_info, /*ipc_ptr=*/nullptr);
   if (threadIdx.x != 0) return;
@@ -79,7 +79,7 @@ TEST_CASE("GPU producer-only stress: kernel submits N tasks",
 
   // 1. Allocate + register a pinned-host backend big enough for all slots.
   char *base = nullptr;
-  hipc::AllocatorId alloc_id = ipc->AllocateAndRegisterGpuBackend(
+  ctp::ipc::AllocatorId alloc_id = ipc->AllocateAndRegisterGpuBackend(
       gpu_id, chi::gpu::IpcManager::MemKind::kPinnedHost, kBackendBytes,
       &base);
   REQUIRE(!alloc_id.IsNull());
@@ -90,8 +90,8 @@ TEST_CASE("GPU producer-only stress: kernel submits N tasks",
   REQUIRE(handles.size() == kNumTasks);
 
   // 3. Stage the FullPtr<TaskT> array in pinned host so the kernel sees it.
-  hipc::FullPtr<TaskT> *task_handle_dev =
-      ctp::GpuApi::MallocHost<hipc::FullPtr<TaskT>>(kNumTasks);
+  ctp::ipc::FullPtr<TaskT> *task_handle_dev =
+      ctp::GpuApi::MallocHost<ctp::ipc::FullPtr<TaskT>>(kNumTasks);
   REQUIRE(task_handle_dev != nullptr);
   for (chi::u32 i = 0; i < kNumTasks; ++i) task_handle_dev[i] = handles[i];
 

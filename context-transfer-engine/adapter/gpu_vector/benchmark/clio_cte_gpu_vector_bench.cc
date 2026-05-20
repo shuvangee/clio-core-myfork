@@ -174,11 +174,11 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
     std::fprintf(stderr, "[INIT] CHIMAERA_INIT failed\n");
     std::exit(2);
   }
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
-    std::fprintf(stderr, "[INIT] WRP_CTE_CLIENT_INIT failed\n");
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+    std::fprintf(stderr, "[INIT] CLIO_CTE_CLIENT_INIT failed\n");
     std::exit(2);
   }
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->Init(clio_cte::core::kCtePoolId);
   clio_cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(

@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CAE_CORE_ASSIMILATOR_FACTORY_H_
-#define WRP_CAE_CORE_ASSIMILATOR_FACTORY_H_
+#ifndef CLIO_CAE_CORE_ASSIMILATOR_FACTORY_H_
+#define CLIO_CAE_CORE_ASSIMILATOR_FACTORY_H_
 
 #include <memory>
 #include <string>
@@ -83,4 +83,4 @@ class AssimilatorFactory {
 
 }  // namespace clio_cae::core
 
-#endif  // WRP_CAE_CORE_ASSIMILATOR_FACTORY_H_
+#endif  // CLIO_CAE_CORE_ASSIMILATOR_FACTORY_H_

@@ -630,7 +630,7 @@ class ZeroMqTransport : public Transport {
     });
   }
 
-  Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size,
+  Bulk Expose(const ctp::ipc::FullPtr<char>& ptr, size_t data_size,
               u32 flags) {
     Bulk bulk;
     bulk.data = ptr;
@@ -868,7 +868,7 @@ class ZeroMqTransport : public Transport {
       Bulk recv_bulk;
       recv_bulk.size = send_bulk.size;
       recv_bulk.flags = send_bulk.flags;
-      recv_bulk.data = hipc::FullPtr<char>::GetNull();
+      recv_bulk.data = ctp::ipc::FullPtr<char>::GetNull();
       if (send_bulk.flags.Any(BULK_XFER)) {
         ++bulk_count;
         bulk_bytes_sum += send_bulk.size;
@@ -1047,7 +1047,7 @@ class ZeroMqTransport : public Transport {
         }
         char *zmq_data = static_cast<char*>(zmq_msg_data(zmq_msg));
         meta.recv[i].data.ptr_ = zmq_data;
-        meta.recv[i].data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+        meta.recv[i].data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
         meta.recv[i].data.shm_.off_ = reinterpret_cast<size_t>(zmq_data);
         meta.recv[i].desc = zmq_msg;
       }

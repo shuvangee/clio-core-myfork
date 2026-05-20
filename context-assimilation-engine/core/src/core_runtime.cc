@@ -34,7 +34,7 @@
 #include <clio_cae/core/core_runtime.h>
 #include <clio_cae/core/factory/assimilation_ctx.h>
 #include <clio_cae/core/factory/assimilator_factory.h>
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
 #include <hdf5.h>
 #include <clio_cae/core/factory/hdf5_file_assimilator.h>
 #endif
@@ -53,7 +53,7 @@ CHI_TASK_CC(clio_cae::core::Runtime)
 
 namespace clio_cae::core {
 
-chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
+chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
   CHI_TASK_BODY_BEGIN
   task->SetReturnCode(0);
@@ -62,7 +62,7 @@ chi::TaskResume Runtime::Monitor(hipc::FullPtr<MonitorTask> task,
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext& ctx) {
+chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext& ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
@@ -89,7 +89,7 @@ chi::u64 Runtime::GetWorkRemaining() const {
   return 0;
 }
 
-chi::TaskResume Runtime::ParseOmni(hipc::FullPtr<ParseOmniTask> task,
+chi::TaskResume Runtime::ParseOmni(ctp::ipc::FullPtr<ParseOmniTask> task,
                                    chi::RunContext& ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -173,14 +173,14 @@ chi::TaskResume Runtime::ParseOmni(hipc::FullPtr<ParseOmniTask> task,
 }
 
 chi::TaskResume Runtime::ProcessHdf5Dataset(
-    hipc::FullPtr<ProcessHdf5DatasetTask> task, chi::RunContext& ctx) {
+    ctp::ipc::FullPtr<ProcessHdf5DatasetTask> task, chi::RunContext& ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
   (void)ctx;
 #endif
   CHI_TASK_BODY_BEGIN
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
   HLOG(kInfo, "ProcessHdf5Dataset: file='{}', dataset='{}', tag_prefix='{}'",
        task->file_path_.str(), task->dataset_path_.str(),
        task->tag_prefix_.str());
@@ -227,7 +227,7 @@ chi::TaskResume Runtime::ProcessHdf5Dataset(
   CHI_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ExportData(hipc::FullPtr<ExportDataTask> task,
+chi::TaskResume Runtime::ExportData(ctp::ipc::FullPtr<ExportDataTask> task,
                                     chi::RunContext& ctx) {
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
@@ -267,7 +267,7 @@ chi::TaskResume Runtime::ExportData(hipc::FullPtr<ExportDataTask> task,
   }
 
   if (format == "hdf5") {
-#ifdef WRP_CAE_ENABLE_HDF5
+#ifdef CLIO_CAE_ENABLE_HDF5
     hid_t file_id = H5Fcreate(output_path.c_str(), H5F_ACC_TRUNC,
                                H5P_DEFAULT, H5P_DEFAULT);
     if (file_id < 0) {
@@ -287,12 +287,12 @@ chi::TaskResume Runtime::ExportData(hipc::FullPtr<ExportDataTask> task,
 
       // Allocate buffer and read blob
       auto *ipc_manager = CHI_IPC;
-      hipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(blob_size);
+      ctp::ipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(blob_size);
       if (buf.IsNull()) {
         HLOG(kError, "ExportData: allocation failed for blob '{}'", blob_name);
         continue;
       }
-      hipc::ShmPtr<> shm_ptr(buf.shm_);
+      ctp::ipc::ShmPtr<> shm_ptr(buf.shm_);
       auto get_future = cte_client_->AsyncGetBlob(tag_id, blob_name, 0,
                                                    blob_size, 0, shm_ptr);
       CHI_CO_AWAIT(get_future);
@@ -339,12 +339,12 @@ chi::TaskResume Runtime::ExportData(hipc::FullPtr<ExportDataTask> task,
       if (blob_size == 0) continue;
 
       auto *ipc_manager = CHI_IPC;
-      hipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(blob_size);
+      ctp::ipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(blob_size);
       if (buf.IsNull()) {
         HLOG(kError, "ExportData: allocation failed for blob '{}'", blob_name);
         continue;
       }
-      hipc::ShmPtr<> shm_ptr(buf.shm_);
+      ctp::ipc::ShmPtr<> shm_ptr(buf.shm_);
       auto get_future = cte_client_->AsyncGetBlob(tag_id, blob_name, 0,
                                                    blob_size, 0, shm_ptr);
       CHI_CO_AWAIT(get_future);

@@ -39,7 +39,7 @@ env:
   # saturates at >=64 nodes).
   CHI_ZMQ_IO_THREADS: "8"
   # Local same-node clients (gray-scott ranks doing IowarpEngine
-  # WRP_CTE_CLIENT_INIT) talk to the daemon over a Unix domain
+  # CLIO_CTE_CLIENT_INIT) talk to the daemon over a Unix domain
   # socket instead of TCP. At 6144 ranks across 512 nodes, the
   # ZMTP greeting handshake on 9416 ROUTER doesn't scale (observed
   # as ranks frozen at attempt 20/60 in iow_s512 v21). UDS has
@@ -65,7 +65,7 @@ pkgs:
   - pkg_type: builtin.compress_libs
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     deploy_mode: container
     git_branch: transparent-compress-router-port-offset
     cmake_preset: release-adapter
@@ -90,10 +90,10 @@ pkgs:
     # still uses TCP on port 9413.
     ipc_mode: ipc
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     deploy_mode: container
 
-  - pkg_type: jarvis_iowarp.adios2_gray_scott
+  - pkg_type: jarvis_clio_core.adios2_gray_scott
     deploy_mode: container
     engine: iowarp
     nprocs: 2

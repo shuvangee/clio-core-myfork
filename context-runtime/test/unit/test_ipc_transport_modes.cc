@@ -124,7 +124,7 @@ void SubmitTasksForMode(const std::string &mode_name) {
   REQUIRE(read_task->return_code_ == 0);
 
   // Verify data up to actual_written
-  hipc::FullPtr<char> data_ptr =
+  ctp::ipc::FullPtr<char> data_ptr =
       CHI_IPC->ToFullPtr(read_task->data_.template Cast<char>());
   REQUIRE_FALSE(data_ptr.IsNull());
   size_t actual_read = read_task->bytes_read_;

@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_COMPRESSOR_CLIENT_H_
-#define WRP_CTE_COMPRESSOR_CLIENT_H_
+#ifndef CLIO_CTE_COMPRESSOR_CLIENT_H_
+#define CLIO_CTE_COMPRESSOR_CLIENT_H_
 
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/compressor/compressor_tasks.h>
@@ -96,7 +96,7 @@ class Client : public clio_cte::core::Client {
    */
   chi::Future<DynamicScheduleTask> AsyncPutBlob(
       const clio_cte::core::TagId &tag_id, const char *blob_name,
-      chi::u64 offset, chi::u64 size, hipc::ShmPtr<> blob_data,
+      chi::u64 offset, chi::u64 size, ctp::ipc::ShmPtr<> blob_data,
       float score = -1.0f,
       const clio_cte::core::Context &context = clio_cte::core::Context(),
       chi::u32 flags = 0,
@@ -114,7 +114,7 @@ class Client : public clio_cte::core::Client {
   /** std::string overload */
   chi::Future<DynamicScheduleTask> AsyncPutBlob(
       const clio_cte::core::TagId &tag_id, const std::string &blob_name,
-      chi::u64 offset, chi::u64 size, hipc::ShmPtr<> blob_data,
+      chi::u64 offset, chi::u64 size, ctp::ipc::ShmPtr<> blob_data,
       float score = -1.0f,
       const clio_cte::core::Context &context = clio_cte::core::Context(),
       chi::u32 flags = 0,
@@ -130,7 +130,7 @@ class Client : public clio_cte::core::Client {
   chi::Future<DecompressTask> AsyncGetBlob(
       const clio_cte::core::TagId &tag_id, const char *blob_name,
       chi::u64 offset, chi::u64 size, chi::u32 flags,
-      hipc::ShmPtr<> blob_data,
+      ctp::ipc::ShmPtr<> blob_data,
       const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
     auto *ipc_manager = CHI_IPC;
     auto task = ipc_manager->NewTask<DecompressTask>(
@@ -144,7 +144,7 @@ class Client : public clio_cte::core::Client {
   chi::Future<DecompressTask> AsyncGetBlob(
       const clio_cte::core::TagId &tag_id, const std::string &blob_name,
       chi::u64 offset, chi::u64 size, chi::u32 flags,
-      hipc::ShmPtr<> blob_data,
+      ctp::ipc::ShmPtr<> blob_data,
       const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
     return AsyncGetBlob(tag_id, blob_name.c_str(), offset, size, flags,
                         blob_data, pool_query);
@@ -161,7 +161,7 @@ class Client : public clio_cte::core::Client {
   chi::Future<DynamicScheduleTask> AsyncDynamicSchedule(
       const chi::PoolQuery &pool_query,
       const clio_cte::core::TagId &tag_id, const std::string &blob_name,
-      chi::u64 offset, chi::u64 size, hipc::ShmPtr<> blob_data,
+      chi::u64 offset, chi::u64 size, ctp::ipc::ShmPtr<> blob_data,
       float score, const clio_cte::core::Context &context,
       chi::u32 flags, const chi::PoolId &core_pool_id) {
     auto *ipc_manager = CHI_IPC;
@@ -178,7 +178,7 @@ class Client : public clio_cte::core::Client {
   chi::Future<CompressTask> AsyncCompress(
       const chi::PoolQuery &pool_query,
       const clio_cte::core::TagId &tag_id, const std::string &blob_name,
-      chi::u64 offset, chi::u64 size, hipc::ShmPtr<> blob_data,
+      chi::u64 offset, chi::u64 size, ctp::ipc::ShmPtr<> blob_data,
       float score, const clio_cte::core::Context &context,
       chi::u32 flags, const chi::PoolId &core_pool_id) {
     auto *ipc_manager = CHI_IPC;
@@ -196,7 +196,7 @@ class Client : public clio_cte::core::Client {
       const chi::PoolQuery &pool_query,
       const clio_cte::core::TagId &tag_id, const std::string &blob_name,
       chi::u64 offset, chi::u64 size, chi::u32 flags,
-      hipc::ShmPtr<> blob_data, const chi::PoolId &core_pool_id) {
+      ctp::ipc::ShmPtr<> blob_data, const chi::PoolId &core_pool_id) {
     auto *ipc_manager = CHI_IPC;
     auto task = ipc_manager->NewTask<DecompressTask>(
         chi::CreateTaskId(), compressor_pool_id_, pool_query, tag_id,
@@ -245,4 +245,4 @@ class Client : public clio_cte::core::Client {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_CLIENT_H_
+#endif  // CLIO_CTE_COMPRESSOR_CLIENT_H_

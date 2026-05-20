@@ -45,8 +45,8 @@
  * have access to the file, you may request a copy from help@hdfgroup.org.   *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifndef WRP_CTE_ADAPTER_STDIO_H
-#define WRP_CTE_ADAPTER_STDIO_H
+#ifndef CLIO_CTE_ADAPTER_STDIO_H
+#define CLIO_CTE_ADAPTER_STDIO_H
 
 #include <cufile.h>
 #include <dlfcn.h>
@@ -158,10 +158,10 @@ class CuFileApi : public RealApi {
 #include "clio_ctp/util/singleton.h"
 
 // Singleton macros
-#define WRP_CTE_CUFILE_API \
+#define CLIO_CTE_CUFILE_API \
   ctp::Singleton<::clio::cae::CuFileApi>::GetInstance()
-#define WRP_CTE_STDIO_API \
+#define CLIO_CTE_STDIO_API \
   ctp::Singleton<::clio::cae::StdioApi>::GetInstance()
-#define WRP_CTE_STDIO_API_T clio::cae::StdioApi *
+#define CLIO_CTE_STDIO_API_T clio::cae::StdioApi *
 
-#endif  // WRP_CTE_ADAPTER_STDIO_H
+#endif  // CLIO_CTE_ADAPTER_STDIO_H

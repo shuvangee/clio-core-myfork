@@ -235,7 +235,7 @@ class Client : public chi::ContainerClient {
       const TagId &tag_id,
       const char *blob_name,
       chi::u64 offset, chi::u64 size,
-      hipc::ShmPtr<> blob_data, float score = -1.0f,
+      ctp::ipc::ShmPtr<> blob_data, float score = -1.0f,
       const Context &context = Context(),
       chi::u32 flags = 0,
       const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
@@ -263,7 +263,7 @@ class Client : public chi::ContainerClient {
       const TagId &tag_id,
       const std::string &blob_name,
       chi::u64 offset, chi::u64 size,
-      hipc::ShmPtr<> blob_data, float score = -1.0f,
+      ctp::ipc::ShmPtr<> blob_data, float score = -1.0f,
       const Context &context = Context(),
       chi::u32 flags = 0,
       const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
@@ -286,7 +286,7 @@ class Client : public chi::ContainerClient {
       const char *blob_name,
       chi::u64 offset, chi::u64 size,
       chi::u32 flags,
-      hipc::ShmPtr<> blob_data,
+      ctp::ipc::ShmPtr<> blob_data,
       const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
     auto *ipc_manager = CHI_CPU_IPC;
 
@@ -303,7 +303,7 @@ class Client : public chi::ContainerClient {
       const std::string &blob_name,
       chi::u64 offset, chi::u64 size,
       chi::u32 flags,
-      hipc::ShmPtr<> blob_data,
+      ctp::ipc::ShmPtr<> blob_data,
       const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
     return AsyncGetBlob(tag_id, blob_name.c_str(), offset, size,
                         flags, blob_data, pool_query);
@@ -580,7 +580,7 @@ CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_cte::core::Client, g_cte_client);
  * Dynamic)
  * @return true if initialization succeeded, false otherwise
  */
-bool WRP_CTE_CLIENT_INIT(
+bool CLIO_CTE_CLIENT_INIT(
     const std::string &config_path = "",
     const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic());
 
@@ -594,13 +594,13 @@ class Tag {
 
  public:
   /**
-   * Constructor - Call the WRP_CTE client GetOrCreateTag function
+   * Constructor - Call the CLIO_CTE client GetOrCreateTag function
    * @param tag_name Tag name to get or create
    */
   explicit Tag(const std::string &tag_name);
 
   /**
-   * Constructor - Does not call WRP_CTE client function, just sets the TagId
+   * Constructor - Does not call CLIO_CTE client function, just sets the TagId
    * variable
    * @param tag_id Tag ID to use directly
    */
@@ -627,7 +627,7 @@ class Tag {
    * @param score Blob score for placement: -1.0=unknown (auto), 0.0-1.0=explicit tier
    * @param context Compression context for workflow-aware decisions (default empty)
    */
-  void PutBlob(const std::string &blob_name, const hipc::ShmPtr<> &data,
+  void PutBlob(const std::string &blob_name, const ctp::ipc::ShmPtr<> &data,
                size_t data_size, size_t off = 0, float score = -1.0f,
                const Context &context = Context());
 
@@ -646,7 +646,7 @@ class Tag {
    * task completes
    */
   chi::Future<PutBlobTask> AsyncPutBlob(const std::string &blob_name,
-                                        const hipc::ShmPtr<> &data,
+                                        const ctp::ipc::ShmPtr<> &data,
                                         size_t data_size, size_t off = 0,
                                         float score = -1.0f,
                                         const Context &context = Context());
@@ -674,7 +674,7 @@ class Tag {
    * @note Caller must pre-allocate shared memory using
    * CHI_IPC->AllocateBuffer<void>(data_size)
    */
-  void GetBlob(const std::string &blob_name, hipc::ShmPtr<> data,
+  void GetBlob(const std::string &blob_name, ctp::ipc::ShmPtr<> data,
                size_t data_size, size_t off = 0);
 
   /**
@@ -722,7 +722,7 @@ void FlushPutBlobTiming(const char *label);
 }  // namespace clio_cte::core
 
 // Global singleton macro for CTE client access (returns pointer, not reference)
-#define WRP_CTE_CLIENT                               \
+#define CLIO_CTE_CLIENT                               \
   (&(*CTP_GET_GLOBAL_PTR_VAR(clio_cte::core::Client, \
                               clio_cte::core::g_cte_client)))
 

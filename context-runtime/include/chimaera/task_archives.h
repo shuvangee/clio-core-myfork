@@ -234,7 +234,7 @@ private:
   }
 
 public:
-  void bulk(hipc::ShmPtr<> ptr, size_t size, uint32_t flags);
+  void bulk(ctp::ipc::ShmPtr<> ptr, size_t size, uint32_t flags);
 
   void write_binary(const char *data, size_t size) {
     serializer_.write_binary(data, size);
@@ -397,7 +397,7 @@ private:
   }
 
 public:
-  void bulk(hipc::ShmPtr<> &ptr, size_t size, uint32_t flags);
+  void bulk(ctp::ipc::ShmPtr<> &ptr, size_t size, uint32_t flags);
 
   const TaskInfo &GetCurrentTaskInfo() const {
     return task_infos_[current_task_index_];

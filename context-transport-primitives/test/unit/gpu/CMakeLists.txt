@@ -2,7 +2,7 @@
 # GPU Unit Tests
 #------------------------------------------------------------------------------
 
-if(WRP_CORE_ENABLE_CUDA)
+if(CLIO_CORE_ENABLE_CUDA)
   message(STATUS "Building GPU unit tests")
 
   set(CLIO_CTP_GPU_INCLUDE_DIRS
@@ -95,7 +95,7 @@ if(WRP_CORE_ENABLE_CUDA)
 
 endif()
 
-if(WRP_CORE_ENABLE_SYCL)
+if(CLIO_CORE_ENABLE_SYCL)
   message(STATUS "Building SYCL GPU unit tests (Intel oneAPI)")
   add_executable(test_gpu_sycl test_gpu_sycl.cc)
   target_compile_definitions(test_gpu_sycl PRIVATE CTP_ENABLE_SYCL=1)
@@ -107,6 +107,6 @@ if(WRP_CORE_ENABLE_SYCL)
   set_tests_properties(test_gpu_sycl PROPERTIES LABELS "gpu;sycl")
 endif()
 
-if(NOT WRP_CORE_ENABLE_CUDA AND NOT WRP_CORE_ENABLE_ROCM AND NOT WRP_CORE_ENABLE_SYCL)
-  message(STATUS "GPU tests disabled (WRP_CORE_ENABLE_CUDA, WRP_CORE_ENABLE_ROCM, and WRP_CORE_ENABLE_SYCL are all OFF)")
+if(NOT CLIO_CORE_ENABLE_CUDA AND NOT CLIO_CORE_ENABLE_ROCM AND NOT CLIO_CORE_ENABLE_SYCL)
+  message(STATUS "GPU tests disabled (CLIO_CORE_ENABLE_CUDA, CLIO_CORE_ENABLE_ROCM, and CLIO_CORE_ENABLE_SYCL are all OFF)")
 endif()

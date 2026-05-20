@@ -103,7 +103,7 @@ class NixlTransport : public Transport {
    * @param flags     BULK_EXPOSE or BULK_XFER flags.
    * @return Bulk descriptor.
    */
-  Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size, u32 flags) {
+  Bulk Expose(const ctp::ipc::FullPtr<char>& ptr, size_t data_size, u32 flags) {
     Bulk bulk;
     bulk.data = ptr;
     bulk.size = data_size;
@@ -319,10 +319,10 @@ class NixlTransport : public Transport {
         rb.flags = sb.flags;
         if (sb.flags.Any(BULK_XFER)) {
           char* dst_ptr = new char[sb.size];
-          rb.data = hipc::FullPtr<char>(dst_ptr);
-          rb.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+          rb.data = ctp::ipc::FullPtr<char>(dst_ptr);
+          rb.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
         } else {
-          rb.data = hipc::FullPtr<char>::GetNull();
+          rb.data = ctp::ipc::FullPtr<char>::GetNull();
         }
         meta.recv.push_back(rb);
       }

@@ -64,7 +64,7 @@ template<bool ATOMIC>
 class _ArenaAllocator : public Allocator {
  private:
   Heap<ATOMIC> heap_;  /**< Heap for bump-pointer allocation */
-  hipc::atomic<ctp::big_uint> total_alloc_;  /**< Total allocated size tracking */
+  ctp::ipc::atomic<ctp::big_uint> total_alloc_;  /**< Total allocated size tracking */
   size_t heap_begin_;  /**< Initial heap offset (for reset) */
   size_t heap_max_;    /**< Maximum heap size (for reset) */
 

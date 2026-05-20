@@ -21,10 +21,10 @@ enable_testing()
 # yaml-cpp is already found by root CMakeLists.txt
 
 # Conditionally find HDF5 if enabled
-if(WRP_CAE_ENABLE_HDF5)
+if(CLIO_CAE_ENABLE_HDF5)
   # HDF5 is already found by root CMakeLists.txt
   if(NOT HDF5_FOUND)
-    message(WARNING "WRP_CAE_ENABLE_HDF5 is ON but HDF5 not found. HDF5 tests will be disabled.")
+    message(WARNING "CLIO_CAE_ENABLE_HDF5 is ON but HDF5 not found. HDF5 tests will be disabled.")
     set(HDF5_ENABLED FALSE)
   else()
     set(HDF5_ENABLED TRUE)
@@ -209,7 +209,7 @@ set_tests_properties(
 # - Tests dataset discovery and transfer
 # - Validates metadata and tensor information
 # - Tests hierarchical group structures
-# Note: Requires WRP_CORE_ENABLE_HDF5=ON
+# Note: Requires CLIO_CORE_ENABLE_HDF5=ON
 #------------------------------------------------------------------------------
 if(HDF5_ENABLED)
   add_cae_unit_test(cae_hdf5_assim
@@ -275,7 +275,7 @@ target_link_libraries(test_export_data
 )
 
 if(HDF5_ENABLED)
-  target_compile_definitions(test_export_data PRIVATE WRP_CAE_ENABLE_HDF5)
+  target_compile_definitions(test_export_data PRIVATE CLIO_CAE_ENABLE_HDF5)
   target_link_libraries(test_export_data PRIVATE ${HDF5_LIBRARIES})
   target_include_directories(test_export_data PRIVATE ${HDF5_INCLUDE_DIRS})
 endif()

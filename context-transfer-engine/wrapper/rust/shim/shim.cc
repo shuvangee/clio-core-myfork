@@ -10,7 +10,7 @@ bool cte_init(rust::Str config_path) {
   std::string path(config_path.data(), config_path.size());
   bool ok = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
   if (!ok) return false;
-  return clio_cte::core::WRP_CTE_CLIENT_INIT(path);
+  return clio_cte::core::CLIO_CTE_CLIENT_INIT(path);
 }
 
 std::unique_ptr<CteTag> tag_new(rust::Str tag_name) {
@@ -78,7 +78,7 @@ bool client_register_target(rust::Str target_path, uint64_t size) {
       chimaera::bdev::BdevType::kFile);
   create_task.Wait();
   // Register with CTE
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
   auto reg_task = client->AsyncRegisterTarget(
       path, chimaera::bdev::BdevType::kFile, size,
       chi::PoolQuery::Local(), bdev_pool_id);
@@ -88,7 +88,7 @@ bool client_register_target(rust::Str target_path, uint64_t size) {
 
 bool client_del_tag(rust::Str name) {
   std::string tag_name(name.data(), name.size());
-  auto *client = WRP_CTE_CLIENT;
+  auto *client = CLIO_CTE_CLIENT;
   auto task = client->AsyncDelTag(tag_name);
   task.Wait();
   return true;

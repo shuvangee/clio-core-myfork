@@ -11,7 +11,7 @@ add_executable(test_fuse_adapter
 )
 
 target_include_directories(test_fuse_adapter PRIVATE
-    ${WRP_CTE_ROOT}
+    ${CLIO_CTE_ROOT}
 )
 
 target_link_libraries(test_fuse_adapter
@@ -79,7 +79,7 @@ add_executable(test_fuse_copy_workspace
 )
 
 target_include_directories(test_fuse_copy_workspace PRIVATE
-    ${WRP_CTE_ROOT}
+    ${CLIO_CTE_ROOT}
 )
 
 target_link_libraries(test_fuse_copy_workspace

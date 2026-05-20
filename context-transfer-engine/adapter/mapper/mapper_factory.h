@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_FACTORY_H
-#define WRP_CTE_ADAPTER_FACTORY_H
+#ifndef CLIO_CTE_ADAPTER_FACTORY_H
+#define CLIO_CTE_ADAPTER_FACTORY_H
 
 #include "abstract_mapper.h"
 #include "balanced_mapper.h"
@@ -63,4 +63,4 @@ class MapperFactory {
   }
 };
 }  // namespace clio::cae
-#endif  // WRP_CTE_ADAPTER_FACTORY_H
+#endif  // CLIO_CTE_ADAPTER_FACTORY_H

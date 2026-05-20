@@ -204,7 +204,7 @@ The interceptor modifies the execution environment in the following ways:
    HDF5_DRIVER=clio_cte_vfd
    ```
 
-3. **WRP_CTE_ROOT**: Set to CTE installation directory for all adapters
+3. **CLIO_CTE_ROOT**: Set to CTE installation directory for all adapters
 
 ### Library Search
 

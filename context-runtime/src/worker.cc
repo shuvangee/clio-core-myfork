@@ -325,8 +325,8 @@ bool Worker::ProcessNewTaskGpu(GpuTaskLane *gpu_lane) {
 
   SetCurrentRunContext(nullptr);
 
-  hipc::ShmPtr<gpu::FutureShm> gpu_fshm_shmptr = gpu_future.GetFutureShmPtr();
-  hipc::ShmPtr<Task> task_shmptr = gpu_future.GetTaskPtr().shm_;
+  ctp::ipc::ShmPtr<gpu::FutureShm> gpu_fshm_shmptr = gpu_future.GetFutureShmPtr();
+  ctp::ipc::ShmPtr<Task> task_shmptr = gpu_future.GetTaskPtr().shm_;
   if (gpu_fshm_shmptr.IsNull() || task_shmptr.IsNull()) {
     HLOG(kError, "Worker {}: ProcessNewTaskGpu: null ShmPtr in queue entry",
          worker_id_);
@@ -393,7 +393,7 @@ bool Worker::ProcessNewTaskGpu(GpuTaskLane *gpu_lane) {
   PoolId pool_id = task_raw->pool_id_;
   u32 method_id = task_raw->method_;
 
-  hipc::FullPtr<Task> task_full_ptr(task_raw);
+  ctp::ipc::FullPtr<Task> task_full_ptr(task_raw);
 
   Future<Task> future = CHI_IPC->MakePointerFuture(task_full_ptr);
   if (future.GetFutureShmPtr().IsNull()) {
@@ -468,7 +468,7 @@ bool Worker::ProcessNewTaskGpu(GpuTaskLane *gpu_lane) {
   return true;
 }
 
-hipc::FullPtr<Task> Worker::GetOrCopyTaskFromFuture(Future<Task> &future,
+ctp::ipc::FullPtr<Task> Worker::GetOrCopyTaskFromFuture(Future<Task> &future,
                                                     Container *container,
                                                     u32 method_id) {
   return CHI_IPC->RecvRuntime(future, container, method_id,

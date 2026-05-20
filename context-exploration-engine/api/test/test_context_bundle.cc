@@ -165,11 +165,11 @@ void test_bundle_and_retrieve_workflow() {
 
   // Step 2: Initialize CTE client
   HLOG(kInfo, "[STEP 2] Initializing CTE client...");
-  clio_cte::core::WRP_CTE_CLIENT_INIT();
+  clio_cte::core::CLIO_CTE_CLIENT_INIT();
 
   // Step 2.5: Register a RAM storage target with CTE
   HLOG(kInfo, "[STEP 2.5] Registering RAM storage target with CTE...");
-  auto* cte_client = WRP_CTE_CLIENT;
+  auto* cte_client = CLIO_CTE_CLIENT;
   auto register_task = cte_client->AsyncRegisterTarget(
       "ram::cee_test_storage",  // Target name (RAM storage)
       chimaera::bdev::BdevType::kRam,  // RAM block device type

@@ -624,7 +624,7 @@ class _BuddyAllocator : public Allocator {
     } else {
       for (auto it = large_pages_[list_idx].begin(this);
            it != large_pages_[list_idx].end(); ++it) {
-        hipc::FullPtr<PageT> free_page(this, it.GetCurrent().load());
+        ctp::ipc::FullPtr<PageT> free_page(this, it.GetCurrent().load());
         size_t page_total_size = free_page.ptr_->GetSize() + sizeof(PageT);
         if (page_total_size >= required_size) {
           size_t offset = it.GetCurrent().load();

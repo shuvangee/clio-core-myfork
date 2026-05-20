@@ -51,7 +51,7 @@ namespace ctp::thread {
 class Pthread : public ThreadModel {
  public:
   ThreadLocalKey tid_key_;
-  hipc::atomic<ctp::big_uint> tid_counter_;
+  ctp::ipc::atomic<ctp::big_uint> tid_counter_;
 
  public:
   /** Default constructor */

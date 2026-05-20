@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_POSIX_H
-#define WRP_CTE_ADAPTER_POSIX_H
+#ifndef CLIO_CTE_ADAPTER_POSIX_H
+#define CLIO_CTE_ADAPTER_POSIX_H
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -285,12 +285,12 @@ namespace clio::cae {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(PosixApi, g_posix_api);
 }
 
-#define WRP_CTE_POSIX_API (CTP_GET_GLOBAL_PTR_VAR(clio::cae::PosixApi, clio::cae::g_posix_api))
-#define WRP_CTE_POSIX_API_T clio::cae::PosixApi *
+#define CLIO_CTE_POSIX_API (CTP_GET_GLOBAL_PTR_VAR(clio::cae::PosixApi, clio::cae::g_posix_api))
+#define CLIO_CTE_POSIX_API_T clio::cae::PosixApi *
 
 namespace clio::cae {
 /** Used for compatability with older kernel versions */
 int fxstat_to_fstat(int fd, struct stat *stbuf);
 }  // namespace clio::cae
 
-#endif  // WRP_CTE_ADAPTER_POSIX_H
+#endif  // CLIO_CTE_ADAPTER_POSIX_H

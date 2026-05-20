@@ -49,7 +49,7 @@ namespace ctp {
  * */
 template <typename T = u32, bool ATOMIC = false>
 struct bitfield {
-  hipc::opt_atomic<T, ATOMIC> bits_;
+  ctp::ipc::opt_atomic<T, ATOMIC> bits_;
 
   /** Default constructor */
   CTP_INLINE_CROSS_FUN bitfield() : bits_(0) {}

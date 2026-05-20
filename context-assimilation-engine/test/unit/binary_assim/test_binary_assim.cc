@@ -248,12 +248,12 @@ int main(int argc, char* argv[]) {
 
     // Step 2: Connect to CTE
     HLOG(kInfo, "[STEP 2] Connecting to CTE...");
-    clio_cte::core::WRP_CTE_CLIENT_INIT();
+    clio_cte::core::CLIO_CTE_CLIENT_INIT();
     HLOG(kSuccess, "CTE client initialized");
 
     // Step 2.5: Initialize CAE client
     HLOG(kInfo, "[STEP 2.5] Initializing CAE client...");
-    WRP_CAE_CLIENT_INIT();
+    CLIO_CAE_CLIENT_INIT();
     HLOG(kSuccess, "CAE client initialized");
 
     // Step 3: Create CAE pool
@@ -311,7 +311,7 @@ int main(int argc, char* argv[]) {
     HLOG(kInfo, "[STEP 8] Verifying data in CTE...");
 
     // Get CTE client
-    auto cte_client = WRP_CTE_CLIENT;
+    auto cte_client = CLIO_CTE_CLIENT;
 
     // Check if tag exists
     auto tag_task = cte_client->AsyncGetOrCreateTag(kTestTagName);

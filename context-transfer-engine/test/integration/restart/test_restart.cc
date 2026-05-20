@@ -83,7 +83,7 @@ int PutBlobs() {
     std::string blob_name = "restart_blob_" + std::to_string(i);
 
     // Allocate SHM buffer
-    hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(kBlobSize);
+    ctp::ipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(kBlobSize);
     if (buf.IsNull()) {
       HLOG(kError, "Phase 1: Failed to allocate SHM buffer for blob {}", i);
       return 1;
@@ -94,7 +94,7 @@ int PutBlobs() {
     memset(buf.ptr_, pattern, kBlobSize);
 
     // Convert to ShmPtr for API
-    hipc::ShmPtr<> shm_ptr = buf.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> shm_ptr = buf.shm_.template Cast<void>();
 
     // Put blob
     auto put_task = cte_client.AsyncPutBlob(
@@ -183,13 +183,13 @@ int VerifyBlobs() {
     std::string blob_name = "restart_blob_" + std::to_string(i);
     char expected_pattern = static_cast<char>('A' + i);
 
-    hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(kBlobSize);
+    ctp::ipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(kBlobSize);
     if (buf.IsNull()) {
       ++failed;
       continue;
     }
     memset(buf.ptr_, 0, kBlobSize);
-    hipc::ShmPtr<> shm_ptr = buf.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> shm_ptr = buf.shm_.template Cast<void>();
 
     auto get_task = cte_client.AsyncGetBlob(
         tag_id, blob_name, 0, kBlobSize, 0, shm_ptr);

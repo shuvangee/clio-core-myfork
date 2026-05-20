@@ -301,9 +301,9 @@ class CTEScoreBenchmark {
     // Allocate shared memory buffer for Put operations
     auto shm_buffer = CHI_IPC->AllocateBuffer(kBlobSize);
     std::memset(shm_buffer.ptr_, rank_ & 0xFF, kBlobSize);
-    hipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
+    ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
 
     for (int step = 0; step < num_steps_; ++step) {
       // Step 1: Start async reorganization of blobs from PREVIOUS step
@@ -401,7 +401,7 @@ class CTEScoreBenchmark {
    * Explicitly deletes each blob first, then deletes the tags
    */
   void CleanupBlobs() {
-    auto *cte_client = WRP_CTE_CLIENT;
+    auto *cte_client = CLIO_CTE_CLIENT;
 
     if (rank_ == 0) {
       HLOG(kInfo, "  Cleaning up blobs...");
@@ -515,7 +515,7 @@ int main(int argc, char **argv) {
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
   // Initialize CTE client
-  if (!clio_cte::core::WRP_CTE_CLIENT_INIT()) {
+  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
     if (rank == 0) {
       HLOG(kError, "Failed to initialize CTE client");
     }

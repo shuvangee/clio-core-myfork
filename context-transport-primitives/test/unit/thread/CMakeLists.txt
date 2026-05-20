@@ -2,7 +2,7 @@ project(clio_ctp)
 
 
 
-if (WRP_CORE_ENABLE_OPENMP)
+if (CLIO_CORE_ENABLE_OPENMP)
     #------------------------------------------------------------------------------
     # Build Tests
     #------------------------------------------------------------------------------
@@ -13,7 +13,7 @@ if (WRP_CORE_ENABLE_OPENMP)
     add_dependencies(test_thread_exec clio_ctp_host)
     target_link_libraries(test_thread_exec
             clio_ctp_host
-            $<$<BOOL:${WRP_CORE_ENABLE_THALLIUM}>:thallium>
+            $<$<BOOL:${CLIO_CORE_ENABLE_THALLIUM}>:thallium>
             Catch2::Catch2
             ctp::thread_all)
 

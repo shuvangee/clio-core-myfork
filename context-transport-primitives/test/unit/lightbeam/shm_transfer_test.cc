@@ -95,7 +95,7 @@ static LbmMeta<> MakeSendMeta(std::vector<char>& data) {
   LbmMeta<> meta;
   Bulk bulk;
   bulk.data.ptr_ = data.data();
-  bulk.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+  bulk.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
   bulk.data.shm_.off_ = 0;
   bulk.size = data.size();
   bulk.flags = ctp::bitfield32_t(BULK_XFER);
@@ -344,7 +344,7 @@ TEST_CASE("ShmTransfer - Send/Recv Basic", "[shm_transfer][sendrecv]") {
   std::vector<char> bulk_data = GenerateTestData(DATA_SIZE);
   Bulk bulk;
   bulk.data.ptr_ = bulk_data.data();
-  bulk.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+  bulk.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
   bulk.data.shm_.off_ = 0;
   bulk.size = DATA_SIZE;
   bulk.flags = ctp::bitfield32_t(BULK_XFER);
@@ -399,7 +399,7 @@ TEST_CASE("ShmTransfer - Send/Recv Large Multi-Chunk", "[shm_transfer][sendrecv]
   std::vector<char> bulk_data = GenerateTestData(DATA_SIZE);
   Bulk bulk;
   bulk.data.ptr_ = bulk_data.data();
-  bulk.data.shm_.alloc_id_ = hipc::AllocatorId::GetNull();
+  bulk.data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
   bulk.data.shm_.off_ = 0;
   bulk.size = DATA_SIZE;
   bulk.flags = ctp::bitfield32_t(BULK_XFER);

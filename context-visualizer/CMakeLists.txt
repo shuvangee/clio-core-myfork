@@ -1,5 +1,5 @@
 # Context Visualizer -- pure Python, no compilation
-# Installs the context_visualizer package to site-packages when WRP_CORE_ENABLE_PYTHON=ON
+# Installs the context_visualizer package to site-packages when CLIO_CORE_ENABLE_PYTHON=ON
 # PYTHON_SITE_PACKAGES is set by the root CMakeLists.txt (absolute path).
 
 install(

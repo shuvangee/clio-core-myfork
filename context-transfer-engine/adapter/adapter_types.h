@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WRP_CTE_ADAPTER_ADAPTER_TYPES_H_
-#define WRP_CTE_ADAPTER_ADAPTER_TYPES_H_
+#ifndef CLIO_CTE_ADAPTER_ADAPTER_TYPES_H_
+#define CLIO_CTE_ADAPTER_ADAPTER_TYPES_H_
 
 #include "adapter/posix/posix_api.h"
 
@@ -114,11 +114,11 @@ struct AdapterInfo {
 
   ~AdapterInfo() {
     if (fd_ >= 0) {
-      WRP_CTE_POSIX_API->close(fd_);
+      CLIO_CTE_POSIX_API->close(fd_);
     }
   }
 };
 
 }  // namespace clio::cae
 
-#endif  // WRP_CTE_ADAPTER_ADAPTER_TYPES_H_
+#endif  // CLIO_CTE_ADAPTER_ADAPTER_TYPES_H_

@@ -37,7 +37,7 @@ container_binds:
   - ${HOME}/montage-scratch-cte:${HOME}/montage-scratch-cte
 
 pkgs:
-  - pkg_type: jarvis_iowarp.clio_runtime
+  - pkg_type: jarvis_clio_core.clio_runtime
     pkg_name: runtime
     deploy_mode: default
     # Heap corruption diagnostic: restore num_threads=4 and pin the
@@ -50,7 +50,7 @@ pkgs:
     log_level: info
     sleep: 4
 
-  - pkg_type: jarvis_iowarp.clio_cte
+  - pkg_type: jarvis_clio_core.clio_cte
     pkg_name: cte_core
     deploy_mode: default
     devices:
@@ -61,12 +61,12 @@ pkgs:
     poll_period_ms: 5000
     iowarp_compress: none
 
-  - pkg_type: jarvis_iowarp.clio_cte_libfuse
+  - pkg_type: jarvis_clio_core.clio_cte_libfuse
     pkg_name: cte_fuse
     deploy_mode: default
     mountpoint: ${HOME}/clio_cte
     # clio_cte_fuse now forces -s (single-threaded libfuse) at the
-    # binary level. Override at runtime with WRP_CTE_FUSE_ALLOW_MT=1
+    # binary level. Override at runtime with CLIO_CTE_FUSE_ALLOW_MT=1
     # once the underlying race is debugged and fixed.
     sleep: 2
 

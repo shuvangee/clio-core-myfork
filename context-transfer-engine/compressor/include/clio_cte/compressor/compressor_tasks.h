@@ -32,8 +32,8 @@
  */
 
 // Copyright 2024 IOWarp contributors
-#ifndef WRP_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_
-#define WRP_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_
+#ifndef CLIO_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_
+#define CLIO_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_
 
 #include <chimaera/chimaera.h>
 #include <chimaera/task.h>
@@ -137,7 +137,7 @@ struct DestroyTask : public chi::Task {
                        const chi::PoolQuery &pool_query)
       : chi::Task(task_id, pool_id, pool_query, Method::kDestroy) {}
 
-  void Copy(const hipc::FullPtr<DestroyTask>& other) {
+  void Copy(const ctp::ipc::FullPtr<DestroyTask>& other) {
     // No additional fields to copy beyond chi::Task
   }
 
@@ -227,7 +227,7 @@ struct DynamicScheduleTask : public chi::Task {
   INOUT chi::priv::string blob_name_;     // Blob name (required)
   IN chi::u64 offset_;                    // Offset within blob
   IN chi::u64 size_;                      // Size of blob data
-  IN hipc::ShmPtr<> blob_data_;           // Blob data (shared memory pointer)
+  IN ctp::ipc::ShmPtr<> blob_data_;           // Blob data (shared memory pointer)
   IN float score_;                        // Score 0-1 for placement decisions
   INOUT Context context_;                 // Context for compression control and statistics
   IN chi::u32 flags_;                     // Operation flags
@@ -240,7 +240,7 @@ struct DynamicScheduleTask : public chi::Task {
   DynamicScheduleTask()
       : chi::Task(), tag_id_(clio_cte::core::TagId::GetNull()),
         blob_name_(CTP_MALLOC), offset_(0), size_(0),
-        blob_data_(hipc::ShmPtr<>::GetNull()), score_(0.5f),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()), score_(0.5f),
         context_(), flags_(0), core_pool_id_(chi::PoolId::GetNull()),
         tier_score_(0.0f) {}
 
@@ -251,7 +251,7 @@ struct DynamicScheduleTask : public chi::Task {
                                const clio_cte::core::TagId &tag_id,
                                const std::string &blob_name,
                                chi::u64 offset, chi::u64 size,
-                               hipc::ShmPtr<> blob_data,
+                               ctp::ipc::ShmPtr<> blob_data,
                                float score, const Context &context,
                                chi::u32 flags,
                                const chi::PoolId &core_pool_id)
@@ -261,7 +261,7 @@ struct DynamicScheduleTask : public chi::Task {
         context_(context), flags_(flags), core_pool_id_(core_pool_id),
         tier_score_(0.0f) {}
 
-  void Copy(const hipc::FullPtr<DynamicScheduleTask>& other) {
+  void Copy(const ctp::ipc::FullPtr<DynamicScheduleTask>& other) {
     tag_id_ = other->tag_id_;
     blob_name_ = other->blob_name_;
     offset_ = other->offset_;
@@ -300,7 +300,7 @@ struct CompressTask : public chi::Task {
   INOUT chi::priv::string blob_name_;     // Blob name (required)
   IN chi::u64 offset_;                    // Offset within blob
   IN chi::u64 size_;                      // Size of blob data
-  IN hipc::ShmPtr<> blob_data_;           // Blob data (shared memory pointer)
+  IN ctp::ipc::ShmPtr<> blob_data_;           // Blob data (shared memory pointer)
   IN float score_;                        // Score 0-1 for placement decisions
   INOUT Context context_;                 // Context for compression control and statistics
   IN chi::u32 flags_;                     // Operation flags
@@ -313,7 +313,7 @@ struct CompressTask : public chi::Task {
   CompressTask()
       : chi::Task(), tag_id_(clio_cte::core::TagId::GetNull()),
         blob_name_(CTP_MALLOC), offset_(0), size_(0),
-        blob_data_(hipc::ShmPtr<>::GetNull()), score_(0.5f),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()), score_(0.5f),
         context_(), flags_(0), core_pool_id_(chi::PoolId::GetNull()),
         tier_score_(0.0f) {}
 
@@ -324,7 +324,7 @@ struct CompressTask : public chi::Task {
                         const clio_cte::core::TagId &tag_id,
                         const std::string &blob_name,
                         chi::u64 offset, chi::u64 size,
-                        hipc::ShmPtr<> blob_data,
+                        ctp::ipc::ShmPtr<> blob_data,
                         float score, const Context &context,
                         chi::u32 flags,
                         const chi::PoolId &core_pool_id)
@@ -334,7 +334,7 @@ struct CompressTask : public chi::Task {
         context_(context), flags_(flags), core_pool_id_(core_pool_id),
         tier_score_(0.0f) {}
 
-  void Copy(const hipc::FullPtr<CompressTask>& other) {
+  void Copy(const ctp::ipc::FullPtr<CompressTask>& other) {
     tag_id_ = other->tag_id_;
     blob_name_ = other->blob_name_;
     offset_ = other->offset_;
@@ -374,7 +374,7 @@ struct DecompressTask : public chi::Task {
   IN chi::u64 offset_;                    // Offset within blob
   IN chi::u64 size_;                      // Size of data to retrieve (decompressed size)
   IN chi::u32 flags_;                     // Operation flags
-  IN hipc::ShmPtr<> blob_data_;           // Output buffer for decompressed data
+  IN ctp::ipc::ShmPtr<> blob_data_;           // Output buffer for decompressed data
   IN chi::PoolId core_pool_id_;           // Pool ID of core chimod for GetBlob
 
   // Output fields
@@ -385,7 +385,7 @@ struct DecompressTask : public chi::Task {
   DecompressTask()
       : chi::Task(), tag_id_(clio_cte::core::TagId::GetNull()),
         blob_name_(CTP_MALLOC), offset_(0), size_(0), flags_(0),
-        blob_data_(hipc::ShmPtr<>::GetNull()),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()),
         core_pool_id_(chi::PoolId::GetNull()),
         output_size_(0), decompress_time_ms_(0.0) {}
 
@@ -396,7 +396,7 @@ struct DecompressTask : public chi::Task {
                           const clio_cte::core::TagId &tag_id,
                           const std::string &blob_name,
                           chi::u64 offset, chi::u64 size,
-                          chi::u32 flags, hipc::ShmPtr<> blob_data,
+                          chi::u32 flags, ctp::ipc::ShmPtr<> blob_data,
                           const chi::PoolId &core_pool_id)
       : chi::Task(task_id, pool_id, pool_query, Method::kDecompress),
         tag_id_(tag_id), blob_name_(CTP_MALLOC, blob_name),
@@ -404,7 +404,7 @@ struct DecompressTask : public chi::Task {
         core_pool_id_(core_pool_id),
         output_size_(0), decompress_time_ms_(0.0) {}
 
-  void Copy(const hipc::FullPtr<DecompressTask>& other) {
+  void Copy(const ctp::ipc::FullPtr<DecompressTask>& other) {
     tag_id_ = other->tag_id_;
     blob_name_ = other->blob_name_;
     offset_ = other->offset_;
@@ -474,7 +474,7 @@ struct PollNodeLoadTask : public chi::Task {
       : chi::Task(task_id, pool_id, pool_query, Method::kPollNodeLoad),
         sample_() {}
 
-  void Copy(const hipc::FullPtr<PollNodeLoadTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<PollNodeLoadTask> &other) {
     sample_ = other->sample_;
   }
 
@@ -503,7 +503,7 @@ struct PollConsumersTask : public chi::Task {
                              const chi::PoolQuery &pool_query)
       : chi::Task(task_id, pool_id, pool_query, Method::kPollConsumers) {}
 
-  void Copy(const hipc::FullPtr<PollConsumersTask> &other) {
+  void Copy(const ctp::ipc::FullPtr<PollConsumersTask> &other) {
     (void)other;
   }
 
@@ -518,4 +518,4 @@ struct PollConsumersTask : public chi::Task {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_
+#endif  // CLIO_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_

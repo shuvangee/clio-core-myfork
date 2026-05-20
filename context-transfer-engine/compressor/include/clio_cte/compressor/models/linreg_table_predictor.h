@@ -41,8 +41,8 @@
  * compression_ratio.
  */
 
-#ifndef WRP_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_
-#define WRP_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_
+#ifndef CLIO_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_
+#define CLIO_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_
 
 #include "compression_features.h"
 #include <map>
@@ -424,4 +424,4 @@ class LinRegTablePredictor : public CompressionPredictor {
 
 }  // namespace clio_cte::compressor
 
-#endif  // WRP_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_
+#endif  // CLIO_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_

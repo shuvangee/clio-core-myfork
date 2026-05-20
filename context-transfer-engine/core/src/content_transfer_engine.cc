@@ -66,7 +66,7 @@ bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
   }
 
   // Initialize CTE core client
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
 
   // Create CreateParams without config - configuration is now provided via chimaera compose
   CreateParams params;
@@ -103,7 +103,7 @@ std::vector<std::string> ContentTransferEngine::TagQuery(
     const std::string &tag_re,
     chi::u32 max_tags,
     const chi::PoolQuery &pool_query) {
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   auto task = cte_client->AsyncTagQuery(tag_re, max_tags, pool_query);
   task.Wait();
 
@@ -116,7 +116,7 @@ std::vector<std::pair<std::string, std::string>> ContentTransferEngine::BlobQuer
     const std::string &blob_re,
     chi::u32 max_blobs,
     const chi::PoolQuery &pool_query) {
-  auto *cte_client = WRP_CTE_CLIENT;
+  auto *cte_client = CLIO_CTE_CLIENT;
   auto task = cte_client->AsyncBlobQuery(tag_re, blob_re, max_blobs, pool_query);
   task.Wait();
 

@@ -2,10 +2,10 @@
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "cmake.configureSettings": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "WRP_CORE_ENABLE_RUNTIME": "ON",
-        "WRP_CORE_ENABLE_CTE": "ON",
-        "WRP_CORE_ENABLE_CAE": "ON",
-        "WRP_CORE_ENABLE_CEE": "ON"
+        "CLIO_CORE_ENABLE_RUNTIME": "ON",
+        "CLIO_CORE_ENABLE_CTE": "ON",
+        "CLIO_CORE_ENABLE_CAE": "ON",
+        "CLIO_CORE_ENABLE_CEE": "ON"
     },
     "files.associations": {
         "*.tcc": "cpp",

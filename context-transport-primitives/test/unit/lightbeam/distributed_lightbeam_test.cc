@@ -86,7 +86,7 @@ void Clients(std::vector<std::unique_ptr<ZeroMqTransport>>& clients,
               << std::endl;
     LbmMeta<> meta;
     Bulk bulk = clients[i]->Expose(
-        hipc::FullPtr<char>(const_cast<char*>(magic.data())),
+        ctp::ipc::FullPtr<char>(const_cast<char*>(magic.data())),
         magic.size(), BULK_XFER);
     meta.send.push_back(bulk);
     int rc = clients[i]->Send(meta);
@@ -436,7 +436,7 @@ int main(int argc, char** argv) {
           for (int m = 0; m < my_msgs; ++m) {
             LbmMeta<> meta;
             Bulk bulk = sock->Expose(
-                hipc::FullPtr<char>(const_cast<char*>(magic.data())),
+                ctp::ipc::FullPtr<char>(const_cast<char*>(magic.data())),
                 magic.size(), BULK_XFER);
             meta.send.push_back(bulk);
             int rc = sock->Send(meta);
@@ -460,7 +460,7 @@ int main(int argc, char** argv) {
         auto send_time = std::chrono::high_resolution_clock::now();
         LbmMeta<> meta;
         Bulk bulk = clients[i]->Expose(
-            hipc::FullPtr<char>(const_cast<char*>(magic.data())),
+            ctp::ipc::FullPtr<char>(const_cast<char*>(magic.data())),
             magic.size(), BULK_XFER);
         meta.send.push_back(bulk);
         int rc = clients[i]->Send(meta);
