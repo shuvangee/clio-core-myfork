@@ -30,7 +30,7 @@
                 "WRP_CORE_ENABLE_COVERAGE": "ON",
                 "WRP_CORE_ENABLE_ZMQ": "ON",
                 "WRP_CORE_ENABLE_CEREAL": "ON",
-                "CTP_LOG_LEVEL": "0",
+                "CLIO_CTP_LOG_LEVEL": "0",
                 "WRP_CORE_ENABLE_DOCKER_CI": "ON",
                 "WRP_CORE_ENABLE_IO_URING": "ON"
             }
@@ -134,7 +134,7 @@
                 "WRP_CORE_ENABLE_ASAN": "OFF",
                 "WRP_CORE_ENABLE_PYTHON": "ON",
                 "WRP_CORE_ENABLE_COVERAGE": "OFF",
-                "CTP_LOG_LEVEL": "1",
+                "CLIO_CTP_LOG_LEVEL": "1",
                 "WRP_CORE_ENABLE_IO_URING": "ON"
             }
         },
@@ -159,7 +159,7 @@
                 "WRP_CORE_ENABLE_ASAN": "OFF",
                 "WRP_CORE_ENABLE_PYTHON": "ON",
                 "WRP_CORE_ENABLE_COVERAGE": "OFF",
-                "CTP_LOG_LEVEL": "1",
+                "CLIO_CTP_LOG_LEVEL": "1",
                 "WRP_CORE_ENABLE_IO_URING": "ON"
             }
         },
@@ -180,7 +180,7 @@
                 "WRP_CORE_ENABLE_ASAN": "ON",
                 "WRP_CORE_ENABLE_UBSAN": "OFF",
                 "WRP_CORE_ENABLE_MSAN": "OFF",
-                "CTP_LOG_LEVEL": "0"
+                "CLIO_CTP_LOG_LEVEL": "0"
             }
         },
         {
@@ -200,7 +200,7 @@
                 "WRP_CORE_ENABLE_ASAN": "OFF",
                 "WRP_CORE_ENABLE_UBSAN": "ON",
                 "WRP_CORE_ENABLE_MSAN": "OFF",
-                "CTP_LOG_LEVEL": "0"
+                "CLIO_CTP_LOG_LEVEL": "0"
             }
         },
         {
@@ -222,7 +222,7 @@
                 "WRP_CORE_ENABLE_ASAN": "OFF",
                 "WRP_CORE_ENABLE_UBSAN": "OFF",
                 "WRP_CORE_ENABLE_MSAN": "ON",
-                "CTP_LOG_LEVEL": "0"
+                "CLIO_CTP_LOG_LEVEL": "0"
             }
         },
         {
@@ -242,7 +242,7 @@
                 "WRP_CORE_ENABLE_ASAN": "ON",
                 "WRP_CORE_ENABLE_UBSAN": "ON",
                 "WRP_CORE_ENABLE_MSAN": "OFF",
-                "CTP_LOG_LEVEL": "0"
+                "CLIO_CTP_LOG_LEVEL": "0"
             }
         },
         {
@@ -270,7 +270,7 @@
                 "WRP_CORE_ENABLE_CEREAL": "ON",
                 "WRP_CTE_ENABLE_HDF5_VOL": "ON",
                 "WRP_CORE_ENABLE_MPI": "ON",
-                "CTP_LOG_LEVEL": "1",
+                "CLIO_CTP_LOG_LEVEL": "1",
                 "WRP_CORE_ENABLE_IO_URING": "ON"
             }
         },
@@ -302,7 +302,7 @@
                 "WRP_CTE_ENABLE_FUSE_ADAPTER": "ON",
                 "WRP_CORE_ENABLE_GRAY_SCOTT": "ON",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-                "CTP_LOG_LEVEL": "1"
+                "CLIO_CTP_LOG_LEVEL": "1"
             }
         },
         {
@@ -332,7 +332,7 @@
                 "WRP_CORE_ENABLE_CUDA": "OFF",
                 "WRP_CORE_ENABLE_ROCM": "OFF",
                 "WRP_CORE_ENABLE_OPENMP": "OFF",
-                "CTP_LOG_LEVEL": "1",
+                "CLIO_CTP_LOG_LEVEL": "1",
                 "WRP_CORE_ENABLE_IO_URING": "ON"
             }
         },
@@ -361,7 +361,7 @@
                 "WRP_CORE_ENABLE_RPATH": "OFF",
                 "WRP_CTE_ENABLE_HDF5_VOL": "OFF",
                 "WRP_CORE_ENABLE_BENCHMARKS": "OFF",
-                "CTP_LOG_LEVEL": "1"
+                "CLIO_CTP_LOG_LEVEL": "1"
             },
             "condition": {
                 "type": "equals",
@@ -394,7 +394,7 @@
                 "WRP_CORE_ENABLE_COVERAGE": "OFF",
                 "WRP_CORE_ENABLE_ZMQ": "ON",
                 "WRP_CORE_ENABLE_CEREAL": "ON",
-                "CTP_LOG_LEVEL": "1",
+                "CLIO_CTP_LOG_LEVEL": "1",
                 "WRP_CORE_ENABLE_IO_URING": "ON"
             }
         },
@@ -419,7 +419,7 @@
                 "WRP_CORE_ENABLE_LLAMA": "ON",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "WRP_CORE_ENABLE_ASAN": "OFF",
-                "CTP_LOG_LEVEL": "0"
+                "CLIO_CTP_LOG_LEVEL": "0"
             }
         }
     ]

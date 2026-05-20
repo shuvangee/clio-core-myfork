@@ -66,14 +66,43 @@ CLIO Core follows a layered architecture integrating five core components:
 
 ## Installation
 
-### Cloning the Repository
+### Pip (recommended)
 
-CLIO Core uses git submodules for several dependencies. Always clone with `--recurse-submodules`:
+The pip wheel is the easiest way to get CLIO Core. It ships a
+**portable, self-contained build** with all dependencies statically
+linked. No system installs are required beyond glibc and Python 3.10+.
+
+```bash
+pip install iowarp-core
+```
+
+The wheel includes the Chimaera runtime, the `chimaera` CLI, the CTE,
+CAE, and CEE engines, and the `wrp_cee` Python bindings. A default
+configuration is seeded at `~/.chimaera/chimaera.yaml` on first import.
+
+Newer extensions and advanced/accelerated features are not in the
+portable wheel — switch to a source build below if you need any of:
+
+- NVIDIA GPU (CUDA) or AMD GPU (ROCm) acceleration
+- MPI for distributed multi-node deployment
+- HDF5 / ADIOS2 adapters
+- FUSE adapter
+- Compression backends (LibPressio, Blosc, etc.)
+- Custom ChiMods built against the C++ headers
+- Sanitizer or debug builds
+
+### Source build (Conda)
 
 ```bash
 git clone --recurse-submodules https://github.com/iowarp/clio-core.git
 cd clio-core
+bash install.sh release
 ```
+
+`release` corresponds to a variant stored under
+`installers/conda/variants/`. Other variants (`cuda`, `rocm`, `mpi`,
+`full`, `release-fuse`, `debug`, ...) enable the corresponding features.
+Feel free to add a new variant for your specific machine there.
 
 If you already cloned without submodules, initialize them with:
 
@@ -81,15 +110,8 @@ If you already cloned without submodules, initialize them with:
 git submodule update --init --recursive
 ```
 
-### Native
-
-The following command will install conda, conda-build, and clio in a single script.
-```bash
-bash install.sh release
-```
-
-Release corresponds to a variant stored in installers/conda/variants.
-Feel free to add a new variant for your specific machine there.
+Other source-install methods (Docker, Spack) are documented in
+[docs/getting-started/installation](docs/docs/getting-started/installation.mdx).
 
 ## Components
 
@@ -239,14 +261,14 @@ int main() {
   if (!success) return 1;
 
   // 2. Initialize CTE subsystem
-  clio::cte::core::WRP_CTE_CLIENT_INIT();
+  wrp_cte::core::WRP_CTE_CLIENT_INIT();
 
   // 3. Create CTE client
-  clio::cte::core::Client cte_client;
-  clio::cte::core::CreateParams params;
+  wrp_cte::core::Client cte_client;
+  wrp_cte::core::CreateParams params;
   cte_client.Create(chi::PoolQuery::Dynamic(),
-                    clio::cte::core::kCtePoolName,
-                    clio::cte::core::kCtePoolId, params);
+                    wrp_cte::core::kCtePoolName,
+                    wrp_cte::core::kCtePoolId, params);
 
   // 4. Register a storage target (100MB file-based)
   cte_client.RegisterTarget("/tmp/cte_storage",
@@ -254,8 +276,8 @@ int main() {
                             100 * 1024 * 1024);
 
   // 5. Create a tag (container for blobs)
-  clio::cte::core::TagId tag_id = cte_client.GetOrCreateTag(
-      "my_tag", clio::cte::core::TagId::GetNull());
+  wrp_cte::core::TagId tag_id = cte_client.GetOrCreateTag(
+      "my_tag", wrp_cte::core::TagId::GetNull());
 
   // 6. Store blob data
   std::vector<char> data(4096, 'A');
