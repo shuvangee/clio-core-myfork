@@ -1,7 +1,10 @@
-# Rebranding: `chimaera` → `clio_runtime`
+# Rebranding: `chimaera` → `clio_runtime`, `hermes_shm` → `clio_ctp`
 
-This document describes the public-API rename from `chimaera` to `clio_runtime`
-and what external projects need to do (if anything) to migrate.
+This document describes the public-API renames from `chimaera` to
+`clio_runtime` (the task-execution runtime) and from `hermes_shm` /
+`HSHM` / `hshm::` to `clio_ctp` / `CTP_` / `ctp::` (the lower-level
+shared-memory / transport primitives), and what external projects need
+to do (if anything) to migrate.
 
 **TL;DR — nothing in your code needs to change immediately.** Every legacy
 identifier, include path, env variable, and config-file name remains a working
@@ -14,6 +17,8 @@ mechanisms that keep old code working.
 ---
 
 ## Migration table
+
+### Runtime layer (`chimaera` → `clio_runtime`)
 
 | Area | Old (still works) | New (preferred) | Compat mechanism |
 | --- | --- | --- | --- |
@@ -33,7 +38,18 @@ mechanisms that keep old code working.
 | Library names (`.so`/CMake targets) | `libchimaera_cxx.so`, `chimaera_cxx`, `libchimaera_admin_runtime.so`, … | unchanged | Not renamed in this pass. |
 | Daemon binary | `chimaera runtime start` | unchanged | Not renamed in this pass. |
 | C++ namespace | `chi::…` | unchanged | Not renamed in this pass. |
-| Lower-level lib namespace | `ctp::…` (formerly `hshm::…`) | unchanged (already renamed earlier) | — |
+
+### Transport-primitives layer (`hermes_shm` / `HSHM` / `hshm::` → `clio_ctp` / `CTP_` / `ctp::`)
+
+| Area | Old (still works) | New (preferred) | Compat mechanism |
+| --- | --- | --- | --- |
+| Header directory | `<hermes_shm/…>` | `<clio_ctp/…>` | 113 forwarder shim headers at `include/hermes_shm/…` that `#include <clio_ctp/…>`. |
+| Umbrella header | `<hermes_shm/hermes_shm.h>` | `<clio_ctp/clio_ctp.h>` | Same. |
+| Top-level namespace | `hshm::` | `ctp::` | `namespace hshm = ctp;` in `clio_ctp/compat/hshm_aliases.h` (re-exported via the umbrella). |
+| IPC sub-namespace | `hshm::ipc::` *and* the historical short alias `hipc::` | `ctp::ipc::` | `namespace hshm = ctp;` (transitive) and the explicit shorthand `namespace hipc = ctp::ipc;` — both work. |
+| Sub-namespaces | `hshm::thread::`, `hshm::lbm::`, `hshm::ipc::`, … | `ctp::thread::`, `ctp::lbm::`, `ctp::ipc::`, … | Resolved transitively via `namespace hshm = ctp`. |
+| Function/type macros | `HSHM_CROSS_FUN`, `HSHM_INLINE`, `HSHM_GPU_FUN`, `HSHM_MALLOC`, `HSHM_ROOT_ALLOC`, `HSHM_DEFAULT_ALLOC`, `HSHM_DEFAULT_ALLOC_GPU_T`, `HSHM_DEVICE_*`, `HSHM_DLL*`, `HSHM_GET_GLOBAL_*`, `HSHM_DEFINE_GLOBAL_*`, `HSHM_ENABLE_*`, `HSHM_ERROR_*`, `HSHM_LOG`, `HSHM_LOG_LEVEL`, `HSHM_SYSTEM_INFO`, `HSHM_THREAD_MODEL`, `HSHM_THROW_ERROR`, `HSHM_IS_*`, … (89 in total) | Same names with `CTP_` prefix | One `#define HSHM_X CTP_X` per macro in `clio_ctp/compat/hshm_aliases.h`. Generated mechanically by scanning every `#define CTP_*` in the tree (include-guard-style names excluded). |
+| Inclusion path | — | `<clio_ctp/clio_ctp.h>` auto-includes the alias header at the bottom. | Any TU that pulls in the umbrella sees the aliases. |
 
 ---
 
