@@ -357,7 +357,7 @@ TEST_CASE("IpcErrors - Concurrent Init/Finalize", "[ipc][errors][multiproc]") {
           ipc->GetNodeId();
           ipc->GetNumSchedQueues();
 
-          // Finalize using Chimaera API
+          // Finalize using CLIO Runtime API
           CHI_CHIMAERA_MANAGER->ServerFinalize();
         }
         exit(0);

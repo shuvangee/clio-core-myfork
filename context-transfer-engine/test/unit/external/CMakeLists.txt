@@ -45,7 +45,7 @@ target_link_libraries(cte_external_test
     clio_cte::core_client                 # CTE Core client library
     clio_cte::core_runtime                # CTE Core runtime library (if needed)
     
-    # Core Chimaera framework (automatically included by ChiMod libraries)
+    # Core CLIO Runtime framework (automatically included by ChiMod libraries)
     # chimaera::cxx                      # NOT needed - automatically included
     
     # Admin ChiMod (if needed for advanced functionality)

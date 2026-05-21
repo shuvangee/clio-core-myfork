@@ -45,7 +45,7 @@
  * 4. Empty result sets and edge cases
  *
  * Following CLAUDE.md requirements:
- * - Use simple_test.h framework (NOT Catch2 - Catch2 causes segfaults with Chimaera runtime)
+ * - Use simple_test.h framework (NOT Catch2 - Catch2 causes segfaults with CLIO Runtime runtime)
  * - Use proper runtime initialization
  * - Use chi::kAdminPoolId for CreateTask operations
  * - Use semantic names for QueueIds and priorities
@@ -68,7 +68,7 @@
 
  using namespace std::chrono_literals;
 
- // Chimaera core includes
+ // CLIO Runtime core includes
  #include <clio_runtime/admin/admin_tasks.h>
  #include <clio_runtime/bdev/bdev_client.h>
  #include <clio_runtime/bdev/bdev_tasks.h>
@@ -169,7 +169,7 @@ static std::string chi_test_data_dir() {
        fs::remove(test_storage_path_);
      }
 
-     // Initialize Chimaera and CTE client once per test suite
+     // Initialize CLIO Runtime and CTE client once per test suite
      if (!g_initialized) {
        bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
        if (!success) {

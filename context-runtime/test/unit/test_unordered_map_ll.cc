@@ -35,7 +35,7 @@
  * Unit tests for ctp::priv::unordered_map_ll
  *
  * Tests the unordered map implementation without requiring
- * the Chimaera runtime to be started.
+ * the CLIO Runtime runtime to be started.
  *
  * Thread-safety note: unordered_map_ll defaults to EnableLocking=true,
  * which gives every bucket its own RwLock. The primary API

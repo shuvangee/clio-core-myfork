@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Initialize Chimaera runtime
+  // Initialize CLIO Runtime runtime
   if (rank == 0) {
     HLOG(kInfo, "Initializing Chimaera runtime...");
   }

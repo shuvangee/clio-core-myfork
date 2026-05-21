@@ -61,7 +61,7 @@ bool initialize_chimaera() {
 }
 
 /**
- * Start a Chimaera server in a forked child process
+ * Start a CLIO Runtime server in a forked child process
  * @return Server process PID
  */
 pid_t StartServerProcess() {

@@ -32,7 +32,7 @@
  */
 
 /**
- * Comprehensive unit tests for Chimaera runtime system
+ * Comprehensive unit tests for CLIO Runtime runtime system
  *
  * Tests the complete flow: runtime startup → client init → task submission →
  * completion Uses simple custom test framework for testing.
@@ -46,7 +46,7 @@
 
 using namespace std::chrono_literals;
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/pool_query.h>
 #include <clio_runtime/singletons.h>
@@ -74,7 +74,7 @@ bool g_initialized = false;
 } // namespace
 
 /**
- * Test fixture for Chimaera runtime tests
+ * Test fixture for CLIO Runtime runtime tests
  * Handles setup and teardown of runtime and client components
  */
 class ChimaeraRuntimeFixture {
@@ -127,8 +127,8 @@ public:
    * Clean up runtime and client resources
    */
   void cleanup() {
-    // Note: Chimaera framework handles automatic cleanup through destructors
-    // when the Chimaera manager singleton is destroyed
+    // Note: CLIO Runtime framework handles automatic cleanup through destructors
+    // when the CLIO Runtime manager singleton is destroyed
     INFO("Test cleanup completed");
   }
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run IOWarp Leader Election Integration Test (Chimaera Runtime)
+# Run IOWarp Leader Election Integration Test (CLIO Runtime Runtime)
 #
 # Tests leader shutdown, client failover, and leader restart:
 # Phase 1: Client on node 1 kills local runtime, fails over to another node

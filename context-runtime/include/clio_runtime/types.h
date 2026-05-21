@@ -49,7 +49,7 @@
 #include <clio_ctp/util/env_compat.h>
 
 /**
- * Core type definitions for Chimaera distributed task execution framework
+ * Core type definitions for CLIO Runtime distributed task execution framework
  */
 
 namespace chi {

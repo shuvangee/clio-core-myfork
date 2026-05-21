@@ -153,7 +153,7 @@ def _initialize_runtime() -> bool:
             # Get config path
             config_path = os.getenv("CLIO_SERVER_CONF", "")
             
-            # Step 1: Initialize Chimaera (unified init)
+            # Step 1: Initialize CLIO Runtime (unified init)
             chimaera_result = False
             if hasattr(cte, 'chimaera_init') and hasattr(cte, 'ChimaeraMode'):
                 try:
@@ -163,7 +163,7 @@ def _initialize_runtime() -> bool:
                 except Exception:
                     pass  # May fail in some environments
 
-            # Step 2: Initialize CTE subsystem (only if Chimaera succeeded)
+            # Step 2: Initialize CTE subsystem (only if CLIO Runtime succeeded)
             cte_result = False
             if chimaera_result and hasattr(cte, 'initialize_cte') and hasattr(cte, 'PoolQuery'):
                 try:
@@ -721,7 +721,7 @@ def initialize_cte_runtime() -> str:
             
             log_progress(result) # Log after getting/generating config path
             
-            # Step 1: Initialize Chimaera (unified init - following test_bindings.py pattern)
+            # Step 1: Initialize CLIO Runtime (unified init - following test_bindings.py pattern)
             # Note: This may fail if runtime is already running or config is missing
             if hasattr(cte, 'chimaera_init') and hasattr(cte, 'ChimaeraMode'):
                 try:
@@ -731,7 +731,7 @@ def initialize_cte_runtime() -> str:
                     result['runtime_init'] = bool(chimaera_result)
                     result['client_init'] = bool(chimaera_result)
                     if chimaera_result:
-                        # Give Chimaera time to initialize all components (500ms as per tests)
+                        # Give CLIO Runtime time to initialize all components (500ms as per tests)
                         time.sleep(0.5)
                         result['messages'].append('Chimaera initialized successfully')
                     else:

@@ -61,7 +61,7 @@ int main() {
   HIPRINT("Testing external_test::simple_mod with custom namespace and CMake linking.");
 
   try {
-    // Step 1: Initialize Chimaera client
+    // Step 1: Initialize CLIO Runtime client
     HLOG(kInfo, "\n1. Initializing Chimaera client...");
     bool client_init_success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
 

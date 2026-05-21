@@ -118,10 +118,10 @@ std::vector<char> GenerateTestData(size_t size, const std::string& pattern) {
 }
 
 /**
- * Initialize Chimaera runtime for compressor tests
+ * Initialize CLIO Runtime runtime for compressor tests
  */
 void InitializeChimaera() {
-  // Initialize Chimaera runtime in client mode with runtime
+  // Initialize CLIO Runtime runtime in client mode with runtime
   bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
   if (!success) {
     throw std::runtime_error("Failed to initialize Chimaera runtime");
@@ -129,7 +129,7 @@ void InitializeChimaera() {
 }
 
 /**
- * Cleanup Chimaera runtime
+ * Cleanup CLIO Runtime runtime
  */
 void CleanupChimaera() {
   // Client finalize handled by CHI_CLIENT destructor

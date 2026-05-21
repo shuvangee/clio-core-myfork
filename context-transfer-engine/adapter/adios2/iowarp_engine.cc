@@ -87,7 +87,7 @@ IowarpEngine::IowarpEngine(adios2::core::IO &io, const std::string &name,
     }
   }
 
-  // Initialize CTE client - assumes Chimaera runtime is already running.
+  // Initialize CTE client - assumes CLIO Runtime runtime is already running.
   // Retry with jittered backoff: at >=512 nodes the local daemon is
   // busy serving cross-node SWIM probes (511+ peers) and may take many
   // seconds to drain its 9416 ROUTER accept queue; a few short retries

@@ -167,7 +167,7 @@ class Iowarp(CMakePackage):
             args.append(self.define('CLIO_CAE_ENABLE_BENCHMARKS', 'OFF'))
             args.append(self.define('CLIO_CEE_ENABLE_BENCHMARKS', 'OFF'))
 
-        # Chimaera runtime options (if enabled)
+        # CLIO Runtime runtime options (if enabled)
         if '+runtime' in self.spec:
             if '+cuda' in self.spec:
                 args.append(self.define('CHIMAERA_ENABLE_CUDA', 'ON'))

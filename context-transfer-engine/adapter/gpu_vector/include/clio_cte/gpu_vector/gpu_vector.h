@@ -54,7 +54,7 @@ enum class CacheMode {
  * AGENTS.md "GPU Producer-Only Model" for the CHI_IPC->Send model.
  *
  * Lifecycle:
- *   - Caller must have already initialized the Chimaera runtime and
+ *   - Caller must have already initialized the CLIO Runtime runtime and
  *     the CTE core pool (see clio_cte::core::CLIO_CTE_CLIENT_INIT plus
  *     AsyncCreate(...)).
  *   - ctor: allocates the backends (HBM pages [kDeviceMem], optional

@@ -18,7 +18,7 @@ target_include_directories(clio_cte_gpu_vector INTERFACE
 target_link_libraries(clio_cte_gpu_vector INTERFACE
     chimaera_cxx
     chimaera_cxx_gpu
-    chimaera_admin_client
+    clio_admin_client
     clio_cte_core_client
 )
 

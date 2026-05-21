@@ -9,7 +9,7 @@ nanobind_add_module(
 )
 
 # Link against the admin client library (provides MonitorTask, admin::Client, chimaera headers)
-target_link_libraries(chimaera_runtime_ext PRIVATE chimaera_admin_client)
+target_link_libraries(chimaera_runtime_ext PRIVATE clio_admin_client)
 
 # Local includes only
 target_include_directories(chimaera_runtime_ext PRIVATE

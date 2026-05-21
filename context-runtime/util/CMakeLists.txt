@@ -16,7 +16,7 @@ add_library(clio_run_commands STATIC
 )
 target_link_libraries(clio_run_commands
   PUBLIC chimaera_cxx
-  PUBLIC chimaera_admin_client
+  PUBLIC clio_admin_client
 )
 target_include_directories(clio_run_commands
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}

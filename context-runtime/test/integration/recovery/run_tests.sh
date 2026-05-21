@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run IOWarp Recovery Integration Test (Chimaera Runtime)
+# Run IOWarp Recovery Integration Test (CLIO Runtime Runtime)
 #
 # Tests node failure detection and container recovery:
 # 1. Starts 4-node Docker cluster

@@ -39,9 +39,9 @@ target_include_directories(${FLUSH_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${FLUSH_TEST_TARGET}
-  cxx                             # Core Chimaera runtime library
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  cxx                             # Core CLIO Runtime
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   chimaera_MOD_NAME_runtime       # MOD_NAME module runtime for work tracking
   chimaera_MOD_NAME_client        # MOD_NAME module client
   ctp::cxx                       # ClioCtp library
@@ -70,8 +70,8 @@ target_include_directories(${COMUTEX_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${COMUTEX_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   chimaera_MOD_NAME_runtime       # MOD_NAME module runtime for CoMutex/CoRwLock
   chimaera_MOD_NAME_client        # MOD_NAME module client
   ctp::cxx                       # ClioCtp library
@@ -98,8 +98,8 @@ target_include_directories(${WAIT_FUNCTIONALITY_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${WAIT_FUNCTIONALITY_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   chimaera_MOD_NAME_runtime       # MOD_NAME module runtime for WaitTest tasks
   chimaera_MOD_NAME_client        # MOD_NAME module client
   ctp::cxx                       # ClioCtp library
@@ -126,8 +126,8 @@ target_include_directories(${STREAMING_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${STREAMING_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   chimaera_MOD_NAME_runtime       # MOD_NAME module runtime for streaming tasks
   chimaera_MOD_NAME_client        # MOD_NAME module client
   ctp::cxx                       # ClioCtp library
@@ -296,8 +296,8 @@ target_include_directories(${MIGRATE_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${MIGRATE_TEST_TARGET}
-  chimaera_admin_runtime
-  chimaera_admin_client
+  clio_admin_runtime
+  clio_admin_client
   chimaera_MOD_NAME_runtime
   chimaera_MOD_NAME_client
   ctp::cxx
@@ -326,8 +326,8 @@ target_include_directories(${RECOVERY_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${RECOVERY_TEST_TARGET}
-  chimaera_admin_runtime
-  chimaera_admin_client
+  clio_admin_runtime
+  clio_admin_client
   chimaera_MOD_NAME_runtime
   chimaera_MOD_NAME_client
   ctp::cxx
@@ -356,8 +356,8 @@ target_include_directories(${RECONNECT_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${RECONNECT_TEST_TARGET}
-  chimaera_admin_runtime
-  chimaera_admin_client
+  clio_admin_runtime
+  clio_admin_client
   chimaera_MOD_NAME_runtime
   chimaera_MOD_NAME_client
   ctp::cxx

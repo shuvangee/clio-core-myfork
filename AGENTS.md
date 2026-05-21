@@ -298,7 +298,7 @@ This project follows the Chimaera MODULE_DEVELOPMENT_GUIDE.md patterns for prope
 ```cmake
 # Core Clio framework (includes ChimaeraCommon.cmake functions)
 find_package(chimaera REQUIRED)              # Core library (chimaera::cxx)
-find_package(chimaera_admin REQUIRED)        # Admin Module (required for most ChiMods)
+find_package(clio_admin REQUIRED)        # Admin Module (required for most ChiMods)
 ```
 
 **Module Creation Pattern:**
@@ -494,7 +494,7 @@ Module libraries use consistent underscore-based naming:
 
 **Package Names:**
 - Format: `${NAMESPACE}_${CHIMOD_NAME}` (e.g., `chimaera_admin`)
-- Used with `find_package(chimaera_admin REQUIRED)`
+- Used with `find_package(clio_admin REQUIRED)`
 - Core package: `chimaera` (provides `chimaera::cxx`)
 
 ### Automatic Dependency Linking
@@ -542,7 +542,7 @@ If you need finer control, you can still find packages individually:
 ```cmake
 find_package(ClioCtp REQUIRED)        # Provides ctp::* targets
 find_package(chimaera REQUIRED)         # Provides chimaera::cxx
-find_package(chimaera_admin REQUIRED)   # Provides admin Module
+find_package(clio_admin REQUIRED)   # Provides admin Module
 find_package(chimaera_bdev REQUIRED)    # Provides bdev Module (library now: clio_bdev_*)
 find_package(clio_cte_core REQUIRED)     # Provides CTE Module (if enabled)
 find_package(clio_cae_core REQUIRED)     # Provides CAE Module (if enabled)

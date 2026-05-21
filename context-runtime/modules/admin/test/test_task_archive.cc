@@ -49,7 +49,7 @@
 #include <vector>
 #include <clio_ctp/util/logging.h>
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <clio_runtime/container.h>
@@ -930,12 +930,12 @@ TEST_CASE("Complete Serialization Flow", "[task_archive][integration]") {
   }
 }
 
-// Main function to run all tests with Chimaera runtime initialization
+// Main function to run all tests with CLIO Runtime runtime initialization
 int main(int argc, char *argv[]) {
   (void)argc;
   (void)argv;
 
-  // Initialize Chimaera runtime for memory management
+  // Initialize CLIO Runtime runtime for memory management
   bool runtime_success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
   if (!runtime_success) {
     HLOG(kError, "Failed to initialize Chimaera runtime");

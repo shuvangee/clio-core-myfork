@@ -1,5 +1,5 @@
-# Chimaera Modules (ChiMods) Directory
-# This directory contains standard Chimaera modules
+# CLIO Runtime Modules (ChiMods) Directory
+# This directory contains standard CLIO Runtime modules
 
 cmake_minimum_required(VERSION 3.10)
 

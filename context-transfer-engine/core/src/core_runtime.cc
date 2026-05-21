@@ -287,7 +287,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     HLOG(kWarning, "Warning: No storage devices configured");
   }
 
-  // Queue management has been removed - queues are now managed by Chimaera
+  // Queue management has been removed - queues are now managed by CLIO Runtime
   // runtime Local queues (kTargetManagementQueue, kTagManagementQueue,
   // kBlobOperationsQueue, kStatsQueue) are no longer created explicitly
 

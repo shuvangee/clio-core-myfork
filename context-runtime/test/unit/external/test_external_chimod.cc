@@ -5,7 +5,7 @@
 
 /**
  * Simple external ChiMod test that verifies:
- * 1. Chimaera can be found and initialized as a client
+ * 1. CLIO Runtime can be found and initialized as a client
  * 2. Admin ChiMod client can be created
  * 3. Basic functionality works through the installed packages
  */
@@ -13,7 +13,7 @@ int main() {
   HIPRINT("Testing external ChiMod integration...");
 
   try {
-    // Initialize Chimaera client
+    // Initialize CLIO Runtime client
     if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true)) {
       HLOG(kError, "Failed to initialize Chimaera client");
       return 1;

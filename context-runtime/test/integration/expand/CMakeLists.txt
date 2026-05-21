@@ -1,4 +1,4 @@
-# CMakeLists.txt for Chimaera Expand/Induction Integration Tests
+# CMakeLists.txt for CLIO Runtime Expand/Induction Integration Tests
 cmake_minimum_required(VERSION 3.10)
 
 # Get the directory containing the test scripts

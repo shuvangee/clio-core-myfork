@@ -257,7 +257,7 @@ def initialize_runtime_early(cte):
         config_path = generate_config()  # Creates YAML config with networking, storage, etc.
         os.environ["CLIO_SERVER_CONF"] = config_path
         
-        # Step 3: Initialize Chimaera (unified init - both runtime and client)
+        # Step 3: Initialize CLIO Runtime (unified init - both runtime and client)
         if not cte.chimaera_init(cte.ChimaeraMode.kClient, True):
             raise RuntimeError("Failed to initialize Chimaera")
         time.sleep(0.5)  # Give Chimaera time to initialize
@@ -293,7 +293,7 @@ def initialize_runtime_early(cte):
             print("   Continuing with binding tests only...")
             return False
 
-        # Step 1: Initialize Chimaera (unified init - both runtime and client)
+        # Step 1: Initialize CLIO Runtime (unified init - both runtime and client)
         # Following pattern from test_chimaera_runtime.cc
         if not runtime_initialized or not client_initialized:
             print("🔧 Initializing Chimaera (unified CHIMAERA_INIT)...")
@@ -316,7 +316,7 @@ def initialize_runtime_early(cte):
             runtime_initialized = True
             client_initialized = True
 
-            # Give Chimaera time to initialize all components (following C++ pattern: 500ms)
+            # Give CLIO Runtime time to initialize all components (following C++ pattern: 500ms)
             time.sleep(0.5)
 
             # Verify initialization succeeded

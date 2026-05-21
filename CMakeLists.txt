@@ -128,7 +128,7 @@ option(CLIO_CTP_NO_COMPILE "Disable compiling / installing this library" OFF)
 set(CLIO_CTP_LOG_LEVEL "1" CACHE STRING "Log level threshold (0=Debug, 1=Info, 2=Warning, 3=Error, 4=Fatal)")
 
 #------------------------------------------------------------------------------
-# Chimaera (context-runtime) Options
+# CLIO Runtime (context-runtime) Options
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
@@ -700,7 +700,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   message(STATUS "GCC detected - enabling coroutines with -fcoroutines")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
   # NVHPC 25.5 crashes (ICE in llc) when compiling GCC 14 libstdc++ coroutines.
-  # Chimaera uses ucontext_t fibers via CHI_CO_AWAIT/CHI_CO_RETURN macros instead.
+  # CLIO Runtime uses ucontext_t fibers via CHI_CO_AWAIT/CHI_CO_RETURN macros instead.
   # No __cpp_impl_coroutine needed - we do not include <coroutine> for NVHPC.
   message(STATUS "NVHPC detected - using ucontext_t fiber fallback for C++20 coroutines")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -875,7 +875,7 @@ if(CLIO_CORE_ENABLE_TESTS)
 
     # -----------------------------------------------------------------------
     # Test cleanup fixture (pre + post)
-    # Kills any orphaned Chimaera server processes and removes leftover shared
+    # Kills any orphaned CLIO Runtime server processes and removes leftover shared
     # state (IPC socket files, shared memory, memfd) plus build-dir test
     # artifacts.  The pre-test variant runs once before any other CTest test.
     # The post-test variant is registered as FIXTURES_CLEANUP and is invoked
@@ -1036,9 +1036,9 @@ else()
 endif()
 
 #------------------------------------------------------------------------------
-# Serialize Chimaera runtime tests to prevent port 9413 conflicts
+# Serialize CLIO Runtime runtime tests to prevent port 9413 conflicts
 #------------------------------------------------------------------------------
-# All tests that start a Chimaera server compete for the same default port
+# All tests that start a CLIO Runtime server compete for the same default port
 # (9413). Under parallel ctest execution (e.g. ctest -j4) this causes
 # "Address already in use" failures. RESOURCE_LOCK ensures only one such
 # test runs at a time. CTP tests (context-transport-primitives) use different
@@ -1282,8 +1282,8 @@ message(STATUS "")
 
 # Shared libraries -> iowarp_core/lib/
 set(PIP_LIB_TARGETS clio_ctp_host chimaera_cxx)
-if(TARGET chimaera_admin_client)
-  list(APPEND PIP_LIB_TARGETS chimaera_admin_client chimaera_admin_runtime)
+if(TARGET clio_admin_client)
+  list(APPEND PIP_LIB_TARGETS clio_admin_client clio_admin_runtime)
 endif()
 if(TARGET clio_bdev_client)
   list(APPEND PIP_LIB_TARGETS clio_bdev_client clio_bdev_runtime)

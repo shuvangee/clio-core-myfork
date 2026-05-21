@@ -78,7 +78,7 @@ public:
     if (!g_initialized) {
       INFO("=== Initializing CEE Test Environment ===");
 
-      // Initialize Chimaera runtime
+      // Initialize CLIO Runtime runtime
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
       if (!success) {
         throw std::runtime_error("CHIMAERA_INIT failed");

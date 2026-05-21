@@ -6,7 +6,7 @@ add_executable(clio_run_thrpt_benchmark
 )
 
 target_link_libraries(clio_run_thrpt_benchmark
-  cxx                             # Core Chimaera runtime
+  cxx                             # Core CLIO Runtime
   chimaera::bdev_client           # BDev client for I/O operations
   chimaera::MOD_NAME_client       # MOD_NAME template module
   chimaera::admin_client          # Admin client for container creation

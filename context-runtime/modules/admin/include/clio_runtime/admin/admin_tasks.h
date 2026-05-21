@@ -64,7 +64,7 @@ struct CreateParams {
   // For now, admin doesn't need special parameters beyond the base ones
 
   // Required: chimod library name for module manager
-  static constexpr const char *chimod_lib_name = "chimaera_admin";
+  static constexpr const char *chimod_lib_name = "clio_admin";
 
   // Default constructor
   CreateParams() = default;
@@ -483,7 +483,7 @@ struct DestroyPoolTask : public chi::Task {
 };
 
 /**
- * StopRuntimeTask - Stop the entire Chimaera runtime
+ * StopRuntimeTask - Stop the entire CLIO Runtime runtime
  */
 struct StopRuntimeTask : public chi::Task {
   // Runtime shutdown parameters

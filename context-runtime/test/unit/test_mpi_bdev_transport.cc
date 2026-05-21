@@ -37,7 +37,7 @@
  * Tests concurrent I/O across multiple transport modes using MPI.
  *
  * Architecture:
- *   Rank 0: Chimaera server
+ *   Rank 0: CLIO Runtime server
  *   Rank 1: Client with SHM mode
  *   Rank 2: Client with TCP mode
  *   Rank 3: Client with IPC mode

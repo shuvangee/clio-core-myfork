@@ -1,7 +1,7 @@
 #!/bin/bash
 # Interactive Dashboard Cluster
 #
-# Starts a 8-node Chimaera runtime cluster in Docker with the dashboard
+# Starts a 8-node CLIO Runtime runtime cluster in Docker with the dashboard
 # running on node 1. A local port-forward (socat) makes port 5000
 # available on this devcontainer so VS Code auto-forwards it to the host.
 #

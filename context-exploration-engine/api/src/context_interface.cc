@@ -42,7 +42,7 @@
 namespace iowarp {
 
 ContextInterface::ContextInterface() : is_initialized_(false) {
-  // Lazy initialization - defer Chimaera/CAE/CTE init until first operation
+  // Lazy initialization - defer CLIO Runtime/CAE/CTE init until first operation
   // This allows object construction without requiring a running runtime
 }
 
@@ -58,7 +58,7 @@ bool ContextInterface::EnsureInitialized() {
     return false;
   }
 
-  // Initialize Chimaera as a client for the context interface
+  // Initialize CLIO Runtime as a client for the context interface
   if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
     HLOG(kError, "Failed to initialize Chimaera client");
     init_failed = true;
@@ -71,7 +71,7 @@ bool ContextInterface::EnsureInitialized() {
     return false;
   }
 
-  // Verify Chimaera IPC is available
+  // Verify CLIO Runtime IPC is available
   auto* ipc_manager = CHI_IPC;
   if (!ipc_manager) {
     HLOG(kError, "Chimaera IPC not initialized. Is the runtime running?");

@@ -32,7 +32,7 @@
  */
 
 /**
- * Chimaera manager implementation
+ * CLIO Runtime manager implementation
  */
 
 #include <cstdlib>
@@ -42,7 +42,7 @@
 #include "clio_runtime/admin/admin_client.h"
 #include "clio_runtime/singletons.h"
 
-// Global pointer variable definition for Chimaera manager singleton
+// Global pointer variable definition for CLIO Runtime manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::Chimaera, g_chimaera_manager);
 
 static void ChimaeraCleanupAtExit() {

@@ -43,7 +43,7 @@
 #include <unordered_map>
 
 /**
- * Initialize the Chimaera runtime from Python.
+ * Initialize the CLIO Runtime runtime from Python.
  *
  * Runs CHIMAERA_INIT on a dedicated background thread so that the
  * ZMQ I/O threads it spawns never touch the calling (Python) thread's
@@ -62,7 +62,7 @@ inline bool py_chimaera_init(int mode) {
 }
 
 /**
- * Finalize the Chimaera runtime.
+ * Finalize the CLIO Runtime runtime.
  *
  * Closes ZMQ sockets and joins background threads.
  */

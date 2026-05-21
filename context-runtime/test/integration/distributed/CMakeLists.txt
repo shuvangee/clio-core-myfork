@@ -1,4 +1,4 @@
-# CMakeLists.txt for Chimaera Distributed Integration Tests
+# CMakeLists.txt for CLIO Runtime Distributed Integration Tests
 cmake_minimum_required(VERSION 3.10)
 
 # These tests require Docker and docker-compose

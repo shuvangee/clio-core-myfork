@@ -90,7 +90,7 @@ class CoreClientConfigFixture {
       fs::remove(test_config_path_);
     }
 
-    // Initialize Chimaera and CTE once
+    // Initialize CLIO Runtime and CTE once
     if (!g_initialized) {
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
       REQUIRE(success);

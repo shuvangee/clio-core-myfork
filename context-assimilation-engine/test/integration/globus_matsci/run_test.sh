@@ -3,7 +3,7 @@
 # run_test.sh - Integration test for Globus data assimilation
 #
 # This script:
-# 1. Starts the Chimaera runtime (with CTE + CAE compose) in the background
+# 1. Starts the CLIO Runtime runtime (with CTE + CAE compose) in the background
 # 2. Runs clio_cae to process the OMNI file
 #
 # Prerequisites:
@@ -75,7 +75,7 @@ mkdir -p "${OUTPUT_DIR}"
 echo "Created output directory: ${OUTPUT_DIR}"
 echo ""
 
-# Start Chimaera runtime in the background
+# Start CLIO Runtime runtime in the background
 # The runtime config contains a compose section that creates both
 # CTE (pool 512.0) and CAE (pool 400.0) automatically on startup.
 echo "Starting Chimaera runtime..."
@@ -128,7 +128,7 @@ else
     echo "OMNI processing failed with exit code: ${OMNI_STATUS}"
 fi
 
-# Cleanup: Stop Chimaera runtime
+# Cleanup: Stop CLIO Runtime runtime
 echo ""
 echo "Stopping Chimaera runtime..."
 clio_run runtime stop 2>/dev/null || kill ${CHIMAERA_PID} 2>/dev/null || true

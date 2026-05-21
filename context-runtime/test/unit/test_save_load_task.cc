@@ -50,7 +50,7 @@
 #include <string>
 #include <vector>
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <clio_runtime/container.h>
@@ -79,11 +79,11 @@ ctp::ipc::MallocAllocator* GetTestAllocator() {
   return CTP_MALLOC;
 }
 
-// Initialize Chimaera runtime for tests
+// Initialize CLIO Runtime runtime for tests
 class ChimaeraTestFixture {
 public:
   ChimaeraTestFixture() {
-    // Initialize Chimaera (client with embedded runtime)
+    // Initialize CLIO Runtime (client with embedded runtime)
     chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
 

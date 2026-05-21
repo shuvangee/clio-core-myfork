@@ -103,7 +103,7 @@ class ReorganizeBlobTestFixture {
     setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
     setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
 
-    // Initialize Chimaera runtime
+    // Initialize CLIO Runtime runtime
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
 

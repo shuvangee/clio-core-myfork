@@ -14,7 +14,7 @@ if(CLIO_CORE_ENABLE_CUDA)
         LINK_LIBS
             chimaera_cxx
             chimaera_cxx_gpu
-            chimaera_admin_client
+            clio_admin_client
             clio_bdev_client
             clio_cte_core_client
             clio_cte_core_runtime
@@ -62,7 +62,7 @@ if(CLIO_CORE_ENABLE_ROCM)
     target_link_libraries(test_gpu_vector PUBLIC
         chimaera_cxx
         chimaera_cxx_gpu
-        chimaera_admin_client
+        clio_admin_client
         clio_bdev_client
         clio_cte_core_client
         clio_cte_core_runtime

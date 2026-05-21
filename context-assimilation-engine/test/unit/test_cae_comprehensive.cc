@@ -70,7 +70,7 @@ public:
     if (!g_initialized) {
       INFO("=== Initializing CAE Test Environment ===");
 
-      // Step 1: Initialize Chimaera runtime
+      // Step 1: Initialize CLIO Runtime runtime
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
       if (!success) {
         throw std::runtime_error("CHIMAERA_INIT failed");

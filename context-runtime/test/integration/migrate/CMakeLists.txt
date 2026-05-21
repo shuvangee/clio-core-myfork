@@ -1,4 +1,4 @@
-# CMakeLists.txt for Chimaera Migrate Integration Tests
+# CMakeLists.txt for CLIO Runtime Migrate Integration Tests
 cmake_minimum_required(VERSION 3.10)
 
 # These tests require Docker and docker-compose

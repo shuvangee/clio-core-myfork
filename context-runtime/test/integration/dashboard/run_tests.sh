@@ -1,5 +1,5 @@
 #!/bin/bash
-# Dashboard Integration Test for Chimaera Runtime
+# Dashboard Integration Test for CLIO Runtime Runtime
 #
 # Spins up a 4-node cluster with context-visualizer dashboard and validates:
 #   - Topology API returns all nodes

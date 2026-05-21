@@ -41,7 +41,7 @@
 namespace chi {
 
 /**
- * Main Chimaera manager singleton class
+ * Main CLIO Runtime manager singleton class
  * 
  * Central coordinator for the distributed task execution framework.
  * Manages initialization and coordination between client and runtime modes.
@@ -78,7 +78,7 @@ class Chimaera {
   void ServerFinalize();
 
   /**
-   * Check if Chimaera is initialized
+   * Check if CLIO Runtime is initialized
    * @return true if initialized, false otherwise
    */
   bool IsInitialized() const;
@@ -108,7 +108,7 @@ class Chimaera {
   u64 GetNodeId() const;
 
   /**
-   * Check if Chimaera is currently in the process of initializing
+   * Check if CLIO Runtime is currently in the process of initializing
    * @return true if either client or runtime initialization is in progress, false otherwise
    */
   bool IsInitializing() const;
@@ -130,10 +130,10 @@ class Chimaera {
 
 }  // namespace chi
 
-// Global pointer variable declaration for Chimaera manager singleton
+// Global pointer variable declaration for CLIO Runtime manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::Chimaera, g_chimaera_manager);
 
-// Macro for accessing the Chimaera manager singleton using global pointer variable
+// Macro for accessing the CLIO Runtime manager singleton using global pointer variable
 #define CHI_CHIMAERA_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::Chimaera, g_chimaera_manager)
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CHIMAERA_MANAGER_H_

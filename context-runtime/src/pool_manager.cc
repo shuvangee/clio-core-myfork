@@ -78,7 +78,7 @@ bool PoolManager::ServerInit() {
   auto admin_task = ipc_manager->NewTask<clio_run::admin::CreateTask>(
       CreateTaskId(),
       kAdminPoolId,  // Use admin pool for admin container creation
-      PoolQuery::Local(), "chimaera_admin", "admin", kAdminPoolId,
+      PoolQuery::Local(), "clio_admin", "admin", kAdminPoolId,
       nullptr);  // No client for internal admin pool creation
 
   RunContext run_ctx;

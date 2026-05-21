@@ -59,7 +59,7 @@ bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
   // Set initializing flag
   is_initializing_ = true;
 
-  // Initialize Chimaera client
+  // Initialize CLIO Runtime client
   if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
     is_initializing_ = false;
     return false;

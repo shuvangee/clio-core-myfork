@@ -118,7 +118,7 @@ TEST_CASE("Cleanup - Client Finalization", "[cleanup][ipc]") {
   REQUIRE(ipc != nullptr);
   REQUIRE(ipc->IsInitialized());
 
-  // Explicitly call ClientFinalize through Chimaera API
+  // Explicitly call ClientFinalize through CLIO Runtime API
   auto *chimaera = CHI_CHIMAERA_MANAGER;
   chimaera->ClientFinalize();
 
@@ -147,7 +147,7 @@ TEST_CASE("Cleanup - Repeated Init/Finalize", "[cleanup][ipc]") {
     auto *ipc = CHI_IPC;
     REQUIRE(ipc->IsInitialized());
 
-    // Finalize using Chimaera API
+    // Finalize using CLIO Runtime API
     auto *chimaera = CHI_CHIMAERA_MANAGER;
     chimaera->ServerFinalize();
     REQUIRE(!ipc->IsInitialized());

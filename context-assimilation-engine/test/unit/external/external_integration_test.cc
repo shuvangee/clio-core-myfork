@@ -39,7 +39,7 @@ public:
         HLOG(kInfo, "Initializing CAE Core system...");
 
         try {
-            // Step 1: Initialize Chimaera (runtime + client)
+            // Step 1: Initialize CLIO Runtime (runtime + client)
             HLOG(kInfo, "1. Initializing Chimaera...");
             bool chimaera_init = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
             if (!chimaera_init) {
@@ -121,7 +121,7 @@ private:
             HLOG(kInfo, "=== Cleanup ===");
             HLOG(kInfo, "Cleaning up CAE Core resources...");
 
-            // CAE and Chimaera cleanup would happen automatically
+            // CAE and CLIO Runtime cleanup would happen automatically
             // through destructors and singleton cleanup
 
             initialized_ = false;

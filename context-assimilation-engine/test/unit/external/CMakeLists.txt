@@ -44,7 +44,7 @@ target_link_libraries(cae_external_test
     # CAE Core ChiMod libraries (from find_package(clio_cae_core))
     clio_cae::core_client                 # CAE Core client library
 
-    # Core Chimaera framework (automatically included by ChiMod libraries)
+    # Core CLIO Runtime framework (automatically included by ChiMod libraries)
     # chimaera::cxx                      # NOT needed - automatically included
 
     # Admin ChiMod (if needed for advanced functionality)

@@ -30,7 +30,7 @@ message(STATUS "CTE Python wrapper will be installed to: ${PYTHON_SITE_PACKAGES}
 
 # Generate stub file for type hints
 # Note: Stub generation is disabled because the module requires runtime initialization
-# (Chimaera runtime, singletons, etc.) before it can be imported. The nanobind stub
+# (CLIO Runtime runtime, singletons, etc.) before it can be imported. The nanobind stub
 # generator imports the module, which fails with std::bad_cast when singletons aren't
 # initialized. Users should rely on the inline documentation and Python type checkers
 # that can work without stubs.
@@ -66,7 +66,7 @@ if(BUILD_TESTING)
     )
 
     # Set environment variable to enable runtime initialization
-    # This allows tests to run with full Chimaera runtime setup
+    # This allows tests to run with full CLIO Runtime runtime setup
     set_tests_properties(
         python_bindings_test
         PROPERTIES

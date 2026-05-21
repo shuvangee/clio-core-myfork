@@ -56,7 +56,7 @@ target_link_libraries(test_compressor_functional
   clio_cte::compressor_client
   clio_cte::core_runtime         # For Context type
   clio_cte::core_client          # For core client if needed
-  chimaera::admin_runtime       # For Chimaera runtime
+  chimaera::admin_runtime       # For CLIO Runtime
   chimaera::admin_client        # For admin client
   chimaera::bdev_runtime        # For bdev runtime
   chimaera::bdev_client         # For bdev client
@@ -213,7 +213,7 @@ target_compile_definitions(clio_cte_compress_bench PRIVATE CLIO_CORE_ENABLE_COMP
 target_link_libraries(clio_cte_compress_bench
     clio_cte::core_client          # CTE core client library
     clio_cte::core_runtime         # CTE core runtime (for compression context)
-    chimaera::cxx                 # Core Chimaera library
+    chimaera::cxx                 # Core CLIO Runtime library
     ctp::compress                # Compression library
     ${CMAKE_THREAD_LIBS_INIT}     # Threading support (for pthread_setaffinity_np)
 )

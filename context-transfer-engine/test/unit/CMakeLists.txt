@@ -624,7 +624,7 @@ set_tests_properties(
 )
 endif()
 
-# Tests that start a full Chimaera runtime share /tmp/chimaera_iowarp SHM
+# Tests that start a full CLIO Runtime runtime share /tmp/chimaera_iowarp SHM
 # segments and TCP/IPC ports, so they must NOT run in parallel.
 set_tests_properties(
     cte_query_tag_exact
@@ -709,7 +709,7 @@ if(CLIO_CORE_ENABLE_CUDA)
     LINK_LIBS
       chimaera_cxx
       chimaera_cxx_gpu
-      chimaera_admin_client
+      clio_admin_client
       clio_bdev_client
       clio_cte_core_client
       clio_cte_core_runtime
@@ -751,7 +751,7 @@ if(CLIO_CORE_ENABLE_ROCM)
   target_link_libraries(test_cte_devmem_putget PUBLIC
     chimaera_cxx
     chimaera_cxx_gpu
-    chimaera_admin_client
+    clio_admin_client
     clio_bdev_client
     clio_cte_core_client
     clio_cte_core_runtime

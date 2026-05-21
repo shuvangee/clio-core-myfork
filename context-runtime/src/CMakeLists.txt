@@ -1,5 +1,5 @@
 # src/CMakeLists.txt
-# Main Chimaera library source code
+# Main CLIO Runtime library source code
 
 cmake_minimum_required(VERSION 3.10)
 
@@ -189,7 +189,7 @@ target_compile_definitions(${CHIMAERA_LIB_NAME} PRIVATE
 )
 
 # Link libraries
-# Chimaera runtime links to hshm modular targets
+# CLIO Runtime runtime links to hshm modular targets
 # Clients only link to ctp::cxx
 target_link_libraries(${CHIMAERA_LIB_NAME}
   PUBLIC

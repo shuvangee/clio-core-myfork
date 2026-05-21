@@ -49,7 +49,7 @@
 
 using namespace std::chrono_literals;
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/pool_query.h>
 #include <clio_runtime/singletons.h>
@@ -99,7 +99,7 @@ chi::PoolId getSharedTestPoolId() {
 class StreamingTestFixture {
 public:
   StreamingTestFixture() : test_pool_id_(getSharedTestPoolId()) {
-    // Initialize Chimaera once per test suite
+    // Initialize CLIO Runtime once per test suite
     if (!g_initialized) {
       INFO("Initializing Chimaera for streaming tests...");
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);

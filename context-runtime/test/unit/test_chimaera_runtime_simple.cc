@@ -32,7 +32,7 @@
  */
 
 /**
- * Simple unit tests for Chimaera runtime system
+ * Simple unit tests for CLIO Runtime runtime system
  * 
  * Basic tests to verify compilation and runtime initialization.
  * Uses simple custom test framework for testing.
@@ -44,7 +44,7 @@
 
 using namespace std::chrono_literals;
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/singletons.h>
 #include <clio_runtime/types.h>
@@ -58,12 +58,12 @@ namespace {
 }
 
 /**
- * Simple test fixture for Chimaera runtime tests
+ * Simple test fixture for CLIO Runtime runtime tests
  */
 class SimpleChimaeraFixture {
 public:
   SimpleChimaeraFixture() {
-    // Initialize Chimaera once per test suite
+    // Initialize CLIO Runtime once per test suite
     if (!g_initialized) {
       INFO("Initializing Chimaera...");
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);

@@ -52,8 +52,8 @@ def _setup():
         for _lib_name in [
             "libclio_ctp_host.so",
             "libchimaera_cxx.so",
-            "libchimaera_admin_client.so",
-            "libchimaera_admin_runtime.so",
+            "libclio_admin_client.so",
+            "libclio_admin_runtime.so",
             "libchimaera_bdev_client.so",
             "libchimaera_bdev_runtime.so",
             "libclio_cte_core_client.so",

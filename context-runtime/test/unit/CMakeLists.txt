@@ -1,4 +1,4 @@
-# CMakeLists.txt for Chimaera core unit tests
+# CMakeLists.txt for CLIO Runtime core unit tests
 # Note: Module-specific tests are now in their respective module directories:
 #   - modules/admin/test/
 #   - modules/bdev/test/
@@ -104,7 +104,7 @@ target_include_directories(${TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -127,7 +127,7 @@ target_include_directories(${IPC_ALLOCATE_BUFFER_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${IPC_ALLOCATE_BUFFER_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -169,8 +169,8 @@ target_include_directories(${SAVE_LOAD_TASK_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${SAVE_LOAD_TASK_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   clio_bdev_runtime           # Bdev module runtime
   clio_bdev_client            # Bdev module client
   ctp::cxx                       # ClioCtp library
@@ -197,8 +197,8 @@ target_include_directories(${LOCAL_TASK_ARCHIVE_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${LOCAL_TASK_ARCHIVE_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   clio_bdev_runtime           # Bdev module runtime
   clio_bdev_client            # Bdev module client
   ctp::cxx                       # ClioCtp library
@@ -223,7 +223,7 @@ target_include_directories(${PER_PROCESS_SHM_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${PER_PROCESS_SHM_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -256,10 +256,10 @@ add_executable(${AUTOGEN_COVERAGE_TEST_TARGET} ${AUTOGEN_COVERAGE_TEST_SOURCES})
     clio_cae_core_runtime
     clio_cae_core_client
     clio_bdev_runtime
-    chimaera_admin_runtime
+    clio_admin_runtime
     clio_cte_core_client
     clio_bdev_client
-    chimaera_admin_client
+    clio_admin_client
     chimaera_cxx
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT}
@@ -285,7 +285,7 @@ target_include_directories(${STREAMING_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${STREAMING_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   chimaera_MOD_NAME_client   # MOD_NAME client
   chimaera_MOD_NAME_runtime  # MOD_NAME runtime
   ctp::cxx                  # ClioCtp library
@@ -310,7 +310,7 @@ target_include_directories(${EXTERNAL_CLIENT_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${EXTERNAL_CLIENT_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -333,7 +333,7 @@ target_include_directories(${RUNTIME_CLEANUP_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${RUNTIME_CLEANUP_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -356,7 +356,7 @@ target_include_directories(${IPC_ERRORS_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${IPC_ERRORS_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -381,9 +381,9 @@ target_include_directories(${IPC_TRANSPORT_MODES_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${IPC_TRANSPORT_MODES_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   clio_bdev_client        # Bdev module client
-  chimaera_admin_client       # Admin module client
+  clio_admin_client       # Admin module client
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -408,9 +408,9 @@ target_include_directories(${CLIENT_RETRY_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${CLIENT_RETRY_TEST_TARGET}
-  chimaera_cxx               # Main Chimaera library
+  chimaera_cxx               # Main CLIO Runtime library
   clio_bdev_client        # Bdev module client
-  chimaera_admin_client       # Admin module client
+  clio_admin_client       # Admin module client
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
@@ -471,7 +471,7 @@ if(CLIO_CORE_ENABLE_CUDA)
     LINK_LIBS
       chimaera_cxx
       chimaera_cxx_gpu
-      chimaera_admin_client
+      clio_admin_client
       chimaera_MOD_NAME_client
       ctp::cuda_cxx
       ${CMAKE_THREAD_LIBS_INIT}
@@ -502,7 +502,7 @@ if(CLIO_CORE_ENABLE_ROCM)
   target_link_libraries(test_gpu_kernel_stress PUBLIC
     chimaera_cxx
     chimaera_cxx_gpu
-    chimaera_admin_client
+    clio_admin_client
     chimaera_MOD_NAME_client
     ctp::rocm_cxx
     ${CMAKE_THREAD_LIBS_INIT}
@@ -531,7 +531,7 @@ if(CLIO_CORE_ENABLE_SYCL)
     LINK_LIBS
       chimaera_cxx
       chimaera_cxx_gpu
-      chimaera_admin_client
+      clio_admin_client
       chimaera_MOD_NAME_client
       ctp::cxx
       ${CMAKE_THREAD_LIBS_INIT}
@@ -1038,7 +1038,7 @@ if(CLIO_CORE_ENABLE_MPI)
   target_link_libraries(${MPI_BDEV_TRANSPORT_TEST_TARGET}
     chimaera_cxx
     clio_bdev_client
-    chimaera_admin_client
+    clio_admin_client
     ctp::cxx
     ctp::mpi
     ${CMAKE_THREAD_LIBS_INIT}

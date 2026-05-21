@@ -76,7 +76,7 @@ if [ ! -c /dev/fuse ]; then
     exit 1
 fi
 
-# Start Chimaera runtime
+# Start CLIO Runtime runtime
 info "Starting Chimaera runtime..."
 export CLIO_SERVER_CONF="$CONFIG_FILE"
 "$RUNTIME_BIN" runtime start &

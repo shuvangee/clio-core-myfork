@@ -23,8 +23,8 @@ target_include_directories(${BDEV_TEST_TARGET} PRIVATE
 
 # Link against required libraries for bdev tests
 target_link_libraries(${BDEV_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   clio_bdev_runtime           # Bdev module runtime
   clio_bdev_client            # Bdev module client
   ctp::cxx                       # ClioCtp library

@@ -99,7 +99,7 @@ def runtime_initialized(cte_module):
     except Exception:
         pass  # Continue with existing environment
 
-    # Initialize Chimaera
+    # Initialize CLIO Runtime
     try:
         init_result = cte_module.chimaera_init(cte_module.ChimaeraMode.kClient, True)
         if not init_result:

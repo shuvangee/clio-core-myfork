@@ -57,7 +57,7 @@
 #include <cstring>
 #include <memory>
 
-// Chimaera and CAE headers
+// CLIO Runtime and CAE headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_cae/core/core_client.h>
 #include <clio_cae/core/constants.h>
@@ -162,7 +162,7 @@ int main(int argc, char* argv[]) {
   int tests_total = 0;
 
   try {
-    // Initialize Chimaera runtime (CHI_WITH_RUNTIME controls behavior)
+    // Initialize CLIO Runtime runtime (CHI_WITH_RUNTIME controls behavior)
     HLOG(kInfo, "Initializing Chimaera...");
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     if (!success) {
@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
     }
     HLOG(kSuccess, "Chimaera initialized successfully");
 
-    // Verify Chimaera IPC
+    // Verify CLIO Runtime IPC
     auto* ipc_manager = CHI_IPC;
     if (!ipc_manager) {
       HLOG(kError, "Chimaera IPC not initialized");

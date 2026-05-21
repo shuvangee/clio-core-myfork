@@ -49,7 +49,7 @@
  * - Tests integration with CTE (tag creation, blob storage)
  *
  * Environment Variables:
- * - INIT_CHIMAERA: If set to "1", initializes Chimaera runtime
+ * - INIT_CHIMAERA: If set to "1", initializes CLIO Runtime runtime
  * - TEST_HDF5_FILE: Override default test file path
  */
 
@@ -65,7 +65,7 @@
 // HDF5 library
 #include <hdf5.h>
 
-// Chimaera and CAE headers
+// CLIO Runtime and CAE headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_cae/core/core_client.h>
 #include <clio_cae/core/constants.h>
@@ -476,7 +476,7 @@ int main(int argc, char* argv[]) {
   int exit_code = 0;
 
   try {
-    // Initialize Chimaera runtime (CHI_WITH_RUNTIME controls behavior)
+    // Initialize CLIO Runtime runtime (CHI_WITH_RUNTIME controls behavior)
     HLOG(kInfo, "Initializing Chimaera...");
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     if (!success) {
@@ -485,7 +485,7 @@ int main(int argc, char* argv[]) {
     }
     HLOG(kSuccess, "Chimaera initialized successfully");
 
-    // Verify Chimaera IPC is available
+    // Verify CLIO Runtime IPC is available
     auto* ipc_manager = CHI_IPC;
     if (!ipc_manager) {
       HLOG(kError, "Chimaera IPC not initialized");

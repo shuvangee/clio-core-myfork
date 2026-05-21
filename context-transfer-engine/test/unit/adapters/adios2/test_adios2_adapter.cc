@@ -74,7 +74,7 @@ public:
   std::atomic<size_t> test_counter_;
 
   ADIOS2AdapterTestFixture() : test_counter_(0) {
-    // Initialize Chimaera runtime and CTE client
+    // Initialize CLIO Runtime runtime and CTE client
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
 

@@ -936,8 +936,8 @@ function(add_clio_module_client)
   set(CLIO_RUN_MODULE_DEPS "")
   if(NOT "${CLIO_RUN_MODULE_NAME}" STREQUAL "admin" AND
      NOT "${CLIO_RUN_MODULE_NAME}" STREQUAL "bdev")
-    if(TARGET chimaera_admin_client)
-      list(APPEND CLIO_RUN_MODULE_DEPS chimaera_admin_client)
+    if(TARGET clio_admin_client)
+      list(APPEND CLIO_RUN_MODULE_DEPS clio_admin_client)
     endif()
     if(TARGET clio_bdev_client)
       list(APPEND CLIO_RUN_MODULE_DEPS clio_bdev_client)
@@ -1121,8 +1121,8 @@ function(add_clio_module_runtime)
   # CLIO_RUN_MODULE_NAME instead of CLIO_RUN_NAMESPACE.
   if(NOT "${CLIO_RUN_MODULE_NAME}" STREQUAL "admin" AND
      NOT "${CLIO_RUN_MODULE_NAME}" STREQUAL "bdev")
-    if(TARGET chimaera_admin_runtime)
-      list(APPEND RUNTIME_LINK_LIBS chimaera_admin_runtime)
+    if(TARGET clio_admin_runtime)
+      list(APPEND RUNTIME_LINK_LIBS clio_admin_runtime)
     endif()
     if(TARGET clio_bdev_runtime)
       list(APPEND RUNTIME_LINK_LIBS clio_bdev_runtime)
@@ -1208,7 +1208,7 @@ function(add_clio_module_runtime)
 
 include(CMakeFindDependencyMacro)
 
-# Find the core Chimaera package (handles all other dependencies)
+# Find the core CLIO Runtime package (handles all other dependencies)
 find_dependency(chimaera REQUIRED)
 
 # Include the exported targets

@@ -86,7 +86,7 @@ class ExportDataFixture {
   ExportDataFixture() {
     if (g_initialized) return;
 
-    // Step 1: Chimaera client init
+    // Step 1: CLIO Runtime client init
     bool ok = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     if (!ok) throw std::runtime_error("CHIMAERA_INIT failed");
     std::this_thread::sleep_for(std::chrono::milliseconds(300));

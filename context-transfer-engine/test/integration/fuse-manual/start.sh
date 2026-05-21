@@ -46,7 +46,7 @@ fi
 
 mkdir -p "$PID_DIR" "$MOUNT_POINT"
 
-# --- Start Chimaera runtime -------------------------------------------------
+# --- Start CLIO Runtime runtime -------------------------------------------------
 
 info "Starting Chimaera runtime..."
 export CLIO_SERVER_CONF="$CLIO_SERVER_CONF"

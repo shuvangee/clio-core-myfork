@@ -35,7 +35,7 @@
  * Unit tests for ShmTransport Send/Recv (SPSC ring buffer)
  *
  * Tests the chunked data transfer mechanism using ShmTransferInfo and
- * copy_space directly, without requiring the full Chimaera runtime.
+ * copy_space directly, without requiring the full CLIO Runtime runtime.
  */
 
 #include <catch2/catch_all.hpp>

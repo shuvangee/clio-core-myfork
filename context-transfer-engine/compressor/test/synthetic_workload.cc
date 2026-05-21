@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
     HLOG(kInfo, "======================================");
   }
 
-  // Initialize CTE client (assumes Chimaera runtime is already running)
+  // Initialize CTE client (assumes CLIO Runtime runtime is already running)
   if (!clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
     if (rank == 0) {
       HLOG(kError, "Failed to initialize CTE client. Make sure chimaera runtime is started.");

@@ -172,7 +172,7 @@ class Client : public chi::ContainerClient {
   }
 
   /**
-   * Stop the entire Chimaera runtime (asynchronous)
+   * Stop the entire CLIO Runtime runtime (asynchronous)
    */
   chi::Future<StopRuntimeTask> AsyncStopRuntime(
       const chi::PoolQuery& pool_query, chi::u32 shutdown_flags = 0,

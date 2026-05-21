@@ -164,7 +164,7 @@ bool ParseOpts(int argc, char *argv[], BenchOpts &opts) {
   return true;
 }
 
-/** One-shot Chimaera + CTE pool + kRam bdev target setup. Host-only:
+/** One-shot CLIO Runtime + CTE pool + kRam bdev target setup. Host-only:
  *  AsyncCreate / AsyncRegisterTarget aren't visible in the GPU device
  *  pass (nvcc parses both passes for __global__-bearing TUs). */
 #if !CTP_IS_DEVICE_PASS

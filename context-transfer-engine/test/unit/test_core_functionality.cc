@@ -72,7 +72,7 @@ static std::string chi_test_data_dir() {
 
 using namespace std::chrono_literals;
 
-// Chimaera core includes
+// CLIO Runtime core includes
 #include <clio_runtime/admin/admin_tasks.h>
 #include <clio_runtime/bdev/bdev_client.h>
 #include <clio_runtime/bdev/bdev_tasks.h>
@@ -104,7 +104,7 @@ bool ShouldInitializeRuntime() {
  *
  * This fixture provides REAL runtime initialization and exercises the actual
  * CTE APIs. Unlike the previous parameter validation tests, this fixture:
- * 1. Initializes the Chimaera runtime properly
+ * 1. Initializes the CLIO Runtime runtime properly
  * 2. Creates real memory contexts for shared memory operations
  * 3. Sets up proper cleanup for runtime resources
  *
@@ -154,7 +154,7 @@ class CTECoreFunctionalTestFixture {
       INFO("Cleaned up existing test file: " << test_storage_path_);
     }
 
-    // Initialize Chimaera runtime and client for functional testing
+    // Initialize CLIO Runtime runtime and client for functional testing
     if (ShouldInitializeRuntime()) {
       INFO("Initializing runtime (CHI_WITH_RUNTIME not set or enabled)");
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
@@ -200,13 +200,13 @@ class CTECoreFunctionalTestFixture {
   }
 
   /**
-   * Initialize Chimaera runtime following the module test guide pattern
+   * Initialize CLIO Runtime runtime following the module test guide pattern
    * This sets up the shared memory infrastructure needed for real API calls
    * Note: The CHIMAERA_RUNTIME_INIT macro has internal state tracking
    */
 
   /**
-   * Initialize Chimaera client following the module test guide pattern
+   * Initialize CLIO Runtime client following the module test guide pattern
    * Note: The CHIMAERA_INIT macro has internal state tracking
    */
 

@@ -55,7 +55,7 @@ bool initialize_chimaera() {
 
 TEST_CASE("CHI_IPC AllocateBuffer basic functionality",
           "[ipc][allocate_buffer][basic]") {
-  // Initialize Chimaera client for testing
+  // Initialize CLIO Runtime client for testing
   REQUIRE(initialize_chimaera());
 
   auto* ipc_manager = CHI_IPC;

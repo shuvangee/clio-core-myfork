@@ -53,11 +53,11 @@
 
 namespace {
 
-// Test helper to initialize Chimaera system
+// Test helper to initialize CLIO Runtime system
 class ChimaeraTestFixture {
  public:
   ChimaeraTestFixture() {
-    // Use the unified Chimaera initialization
+    // Use the unified CLIO Runtime initialization
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
     SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;

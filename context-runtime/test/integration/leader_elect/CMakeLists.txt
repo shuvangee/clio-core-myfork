@@ -1,4 +1,4 @@
-# CMakeLists.txt for Chimaera Leader Election Integration Tests
+# CMakeLists.txt for CLIO Runtime Leader Election Integration Tests
 cmake_minimum_required(VERSION 3.10)
 
 # These tests require Docker and docker-compose
@@ -21,8 +21,8 @@ target_include_directories(${LEADER_ELECT_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${LEADER_ELECT_TEST_TARGET}
-  chimaera_admin_runtime
-  chimaera_admin_client
+  clio_admin_runtime
+  clio_admin_client
   chimaera_MOD_NAME_runtime
   chimaera_MOD_NAME_client
   ctp::cxx

@@ -57,7 +57,7 @@
 
 using namespace std::chrono_literals;
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/pool_query.h>
 #include <clio_runtime/singletons.h>
@@ -127,7 +127,7 @@ inline chi::priv::vector<clio_run::bdev::Block> ConvertBlocks(
 class BdevChimodFixture {
  public:
   BdevChimodFixture() : current_test_file_("") {
-    // Initialize Chimaera once per test suite
+    // Initialize CLIO Runtime once per test suite
     if (!g_initialized) {
       HLOG(kInfo, "Initializing Chimaera...");
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run IOWarp Migrate Integration Test (Chimaera Runtime)
+# Run IOWarp Migrate Integration Test (CLIO Runtime Runtime)
 #
 # Tests container migration with retry queue:
 # 1. Starts 4-node Docker cluster

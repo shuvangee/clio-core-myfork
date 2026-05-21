@@ -191,7 +191,7 @@ struct TaskStat {
 #define CLASS_NEW_ARGS
 
 /**
- * Base task class for Chimaera distributed execution
+ * Base task class for CLIO Runtime distributed execution
  *
  * All tasks represent C++ functions similar to RPCs that can be executed
  * across the distributed system. Tasks are now allocated in private memory

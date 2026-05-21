@@ -30,9 +30,9 @@ target_include_directories(${COMPOSE_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${COMPOSE_TEST_TARGET}
-  cxx                             # Core Chimaera runtime library
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  cxx                             # Core CLIO Runtime
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   clio_bdev_runtime           # BDev module runtime
   clio_bdev_client            # BDev module client
   ctp::cxx                       # ClioCtp library
@@ -60,8 +60,8 @@ target_include_directories(${TASK_ARCHIVE_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${TASK_ARCHIVE_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime for task types
-  chimaera_admin_client           # Admin module client for task types
+  clio_admin_runtime          # Admin module runtime for task types
+  clio_admin_client           # Admin module client for task types
   ctp::cxx                       # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}       # Threading support
 )
@@ -85,8 +85,8 @@ target_include_directories(${SUBMIT_BATCH_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${SUBMIT_BATCH_TEST_TARGET}
-  chimaera_admin_runtime          # Admin module runtime
-  chimaera_admin_client           # Admin module client
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
   ctp::cxx                       # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}       # Threading support
 )

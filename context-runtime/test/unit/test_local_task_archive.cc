@@ -49,7 +49,7 @@ using namespace chi;
 class LocalTaskArchiveTest {
 public:
   LocalTaskArchiveTest() {
-    // Initialize Chimaera with client mode and runtime
+    // Initialize CLIO Runtime with client mode and runtime
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
     SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;

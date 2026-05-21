@@ -194,7 +194,7 @@ $CONDA_PREFIX/
 ├── lib/                           # Shared libraries
 │   ├── libchimaera_cxx.so
 │   ├── libclio_ctp_host.so
-│   ├── chimaera_admin_runtime.so
+│   ├── clio_admin_runtime.so
 │   └── ...
 ├── lib/python3.X/site-packages/   # Python modules
 │   ├── clio_cte/

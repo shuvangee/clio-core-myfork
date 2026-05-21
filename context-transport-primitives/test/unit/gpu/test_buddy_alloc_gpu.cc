@@ -183,7 +183,7 @@ TEST_CASE("BuddyAllocatorGpu", "[gpu][allocator]") {
     constexpr size_t kBackendSize    = kNumThreads * kPerThreadBytes;  // 32 MB
 
     // ptxas -v shows this kernel compiles to 0 bytes stack frame (fully
-    // register-allocated).  4 096 B matches the Chimaera orchestrator setting
+    // register-allocated).  4 096 B matches the CLIO Runtime orchestrator setting
     // and is generous for this test; even 2 048 B passes in practice.
     cudaDeviceSetLimit(cudaLimitStackSize, 4096);
 

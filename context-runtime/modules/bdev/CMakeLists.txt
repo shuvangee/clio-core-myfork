@@ -23,7 +23,7 @@ add_clio_module_client(
   SOURCES
     src/bdev_client.cc
   LINK_LIBRARIES
-    chimaera_admin_client
+    clio_admin_client
     ctp::aio
     ${BDEV_OPTIONAL_LIBS}
 )
@@ -36,7 +36,7 @@ add_clio_module_runtime(
     src/bdev_runtime.cc
     src/autogen/bdev_lib_exec.cc
   LINK_LIBRARIES
-    chimaera_admin_runtime
+    clio_admin_runtime
     ctp::aio
     ${BDEV_OPTIONAL_LIBS}
     ${BDEV_GPU_LIBS}

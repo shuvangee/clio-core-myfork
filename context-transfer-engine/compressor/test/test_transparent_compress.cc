@@ -35,7 +35,7 @@ static bool g_initialized = false;
 static void EnsureInit() {
   if (g_initialized) return;
 
-  // Point Chimaera at our compose config with compressor at 512.0
+  // Point CLIO Runtime at our compose config with compressor at 512.0
   fs::path config_path = fs::path(__FILE__).parent_path() /
                           "test_transparent_compress_config.yaml";
   setenv("CLIO_SERVER_CONF", config_path.c_str(), 1);

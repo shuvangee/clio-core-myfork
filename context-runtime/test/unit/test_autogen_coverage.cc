@@ -19,7 +19,7 @@
 #include <vector>
 #include "clio_ctp/data_structures/serialization/global_serialize.h"
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/container.h>
 #include <clio_runtime/ipc_manager.h>
@@ -60,7 +60,7 @@ namespace {
 // Global initialization flag
 bool g_initialized = false;
 
-// Initialize Chimaera runtime once
+// Initialize CLIO Runtime runtime once
 void EnsureInitialized() {
   if (!g_initialized) {
     chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);

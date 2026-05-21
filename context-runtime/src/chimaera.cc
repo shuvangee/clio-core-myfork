@@ -32,7 +32,7 @@
  */
 
 /**
- * Main Chimaera initialization and global functions
+ * Main CLIO Runtime initialization and global functions
  */
 
 #include "clio_runtime/clio_runtime.h"
@@ -91,7 +91,7 @@ bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime, bool is_restart
   }
 
   // Register atexit handler so CHIMAERA_FINALIZE runs before static
-  // destructors.  The Chimaera singleton is heap-allocated (GetGlobalPtrVar)
+  // destructors.  The CLIO Runtime singleton is heap-allocated (GetGlobalPtrVar)
   // so its destructor is never called automatically.  Without this the ZMQ
   // DEALER socket stays open and zmq_ctx_destroy blocks forever at exit.
   std::atexit(CHIMAERA_FINALIZE);

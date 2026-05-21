@@ -32,9 +32,9 @@
  */
 
 /**
- * Central header for Chimaera singleton access macros
+ * Central header for CLIO Runtime singleton access macros
  * 
- * This header provides convenient macros for accessing all Chimaera singletons
+ * This header provides convenient macros for accessing all CLIO Runtime singletons
  * using CTP's global cross pointer variable pattern. Include this header to
  * get access to all singleton macros in one place.
  */
@@ -51,14 +51,14 @@
 #include "clio_runtime/admin.h"
 
 /**
- * Convenience macros for accessing Chimaera singletons
+ * Convenience macros for accessing CLIO Runtime singletons
  * 
- * These macros provide easy access to all Chimaera singleton managers
+ * These macros provide easy access to all CLIO Runtime singleton managers
  * using CTP's global cross pointer variable pattern.
  */
 
 // Core Framework Singleton Access
-// CHI_CHIMAERA_MANAGER - Main Chimaera framework coordinator
+// CHI_CHIMAERA_MANAGER - Main CLIO Runtime framework coordinator
 // CHI_CONFIG_MANAGER   - Configuration manager for YAML parsing
 // CHI_IPC              - IPC manager for shared memory and networking
 // CHI_POOL_MANAGER     - Pool manager for ChiPools and ChiContainers

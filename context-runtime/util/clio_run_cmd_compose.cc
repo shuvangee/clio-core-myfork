@@ -56,7 +56,7 @@ int Compose(int argc, char** argv) {
   // RAII guard: call ClientFinalize() on every return path so the background
   // ZMQ receive thread is joined and the DEALER socket is closed before the
   // ZMQ shared-context static destructor runs.  Without this, zmq_ctx_destroy
-  // blocks forever because the singleton Chimaera object is heap-allocated
+  // blocks forever because the singleton CLIO Runtime object is heap-allocated
   // (via GetGlobalPtrVar) and its destructor is never invoked by the runtime.
   struct ClientFinalizeGuard {
     ~ClientFinalizeGuard() {

@@ -34,7 +34,7 @@
 /**
  * Comprehensive unit tests for CoMutex and CoRwLock synchronization primitives
  *
- * Tests the cooperative synchronization mechanisms in the Chimaera runtime:
+ * Tests the cooperative synchronization mechanisms in the CLIO Runtime runtime:
  * - CoMutex: Cooperative mutual exclusion with TaskId grouping
  * - CoRwLock: Cooperative reader-writer locks with TaskId grouping
  */
@@ -49,7 +49,7 @@
 
 using namespace std::chrono_literals;
 
-// Include Chimaera headers
+// Include CLIO Runtime headers
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/pool_query.h>
 #include <clio_runtime/singletons.h>
@@ -102,7 +102,7 @@ std::atomic<int> g_successful_tasks{0};
 class CoMutexTestFixture {
 public:
   CoMutexTestFixture() : test_pool_id_(generateTestPoolId()) {
-    // Initialize Chimaera once per test suite
+    // Initialize CLIO Runtime once per test suite
     if (!g_initialized) {
       INFO("Initializing Chimaera for CoMutex tests...");
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);

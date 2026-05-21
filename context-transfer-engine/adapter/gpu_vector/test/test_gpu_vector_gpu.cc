@@ -9,7 +9,7 @@
 /**
  * GPU vector unit test (CUDA / ROCm).
  *
- * 1. Bring up the Chimaera server + CTE core pool.
+ * 1. Bring up the CLIO Runtime server + CTE core pool.
  * 2. Create a clio_cte::gpu_vector::Vector<uint32_t> with 4 blocks,
  *    4 pages per block, 4 KiB pages.
  * 3. Launch a write kernel that does v[i] = i*2 over a striped pattern
@@ -43,7 +43,7 @@ namespace {
 
 bool g_initialized = false;
 
-/** Bring up Chimaera + CTE core pool exactly once. Body gated to host
+/** Bring up CLIO Runtime + CTE core pool exactly once. Body gated to host
  *  pass: the device pass parses the function but never runs it, and
  *  cte_client->AsyncCreate is CTP_IS_HOST-only. */
 void EnsureInit() {

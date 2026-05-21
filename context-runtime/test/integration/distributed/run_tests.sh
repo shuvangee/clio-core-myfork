@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run IOWarp Distributed Integration Test (Chimaera Runtime)
+# Run IOWarp Distributed Integration Test (CLIO Runtime Runtime)
 #
 # This script manages the distributed test environment, including:
 # - Docker cluster setup using deps-cpu container

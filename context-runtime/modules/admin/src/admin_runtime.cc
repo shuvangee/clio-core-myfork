@@ -496,7 +496,7 @@ void Runtime::InitiateShutdown(chi::u32 grace_period_ms) {
   // For now, we'll just set a flag that other components can check
   is_shutdown_requested_ = true;
 
-  // Get Chimaera manager to initiate shutdown
+  // Get CLIO Runtime manager to initiate shutdown
   auto *chimaera_manager = CHI_CHIMAERA_MANAGER;
   if (chimaera_manager) {
     // chimaera_manager->InitiateShutdown(grace_period_ms);

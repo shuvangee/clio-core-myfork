@@ -34,7 +34,7 @@
 /**
  * Task Throughput and Latency Benchmark
  *
- * Benchmarks different aspects of the Chimaera runtime:
+ * Benchmarks different aspects of the CLIO Runtime runtime:
  * - BDev I/O throughput (allocate/write/free)
  * - BDev allocation throughput (allocate/free only)
  * - Round-trip latency using MOD_NAME Custom function
@@ -466,7 +466,7 @@ int main(int argc, char **argv) {
     HIPRINT("Max file size: {} bytes", config.max_file_size);
   }
 
-  // Initialize Chimaera client
+  // Initialize CLIO Runtime client
   if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
     HLOG(kError, "ERROR: Failed to initialize Chimaera client");
     return 1;

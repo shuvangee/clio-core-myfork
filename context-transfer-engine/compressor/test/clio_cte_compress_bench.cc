@@ -976,7 +976,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Initialize Chimaera runtime
+  // Initialize CLIO Runtime runtime
   HLOG(kInfo, "Initializing Chimaera runtime...");
 
   if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true)) {

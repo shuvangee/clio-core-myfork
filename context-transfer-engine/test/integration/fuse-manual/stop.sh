@@ -43,7 +43,7 @@ if [ -f "$PID_DIR/fuse.pid" ]; then
     ok "FUSE daemon stopped"
 fi
 
-# --- Stop Chimaera runtime ---------------------------------------------------
+# --- Stop CLIO Runtime runtime ---------------------------------------------------
 
 if [ -f "$PID_DIR/runtime.pid" ]; then
     RUNTIME_PID="$(cat "$PID_DIR/runtime.pid")"

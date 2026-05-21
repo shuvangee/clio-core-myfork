@@ -193,13 +193,13 @@ int main(int argc, char* argv[]) {
   std::string omni_file_path(argv[1]);
 
   try {
-    // Initialize Chimaera client
+    // Initialize CLIO Runtime client
     if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
       HLOG(kError, "Error: Failed to initialize Chimaera client");
       return 1;
     }
 
-    // Verify Chimaera IPC is available
+    // Verify CLIO Runtime IPC is available
     auto* ipc_manager = CHI_IPC;
     if (!ipc_manager) {
       HLOG(kError, "Error: Chimaera IPC not initialized. Is the runtime running?");

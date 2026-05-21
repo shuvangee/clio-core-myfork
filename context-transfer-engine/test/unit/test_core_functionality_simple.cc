@@ -95,7 +95,7 @@ public:
       INFO("Cleaned up existing test file: " << test_storage_path_);
     }
     
-    // Initialize Chimaera runtime and client for proper functionality
+    // Initialize CLIO Runtime runtime and client for proper functionality
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
     
@@ -151,12 +151,12 @@ public:
   }
 
   /**
-   * Initialize Chimaera runtime following the module test guide pattern
+   * Initialize CLIO Runtime runtime following the module test guide pattern
    * This sets up the shared memory infrastructure needed for real API calls
    */
 
   /**
-   * Initialize Chimaera client following the module test guide pattern
+   * Initialize CLIO Runtime client following the module test guide pattern
    */
 
   /**
@@ -226,7 +226,7 @@ TEST_CASE("CTE CreateParams Configuration", "[cte][core][params]") {
     REQUIRE(std::string(clio_cte::core::CreateParams::chimod_lib_name) == "clio_cte_core");
 
     // The allocator-based constructor would be tested in integration tests
-    // where the full Chimaera runtime is properly initialized
+    // where the full CLIO Runtime runtime is properly initialized
     INFO("CreateParams constructor signatures validated");
   }
 }

@@ -252,7 +252,7 @@ set_tests_properties(cae_error_handling PROPERTIES LABELS "core;validation;msan_
 # - Autogen core_lib_exec.cc kExportData cases exercised via AsyncExportData
 #
 # NOTE: All ExportData tests are consolidated into two CTest targets (task and
-# runtime) to avoid starting the Chimaera runtime multiple times on the same
+# runtime) to avoid starting the CLIO Runtime runtime multiple times on the same
 # port (which causes TIME_WAIT failures for subsequent processes).
 #------------------------------------------------------------------------------
 add_executable(test_export_data

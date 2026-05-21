@@ -35,10 +35,10 @@
 #define CLIO_RUNTIME_INCLUDE_CLIO_RUNTIME_CLIO_RUNTIME_H_
 
 /**
- * Main header file for Chimaera distributed task execution framework
+ * Main header file for CLIO Runtime distributed task execution framework
  *
  * This header provides the primary interface for both runtime and client
- * applications using the Chimaera framework.
+ * applications using the CLIO Runtime framework.
  */
 
 #include "clio_runtime/pool_query.h"
@@ -53,7 +53,7 @@ namespace chi {
 
 
 /**
- * Chimaera initialization mode
+ * CLIO Runtime initialization mode
  */
 enum class ChimaeraMode {
   kClient,   /**< Client mode - connects to existing runtime */
@@ -66,7 +66,7 @@ enum class ChimaeraMode {
  */
 
 /**
- * Initialize Chimaera with specified mode
+ * Initialize CLIO Runtime with specified mode
  *
  * @param mode Initialization mode (kClient or kServer/kRuntime)
  * @param default_with_runtime Default behavior if CHI_WITH_RUNTIME env var not set
@@ -85,11 +85,11 @@ bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime = false,
                    bool is_restart = false);
 
 /**
- * Finalize Chimaera and release all resources
+ * Finalize CLIO Runtime and release all resources
  *
- * Calls ClientFinalize on the Chimaera manager to close ZMQ sockets and
+ * Calls ClientFinalize on the CLIO Runtime manager to close ZMQ sockets and
  * join background threads. Must be called before process exit to avoid
- * hangs in zmq_ctx_destroy (the Chimaera singleton is heap-allocated so
+ * hangs in zmq_ctx_destroy (the CLIO Runtime singleton is heap-allocated so
  * its destructor is never invoked automatically).
  */
 void CHIMAERA_FINALIZE();
