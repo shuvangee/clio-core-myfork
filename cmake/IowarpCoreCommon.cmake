@@ -954,6 +954,12 @@ function(add_clio_module_client)
 
   # Create alias for external use
   add_library(${CLIO_RUN_NAMESPACE}::${CLIO_RUN_MODULE_NAME}_client ALIAS ${TARGET_NAME})
+  # Also expose the legacy `chimaera::` alias so consumers that pre-date
+  # the module-namespace rename (e.g. coeus-adapter, in-tree CMakeLists
+  # that link to chimaera::admin_client) keep working at build time.
+  if(NOT TARGET chimaera::${CLIO_RUN_MODULE_NAME}_client)
+    add_library(chimaera::${CLIO_RUN_MODULE_NAME}_client ALIAS ${TARGET_NAME})
+  endif()
 
   # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
   # so the .so file on disk matches the CMake target.
@@ -968,7 +974,16 @@ function(add_clio_module_client)
   )
 
   # Install the client library
-  set(MODULE_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}")
+  # MODULE_PACKAGE_NAME: install dir under lib/cmake/. For runtime modules
+  # whose namespace was renamed chimaera -> clio_run (admin, bdev, MOD_NAME)
+  # we pin to the legacy `chimaera_<module>` form so external find_package
+  # consumers (e.g. coeus-adapter) keep working. For other namespaces
+  # (clio_cte, clio_cae, …) we use the standard `<namespace>_<module>` form.
+  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio_run")
+    set(MODULE_PACKAGE_NAME "chimaera_${CLIO_RUN_MODULE_NAME}")
+  else()
+    set(MODULE_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}")
+  endif()
   set(MODULE_EXPORT_NAME "${MODULE_PACKAGE_NAME}")
 
   install(TARGETS ${TARGET_NAME}
@@ -1137,6 +1152,12 @@ function(add_clio_module_runtime)
 
   # Create alias for external use
   add_library(${CLIO_RUN_NAMESPACE}::${CLIO_RUN_MODULE_NAME}_runtime ALIAS ${TARGET_NAME})
+  # Also expose the legacy `chimaera::` alias so consumers that pre-date
+  # the module-namespace rename (e.g. coeus-adapter, in-tree CMakeLists
+  # that link to chimaera::admin_runtime) keep working at build time.
+  if(NOT TARGET chimaera::${CLIO_RUN_MODULE_NAME}_runtime)
+    add_library(chimaera::${CLIO_RUN_MODULE_NAME}_runtime ALIAS ${TARGET_NAME})
+  endif()
 
   # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
   # so the .so file on disk matches the CMake target.
@@ -1156,7 +1177,16 @@ function(add_clio_module_runtime)
   ")
 
   # Install the runtime library (add to existing export set if client exists)
-  set(MODULE_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}")
+  # MODULE_PACKAGE_NAME: install dir under lib/cmake/. For runtime modules
+  # whose namespace was renamed chimaera -> clio_run (admin, bdev, MOD_NAME)
+  # we pin to the legacy `chimaera_<module>` form so external find_package
+  # consumers (e.g. coeus-adapter) keep working. For other namespaces
+  # (clio_cte, clio_cae, …) we use the standard `<namespace>_<module>` form.
+  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio_run")
+    set(MODULE_PACKAGE_NAME "chimaera_${CLIO_RUN_MODULE_NAME}")
+  else()
+    set(MODULE_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}")
+  endif()
   set(MODULE_EXPORT_NAME "${MODULE_PACKAGE_NAME}")
 
   install(TARGETS ${TARGET_NAME}
@@ -1185,22 +1215,40 @@ function(add_clio_module_runtime)
 
   if(SHOULD_GENERATE_CONFIG)
     # Export targets file
+    # NAMESPACE: for chimaera-renamed runtime modules (admin/bdev/MOD_NAME,
+    # now under clio_run::), pin to `chimaera::` so installed targets keep
+    # the legacy name external consumers (coeus-adapter etc.) expect. For
+    # other modules use the canonical namespace. Either way the modern
+    # alias namespace is emitted in Config.cmake below.
+    set(_install_namespace "${CLIO_RUN_NAMESPACE}")
+    if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio_run")
+      set(_install_namespace "chimaera")
+    endif()
     install(EXPORT ${MODULE_EXPORT_NAME}
       FILE ${MODULE_EXPORT_NAME}.cmake
-      NAMESPACE ${CLIO_RUN_NAMESPACE}::
+      NAMESPACE ${_install_namespace}::
       DESTINATION lib/cmake/${MODULE_PACKAGE_NAME}
     )
 
-    # Compute the legacy namespace for backward-compat target aliases.
-    # The clio_* CMake namespaces (clio_cte, clio_cae, …) were renamed from
-    # wrp_* in the WRP_->CLIO_ pass. External code that still references
-    # wrp_cte::core_client etc. needs an IMPORTED alias resolving back to
-    # the new target. Modules whose namespace doesn't start with "clio_"
-    # (e.g. the chimaera::* runtime modules) get no legacy alias block.
-    set(LEGACY_NAMESPACE "")
-    if("${CLIO_RUN_NAMESPACE}" MATCHES "^clio_(.*)$")
-      set(LEGACY_NAMESPACE "wrp_${CMAKE_MATCH_1}")
+    # Compute additional namespace aliases to emit alongside the install-time
+    # targets (which carry the `${_install_namespace}::` prefix).
+    #
+    # ALIAS_NAMESPACES is the list of EXTRA namespaces (not equal to the
+    # install namespace) that should also resolve to the same exported
+    # targets. Always includes the current CLIO_RUN_NAMESPACE so new code
+    # can link via the canonical name. For clio_* namespaces we also emit
+    # the historical `wrp_*` alias from the WRP_->CLIO_ rename.
+    set(ALIAS_NAMESPACES "${CLIO_RUN_NAMESPACE}")
+    # Only emit the historical wrp_* alias when the suffix is genuinely
+    # one of the WRP_->CLIO_ rename targets (cte, cae, ...). "wrp_run"
+    # was never a valid namespace and would just confuse downstream users.
+    if("${CLIO_RUN_NAMESPACE}" MATCHES "^clio_(.*)$"
+       AND NOT "${CMAKE_MATCH_1}" STREQUAL "run")
+      list(APPEND ALIAS_NAMESPACES "wrp_${CMAKE_MATCH_1}")
     endif()
+    # Don't double-emit the install namespace itself.
+    list(REMOVE_ITEM ALIAS_NAMESPACES "${_install_namespace}")
+    list(REMOVE_DUPLICATES ALIAS_NAMESPACES)
 
     # Generate Config.cmake file
     set(CONFIG_CONTENT "
@@ -1215,25 +1263,23 @@ find_dependency(chimaera REQUIRED)
 include(\"\${CMAKE_CURRENT_LIST_DIR}/${MODULE_EXPORT_NAME}.cmake\")
 ")
 
-    # Append backward-compat legacy-namespace aliases if applicable. The
-    # aliases are INTERFACE IMPORTED libraries that forward to the new
-    # canonical targets, so downstream `target_link_libraries(... wrp_cte::core_client)`
-    # transparently picks up clio_cte::core_client and everything it carries
-    # (include dirs, link dependencies, compile defs).
-    if(LEGACY_NAMESPACE)
+    # Append IMPORTED ALIAS targets for every extra namespace in
+    # ALIAS_NAMESPACES. The aliases forward to the install-time target
+    # (`${_install_namespace}::<module>_<x>`) so downstream consumers can
+    # link via any of the historically-valid names.
+    foreach(_alias_ns IN LISTS ALIAS_NAMESPACES)
       string(APPEND CONFIG_CONTENT "
-# --- Backward-compat aliases for the WRP_ -> CLIO_ namespace rename ---
-# Lets downstream projects that still reference ${LEGACY_NAMESPACE}::*
-# resolve transparently to ${CLIO_RUN_NAMESPACE}::*. See rebranding.md.
+# --- Alias namespace ${_alias_ns}:: -> ${_install_namespace}:: ---
+# Lets downstream projects that reference ${_alias_ns}::* keep working.
 foreach(_legacy_tgt IN ITEMS ${CLIO_RUN_MODULE_NAME}_client ${CLIO_RUN_MODULE_NAME}_runtime)
-  if(TARGET ${CLIO_RUN_NAMESPACE}::\${_legacy_tgt} AND NOT TARGET ${LEGACY_NAMESPACE}::\${_legacy_tgt})
-    add_library(${LEGACY_NAMESPACE}::\${_legacy_tgt} INTERFACE IMPORTED)
-    set_target_properties(${LEGACY_NAMESPACE}::\${_legacy_tgt} PROPERTIES
-      INTERFACE_LINK_LIBRARIES ${CLIO_RUN_NAMESPACE}::\${_legacy_tgt})
+  if(TARGET ${_install_namespace}::\${_legacy_tgt} AND NOT TARGET ${_alias_ns}::\${_legacy_tgt})
+    add_library(${_alias_ns}::\${_legacy_tgt} INTERFACE IMPORTED)
+    set_target_properties(${_alias_ns}::\${_legacy_tgt} PROPERTIES
+      INTERFACE_LINK_LIBRARIES ${_install_namespace}::\${_legacy_tgt})
   endif()
 endforeach()
 ")
-    endif()
+    endforeach()
 
     string(APPEND CONFIG_CONTENT "
 # Provide components
