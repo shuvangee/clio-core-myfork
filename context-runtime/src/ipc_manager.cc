@@ -2576,17 +2576,22 @@ RouteResult IpcManager::RouteTask(Future<Task> &future, bool force_enqueue) {
   auto *pool_manager = CLIO_POOL_MANAGER;
   Container *static_container =
       pool_manager->GetStaticContainer(task_ptr->pool_id_);
-  // Snapshot the caller's original intent BEFORE ScheduleTask rewrites it
-  // — IsTaskLocal needs to know whether Local came from the API call
-  // (always honor, even with CLIO_FORCE_NET=1) or from Dynamic resolution
-  // on a single-node deployment (force_net_ should override).
-  const bool caller_asked_for_local =
-      task_ptr->pool_query_.GetRoutingMode() == RoutingMode::Local;
   PoolQuery resolved_query = task_ptr->pool_query_;
   if (static_container && resolved_query.IsDynamicMode()) {
     resolved_query = static_container->ScheduleTask(task_ptr);
     task_ptr->pool_query_ = resolved_query;
   }
+
+  // Snapshot the routing intent AFTER ScheduleTask resolves Dynamic but
+  // BEFORE ResolvePoolQuery's DirectHash/DirectId → Local boundary-case
+  // rewrite.  IsTaskLocal uses this to gate CLIO_FORCE_NET:
+  //   - admin tasks that go through Dynamic-resolved-to-Local on single-
+  //     node stay local (avoids dragging SaveTaskArchive through ZMQ);
+  //   - DirectHash/DirectId/Range/Broadcast/Physical that the resolver
+  //     would collapse to Local for the local-container case still take
+  //     the network path under force_net_.
+  const bool originally_local =
+      resolved_query.GetRoutingMode() == RoutingMode::Local;
 
   // Resolve pool query into concrete physical addresses
   std::vector<PoolQuery> pool_queries =
@@ -2603,8 +2608,7 @@ RouteResult IpcManager::RouteTask(Future<Task> &future, bool force_enqueue) {
   }
 
   // Check if task should be processed locally
-  bool is_local =
-      IsTaskLocal(task_ptr, pool_queries, caller_asked_for_local);
+  bool is_local = IsTaskLocal(task_ptr, pool_queries, originally_local);
   if (is_local) {
     RouteResult result = RouteLocal(future, force_enqueue);
     // If container is plugged or gone, add to retry queue
@@ -2625,25 +2629,24 @@ RouteResult IpcManager::RouteTask(Future<Task> &future, bool force_enqueue) {
 
 bool IpcManager::IsTaskLocal(const FullPtr<Task> & /*task_ptr*/,
                              const std::vector<PoolQuery> &pool_queries,
-                             bool /*caller_asked_for_local*/) {
+                             bool originally_local) {
+  // CLIO_FORCE_NET stress mode: routing is determined entirely by the
+  // caller's original intent.  Explicit PoolQuery::Local() stays local;
+  // anything else (Dynamic, DirectHash, DirectId, Range, Broadcast,
+  // Physical) takes the network path, even on single-node deployments
+  // where ResolveDirectHashQuery / ResolveDirectIdQuery would otherwise
+  // short-circuit to Local() via their boundary-case optimization.
+  // force_net_ is read once in ServerInit; see force_net_ in
+  // ipc_manager.h.
+  if (force_net_) {
+    return originally_local;
+  }
+
   // A single Local() query — whether the user-facing API picked it or
-  // ScheduleTask resolved a Dynamic query to it on single-node — is
-  // always local.  CLIO_FORCE_NET only overrides queries that resolved to
-  // something other than Local.
-  // (We intentionally do not split caller-intent vs scheduler-resolution
-  //  here: a stricter rule that pushed scheduler-resolved Locals through
-  //  the loopback path surfaced a separate SendCompletion lifetime bug in
-  //  the admin SaveTaskArchive path — tracked separately.)
+  // ScheduleTask / ResolvePoolQuery collapsed it to Local — is local.
   if (pool_queries.size() == 1 &&
       pool_queries[0].GetRoutingMode() == RoutingMode::Local) {
     return true;
-  }
-
-  // CLIO_FORCE_NET stress mode: any non-Local query routes via the
-  // network path even on single-node deployments.  Read once in
-  // ServerInit; see force_net_ in ipc_manager.h.
-  if (force_net_) {
-    return false;
   }
 
   // If there's only one node, all tasks are local
