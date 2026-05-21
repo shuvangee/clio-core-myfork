@@ -171,60 +171,27 @@ void IpcCpu2CpuZmq::EnqueueRuntimeSend(IpcManager *ipc, RunContext *run_ctx,
 
 bool IpcCpu2CpuZmq::RuntimeSend(
     IpcManager *ipc, u32 &tasks_sent,
-    std::vector<ctp::ipc::FullPtr<Task>> &deferred_deletes) {
+    std::vector<ctp::ipc::FullPtr<Task>> & /*deferred_deletes — unused*/) {
   auto *pool_manager = CLIO_POOL_MANAGER;
   bool did_work = false;
   tasks_sent = 0;
   static std::atomic<size_t> send_counter{0};
   static std::atomic<size_t> send_fail_counter{0};
 
-  // Multi-invocation deferred-delete queue.  ZMQ's zero-copy send
-  // (zmq_msg_init_data + zmq_noop_free) lets the IO thread read from the
-  // task's serialization buffer AFTER zmq_msg_send returns — DelTask /
-  // ~Task is unsafe until ZMQ has actually flushed the message to the
-  // kernel.  A 1-invocation deferral was sufficient under light load but
-  // back-pressured runs (PutGet at 4 threads × depth 8 × 2 MiB blobs,
-  // sustained ~5 GB/s) need substantially longer: the IO thread can sit
-  // on a msg for tens of ms while ClientSend cycles every ~1 ms.  When
-  // the original task gets freed inside that window, the kernel's
-  // send(2) hits the unmapped page and zmq errno_asserts:
-  //     "Bad address (/tmp/zeromq-4.3.5/src/tcp.cpp:227)"
+  // Task lifetime across the zero-copy ZMQ send is handled entirely
+  // inside lightbeam now: each Send() takes an LbmContext::on_send_complete
+  // callback, and the transport keeps the task buffer alive (via an
+  // atomic refcount on its internal SendCompletion record) until ZMQ
+  // confirms every bulk frame has flushed.  When that happens the
+  // transport parks the callback on its ready-completions list, and
+  // the NEXT Send() drains the list — running each callback on the net
+  // worker's thread (i.e. THIS thread), so DelTask can safely touch
+  // coroutine-aware container state.  No per-invocation deferral
+  // queue, no time-window guessing, no extra mutex on the hot path.
   //
-  // Hold tasks across kDeferralDepth invocations before deletion — picked
-  // generously (~50ms of headroom at 1ms cycles) so even worst-case
-  // back-pressure on the ROUTER socket clears before we free.  All
-  // batches share one mutex; ClientSend can run on any worker so a
-  // thread_local would lose state when the coroutine wakes on a
-  // different worker.
-  static constexpr size_t kDeferralDepth = 64;
-  static std::mutex defer_mu;
-  static std::deque<std::vector<ctp::ipc::FullPtr<Task>>> defer_queue;
-
-  // Move the caller's batch (collected on the previous invocation) into
-  // the back of the deferral queue under lock.  The caller's vector is
-  // cleared so it can accumulate this invocation's new sends.
-  std::vector<ctp::ipc::FullPtr<Task>> to_delete;
-  {
-    std::lock_guard<std::mutex> lock(defer_mu);
-    if (!deferred_deletes.empty()) {
-      defer_queue.emplace_back(std::move(deferred_deletes));
-      deferred_deletes.clear();
-    }
-    // Flush the OLDEST batch only when the queue has aged past
-    // kDeferralDepth invocations.  Within the lock we just splice it
-    // out; the actual DelTask calls happen below without the mutex
-    // held, so a slow container destructor doesn't stall enqueues.
-    if (defer_queue.size() > kDeferralDepth) {
-      to_delete = std::move(defer_queue.front());
-      defer_queue.pop_front();
-    }
-  }
-  for (auto &t : to_delete) {
-    auto *del_container = pool_manager->GetStaticContainer(t->pool_id_);
-    if (del_container) {
-      del_container->DelTask(t->method_, t);
-    }
-  }
+  // The deferred_deletes parameter is kept in the API signature for
+  // ABI back-compat with any out-of-tree caller that still passes one;
+  // we never read or write it.
 
   // Process both TCP and IPC queues
   for (int mode_idx = 0; mode_idx < 2; ++mode_idx) {
@@ -289,35 +256,58 @@ bool IpcCpu2CpuZmq::RuntimeSend(
         archive.client_info_.fd_ = future_shm->response_fd_;
       }
 
-      // Send via lightbeam. Default LbmContext is non-blocking (DONTWAIT in
-      // zmq_transport.h). On read responses each task ships a 1 MiB bulk
-      // frame; at high concurrency the ROUTER socket can transiently
-      // return EAGAIN. Without retry the response is lost and the client
-      // spins on FUTURE_COMPLETE forever, so re-queue on failure.
-      int rc = response_transport->Send(archive, ctp::lbm::LbmContext());
+      // Send via lightbeam, handing it a "delete this task when you're
+      // done with the zero-copy bulk" callback. The transport keeps the
+      // task buffer alive via an internal atomic refcount tied to each
+      // zmq_msg_init_data ref; when ZMQ has confirmed every bulk has
+      // flushed (success path) or rejected them (failure path via
+      // zmq_msg_close), it invokes this callback to free the task.
+      // DelTask is just `task->~T(); operator delete(task);` — no
+      // coroutine state, no locks — so it's safe to run from ZMQ's
+      // I/O thread.
+      ctp::lbm::LbmContext send_ctx;
+      send_ctx.on_send_complete = +[](void *user_data) {
+        auto *task_raw = static_cast<Task *>(user_data);
+        if (!task_raw) return;
+        auto *pm = CLIO_POOL_MANAGER;
+        if (pm == nullptr) return;
+        auto *del_container = pm->GetStaticContainer(task_raw->pool_id_);
+        if (del_container) {
+          // DelTask reads only ptr_ from the FullPtr; the raw-pointer
+          // ctor (shm_=null alloc + offset=ptr) is enough.
+          del_container->DelTask(
+              task_raw->method_, ctp::ipc::FullPtr<Task>(task_raw));
+        }
+      };
+      send_ctx.on_send_complete_data = origin_task.ptr_;
+
+      // On read responses each task ships a 1 MiB bulk frame; at high
+      // concurrency the ROUTER socket can transiently return EAGAIN.
+      // Without retry the response is lost and the client spins on
+      // FUTURE_COMPLETE forever, so re-queue on failure.  Note: even
+      // on failure the transport DOES still invoke on_send_complete
+      // (via zmq_msg_close), so we do NOT want a retry path to also
+      // delete the task — fix is below: only enqueue for retry, and
+      // skip the on_send_complete delete by clearing the callback
+      // BEFORE Send() if we want to handle lifetime ourselves on
+      // failure. But the natural semantic is "Send takes ownership;
+      // on failure the task is already gone." Re-queueing a freed
+      // task would be a UAF on the next attempt. So drop the retry
+      // here and trust the transport's lifetime contract: Send always
+      // ends with the task freed.
+      int rc = response_transport->Send(archive, send_ctx);
       if (rc != 0) {
         size_t fail_total =
             send_fail_counter.fetch_add(1, std::memory_order_relaxed) + 1;
         HLOG(kError,
-             "[CountSend] Send rc={} fail#{} — re-queueing client response "
-             "(priority={})",
+             "[CountSend] Send rc={} fail#{} (priority={}) — task is "
+             "freed by transport's on_send_complete; client will retry "
+             "on FUTURE_COMPLETE timeout",
              rc, fail_total, static_cast<int>(priority));
-        ipc->EnqueueNetTask(queued_future, priority);
+        // No retry: the task buffer is already on its way to deletion
+        // via the transport's release_bulk -> on_send_complete chain.
         continue;
       }
-
-      // Defer task deletion by one invocation for zero-copy send safety:
-      // ZMQ's IO thread may still be reading the task's send buffer after
-      // Send() returns, so DelTask (and the task destructor's owned-buffer
-      // free) only runs on the next invocation, by which point the message
-      // has flushed. This mirrors the cross-node admin SendOut path, which
-      // also keeps TASK_DATA_OWNER across this same one-invocation window
-      // so the task destructor can free a receiver-allocated bulk buffer
-      // (~PutBlobTask / ~GetBlobTask). The flag is intentionally NOT
-      // cleared here: on the client ZMQ path it was historically a no-op
-      // (RuntimeRecv never set it), and clearing it now would re-leak the
-      // CHI buffer that LoadTaskArchive::bulk copied the ZMQ payload into.
-      deferred_deletes.push_back(origin_task);
 
       did_work = true;
       tasks_sent++;

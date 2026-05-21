@@ -54,11 +54,60 @@
 
 namespace ctp::lbm {
 
-/** No-op free callback for zmq_msg_init_data zero-copy sends */
+/** No-op free callback for zmq_msg_init_data zero-copy sends.
+ *  Used when the caller has not provided a Send-completion callback on
+ *  LbmContext::on_send_complete; the caller owns buffer lifetime
+ *  themselves (typically a permanent SHM region or a refcounted task). */
 static inline void zmq_noop_free(void *data, void *hint) {
   (void)data;
   (void)hint;
 }
+
+namespace zmq_detail {
+
+/**
+ * Per-Send completion record.
+ *
+ * Owned by the SendCompletion machinery: allocated when a Send() is
+ * issued with an on_send_complete callback in LbmContext, and deleted
+ * by `release_bulk` after the user callback fires.
+ *
+ * Refcount sized to "(starter ref) + (one ref per zero-copy bulk handed
+ * to zmq_msg_init_data)". Every bulk that successfully reaches ZMQ
+ * holds one ref via `release_bulk` (registered as the msg's free
+ * function). The starter ref is held across the whole Send() body so
+ * the holder stays alive while the bulk loop is iterating; Send()
+ * drops it just before returning. When the final ref drops the user
+ * callback runs inline on whatever thread released it (typically
+ * ZMQ's I/O thread for success, the calling thread via `zmq_msg_close`
+ * for failure) and the holder self-destructs.
+ *
+ * Hidden inside this namespace so the runtime never sees it.
+ */
+struct SendCompletion {
+  std::atomic<size_t> pending{0};
+  void (*user_cb)(void *) = nullptr;
+  void *user_data = nullptr;
+};
+
+/**
+ * zmq_msg_init_data free function: decrements the holder's pending
+ * count and, on transition to zero, fires the user callback and
+ * deletes the holder. Called either inline from `zmq_msg_close`
+ * (failure path) or asynchronously from ZMQ's I/O thread when the
+ * message is finally on the wire (success path). The user callback
+ * must be thread-safe — IpcCpu2CpuZmq's typical use (DelTask, which
+ * is just `task->~T(); operator delete(task);`) is fine.
+ */
+inline void release_bulk(void * /*data*/, void *hint) {
+  auto *c = static_cast<SendCompletion *>(hint);
+  if (c->pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    if (c->user_cb) c->user_cb(c->user_data);
+    delete c;
+  }
+}
+
+}  // namespace zmq_detail
 
 // ===========================================================================
 // Per-phase timing instrumentation for ZeroMqTransport::Send / Recv.
@@ -709,6 +758,28 @@ class ZeroMqTransport : public Transport {
     uint64_t t_ser_end = stamp();
     size_t write_bulk_count = meta.send_bulks;
 
+    // --- Per-Send completion holder (allocated up-front so EVERY exit
+    // ---  path from Send fires the user callback exactly once) ---
+    //
+    // The starter ref is dropped via a scope-guard destructor; that
+    // way an early return on a meta/id/delim frame failure can't leak
+    // the holder. Bulk loop adds one ref per zmq_msg_init_data; ZMQ
+    // releases each ref when the bulk is flushed (success) or when
+    // the caller calls zmq_msg_close after a bulk send failure.
+    zmq_detail::SendCompletion *completion = nullptr;
+    if (ctx.on_send_complete != nullptr) {
+      completion = new zmq_detail::SendCompletion();
+      completion->pending.store(1, std::memory_order_relaxed);  // starter
+      completion->user_cb = ctx.on_send_complete;
+      completion->user_data = ctx.on_send_complete_data;
+    }
+    struct CompletionGuard {
+      zmq_detail::SendCompletion *c;
+      ~CompletionGuard() {
+        if (c) zmq_detail::release_bulk(nullptr, c);
+      }
+    } completion_guard{completion};
+
     // Send all frames non-blocking unless the caller explicitly set
     // LBM_SYNC. The HWMs above (100k msgs) make EAGAIN essentially
     // impossible under realistic CTE workloads, so we don't have to
@@ -783,6 +854,7 @@ class ZeroMqTransport : public Transport {
     uint64_t t_bulk_begin = stamp();
     size_t sent_count = 0;
     size_t bulk_bytes_sum = 0;
+    int bulk_send_rc = 0;
     for (size_t i = 0; i < meta.send.size(); ++i) {
       if (!meta.send[i].flags.Any(BULK_XFER)) {
         continue;
@@ -795,16 +867,37 @@ class ZeroMqTransport : public Transport {
       }
 
       zmq_msg_t msg;
-      zmq_msg_init_data(&msg, meta.send[i].data.ptr_, meta.send[i].size,
-                         zmq_noop_free, nullptr);
+      if (completion) {
+        // Take one ref BEFORE init_data so the release callback can
+        // safely fire (possibly re-entrantly from zmq_msg_close on the
+        // failure path below) without dropping below the starter ref
+        // we still hold while iterating.
+        completion->pending.fetch_add(1, std::memory_order_relaxed);
+        zmq_msg_init_data(&msg, meta.send[i].data.ptr_, meta.send[i].size,
+                           &zmq_detail::release_bulk, completion);
+      } else {
+        zmq_msg_init_data(&msg, meta.send[i].data.ptr_, meta.send[i].size,
+                           &zmq_noop_free, nullptr);
+      }
       bulk_bytes_sum += meta.send[i].size;
       rc = zmq_msg_send_eintr(&msg, socket_, flags);
       if (rc == -1) {
         HLOG(kError, "ZeroMqTransport::Send - bulk {} FAILED: {}", i,
              zmq_strerror(zmq_errno()));
-        zmq_msg_close(&msg);
-        return zmq_errno();
+        zmq_msg_close(&msg);  // releases this bulk's ref (decrements completion)
+        bulk_send_rc = zmq_errno();
+        break;
       }
+    }
+
+    // The starter ref is dropped by `completion_guard`'s destructor
+    // when Send returns — see CompletionGuard at the top of this
+    // function. If every bulk has already released (zero-bulk Send,
+    // or all bulks flushed synchronously) the user callback fires
+    // there; otherwise the last late release on ZMQ's I/O thread
+    // fires it.
+    if (bulk_send_rc != 0) {
+      return bulk_send_rc;
     }
     uint64_t t_bulk_end = stamp();
     uint64_t t_send_end = stamp();

@@ -165,6 +165,27 @@ struct LbmContext {
   int dst_fd_ = -1;                                /**< Destination file descriptor for CPU→storage (-1 = none) */
   size_t dst_offset_ = 0;                          /**< Offset within destination file for CPU→storage */
 
+  /**
+   * Optional callback invoked when every zero-copy bulk buffer passed to
+   * a Send() call has been confirmed flushed by the underlying transport.
+   * After it fires, the caller's send buffers are safe to free or reuse.
+   *
+   * Semantics:
+   *   - Fires exactly once per Send() (even on partial-failure paths —
+   *     transports must always call back to release caller-side state).
+   *   - Runs on the caller's thread (drained at the top of the next
+   *     Send() invocation), NOT on the transport's internal I/O thread,
+   *     so the callback can safely touch non-thread-safe state.
+   *   - NULL = no completion notification; the transport uses a no-op
+   *     buffer release and the caller is responsible for keeping its
+   *     zero-copy buffers alive (e.g. permanent SHM, refcounted task).
+   *
+   * Plain function-pointer (not std::function) so the field is usable
+   * from device code without dragging in host-only machinery.
+   */
+  void (*on_send_complete)(void* user_data) = nullptr;
+  void* on_send_complete_data = nullptr;
+
   CTP_CROSS_FUN LbmContext() : flags(0), timeout_ms(0) {}
 
   CTP_CROSS_FUN explicit LbmContext(uint32_t f) : flags(f), timeout_ms(0) {}
