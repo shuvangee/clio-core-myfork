@@ -143,4 +143,9 @@ void CHIMAERA_FINALIZE();
 #define CLIO_PRIV_SHARED_ALLOC_T    CHI_PRIV_SHARED_ALLOC_T
 #define CLIO_PRIV_SHARED_ALLOC      CHI_PRIV_SHARED_ALLOC
 
+// --- Module namespace alias (chimaera:: -> clio_run::) ---
+// Pulled in last so the alias is visible to every TU that includes this
+// umbrella, regardless of which module headers come along for the ride.
+#include "clio_runtime/compat/chimaera_namespace.h"
+
 #endif  // CLIO_RUNTIME_INCLUDE_CLIO_RUNTIME_CLIO_RUNTIME_H_

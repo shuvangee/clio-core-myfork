@@ -928,14 +928,19 @@ function(add_chimod_client)
     message(FATAL_ERROR "Neither chimaera::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
   endif()
 
-  # Automatically add chimaera ChiMod dependencies in unified builds
+  # Automatically add foundational ChiMod dependencies in unified builds.
+  # Skip when the target being built IS one of those foundational modules
+  # (admin keeps LIB_NAME=chimaera_admin, bdev uses LIB_NAME=clio_bdev) — the
+  # old guard `NOT NAMESPACE STREQUAL "chimaera"` no longer works now that
+  # admin's own namespace is `clio_run`.
   set(CHIMAERA_CHIMOD_DEPS "")
-  if(NOT "${CHIMAERA_NAMESPACE}" STREQUAL "chimaera")
+  if(NOT "${CHIMAERA_MODULE_NAME}" STREQUAL "admin" AND
+     NOT "${CHIMAERA_MODULE_NAME}" STREQUAL "bdev")
     if(TARGET chimaera_admin_client)
       list(APPEND CHIMAERA_CHIMOD_DEPS chimaera_admin_client)
     endif()
-    if(TARGET chimaera_bdev_client)
-      list(APPEND CHIMAERA_CHIMOD_DEPS chimaera_bdev_client)
+    if(TARGET clio_bdev_client)
+      list(APPEND CHIMAERA_CHIMOD_DEPS clio_bdev_client)
     endif()
   endif()
 
@@ -1111,13 +1116,16 @@ function(add_chimod_runtime)
     message(STATUS "Runtime ${TARGET_NAME} linking to client ${CHIMAERA_MODULE_CLIENT_TARGET}")
   endif()
 
-  # Automatically add chimaera ChiMod dependencies in unified builds
-  if(NOT "${CHIMAERA_NAMESPACE}" STREQUAL "chimaera")
+  # Automatically add foundational ChiMod dependencies in unified builds.
+  # See the matching block in add_chimod_client for why we key off
+  # CHIMAERA_MODULE_NAME instead of CHIMAERA_NAMESPACE.
+  if(NOT "${CHIMAERA_MODULE_NAME}" STREQUAL "admin" AND
+     NOT "${CHIMAERA_MODULE_NAME}" STREQUAL "bdev")
     if(TARGET chimaera_admin_runtime)
       list(APPEND RUNTIME_LINK_LIBS chimaera_admin_runtime)
     endif()
-    if(TARGET chimaera_bdev_runtime)
-      list(APPEND RUNTIME_LINK_LIBS chimaera_bdev_runtime)
+    if(TARGET clio_bdev_runtime)
+      list(APPEND RUNTIME_LINK_LIBS clio_bdev_runtime)
     endif()
   endif()
 

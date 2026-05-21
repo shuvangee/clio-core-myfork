@@ -37,7 +37,7 @@
 #include <thread>
 
 using namespace std::chrono_literals;
-using TaskT = chimaera::admin::CreateTask;
+using TaskT = clio_run::admin::CreateTask;
 
 namespace {
 
@@ -68,15 +68,15 @@ void EnsureInit() {
   // through the bdev runtime.
   const chi::u64 kRamCapacity = 4ULL << 30;  // 4 GiB
   chi::PoolId bdev_pool_id(950, 0);
-  chimaera::bdev::Client bdev_client(bdev_pool_id);
+  clio_run::bdev::Client bdev_client(bdev_pool_id);
   auto bdev_create = bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(), std::string("gpu_vector_ram"),
-      bdev_pool_id, chimaera::bdev::BdevType::kRam, kRamCapacity);
+      bdev_pool_id, clio_run::bdev::BdevType::kRam, kRamCapacity);
   bdev_create.Wait();
   REQUIRE(bdev_create->GetReturnCode() == 0);
   std::this_thread::sleep_for(50ms);
   auto reg_task = cte_client->AsyncRegisterTarget(
-      "gpu_vector_ram", chimaera::bdev::BdevType::kRam, kRamCapacity,
+      "gpu_vector_ram", clio_run::bdev::BdevType::kRam, kRamCapacity,
       chi::PoolQuery::Local(), bdev_pool_id);
   reg_task.Wait();
   REQUIRE(reg_task->GetReturnCode() == 0);

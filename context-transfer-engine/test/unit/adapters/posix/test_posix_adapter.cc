@@ -93,7 +93,7 @@ bool initializeRuntime() {
   chi::u32 result = cte_client->RegisterTarget(
       ctp::ipc::MemContext(),
       kTestBackendFile,                  // target_name (backend file path)
-      chimaera::bdev::BdevType::kFile,   // bdev_type
+      clio_run::bdev::BdevType::kFile,   // bdev_type
       kTestFileSize * 10                 // total_size
   );
   if (result != 0) {

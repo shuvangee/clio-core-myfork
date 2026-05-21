@@ -124,7 +124,7 @@ struct CompressorConfig {
 /**
  * CreateTask - Use GetOrCreatePoolTask for standard pool creation
  */
-using CreateTask = chimaera::admin::GetOrCreatePoolTask<CompressorConfig>;
+using CreateTask = clio_run::admin::GetOrCreatePoolTask<CompressorConfig>;
 
 /**
  * DestroyTask - Cleanup the compressor container
@@ -165,7 +165,7 @@ struct TargetState {
         bytes_written_(written), last_updated_(std::chrono::steady_clock::now()) {}
 };
 
-using MonitorTask = chimaera::admin::MonitorTask;
+using MonitorTask = clio_run::admin::MonitorTask;
 
 /**
  * Compression telemetry data structure for performance monitoring

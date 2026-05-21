@@ -53,7 +53,7 @@
  * Responsible for pool creation/destruction and runtime shutdown.
  */
 
-namespace chimaera::admin {
+namespace clio_run::admin {
 
 /**
  * CreateParams for admin chimod
@@ -2003,6 +2003,6 @@ struct RegisterGpuContainerTask : public chi::Task {
   }
 };
 
-}  // namespace chimaera::admin
+}  // namespace clio_run::admin
 
 #endif  // ADMIN_TASKS_H_

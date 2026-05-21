@@ -118,7 +118,7 @@ class Client : public chi::ContainerClient {
    * @param pool_query Pool query for task routing (default: Dynamic)
    */
   chi::Future<RegisterTargetTask> AsyncRegisterTarget(
-      const std::string &target_name, chimaera::bdev::BdevType bdev_type,
+      const std::string &target_name, clio_run::bdev::BdevType bdev_type,
       chi::u64 total_size,
       const chi::PoolQuery &target_query = chi::PoolQuery::Local(),
       const chi::PoolId &bdev_id = chi::PoolId::GetNull(),

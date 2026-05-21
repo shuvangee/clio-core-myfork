@@ -9,7 +9,7 @@
  * Auto-generated method definitions for bdev
  */
 
-namespace chimaera::bdev {
+namespace clio_run::bdev {
 
 namespace Method {
 // Inherited methods
@@ -45,6 +45,6 @@ inline const std::vector<std::string>& GetMethodNames() {
 }
 }  // namespace Method
 
-}  // namespace chimaera::bdev
+}  // namespace clio_run::bdev
 
 #endif  // BDEV_AUTOGEN_METHODS_H_

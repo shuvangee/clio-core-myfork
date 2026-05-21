@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 
 # Create client library
 add_chimod_client(
+  LIB_NAME chimaera_MOD_NAME
   SOURCES
     src/MOD_NAME_client.cc
   INCLUDE_DIRECTORIES
@@ -11,6 +12,7 @@ add_chimod_client(
 
 # Create runtime library
 add_chimod_runtime(
+  LIB_NAME chimaera_MOD_NAME
   SOURCES
     src/MOD_NAME_runtime.cc
     src/autogen/MOD_NAME_lib_exec.cc

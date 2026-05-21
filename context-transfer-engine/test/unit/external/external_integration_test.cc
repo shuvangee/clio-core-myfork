@@ -151,7 +151,7 @@ private:
             chi::u32 result = cte_client_->RegisterTarget(
                 ctp::ipc::MemContext(),
                 target_name,
-                chimaera::bdev::BdevType::kFile,
+                clio_run::bdev::BdevType::kFile,
                 target_size
             );
 

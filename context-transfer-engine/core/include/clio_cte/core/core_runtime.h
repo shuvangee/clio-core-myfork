@@ -362,7 +362,7 @@ private:
   /**
    * Get the persistence level for a target from its storage device config
    */
-  chimaera::bdev::PersistenceLevel GetPersistenceLevelForTarget(
+  clio_run::bdev::PersistenceLevel GetPersistenceLevelForTarget(
       const std::string &target_name);
 
   /**

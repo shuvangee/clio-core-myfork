@@ -201,16 +201,16 @@ int main(int argc, char* argv[]) {
 
     // Create bdev storage target
     chi::PoolId bdev_pool_id(200, 0);
-    chimaera::bdev::Client bdev_client(bdev_pool_id);
+    clio_run::bdev::Client bdev_client(bdev_pool_id);
     auto bdev_create_task = bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), kTestStoragePath,
-                                                     bdev_pool_id, chimaera::bdev::BdevType::kFile);
+                                                     bdev_pool_id, clio_run::bdev::BdevType::kFile);
     bdev_create_task.Wait();
     std::this_thread::sleep_for(100ms);
 
     // Register storage target with CTE
     auto *cte_client = CLIO_CTE_CLIENT;
     auto reg_task = cte_client->AsyncRegisterTarget(kTestStoragePath,
-                                                     chimaera::bdev::BdevType::kFile,
+                                                     clio_run::bdev::BdevType::kFile,
                                                      kTestTargetSize, chi::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     std::this_thread::sleep_for(100ms);

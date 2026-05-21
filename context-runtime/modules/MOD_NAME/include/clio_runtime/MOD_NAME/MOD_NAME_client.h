@@ -46,7 +46,7 @@
  * Task cleanup is automatic when Future goes out of scope after Wait().
  */
 
-namespace chimaera::MOD_NAME {
+namespace clio_run::MOD_NAME {
 
 class Client : public chi::ContainerClient {
  public:
@@ -217,6 +217,6 @@ class Client : public chi::ContainerClient {
   }
 };
 
-}  // namespace chimaera::MOD_NAME
+}  // namespace clio_run::MOD_NAME
 
 #endif  // MOD_NAME_CLIENT_H_

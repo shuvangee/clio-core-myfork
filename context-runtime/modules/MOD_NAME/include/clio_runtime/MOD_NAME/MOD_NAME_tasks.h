@@ -45,9 +45,9 @@
  * Defines the tasks for Create and Custom methods.
  */
 
-namespace chimaera::MOD_NAME {
+namespace clio_run::MOD_NAME {
 
-using MonitorTask = chimaera::admin::MonitorTask;
+using MonitorTask = clio_run::admin::MonitorTask;
 
 /**
  * CreateParams for MOD_NAME chimod
@@ -78,7 +78,7 @@ struct CreateParams {
  * Type alias for GetOrCreatePoolTask with CreateParams (uses kGetOrCreatePool method)
  * Non-admin modules should use GetOrCreatePoolTask instead of BaseCreateTask
  */
-using CreateTask = chimaera::admin::GetOrCreatePoolTask<CreateParams>;
+using CreateTask = clio_run::admin::GetOrCreatePoolTask<CreateParams>;
 
 /**
  * CustomTask - Example custom operation
@@ -533,8 +533,8 @@ struct SubtaskTestTask : public chi::Task {
  * Standard DestroyTask for MOD_NAME
  * All ChiMods should use the same DestroyTask structure from admin
  */
-using DestroyTask = chimaera::admin::DestroyTask;
+using DestroyTask = clio_run::admin::DestroyTask;
 
-} // namespace chimaera::MOD_NAME
+} // namespace clio_run::MOD_NAME
 
 #endif // MOD_NAME_TASKS_H_

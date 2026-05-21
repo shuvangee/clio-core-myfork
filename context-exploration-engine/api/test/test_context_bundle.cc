@@ -172,7 +172,7 @@ void test_bundle_and_retrieve_workflow() {
   auto* cte_client = CLIO_CTE_CLIENT;
   auto register_task = cte_client->AsyncRegisterTarget(
       "ram::cee_test_storage",  // Target name (RAM storage)
-      chimaera::bdev::BdevType::kRam,  // RAM block device type
+      clio_run::bdev::BdevType::kRam,  // RAM block device type
       4ULL * 1024 * 1024 * 1024,  // 4GB capacity
       chi::PoolQuery::Local(),  // Local pool query for single-node
       chi::PoolId(800, 0));  // Explicit bdev pool ID

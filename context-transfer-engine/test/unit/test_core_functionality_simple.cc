@@ -243,13 +243,13 @@ TEST_CASE("Target Configuration Validation", "[cte][core][target][config]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("File-based target configuration") {
     const std::string target_name = "test_target_validation";
-    const chimaera::bdev::BdevType bdev_type = chimaera::bdev::BdevType::kFile;
+    const clio_run::bdev::BdevType bdev_type = clio_run::bdev::BdevType::kFile;
     
     // Verify configuration parameters are valid
     REQUIRE(!target_name.empty());
     REQUIRE(!fixture->test_storage_path_.empty());
     REQUIRE(CTECoreTestFixture::kTestTargetSize > 0);
-    REQUIRE(bdev_type == chimaera::bdev::BdevType::kFile);  // Use bdev_type to avoid unused warning
+    REQUIRE(bdev_type == clio_run::bdev::BdevType::kFile);  // Use bdev_type to avoid unused warning
     
     INFO("Target configuration validated:");
     INFO("  Name: " << target_name);
@@ -383,14 +383,14 @@ TEST_CASE("Task Structure Validation", "[cte][core][tasks]") {
     // Test task parameter types and ranges
     const chi::u32 test_result_code = 0;
     const chi::u64 test_total_size = 1024 * 1024;  // 1MB
-    const chimaera::bdev::BdevType test_bdev_type = chimaera::bdev::BdevType::kFile;
+    const clio_run::bdev::BdevType test_bdev_type = clio_run::bdev::BdevType::kFile;
     const chi::u32 test_tag_id = 100;
     const chi::u32 test_blob_id = 200;
     const float test_score = 0.5f;
     
     REQUIRE(test_result_code == 0);
     REQUIRE(test_total_size > 0);
-    REQUIRE(test_bdev_type == chimaera::bdev::BdevType::kFile);
+    REQUIRE(test_bdev_type == clio_run::bdev::BdevType::kFile);
     REQUIRE(test_tag_id > 0);
     REQUIRE(test_blob_id > 0);
     REQUIRE(test_score >= 0.0f);

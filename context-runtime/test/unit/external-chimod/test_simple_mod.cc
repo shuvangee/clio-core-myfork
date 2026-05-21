@@ -75,7 +75,7 @@ int main() {
 
     // Step 2: Create admin client (required for pool management)
     HLOG(kInfo, "\n2. Creating admin client...");
-    chimaera::admin::Client admin_client(chi::kAdminPoolId);
+    clio_run::admin::Client admin_client(chi::kAdminPoolId);
     HLOG(kInfo, "Admin client created with pool ID: {}", chi::kAdminPoolId);
 
     // Step 3: Create simple_mod client (from external_test namespace)
@@ -123,7 +123,7 @@ int main() {
   HIPRINT("External chimaera_repo.yaml configuration");
   HIPRINT("add_chimod_client()/add_chimod_runtime() CMake functions");
   HIPRINT("install_chimod() CMake function usage");
-  HIPRINT("find_package(chimaera::core) linking");
+  HIPRINT("find_package(chimaera) linking");
   HIPRINT("External module directory structure");
   HIPRINT("CHI_TASK_CC macro with external library name");
 

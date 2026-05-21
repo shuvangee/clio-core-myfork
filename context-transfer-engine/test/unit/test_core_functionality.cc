@@ -352,7 +352,7 @@ class CTECoreFunctionalTestFixture {
    * Async helper: Register target
    */
   chi::u32 RegisterTargetAsync(const std::string& target_name,
-                                chimaera::bdev::BdevType bdev_type,
+                                clio_run::bdev::BdevType bdev_type,
                                 chi::u64 capacity, chi::PoolQuery query,
                                 chi::PoolId bdev_id) {
     auto task = core_client_->AsyncRegisterTarget(target_name, bdev_type, capacity, query, bdev_id);
@@ -511,7 +511,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
 
     // ACTUAL FUNCTIONAL TEST - call the real RegisterTarget API
     chi::u32 result = fixture->RegisterTargetAsync(
-        target_name, chimaera::bdev::BdevType::kFile,
+        target_name, clio_run::bdev::BdevType::kFile,
         CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
         chi::PoolId(600, 0));
 
@@ -551,7 +551,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
   //     chi::u32 result = fixture->RegisterTargetAsync(
   //         fixture->mctx_,
   //         "", // Empty name should cause failure
-  //         chimaera::bdev::BdevType::kFile,
+  //         clio_run::bdev::BdevType::kFile,
   //         CTECoreFunctionalTestFixture::kTestTargetSize);
 
   //     // FUNCTIONAL TEST - verify real error handling
@@ -573,7 +573,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
 
     // ACTUAL FUNCTIONAL TEST - call the real AsyncRegisterTarget API
     auto register_task = fixture->core_client_->AsyncRegisterTarget(
-        target_name, chimaera::bdev::BdevType::kFile,
+        target_name, clio_run::bdev::BdevType::kFile,
         CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
         chi::PoolId(601, 0));
 
@@ -622,7 +622,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
   // matters for bdev creation
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, chimaera::bdev::BdevType::kFile,
+      target_name, clio_run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(602, 0));
   REQUIRE(reg_result == 0);
@@ -895,7 +895,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
   // matters for bdev creation
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, chimaera::bdev::BdevType::kFile,
+      target_name, clio_run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(603, 0));
   REQUIRE(reg_result == 0);
@@ -1282,7 +1282,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
 
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, chimaera::bdev::BdevType::kFile,
+      target_name, clio_run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(604, 0));
   REQUIRE(reg_result == 0);
@@ -1801,7 +1801,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Comprehensive Integration",
   INFO("Step 2: Registering target...");
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, chimaera::bdev::BdevType::kFile,
+      target_name, clio_run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(605, 0));
   REQUIRE(reg_result == 0);
@@ -1959,7 +1959,7 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, chimaera::bdev::BdevType::kFile,
+      target_name, clio_run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(606, 0));
   REQUIRE(reg_result == 0);
@@ -2239,7 +2239,7 @@ TEST_CASE("End-to-End CTE Core Workflow", "[cte][core][integration]") {
     std::string target_name =
         fixture->test_storage_path_ + "_" + target_suffixes[i];
     chi::u32 result = fixture->RegisterTargetAsync(
-        target_name, chimaera::bdev::BdevType::kFile,
+        target_name, clio_run::bdev::BdevType::kFile,
         CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
         chi::PoolId(607 + static_cast<chi::u32>(i), 0));
     REQUIRE(result == 0);
@@ -2349,7 +2349,7 @@ TEST_CASE("FUNCTIONAL - Distributed Execution Validation",
   // Use the fixture->test_storage_path_ as target_name
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, chimaera::bdev::BdevType::kFile,
+      target_name, clio_run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(608, 0));
   REQUIRE(reg_result == 0);

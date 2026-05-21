@@ -113,7 +113,7 @@ public:
       // but when it's absent (e.g., compute nodes), the pool has none.
       auto reg_task = cte_client->AsyncRegisterTarget(
           "ram::cee_test_cache",
-          chimaera::bdev::BdevType::kRam,
+          clio_run::bdev::BdevType::kRam,
           512 * 1024 * 1024,             // 512 MB
           chi::PoolQuery::Local(),
           chi::PoolId(512, 10));          // explicit bdev pool id

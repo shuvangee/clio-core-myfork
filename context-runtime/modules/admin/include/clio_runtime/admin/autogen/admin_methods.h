@@ -9,7 +9,7 @@
  * Auto-generated method definitions for admin
  */
 
-namespace chimaera::admin {
+namespace clio_run::admin {
 
 namespace Method {
 // Inherited methods
@@ -79,6 +79,6 @@ inline const std::vector<std::string>& GetMethodNames() {
 }
 }  // namespace Method
 
-}  // namespace chimaera::admin
+}  // namespace clio_run::admin
 
 #endif  // ADMIN_AUTOGEN_METHODS_H_

@@ -49,7 +49,7 @@
 
 #include "clio_ctp/util/timer.h"
 
-namespace chimaera::bdev {
+namespace clio_run::bdev {
 
 //===========================================================================
 // WorkerIOContext Implementation
@@ -1314,7 +1314,7 @@ void Runtime::PostGpuContainerCreate() {
   // kRam/kFile and use the device-aware memcpy hook.
 }
 
-}  // namespace chimaera::bdev
+}  // namespace clio_run::bdev
 
 // Define ChiMod entry points using CHI_TASK_CC macro
-CHI_TASK_CC(chimaera::bdev::Runtime)
+CHI_TASK_CC(clio_run::bdev::Runtime)

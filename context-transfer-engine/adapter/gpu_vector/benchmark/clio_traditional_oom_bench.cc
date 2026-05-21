@@ -148,10 +148,10 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
   std::this_thread::sleep_for(50ms);
 
   chi::PoolId bdev_pool_id(951, 0);
-  chimaera::bdev::Client bdev_client(bdev_pool_id);
+  clio_run::bdev::Client bdev_client(bdev_pool_id);
   auto bdev_create = bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(), std::string("trad_bench_ram"),
-      bdev_pool_id, chimaera::bdev::BdevType::kRam, bdev_capacity_bytes);
+      bdev_pool_id, clio_run::bdev::BdevType::kRam, bdev_capacity_bytes);
   bdev_create.Wait();
   if (bdev_create->GetReturnCode() != 0) {
     std::fprintf(stderr, "[INIT] bdev create failed rc=%u\n",
@@ -160,7 +160,7 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
   }
   std::this_thread::sleep_for(50ms);
   auto reg_task = cte_client->AsyncRegisterTarget(
-      "trad_bench_ram", chimaera::bdev::BdevType::kRam,
+      "trad_bench_ram", clio_run::bdev::BdevType::kRam,
       bdev_capacity_bytes, chi::PoolQuery::Local(), bdev_pool_id);
   reg_task.Wait();
   if (reg_task->GetReturnCode() != 0) {

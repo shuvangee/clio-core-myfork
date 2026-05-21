@@ -111,17 +111,17 @@ int main(int argc, char **argv) {
   // -------- Pool setup --------
   // Rank 0 (globally) creates the pool with N containers (one per node).
   // Everyone else waits on MPI_Barrier and reuses the same pool_id.
-  chimaera::bdev::Client bdev_client;
+  clio_run::bdev::Client bdev_client;
   if (world_rank == 0 && args.create_pool) {
-    chimaera::admin::Client admin_client;
-    chimaera::bdev::CreateParams params;
-    params.bdev_type_ = chimaera::bdev::BdevType::kRam;
+    clio_run::admin::Client admin_client;
+    clio_run::bdev::CreateParams params;
+    params.bdev_type_ = clio_run::bdev::BdevType::kRam;
     params.total_size_ = args.tier_bytes;
     params.alignment_ = 4096;
 
     auto create_task = bdev_client.AsyncCreate(
         chi::PoolQuery::Broadcast(), args.pool_name, args.pool_id,
-        chimaera::bdev::BdevType::kRam, args.tier_bytes);
+        clio_run::bdev::BdevType::kRam, args.tier_bytes);
     create_task.Wait();
     if (create_task->return_code_ != 0) {
       HLOG(kError, "AsyncCreate failed rc={}",
@@ -160,15 +160,15 @@ int main(int argc, char **argv) {
   // the oldest before issuing a new one. This is how you actually
   // saturate a cross-node DEALER without the client-side Wait-after-
   // every-send anti-pattern we see in the FUSE adapter.
-  std::vector<chi::Future<chimaera::bdev::WriteTask>> inflight;
+  std::vector<chi::Future<clio_run::bdev::WriteTask>> inflight;
   inflight.reserve(args.depth);
 
   MPI_Barrier(MPI_COMM_WORLD);
   auto t_start = std::chrono::steady_clock::now();
 
   for (size_t i = 0; i < args.num_ops; ++i) {
-    chi::priv::vector<chimaera::bdev::Block> blocks(CTP_MALLOC);
-    chimaera::bdev::Block blk;
+    chi::priv::vector<clio_run::bdev::Block> blocks(CTP_MALLOC);
+    clio_run::bdev::Block blk;
     blk.offset_ = rank_offset + i * args.io_size;
     blk.size_ = args.io_size;
     blocks.push_back(blk);

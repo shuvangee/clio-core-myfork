@@ -52,7 +52,7 @@
  * Provides block device operations with async I/O and data allocation management
  */
 
-namespace chimaera::bdev {
+namespace clio_run::bdev {
 
 /**
  * Per-worker I/O context for parallel file access
@@ -227,7 +227,7 @@ class Heap {
 class Runtime : public chi::Container {
  public:
   // Required typedef for CHI_TASK_CC macro
-  using CreateParams = chimaera::bdev::CreateParams;
+  using CreateParams = clio_run::bdev::CreateParams;
   
   Runtime() : bdev_type_(BdevType::kFile), file_size_(0), alignment_(4096),
               io_depth_(32),
@@ -503,6 +503,6 @@ class Runtime : public chi::Container {
                                 double duration_us);
 };
 
-} // namespace chimaera::bdev
+} // namespace clio_run::bdev
 
 #endif // BDEV_RUNTIME_H_

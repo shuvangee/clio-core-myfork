@@ -44,7 +44,7 @@
 
 namespace clio_cae::core {
 
-using MonitorTask = chimaera::admin::MonitorTask;
+using MonitorTask = clio_run::admin::MonitorTask;
 
 /**
  * CreateParams for core chimod
@@ -71,7 +71,7 @@ struct CreateParams {
  * CreateTask - Initialize the core container
  * Type alias for GetOrCreatePoolTask with CreateParams
  */
-using CreateTask = chimaera::admin::GetOrCreatePoolTask<CreateParams>;
+using CreateTask = clio_run::admin::GetOrCreatePoolTask<CreateParams>;
 
 /**
  * DestroyTask - Destroy the core container

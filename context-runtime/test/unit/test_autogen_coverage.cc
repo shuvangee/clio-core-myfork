@@ -93,7 +93,7 @@ TEST_CASE("Autogen - Admin MonitorTask SaveTask/LoadTask", "[autogen][admin][mon
 
   SECTION("SaveTask and LoadTask for MonitorTask") {
     // Create MonitorTask
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (orig_task.IsNull()) {
@@ -104,16 +104,16 @@ TEST_CASE("Autogen - Admin MonitorTask SaveTask/LoadTask", "[autogen][admin][mon
     // SaveTask (SaveIn)
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->SaveTask(chimaera::admin::Method::kMonitor, save_archive, task_ptr);
+    container->SaveTask(clio_run::admin::Method::kMonitor, save_archive, task_ptr);
 
     // LoadTask (LoadIn)
     std::string save_data = save_archive.GetData();
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>();
     ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
-    container->LoadTask(chimaera::admin::Method::kMonitor, load_archive, loaded_ptr);
+    container->LoadTask(clio_run::admin::Method::kMonitor, load_archive, loaded_ptr);
 
     REQUIRE(!loaded_task.IsNull());
     INFO("MonitorTask SaveTask/LoadTask completed successfully");
@@ -137,7 +137,7 @@ TEST_CASE("Autogen - Admin FlushTask SaveTask/LoadTask", "[autogen][admin][flush
   }
 
   SECTION("SaveTask and LoadTask for FlushTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -147,15 +147,15 @@ TEST_CASE("Autogen - Admin FlushTask SaveTask/LoadTask", "[autogen][admin][flush
 
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->SaveTask(chimaera::admin::Method::kFlush, save_archive, task_ptr);
+    container->SaveTask(clio_run::admin::Method::kFlush, save_archive, task_ptr);
 
     std::string save_data = save_archive.GetData();
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::admin::FlushTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::admin::FlushTask>();
     ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
-    container->LoadTask(chimaera::admin::Method::kFlush, load_archive, loaded_ptr);
+    container->LoadTask(clio_run::admin::Method::kFlush, load_archive, loaded_ptr);
 
     REQUIRE(!loaded_task.IsNull());
     INFO("FlushTask SaveTask/LoadTask completed successfully");
@@ -178,7 +178,7 @@ TEST_CASE("Autogen - Admin ClientConnectTask SaveTask/LoadTask", "[autogen][admi
   }
 
   SECTION("SaveTask and LoadTask for ClientConnectTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -188,15 +188,15 @@ TEST_CASE("Autogen - Admin ClientConnectTask SaveTask/LoadTask", "[autogen][admi
 
     chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->SaveTask(chimaera::admin::Method::kClientConnect, save_archive, task_ptr);
+    container->SaveTask(clio_run::admin::Method::kClientConnect, save_archive, task_ptr);
 
     std::string save_data = save_archive.GetData();
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>();
     ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded_task.template Cast<chi::Task>();
-    container->LoadTask(chimaera::admin::Method::kClientConnect, load_archive, loaded_ptr);
+    container->LoadTask(clio_run::admin::Method::kClientConnect, load_archive, loaded_ptr);
 
     REQUIRE(!loaded_task.IsNull());
     INFO("ClientConnectTask SaveTask/LoadTask completed successfully");
@@ -221,14 +221,14 @@ TEST_CASE("Autogen - Admin NewTask for all methods", "[autogen][admin][newtask]"
   SECTION("NewTask for each admin method") {
     // Test NewTask for various admin methods
     std::vector<chi::u32> methods = {
-        chimaera::admin::Method::kCreate,
-        chimaera::admin::Method::kDestroy,
-        chimaera::admin::Method::kGetOrCreatePool,
-        chimaera::admin::Method::kDestroyPool,
-        chimaera::admin::Method::kFlush,
-        chimaera::admin::Method::kClientConnect,
-        chimaera::admin::Method::kMonitor,
-        chimaera::admin::Method::kSubmitBatch
+        clio_run::admin::Method::kCreate,
+        clio_run::admin::Method::kDestroy,
+        clio_run::admin::Method::kGetOrCreatePool,
+        clio_run::admin::Method::kDestroyPool,
+        clio_run::admin::Method::kFlush,
+        clio_run::admin::Method::kClientConnect,
+        clio_run::admin::Method::kMonitor,
+        clio_run::admin::Method::kSubmitBatch
     };
 
     for (auto method : methods) {
@@ -254,7 +254,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
   }
 
   SECTION("NewCopyTask for FlushTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -263,7 +263,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
     }
 
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    auto copied_task = container->NewCopyTask(chimaera::admin::Method::kFlush, task_ptr, false);
+    auto copied_task = container->NewCopyTask(clio_run::admin::Method::kFlush, task_ptr, false);
 
     if (!copied_task.IsNull()) {
       INFO("NewCopyTask for FlushTask succeeded");
@@ -274,7 +274,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
   }
 
   SECTION("NewCopyTask for MonitorTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (orig_task.IsNull()) {
@@ -283,7 +283,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
     }
 
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    auto copied_task = container->NewCopyTask(chimaera::admin::Method::kMonitor, task_ptr, false);
+    auto copied_task = container->NewCopyTask(clio_run::admin::Method::kMonitor, task_ptr, false);
 
     if (!copied_task.IsNull()) {
       INFO("NewCopyTask for MonitorTask succeeded");
@@ -294,7 +294,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
   }
 
   SECTION("NewCopyTask for ClientConnectTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -303,7 +303,7 @@ TEST_CASE("Autogen - Admin NewCopyTask", "[autogen][admin][copytask]") {
     }
 
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    auto copied_task = container->NewCopyTask(chimaera::admin::Method::kClientConnect, task_ptr, false);
+    auto copied_task = container->NewCopyTask(clio_run::admin::Method::kClientConnect, task_ptr, false);
 
     if (!copied_task.IsNull()) {
       INFO("NewCopyTask for ClientConnectTask succeeded");
@@ -327,9 +327,9 @@ TEST_CASE("Autogen - Admin Aggregate", "[autogen][admin][aggregate]") {
   }
 
   SECTION("Aggregate for FlushTask") {
-    auto origin_task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto origin_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
-    auto replica_task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto replica_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (origin_task.IsNull() || replica_task.IsNull()) {
@@ -349,9 +349,9 @@ TEST_CASE("Autogen - Admin Aggregate", "[autogen][admin][aggregate]") {
   }
 
   SECTION("Aggregate for MonitorTask") {
-    auto origin_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto origin_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
-    auto replica_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto replica_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (origin_task.IsNull() || replica_task.IsNull()) {
@@ -384,7 +384,7 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
   }
 
   SECTION("LocalSaveTask and LocalLoadTask for FlushTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -396,13 +396,13 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->LocalSaveTask(chimaera::admin::Method::kFlush, save_archive, task_ptr);
+    container->LocalSaveTask(clio_run::admin::Method::kFlush, save_archive, task_ptr);
 
     // LocalLoadTask
-    auto loaded_task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto loaded_task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!loaded_task.IsNull()) {
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      container->LocalLoadTask(chimaera::admin::Method::kFlush, load_archive, loaded_task);
+      container->LocalLoadTask(clio_run::admin::Method::kFlush, load_archive, loaded_task);
       INFO("LocalSaveTask/LocalLoadTask for FlushTask completed");
       CHI_IPC->DelTask(loaded_task);
     }
@@ -411,7 +411,7 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
   }
 
   SECTION("LocalSaveTask and LocalLoadTask for MonitorTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (orig_task.IsNull()) {
@@ -422,12 +422,12 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->LocalSaveTask(chimaera::admin::Method::kMonitor, save_archive, task_ptr);
+    container->LocalSaveTask(clio_run::admin::Method::kMonitor, save_archive, task_ptr);
 
-    auto loaded_task = container->NewTask(chimaera::admin::Method::kMonitor);
+    auto loaded_task = container->NewTask(clio_run::admin::Method::kMonitor);
     if (!loaded_task.IsNull()) {
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      container->LocalLoadTask(chimaera::admin::Method::kMonitor, load_archive, loaded_task);
+      container->LocalLoadTask(clio_run::admin::Method::kMonitor, load_archive, loaded_task);
       INFO("LocalSaveTask/LocalLoadTask for MonitorTask completed");
       CHI_IPC->DelTask(loaded_task);
     }
@@ -436,7 +436,7 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
   }
 
   SECTION("LocalSaveTask and LocalLoadTask for ClientConnectTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -447,12 +447,12 @@ TEST_CASE("Autogen - Admin LocalSaveTask/LocalLoadTask", "[autogen][admin][local
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->LocalSaveTask(chimaera::admin::Method::kClientConnect, save_archive, task_ptr);
+    container->LocalSaveTask(clio_run::admin::Method::kClientConnect, save_archive, task_ptr);
 
-    auto loaded_task = container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto loaded_task = container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!loaded_task.IsNull()) {
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      container->LocalLoadTask(chimaera::admin::Method::kClientConnect, load_archive, loaded_task);
+      container->LocalLoadTask(clio_run::admin::Method::kClientConnect, load_archive, loaded_task);
       INFO("LocalSaveTask/LocalLoadTask for ClientConnectTask completed");
       CHI_IPC->DelTask(loaded_task);
     }
@@ -482,9 +482,9 @@ TEST_CASE("Autogen - Admin DelTask for all methods", "[autogen][admin][deltask]"
   SECTION("DelTask through container for various methods") {
     // Create and delete tasks through container's DelTask method
     std::vector<std::pair<chi::u32, std::string>> methods = {
-        {chimaera::admin::Method::kFlush, "FlushTask"},
-        {chimaera::admin::Method::kMonitor, "MonitorTask"},
-        {chimaera::admin::Method::kClientConnect, "ClientConnectTask"},
+        {clio_run::admin::Method::kFlush, "FlushTask"},
+        {clio_run::admin::Method::kMonitor, "MonitorTask"},
+        {clio_run::admin::Method::kClientConnect, "ClientConnectTask"},
     };
 
     for (const auto& [method, name] : methods) {
@@ -508,31 +508,31 @@ TEST_CASE("Autogen - Bdev NewTask for all methods", "[autogen][bdev][newtask]") 
 
   SECTION("NewTask using IPC manager for Bdev tasks") {
     // Test creating various bdev task types
-    auto alloc_task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto alloc_task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!alloc_task.IsNull()) {
       INFO("AllocateBlocksTask created successfully");
       CHI_IPC->DelTask(alloc_task);
     }
 
-    auto free_task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto free_task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!free_task.IsNull()) {
       INFO("FreeBlocksTask created successfully");
       CHI_IPC->DelTask(free_task);
     }
 
-    auto write_task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto write_task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!write_task.IsNull()) {
       INFO("WriteTask created successfully");
       CHI_IPC->DelTask(write_task);
     }
 
-    auto read_task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto read_task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!read_task.IsNull()) {
       INFO("ReadTask created successfully");
       CHI_IPC->DelTask(read_task);
     }
 
-    auto stats_task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto stats_task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!stats_task.IsNull()) {
       INFO("GetStatsTask created successfully");
       CHI_IPC->DelTask(stats_task);
@@ -546,7 +546,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
   auto* ipc_manager = CHI_IPC;
 
   SECTION("SaveTask and LoadTask for AllocateBlocksTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>(
         chi::CreateTaskId(), chi::PoolId(100, 0), chi::PoolQuery::Local(), 4096);
 
     if (orig_task.IsNull()) {
@@ -562,7 +562,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     load_archive >> *loaded_task;
 
     REQUIRE(!loaded_task.IsNull());
@@ -573,7 +573,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
   }
 
   SECTION("SaveTask and LoadTask for GetStatsTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>(
         chi::CreateTaskId(), chi::PoolId(100, 0), chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -588,7 +588,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     load_archive >> *loaded_task;
 
     REQUIRE(!loaded_task.IsNull());
@@ -599,7 +599,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
   }
 
   SECTION("SaveTask and LoadTask for FreeBlocksTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
 
     if (orig_task.IsNull()) {
       INFO("Failed to create FreeBlocksTask - skipping test");
@@ -613,7 +613,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     load_archive >> *loaded_task;
 
     REQUIRE(!loaded_task.IsNull());
@@ -624,7 +624,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
   }
 
   SECTION("SaveTask and LoadTask for WriteTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
 
     if (orig_task.IsNull()) {
       INFO("Failed to create WriteTask - skipping test");
@@ -638,7 +638,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     load_archive >> *loaded_task;
 
     REQUIRE(!loaded_task.IsNull());
@@ -649,7 +649,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
   }
 
   SECTION("SaveTask and LoadTask for ReadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
 
     if (orig_task.IsNull()) {
       INFO("Failed to create ReadTask - skipping test");
@@ -663,7 +663,7 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask", "[autogen][bdev][saveload]") {
     chi::LoadTaskArchive load_archive(save_data);
     load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-    auto loaded_task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto loaded_task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     load_archive >> *loaded_task;
 
     REQUIRE(!loaded_task.IsNull());
@@ -691,19 +691,19 @@ TEST_CASE("Autogen - Admin StopRuntimeTask coverage", "[autogen][admin][stoprunt
   }
 
   SECTION("NewTask for StopRuntimeTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto new_task = container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!new_task.IsNull()) {
       INFO("NewTask for StopRuntimeTask succeeded");
 
       // Test NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kStopRuntime, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kStopRuntime, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for StopRuntimeTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Test Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kStopRuntime);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kStopRuntime);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for StopRuntimeTask succeeded");
@@ -728,34 +728,34 @@ TEST_CASE("Autogen - Admin DestroyPoolTask coverage", "[autogen][admin][destroyp
   }
 
   SECTION("NewTask and operations for DestroyPoolTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kDestroyPool);
+    auto new_task = container->NewTask(clio_run::admin::Method::kDestroyPool);
     if (!new_task.IsNull()) {
       INFO("NewTask for DestroyPoolTask succeeded");
 
       // SaveTask/LoadTask
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kDestroyPool, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kDestroyPool, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kDestroyPool);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kDestroyPool);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kDestroyPool, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kDestroyPool, load_archive, loaded_task);
         INFO("SaveTask/LoadTask for DestroyPoolTask succeeded");
         CHI_IPC->DelTask(loaded_task);
       }
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kDestroyPool, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kDestroyPool, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for DestroyPoolTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kDestroyPool);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kDestroyPool);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for DestroyPoolTask succeeded");
@@ -780,19 +780,19 @@ TEST_CASE("Autogen - Admin SubmitBatchTask coverage", "[autogen][admin][submitba
   }
 
   SECTION("NewTask and operations for SubmitBatchTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto new_task = container->NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!new_task.IsNull()) {
       INFO("NewTask for SubmitBatchTask succeeded");
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kSubmitBatch, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kSubmitBatch, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for SubmitBatchTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kSubmitBatch);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kSubmitBatch);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for SubmitBatchTask succeeded");
@@ -817,19 +817,19 @@ TEST_CASE("Autogen - Admin CreateTask and DestroyTask coverage", "[autogen][admi
   }
 
   SECTION("NewTask and operations for CreateTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kCreate);
+    auto new_task = container->NewTask(clio_run::admin::Method::kCreate);
     if (!new_task.IsNull()) {
       INFO("NewTask for CreateTask succeeded");
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kCreate, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kCreate, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for CreateTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kCreate);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kCreate);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for CreateTask succeeded");
@@ -841,19 +841,19 @@ TEST_CASE("Autogen - Admin CreateTask and DestroyTask coverage", "[autogen][admi
   }
 
   SECTION("NewTask and operations for DestroyTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kDestroy);
+    auto new_task = container->NewTask(clio_run::admin::Method::kDestroy);
     if (!new_task.IsNull()) {
       INFO("NewTask for DestroyTask succeeded");
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kDestroy, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kDestroy, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for DestroyTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kDestroy);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kDestroy);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for DestroyTask succeeded");
@@ -878,19 +878,19 @@ TEST_CASE("Autogen - Admin GetOrCreatePoolTask coverage", "[autogen][admin][geto
   }
 
   SECTION("NewTask and operations for GetOrCreatePoolTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto new_task = container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!new_task.IsNull()) {
       INFO("NewTask for GetOrCreatePoolTask succeeded");
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kGetOrCreatePool, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kGetOrCreatePool, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for GetOrCreatePoolTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for GetOrCreatePoolTask succeeded");
@@ -915,19 +915,19 @@ TEST_CASE("Autogen - Admin SendTask and RecvTask coverage", "[autogen][admin][se
   }
 
   SECTION("NewTask and operations for SendTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kSend);
+    auto new_task = container->NewTask(clio_run::admin::Method::kSend);
     if (!new_task.IsNull()) {
       INFO("NewTask for SendTask succeeded");
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kSend, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kSend, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for SendTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kSend);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kSend);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for SendTask succeeded");
@@ -939,19 +939,19 @@ TEST_CASE("Autogen - Admin SendTask and RecvTask coverage", "[autogen][admin][se
   }
 
   SECTION("NewTask and operations for RecvTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kRecv);
+    auto new_task = container->NewTask(clio_run::admin::Method::kRecv);
     if (!new_task.IsNull()) {
       INFO("NewTask for RecvTask succeeded");
 
       // NewCopyTask
-      auto copied_task = container->NewCopyTask(chimaera::admin::Method::kRecv, new_task, false);
+      auto copied_task = container->NewCopyTask(clio_run::admin::Method::kRecv, new_task, false);
       if (!copied_task.IsNull()) {
         INFO("NewCopyTask for RecvTask succeeded");
         CHI_IPC->DelTask(copied_task);
       }
 
       // Aggregate
-      auto replica_task = container->NewTask(chimaera::admin::Method::kRecv);
+      auto replica_task = container->NewTask(clio_run::admin::Method::kRecv);
       if (!replica_task.IsNull()) {
         new_task.ptr_->Aggregate(replica_task.template Cast<chi::Task>());
         INFO("Aggregate for RecvTask succeeded");
@@ -1690,8 +1690,8 @@ TEST_CASE("Autogen - Bdev Task Copy and Aggregate", "[autogen][bdev][copy][aggre
   auto* ipc_manager = CHI_IPC;
 
   SECTION("Copy for AllocateBlocksTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task2->Copy(task1);
@@ -1702,8 +1702,8 @@ TEST_CASE("Autogen - Bdev Task Copy and Aggregate", "[autogen][bdev][copy][aggre
   }
 
   SECTION("Aggregate for GetStatsTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -1731,18 +1731,18 @@ TEST_CASE("Autogen - Admin Container SaveTask/LoadTask all methods", "[autogen][
   }
 
   SECTION("SaveTask/LoadTask for CreateTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kCreate);
+    auto new_task = container->NewTask(clio_run::admin::Method::kCreate);
     if (!new_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kCreate, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kCreate, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kCreate);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kCreate);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kCreate, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kCreate, load_archive, loaded_task);
         INFO("CreateTask SaveTask/LoadTask completed");
         CHI_IPC->DelTask(loaded_task);
       }
@@ -1751,18 +1751,18 @@ TEST_CASE("Autogen - Admin Container SaveTask/LoadTask all methods", "[autogen][
   }
 
   SECTION("SaveTask/LoadTask for StopRuntimeTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto new_task = container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!new_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kStopRuntime, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kStopRuntime, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kStopRuntime);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kStopRuntime);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kStopRuntime, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kStopRuntime, load_archive, loaded_task);
         INFO("StopRuntimeTask SaveTask/LoadTask completed");
         CHI_IPC->DelTask(loaded_task);
       }
@@ -1771,18 +1771,18 @@ TEST_CASE("Autogen - Admin Container SaveTask/LoadTask all methods", "[autogen][
   }
 
   SECTION("SaveTask/LoadTask for SubmitBatchTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto new_task = container->NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!new_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kSubmitBatch, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kSubmitBatch, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kSubmitBatch);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kSubmitBatch);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kSubmitBatch, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kSubmitBatch, load_archive, loaded_task);
         INFO("SubmitBatchTask SaveTask/LoadTask completed");
         CHI_IPC->DelTask(loaded_task);
       }
@@ -1791,18 +1791,18 @@ TEST_CASE("Autogen - Admin Container SaveTask/LoadTask all methods", "[autogen][
   }
 
   SECTION("SaveTask/LoadTask for SendTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kSend);
+    auto new_task = container->NewTask(clio_run::admin::Method::kSend);
     if (!new_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kSend, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kSend, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kSend);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kSend);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kSend, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kSend, load_archive, loaded_task);
         INFO("SendTask SaveTask/LoadTask completed");
         CHI_IPC->DelTask(loaded_task);
       }
@@ -1811,18 +1811,18 @@ TEST_CASE("Autogen - Admin Container SaveTask/LoadTask all methods", "[autogen][
   }
 
   SECTION("SaveTask/LoadTask for RecvTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kRecv);
+    auto new_task = container->NewTask(clio_run::admin::Method::kRecv);
     if (!new_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kRecv, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kRecv, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kRecv);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kRecv);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kRecv, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kRecv, load_archive, loaded_task);
         INFO("RecvTask SaveTask/LoadTask completed");
         CHI_IPC->DelTask(loaded_task);
       }
@@ -1831,18 +1831,18 @@ TEST_CASE("Autogen - Admin Container SaveTask/LoadTask all methods", "[autogen][
   }
 
   SECTION("SaveTask/LoadTask for GetOrCreatePoolTask") {
-    auto new_task = container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto new_task = container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!new_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kGetOrCreatePool, save_archive, new_task);
+      container->SaveTask(clio_run::admin::Method::kGetOrCreatePool, save_archive, new_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+      auto loaded_task = container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
       if (!loaded_task.IsNull()) {
-        container->LoadTask(chimaera::admin::Method::kGetOrCreatePool, load_archive, loaded_task);
+        container->LoadTask(clio_run::admin::Method::kGetOrCreatePool, load_archive, loaded_task);
         INFO("GetOrCreatePoolTask SaveTask/LoadTask completed");
         CHI_IPC->DelTask(loaded_task);
       }
@@ -1862,8 +1862,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
 
   SECTION("Copy for additional Admin task types") {
     // Test Copy for CreateTask
-    auto create1 = ipc_manager->NewTask<chimaera::admin::CreateTask>();
-    auto create2 = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+    auto create1 = ipc_manager->NewTask<clio_run::admin::CreateTask>();
+    auto create2 = ipc_manager->NewTask<clio_run::admin::CreateTask>();
     if (!create1.IsNull() && !create2.IsNull()) {
       create2->Copy(create1);
       INFO("CreateTask Copy completed");
@@ -1872,8 +1872,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
     }
 
     // Test Copy for DestroyTask
-    auto destroy1 = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
-    auto destroy2 = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+    auto destroy1 = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
+    auto destroy2 = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
     if (!destroy1.IsNull() && !destroy2.IsNull()) {
       destroy2->Copy(destroy1);
       INFO("DestroyTask Copy completed");
@@ -1882,8 +1882,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
     }
 
     // Test Copy for StopRuntimeTask
-    auto stop1 = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
-    auto stop2 = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+    auto stop1 = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
+    auto stop2 = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
     if (!stop1.IsNull() && !stop2.IsNull()) {
       stop2->Copy(stop1);
       INFO("StopRuntimeTask Copy completed");
@@ -1892,8 +1892,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
     }
 
     // Test Copy for DestroyPoolTask
-    auto pool1 = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
-    auto pool2 = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+    auto pool1 = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
+    auto pool2 = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
     if (!pool1.IsNull() && !pool2.IsNull()) {
       pool2->Copy(pool1);
       INFO("DestroyPoolTask Copy completed");
@@ -1904,8 +1904,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
 
   SECTION("Aggregate for additional Admin task types") {
     // Test Aggregate for CreateTask
-    auto create1 = ipc_manager->NewTask<chimaera::admin::CreateTask>();
-    auto create2 = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+    auto create1 = ipc_manager->NewTask<clio_run::admin::CreateTask>();
+    auto create2 = ipc_manager->NewTask<clio_run::admin::CreateTask>();
     if (!create1.IsNull() && !create2.IsNull()) {
       create1->Aggregate(create2.template Cast<chi::Task>());
       INFO("CreateTask Aggregate completed");
@@ -1914,8 +1914,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
     }
 
     // Test Aggregate for DestroyTask
-    auto destroy1 = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
-    auto destroy2 = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+    auto destroy1 = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
+    auto destroy2 = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
     if (!destroy1.IsNull() && !destroy2.IsNull()) {
       destroy1->Aggregate(destroy2.template Cast<chi::Task>());
       INFO("DestroyTask Aggregate completed");
@@ -1924,8 +1924,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
     }
 
     // Test Aggregate for StopRuntimeTask
-    auto stop1 = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
-    auto stop2 = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+    auto stop1 = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
+    auto stop2 = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
     if (!stop1.IsNull() && !stop2.IsNull()) {
       stop1->Aggregate(stop2.template Cast<chi::Task>());
       INFO("StopRuntimeTask Aggregate completed");
@@ -1934,8 +1934,8 @@ TEST_CASE("Autogen - Admin Additional Task operations", "[autogen][admin][additi
     }
 
     // Test Aggregate for DestroyPoolTask
-    auto pool1 = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
-    auto pool2 = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+    auto pool1 = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
+    auto pool2 = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
     if (!pool1.IsNull() && !pool2.IsNull()) {
       pool1->Aggregate(pool2.template Cast<chi::Task>());
       INFO("DestroyPoolTask Aggregate completed");
@@ -2383,8 +2383,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   auto* ipc_manager = CHI_IPC;
 
   SECTION("Copy for FreeBlocksTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task2->Copy(task1);
@@ -2395,8 +2395,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Copy for WriteTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task2->Copy(task1);
@@ -2407,8 +2407,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Copy for ReadTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task2->Copy(task1);
@@ -2419,8 +2419,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Copy for GetStatsTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task2->Copy(task1);
@@ -2431,8 +2431,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Aggregate for AllocateBlocksTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -2443,8 +2443,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Aggregate for FreeBlocksTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -2455,8 +2455,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Aggregate for WriteTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -2467,8 +2467,8 @@ TEST_CASE("Autogen - Bdev Additional Task Coverage", "[autogen][bdev][additional
   }
 
   SECTION("Aggregate for ReadTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
 
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -2489,9 +2489,9 @@ TEST_CASE("Autogen - Admin Additional Task Coverage", "[autogen][admin][addition
   auto* ipc_manager = CHI_IPC;
 
   SECTION("Copy for FlushTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto task1 = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
-    auto task2 = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto task2 = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (!task1.IsNull() && !task2.IsNull()) {
@@ -2503,9 +2503,9 @@ TEST_CASE("Autogen - Admin Additional Task Coverage", "[autogen][admin][addition
   }
 
   SECTION("Copy for MonitorTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto task1 = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
-    auto task2 = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto task2 = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (!task1.IsNull() && !task2.IsNull()) {
@@ -2517,9 +2517,9 @@ TEST_CASE("Autogen - Admin Additional Task Coverage", "[autogen][admin][addition
   }
 
   SECTION("Copy for ClientConnectTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto task1 = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
-    auto task2 = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto task2 = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (!task1.IsNull() && !task2.IsNull()) {
@@ -2531,9 +2531,9 @@ TEST_CASE("Autogen - Admin Additional Task Coverage", "[autogen][admin][addition
   }
 
   SECTION("Aggregate for FlushTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto task1 = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
-    auto task2 = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto task2 = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (!task1.IsNull() && !task2.IsNull()) {
@@ -2545,9 +2545,9 @@ TEST_CASE("Autogen - Admin Additional Task Coverage", "[autogen][admin][addition
   }
 
   SECTION("Aggregate for MonitorTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto task1 = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
-    auto task2 = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto task2 = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (!task1.IsNull() && !task2.IsNull()) {
@@ -2559,9 +2559,9 @@ TEST_CASE("Autogen - Admin Additional Task Coverage", "[autogen][admin][addition
   }
 
   SECTION("Aggregate for ClientConnectTask") {
-    auto task1 = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto task1 = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
-    auto task2 = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto task2 = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (!task1.IsNull() && !task2.IsNull()) {
@@ -2641,14 +2641,14 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask coverage", "[autogen][bdev][saveload
   auto* ipc_manager = CHI_IPC;
 
   SECTION("SaveTask/LoadTask for AllocateBlocksTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
       load_archive >> *loaded_task;
       INFO("AllocateBlocksTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2657,14 +2657,14 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask coverage", "[autogen][bdev][saveload
   }
 
   SECTION("SaveTask/LoadTask for FreeBlocksTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
       load_archive >> *loaded_task;
       INFO("FreeBlocksTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2673,14 +2673,14 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask coverage", "[autogen][bdev][saveload
   }
 
   SECTION("SaveTask/LoadTask for WriteTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
       load_archive >> *loaded_task;
       INFO("WriteTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2689,14 +2689,14 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask coverage", "[autogen][bdev][saveload
   }
 
   SECTION("SaveTask/LoadTask for ReadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
       load_archive >> *loaded_task;
       INFO("ReadTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2705,14 +2705,14 @@ TEST_CASE("Autogen - Bdev SaveTask/LoadTask coverage", "[autogen][bdev][saveload
   }
 
   SECTION("SaveTask/LoadTask for GetStatsTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
       load_archive >> *loaded_task;
       INFO("GetStatsTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2731,14 +2731,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   auto* ipc_manager = CHI_IPC;
 
   SECTION("SaveTask/LoadTask for CreateTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::CreateTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::CreateTask>();
       load_archive >> *loaded_task;
       INFO("CreateTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2747,14 +2747,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   }
 
   SECTION("SaveTask/LoadTask for DestroyTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
       load_archive >> *loaded_task;
       INFO("DestroyTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2763,14 +2763,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   }
 
   SECTION("SaveTask/LoadTask for StopRuntimeTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
       load_archive >> *loaded_task;
       INFO("StopRuntimeTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2779,14 +2779,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   }
 
   SECTION("SaveTask/LoadTask for DestroyPoolTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
       load_archive >> *loaded_task;
       INFO("DestroyPoolTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2795,14 +2795,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   }
 
   SECTION("SaveTask/LoadTask for SubmitBatchTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
       load_archive >> *loaded_task;
       INFO("SubmitBatchTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2811,14 +2811,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   }
 
   SECTION("SaveTask/LoadTask for SendTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::SendTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::SendTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::SendTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::SendTask>();
       load_archive >> *loaded_task;
       INFO("SendTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2827,14 +2827,14 @@ TEST_CASE("Autogen - Admin Additional SaveTask/LoadTask coverage", "[autogen][ad
   }
 
   SECTION("SaveTask/LoadTask for RecvTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::RecvTask>();
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       save_archive << *orig_task;
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_task = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+      auto loaded_task = ipc_manager->NewTask<clio_run::admin::RecvTask>();
       load_archive >> *loaded_task;
       INFO("RecvTask SaveTask/LoadTask completed");
       CHI_IPC->DelTask(orig_task);
@@ -2860,9 +2860,9 @@ TEST_CASE("Autogen - Admin Container advanced operations", "[autogen][admin][con
   }
 
   SECTION("Admin Container NewCopyTask for multiple methods") {
-    auto orig1 = admin_container->NewTask(chimaera::admin::Method::kFlush);
+    auto orig1 = admin_container->NewTask(clio_run::admin::Method::kFlush);
     if (!orig1.IsNull()) {
-      auto copy1 = admin_container->NewCopyTask(chimaera::admin::Method::kFlush, orig1, false);
+      auto copy1 = admin_container->NewCopyTask(clio_run::admin::Method::kFlush, orig1, false);
       if (!copy1.IsNull()) {
         INFO("Admin Container NewCopyTask for Flush completed");
         CHI_IPC->DelTask(copy1);
@@ -2870,9 +2870,9 @@ TEST_CASE("Autogen - Admin Container advanced operations", "[autogen][admin][con
       CHI_IPC->DelTask(orig1);
     }
 
-    auto orig2 = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+    auto orig2 = admin_container->NewTask(clio_run::admin::Method::kMonitor);
     if (!orig2.IsNull()) {
-      auto copy2 = admin_container->NewCopyTask(chimaera::admin::Method::kMonitor, orig2, false);
+      auto copy2 = admin_container->NewCopyTask(clio_run::admin::Method::kMonitor, orig2, false);
       if (!copy2.IsNull()) {
         INFO("Admin Container NewCopyTask for Monitor completed");
         CHI_IPC->DelTask(copy2);
@@ -2882,8 +2882,8 @@ TEST_CASE("Autogen - Admin Container advanced operations", "[autogen][admin][con
   }
 
   SECTION("Admin Container Aggregate for multiple methods") {
-    auto task1a = admin_container->NewTask(chimaera::admin::Method::kFlush);
-    auto task1b = admin_container->NewTask(chimaera::admin::Method::kFlush);
+    auto task1a = admin_container->NewTask(clio_run::admin::Method::kFlush);
+    auto task1b = admin_container->NewTask(clio_run::admin::Method::kFlush);
     if (!task1a.IsNull() && !task1b.IsNull()) {
       task1a.ptr_->Aggregate(task1b.template Cast<chi::Task>());
       INFO("Admin Container Aggregate for Flush completed");
@@ -2891,8 +2891,8 @@ TEST_CASE("Autogen - Admin Container advanced operations", "[autogen][admin][con
       CHI_IPC->DelTask(task1b);
     }
 
-    auto task2a = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
-    auto task2b = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto task2a = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
+    auto task2b = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!task2a.IsNull() && !task2b.IsNull()) {
       task2a.ptr_->Aggregate(task2b.template Cast<chi::Task>());
       INFO("Admin Container Aggregate for ClientConnect completed");
@@ -2945,8 +2945,8 @@ TEST_CASE("Autogen - Bdev Comprehensive Copy and Aggregate", "[autogen][bdev][co
 
   SECTION("Additional Copy for Bdev tasks") {
     // Copy for AllocateBlocksTask
-    auto alloc1 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
-    auto alloc2 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto alloc1 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
+    auto alloc2 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!alloc1.IsNull() && !alloc2.IsNull()) {
       alloc2->Copy(alloc1);
       INFO("AllocateBlocksTask Copy completed");
@@ -2957,8 +2957,8 @@ TEST_CASE("Autogen - Bdev Comprehensive Copy and Aggregate", "[autogen][bdev][co
 
   SECTION("Additional Aggregate for Bdev tasks") {
     // Aggregate for GetStatsTask
-    auto stats1 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
-    auto stats2 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto stats1 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
+    auto stats2 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!stats1.IsNull() && !stats2.IsNull()) {
       stats1->Aggregate(stats2.template Cast<chi::Task>());
       INFO("GetStatsTask Aggregate completed");
@@ -3026,8 +3026,8 @@ TEST_CASE("Autogen - Admin Comprehensive Copy and Aggregate", "[autogen][admin][
 
   SECTION("More Copy tests for Admin") {
     // Copy for SubmitBatchTask
-    auto batch1 = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
-    auto batch2 = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+    auto batch1 = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
+    auto batch2 = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
     if (!batch1.IsNull() && !batch2.IsNull()) {
       batch2->Copy(batch1);
       INFO("SubmitBatchTask Copy completed");
@@ -3036,8 +3036,8 @@ TEST_CASE("Autogen - Admin Comprehensive Copy and Aggregate", "[autogen][admin][
     }
 
     // Copy for SendTask
-    auto send1 = ipc_manager->NewTask<chimaera::admin::SendTask>();
-    auto send2 = ipc_manager->NewTask<chimaera::admin::SendTask>();
+    auto send1 = ipc_manager->NewTask<clio_run::admin::SendTask>();
+    auto send2 = ipc_manager->NewTask<clio_run::admin::SendTask>();
     if (!send1.IsNull() && !send2.IsNull()) {
       send2->Copy(send1);
       INFO("SendTask Copy completed");
@@ -3046,8 +3046,8 @@ TEST_CASE("Autogen - Admin Comprehensive Copy and Aggregate", "[autogen][admin][
     }
 
     // Copy for RecvTask
-    auto recv1 = ipc_manager->NewTask<chimaera::admin::RecvTask>();
-    auto recv2 = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+    auto recv1 = ipc_manager->NewTask<clio_run::admin::RecvTask>();
+    auto recv2 = ipc_manager->NewTask<clio_run::admin::RecvTask>();
     if (!recv1.IsNull() && !recv2.IsNull()) {
       recv2->Copy(recv1);
       INFO("RecvTask Copy completed");
@@ -3059,8 +3059,8 @@ TEST_CASE("Autogen - Admin Comprehensive Copy and Aggregate", "[autogen][admin][
 
   SECTION("More Aggregate tests for Admin") {
     // Aggregate for SubmitBatchTask
-    auto batch1 = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
-    auto batch2 = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+    auto batch1 = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
+    auto batch2 = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
     if (!batch1.IsNull() && !batch2.IsNull()) {
       batch1->Aggregate(batch2.template Cast<chi::Task>());
       INFO("SubmitBatchTask Aggregate completed");
@@ -3069,8 +3069,8 @@ TEST_CASE("Autogen - Admin Comprehensive Copy and Aggregate", "[autogen][admin][
     }
 
     // Aggregate for SendTask
-    auto send1 = ipc_manager->NewTask<chimaera::admin::SendTask>();
-    auto send2 = ipc_manager->NewTask<chimaera::admin::SendTask>();
+    auto send1 = ipc_manager->NewTask<clio_run::admin::SendTask>();
+    auto send2 = ipc_manager->NewTask<clio_run::admin::SendTask>();
     if (!send1.IsNull() && !send2.IsNull()) {
       send1->Aggregate(send2.template Cast<chi::Task>());
       INFO("SendTask Aggregate completed");
@@ -3079,8 +3079,8 @@ TEST_CASE("Autogen - Admin Comprehensive Copy and Aggregate", "[autogen][admin][
     }
 
     // Aggregate for RecvTask
-    auto recv1 = ipc_manager->NewTask<chimaera::admin::RecvTask>();
-    auto recv2 = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+    auto recv1 = ipc_manager->NewTask<clio_run::admin::RecvTask>();
+    auto recv2 = ipc_manager->NewTask<clio_run::admin::RecvTask>();
     if (!recv1.IsNull() && !recv2.IsNull()) {
       recv1->Aggregate(recv2.template Cast<chi::Task>());
       INFO("RecvTask Aggregate completed");
@@ -3238,14 +3238,14 @@ TEST_CASE("Autogen - Bdev SerializeOut coverage", "[autogen][bdev][serializeout]
   auto* ipc_manager = CHI_IPC;
 
   SECTION("SerializeOut for AllocateBlocksTask") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
       load_archive >> *loaded;
       INFO("AllocateBlocksTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3254,14 +3254,14 @@ TEST_CASE("Autogen - Bdev SerializeOut coverage", "[autogen][bdev][serializeout]
   }
 
   SECTION("SerializeOut for FreeBlocksTask") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
       load_archive >> *loaded;
       INFO("FreeBlocksTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3270,14 +3270,14 @@ TEST_CASE("Autogen - Bdev SerializeOut coverage", "[autogen][bdev][serializeout]
   }
 
   SECTION("SerializeOut for WriteTask") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
       load_archive >> *loaded;
       INFO("WriteTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3286,14 +3286,14 @@ TEST_CASE("Autogen - Bdev SerializeOut coverage", "[autogen][bdev][serializeout]
   }
 
   SECTION("SerializeOut for ReadTask") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
       load_archive >> *loaded;
       INFO("ReadTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3302,14 +3302,14 @@ TEST_CASE("Autogen - Bdev SerializeOut coverage", "[autogen][bdev][serializeout]
   }
 
   SECTION("SerializeOut for GetStatsTask") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
       load_archive >> *loaded;
       INFO("GetStatsTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3328,7 +3328,7 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   auto* ipc_manager = CHI_IPC;
 
   SECTION("SerializeOut for FlushTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
@@ -3336,7 +3336,7 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+      auto loaded = ipc_manager->NewTask<clio_run::admin::FlushTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       load_archive >> *loaded;
       INFO("FlushTask SerializeOut completed");
@@ -3346,7 +3346,7 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for MonitorTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
@@ -3354,7 +3354,7 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+      auto loaded = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
       load_archive >> *loaded;
       INFO("MonitorTask SerializeOut completed");
@@ -3364,7 +3364,7 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for ClientConnectTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
@@ -3372,7 +3372,7 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+      auto loaded = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       load_archive >> *loaded;
       INFO("ClientConnectTask SerializeOut completed");
@@ -3382,14 +3382,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for CreateTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::CreateTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::CreateTask>();
       load_archive >> *loaded;
       INFO("CreateTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3398,14 +3398,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for DestroyTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
       load_archive >> *loaded;
       INFO("DestroyTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3414,14 +3414,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for StopRuntimeTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
       load_archive >> *loaded;
       INFO("StopRuntimeTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3430,14 +3430,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for DestroyPoolTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
       load_archive >> *loaded;
       INFO("DestroyPoolTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3446,14 +3446,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for SubmitBatchTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
       load_archive >> *loaded;
       INFO("SubmitBatchTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3462,14 +3462,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for SendTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SendTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::SendTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::SendTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::SendTask>();
       load_archive >> *loaded;
       INFO("SendTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3478,14 +3478,14 @@ TEST_CASE("Autogen - Admin SerializeOut coverage", "[autogen][admin][serializeou
   }
 
   SECTION("SerializeOut for RecvTask") {
-    auto task = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::RecvTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
       save_archive << *task;
       std::string data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(data);
       load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-      auto loaded = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::admin::RecvTask>();
       load_archive >> *loaded;
       INFO("RecvTask SerializeOut completed");
       CHI_IPC->DelTask(task);
@@ -3675,67 +3675,67 @@ TEST_CASE("Autogen - Admin Container DelTask coverage", "[autogen][admin][contai
   }
 
   SECTION("DelTask for various Admin methods") {
-    auto task1 = admin_container->NewTask(chimaera::admin::Method::kFlush);
+    auto task1 = admin_container->NewTask(clio_run::admin::Method::kFlush);
     if (!task1.IsNull()) {
       CHI_IPC->DelTask(task1);
       INFO("Admin Container DelTask for Flush completed");
     }
 
-    auto task2 = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+    auto task2 = admin_container->NewTask(clio_run::admin::Method::kMonitor);
     if (!task2.IsNull()) {
       CHI_IPC->DelTask(task2);
       INFO("Admin Container DelTask for Monitor completed");
     }
 
-    auto task3 = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto task3 = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!task3.IsNull()) {
       CHI_IPC->DelTask(task3);
       INFO("Admin Container DelTask for ClientConnect completed");
     }
 
-    auto task4 = admin_container->NewTask(chimaera::admin::Method::kCreate);
+    auto task4 = admin_container->NewTask(clio_run::admin::Method::kCreate);
     if (!task4.IsNull()) {
       CHI_IPC->DelTask(task4);
       INFO("Admin Container DelTask for Create completed");
     }
 
-    auto task5 = admin_container->NewTask(chimaera::admin::Method::kDestroy);
+    auto task5 = admin_container->NewTask(clio_run::admin::Method::kDestroy);
     if (!task5.IsNull()) {
       CHI_IPC->DelTask(task5);
       INFO("Admin Container DelTask for Destroy completed");
     }
 
-    auto task6 = admin_container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto task6 = admin_container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!task6.IsNull()) {
       CHI_IPC->DelTask(task6);
       INFO("Admin Container DelTask for StopRuntime completed");
     }
 
-    auto task7 = admin_container->NewTask(chimaera::admin::Method::kDestroyPool);
+    auto task7 = admin_container->NewTask(clio_run::admin::Method::kDestroyPool);
     if (!task7.IsNull()) {
       CHI_IPC->DelTask(task7);
       INFO("Admin Container DelTask for DestroyPool completed");
     }
 
-    auto task8 = admin_container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto task8 = admin_container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!task8.IsNull()) {
       CHI_IPC->DelTask(task8);
       INFO("Admin Container DelTask for GetOrCreatePool completed");
     }
 
-    auto task9 = admin_container->NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto task9 = admin_container->NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!task9.IsNull()) {
       CHI_IPC->DelTask(task9);
       INFO("Admin Container DelTask for SubmitBatch completed");
     }
 
-    auto task10 = admin_container->NewTask(chimaera::admin::Method::kSend);
+    auto task10 = admin_container->NewTask(clio_run::admin::Method::kSend);
     if (!task10.IsNull()) {
       CHI_IPC->DelTask(task10);
       INFO("Admin Container DelTask for Send completed");
     }
 
-    auto task11 = admin_container->NewTask(chimaera::admin::Method::kRecv);
+    auto task11 = admin_container->NewTask(clio_run::admin::Method::kRecv);
     if (!task11.IsNull()) {
       CHI_IPC->DelTask(task11);
       INFO("Admin Container DelTask for Recv completed");
@@ -3816,8 +3816,8 @@ TEST_CASE("Autogen - More Bdev Container coverage", "[autogen][bdev][more]") {
 
   SECTION("Multiple Bdev task operations") {
     // AllocateBlocksTask operations
-    auto alloc1 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
-    auto alloc2 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto alloc1 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
+    auto alloc2 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!alloc1.IsNull() && !alloc2.IsNull()) {
       alloc2->Copy(alloc1);
       alloc1->Aggregate(alloc2.template Cast<chi::Task>());
@@ -3827,8 +3827,8 @@ TEST_CASE("Autogen - More Bdev Container coverage", "[autogen][bdev][more]") {
     }
 
     // FreeBlocksTask operations
-    auto free1 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
-    auto free2 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto free1 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
+    auto free2 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!free1.IsNull() && !free2.IsNull()) {
       free2->Copy(free1);
       free1->Aggregate(free2.template Cast<chi::Task>());
@@ -3838,8 +3838,8 @@ TEST_CASE("Autogen - More Bdev Container coverage", "[autogen][bdev][more]") {
     }
 
     // WriteTask operations
-    auto write1 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
-    auto write2 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto write1 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
+    auto write2 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!write1.IsNull() && !write2.IsNull()) {
       write2->Copy(write1);
       write1->Aggregate(write2.template Cast<chi::Task>());
@@ -3849,8 +3849,8 @@ TEST_CASE("Autogen - More Bdev Container coverage", "[autogen][bdev][more]") {
     }
 
     // ReadTask operations
-    auto read1 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
-    auto read2 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto read1 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
+    auto read2 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!read1.IsNull() && !read2.IsNull()) {
       read2->Copy(read1);
       read1->Aggregate(read2.template Cast<chi::Task>());
@@ -3860,8 +3860,8 @@ TEST_CASE("Autogen - More Bdev Container coverage", "[autogen][bdev][more]") {
     }
 
     // GetStatsTask operations
-    auto stats1 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
-    auto stats2 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto stats1 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
+    auto stats2 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!stats1.IsNull() && !stats2.IsNull()) {
       stats2->Copy(stats1);
       stats1->Aggregate(stats2.template Cast<chi::Task>());
@@ -4077,9 +4077,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for Create") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kCreate);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kCreate);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kCreate, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kCreate, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for Create completed");
         CHI_IPC->DelTask(copy);
@@ -4089,9 +4089,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for Destroy") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kDestroy);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kDestroy);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kDestroy, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kDestroy, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for Destroy completed");
         CHI_IPC->DelTask(copy);
@@ -4101,9 +4101,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for StopRuntime") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kStopRuntime, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kStopRuntime, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for StopRuntime completed");
         CHI_IPC->DelTask(copy);
@@ -4113,9 +4113,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for DestroyPool") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kDestroyPool);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kDestroyPool);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kDestroyPool, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kDestroyPool, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for DestroyPool completed");
         CHI_IPC->DelTask(copy);
@@ -4125,9 +4125,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for GetOrCreatePool") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kGetOrCreatePool, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kGetOrCreatePool, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for GetOrCreatePool completed");
         CHI_IPC->DelTask(copy);
@@ -4137,9 +4137,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for SubmitBatch") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kSubmitBatch, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kSubmitBatch, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for SubmitBatch completed");
         CHI_IPC->DelTask(copy);
@@ -4149,9 +4149,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for Send") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kSend);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kSend);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kSend, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kSend, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for Send completed");
         CHI_IPC->DelTask(copy);
@@ -4161,9 +4161,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for Recv") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kRecv);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kRecv);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kRecv, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kRecv, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for Recv completed");
         CHI_IPC->DelTask(copy);
@@ -4173,9 +4173,9 @@ TEST_CASE("Autogen - Admin NewCopyTask comprehensive", "[autogen][admin][newcopy
   }
 
   SECTION("NewCopyTask for ClientConnect") {
-    auto orig = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto orig = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!orig.IsNull()) {
-      auto copy = admin_container->NewCopyTask(chimaera::admin::Method::kClientConnect, orig, false);
+      auto copy = admin_container->NewCopyTask(clio_run::admin::Method::kClientConnect, orig, false);
       if (!copy.IsNull()) {
         INFO("Admin NewCopyTask for ClientConnect completed");
         CHI_IPC->DelTask(copy);
@@ -4202,8 +4202,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for Create") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kCreate);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kCreate);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kCreate);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kCreate);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for Create completed");
@@ -4213,8 +4213,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for Destroy") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kDestroy);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kDestroy);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kDestroy);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kDestroy);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for Destroy completed");
@@ -4224,8 +4224,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for StopRuntime") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kStopRuntime);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kStopRuntime);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for StopRuntime completed");
@@ -4235,8 +4235,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for DestroyPool") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kDestroyPool);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kDestroyPool);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kDestroyPool);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kDestroyPool);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for DestroyPool completed");
@@ -4246,8 +4246,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for GetOrCreatePool") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for GetOrCreatePool completed");
@@ -4257,8 +4257,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for SubmitBatch") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kSubmitBatch);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kSubmitBatch);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for SubmitBatch completed");
@@ -4268,8 +4268,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for Send") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kSend);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kSend);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kSend);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kSend);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for Send completed");
@@ -4279,8 +4279,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for Recv") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kRecv);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kRecv);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kRecv);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kRecv);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for Recv completed");
@@ -4290,8 +4290,8 @@ TEST_CASE("Autogen - Admin Aggregate comprehensive", "[autogen][admin][aggregate
   }
 
   SECTION("Aggregate for Monitor") {
-    auto t1 = admin_container->NewTask(chimaera::admin::Method::kMonitor);
-    auto t2 = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+    auto t1 = admin_container->NewTask(clio_run::admin::Method::kMonitor);
+    auto t2 = admin_container->NewTask(clio_run::admin::Method::kMonitor);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       INFO("Admin Aggregate for Monitor completed");
@@ -4318,15 +4318,15 @@ TEST_CASE("Autogen - Admin SaveTask/LoadTask comprehensive", "[autogen][admin][s
   }
 
   SECTION("SaveTask/LoadTask SerializeIn for Flush") {
-    auto task = admin_container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = admin_container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      admin_container->SaveTask(chimaera::admin::Method::kFlush, save_archive, task);
-      auto loaded = admin_container->NewTask(chimaera::admin::Method::kFlush);
+      admin_container->SaveTask(clio_run::admin::Method::kFlush, save_archive, task);
+      auto loaded = admin_container->NewTask(clio_run::admin::Method::kFlush);
       if (!loaded.IsNull()) {
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        admin_container->LoadTask(chimaera::admin::Method::kFlush, load_archive, loaded);
+        admin_container->LoadTask(clio_run::admin::Method::kFlush, load_archive, loaded);
         INFO("SaveTask/LoadTask SerializeIn for Flush completed");
         CHI_IPC->DelTask(loaded);
       }
@@ -4335,15 +4335,15 @@ TEST_CASE("Autogen - Admin SaveTask/LoadTask comprehensive", "[autogen][admin][s
   }
 
   SECTION("SaveTask/LoadTask SerializeOut for Flush") {
-    auto task = admin_container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = admin_container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      admin_container->SaveTask(chimaera::admin::Method::kFlush, save_archive, task);
-      auto loaded = admin_container->NewTask(chimaera::admin::Method::kFlush);
+      admin_container->SaveTask(clio_run::admin::Method::kFlush, save_archive, task);
+      auto loaded = admin_container->NewTask(clio_run::admin::Method::kFlush);
       if (!loaded.IsNull()) {
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-        admin_container->LoadTask(chimaera::admin::Method::kFlush, load_archive, loaded);
+        admin_container->LoadTask(clio_run::admin::Method::kFlush, load_archive, loaded);
         INFO("SaveTask/LoadTask SerializeOut for Flush completed");
         CHI_IPC->DelTask(loaded);
       }
@@ -4352,15 +4352,15 @@ TEST_CASE("Autogen - Admin SaveTask/LoadTask comprehensive", "[autogen][admin][s
   }
 
   SECTION("SaveTask/LoadTask SerializeIn for Monitor") {
-    auto task = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+    auto task = admin_container->NewTask(clio_run::admin::Method::kMonitor);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      admin_container->SaveTask(chimaera::admin::Method::kMonitor, save_archive, task);
-      auto loaded = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+      admin_container->SaveTask(clio_run::admin::Method::kMonitor, save_archive, task);
+      auto loaded = admin_container->NewTask(clio_run::admin::Method::kMonitor);
       if (!loaded.IsNull()) {
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        admin_container->LoadTask(chimaera::admin::Method::kMonitor, load_archive, loaded);
+        admin_container->LoadTask(clio_run::admin::Method::kMonitor, load_archive, loaded);
         INFO("SaveTask/LoadTask SerializeIn for Monitor completed");
         CHI_IPC->DelTask(loaded);
       }
@@ -4369,15 +4369,15 @@ TEST_CASE("Autogen - Admin SaveTask/LoadTask comprehensive", "[autogen][admin][s
   }
 
   SECTION("SaveTask/LoadTask SerializeOut for Monitor") {
-    auto task = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+    auto task = admin_container->NewTask(clio_run::admin::Method::kMonitor);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      admin_container->SaveTask(chimaera::admin::Method::kMonitor, save_archive, task);
-      auto loaded = admin_container->NewTask(chimaera::admin::Method::kMonitor);
+      admin_container->SaveTask(clio_run::admin::Method::kMonitor, save_archive, task);
+      auto loaded = admin_container->NewTask(clio_run::admin::Method::kMonitor);
       if (!loaded.IsNull()) {
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-        admin_container->LoadTask(chimaera::admin::Method::kMonitor, load_archive, loaded);
+        admin_container->LoadTask(clio_run::admin::Method::kMonitor, load_archive, loaded);
         INFO("SaveTask/LoadTask SerializeOut for Monitor completed");
         CHI_IPC->DelTask(loaded);
       }
@@ -4386,15 +4386,15 @@ TEST_CASE("Autogen - Admin SaveTask/LoadTask comprehensive", "[autogen][admin][s
   }
 
   SECTION("SaveTask/LoadTask SerializeIn for ClientConnect") {
-    auto task = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto task = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      admin_container->SaveTask(chimaera::admin::Method::kClientConnect, save_archive, task);
-      auto loaded = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+      admin_container->SaveTask(clio_run::admin::Method::kClientConnect, save_archive, task);
+      auto loaded = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
       if (!loaded.IsNull()) {
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        admin_container->LoadTask(chimaera::admin::Method::kClientConnect, load_archive, loaded);
+        admin_container->LoadTask(clio_run::admin::Method::kClientConnect, load_archive, loaded);
         INFO("SaveTask/LoadTask SerializeIn for ClientConnect completed");
         CHI_IPC->DelTask(loaded);
       }
@@ -4403,15 +4403,15 @@ TEST_CASE("Autogen - Admin SaveTask/LoadTask comprehensive", "[autogen][admin][s
   }
 
   SECTION("SaveTask/LoadTask SerializeOut for ClientConnect") {
-    auto task = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto task = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      admin_container->SaveTask(chimaera::admin::Method::kClientConnect, save_archive, task);
-      auto loaded = admin_container->NewTask(chimaera::admin::Method::kClientConnect);
+      admin_container->SaveTask(clio_run::admin::Method::kClientConnect, save_archive, task);
+      auto loaded = admin_container->NewTask(clio_run::admin::Method::kClientConnect);
       if (!loaded.IsNull()) {
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeOut;
-        admin_container->LoadTask(chimaera::admin::Method::kClientConnect, load_archive, loaded);
+        admin_container->LoadTask(clio_run::admin::Method::kClientConnect, load_archive, loaded);
         INFO("SaveTask/LoadTask SerializeOut for ClientConnect completed");
         CHI_IPC->DelTask(loaded);
       }
@@ -4682,19 +4682,19 @@ TEST_CASE("Autogen - Bdev All Methods Comprehensive", "[autogen][bdev][all][comp
   auto* ipc_manager = CHI_IPC;
 
   SECTION("AllocateBlocksTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!task.IsNull()) {
       // SerializeIn
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
       load_in >> *loaded_in;
       INFO("AllocateBlocksTask SerializeIn completed");
 
       // Copy and Aggregate
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4708,17 +4708,17 @@ TEST_CASE("Autogen - Bdev All Methods Comprehensive", "[autogen][bdev][all][comp
   }
 
   SECTION("FreeBlocksTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
       load_in >> *loaded_in;
       INFO("FreeBlocksTask SerializeIn completed");
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4732,17 +4732,17 @@ TEST_CASE("Autogen - Bdev All Methods Comprehensive", "[autogen][bdev][all][comp
   }
 
   SECTION("WriteTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
       load_in >> *loaded_in;
       INFO("WriteTask SerializeIn completed");
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4756,17 +4756,17 @@ TEST_CASE("Autogen - Bdev All Methods Comprehensive", "[autogen][bdev][all][comp
   }
 
   SECTION("ReadTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
       load_in >> *loaded_in;
       INFO("ReadTask SerializeIn completed");
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4780,17 +4780,17 @@ TEST_CASE("Autogen - Bdev All Methods Comprehensive", "[autogen][bdev][all][comp
   }
 
   SECTION("GetStatsTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
       load_in >> *loaded_in;
       INFO("GetStatsTask SerializeIn completed");
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4814,16 +4814,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   auto* ipc_manager = CHI_IPC;
 
   SECTION("CreateTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::CreateTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::CreateTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::CreateTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::CreateTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4836,16 +4836,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("DestroyTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::DestroyTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::DestroyTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4858,16 +4858,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("StopRuntimeTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4880,16 +4880,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("DestroyPoolTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4902,16 +4902,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("SubmitBatchTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4924,16 +4924,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("SendTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SendTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::SendTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::SendTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::SendTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::SendTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::SendTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4946,16 +4946,16 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("RecvTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::RecvTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::RecvTask>();
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::admin::RecvTask>();
       if (!task2.IsNull()) {
         task2->Copy(task);
         task->Aggregate(task2.template Cast<chi::Task>());
@@ -4968,18 +4968,18 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("FlushTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::FlushTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+      auto task2 = ipc_manager->NewTask<clio_run::admin::FlushTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!task2.IsNull()) {
         task2->Copy(task);
@@ -4993,18 +4993,18 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("MonitorTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+      auto task2 = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
       if (!task2.IsNull()) {
         task2->Copy(task);
@@ -5018,18 +5018,18 @@ TEST_CASE("Autogen - Admin All Methods Comprehensive", "[autogen][admin][all][co
   }
 
   SECTION("ClientConnectTask full coverage") {
-    auto task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       save_in << *task;
       chi::LoadTaskArchive load_in(save_in.GetData());
       load_in.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded_in = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+      auto loaded_in = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       load_in >> *loaded_in;
 
-      auto task2 = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+      auto task2 = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!task2.IsNull()) {
         task2->Copy(task);
@@ -6351,18 +6351,18 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
   auto* ipc_manager = CHI_IPC;
 
   // Instantiate Bdev Runtime directly for testing Container dispatch methods
-  chimaera::bdev::Runtime bdev_runtime;
+  clio_run::bdev::Runtime bdev_runtime;
 
   SECTION("Bdev Runtime NewTask all methods") {
     INFO("Testing Bdev Runtime::NewTask for all methods");
 
-    auto task_create = bdev_runtime.NewTask(chimaera::bdev::Method::kCreate);
-    auto task_destroy = bdev_runtime.NewTask(chimaera::bdev::Method::kDestroy);
-    auto task_alloc = bdev_runtime.NewTask(chimaera::bdev::Method::kAllocateBlocks);
-    auto task_free = bdev_runtime.NewTask(chimaera::bdev::Method::kFreeBlocks);
-    auto task_write = bdev_runtime.NewTask(chimaera::bdev::Method::kWrite);
-    auto task_read = bdev_runtime.NewTask(chimaera::bdev::Method::kRead);
-    auto task_stats = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task_create = bdev_runtime.NewTask(clio_run::bdev::Method::kCreate);
+    auto task_destroy = bdev_runtime.NewTask(clio_run::bdev::Method::kDestroy);
+    auto task_alloc = bdev_runtime.NewTask(clio_run::bdev::Method::kAllocateBlocks);
+    auto task_free = bdev_runtime.NewTask(clio_run::bdev::Method::kFreeBlocks);
+    auto task_write = bdev_runtime.NewTask(clio_run::bdev::Method::kWrite);
+    auto task_read = bdev_runtime.NewTask(clio_run::bdev::Method::kRead);
+    auto task_stats = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     auto task_unknown = bdev_runtime.NewTask(9999);
 
     INFO("Bdev Runtime::NewTask tests completed");
@@ -6381,106 +6381,106 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
     INFO("Testing Bdev Runtime::SaveTask/LoadTask for all methods");
 
     // Test SaveTask and LoadTask for CreateTask
-    auto task_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
+    auto task_c = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
     if (!task_c.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_c.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kCreate, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kCreate, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kCreate, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kCreate, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_c);
       CHI_IPC->DelTask(loaded);
     }
 
     // Test SaveTask and LoadTask for DestroyTask
-    auto task_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
+    auto task_d = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
     if (!task_d.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_d.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kDestroy, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kDestroy, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kDestroy, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kDestroy, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_d);
       CHI_IPC->DelTask(loaded);
     }
 
     // Test SaveTask and LoadTask for AllocateBlocksTask
-    auto task_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto task_a = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!task_a.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_a.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kAllocateBlocks, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kAllocateBlocks, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kAllocateBlocks, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kAllocateBlocks, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_a);
       CHI_IPC->DelTask(loaded);
     }
 
     // Test SaveTask and LoadTask for FreeBlocksTask
-    auto task_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto task_f = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!task_f.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_f.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kFreeBlocks, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kFreeBlocks, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kFreeBlocks, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kFreeBlocks, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_f);
       CHI_IPC->DelTask(loaded);
     }
 
     // Test SaveTask and LoadTask for WriteTask
-    auto task_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto task_w = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!task_w.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_w.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kWrite, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kWrite, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kWrite, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kWrite, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_w);
       CHI_IPC->DelTask(loaded);
     }
 
     // Test SaveTask and LoadTask for ReadTask
-    auto task_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto task_r = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!task_r.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_r.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kRead, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kRead, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kRead, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kRead, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_r);
       CHI_IPC->DelTask(loaded);
     }
 
     // Test SaveTask and LoadTask for GetStatsTask
-    auto task_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto task_s = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!task_s.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_s.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kGetStats, save_archive, task_ptr);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kGetStats, save_archive, task_ptr);
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
       ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-      bdev_runtime.LoadTask(chimaera::bdev::Method::kGetStats, load_archive, loaded_ptr);
+      bdev_runtime.LoadTask(clio_run::bdev::Method::kGetStats, load_archive, loaded_ptr);
       CHI_IPC->DelTask(task_s);
       CHI_IPC->DelTask(loaded);
     }
@@ -6491,59 +6491,59 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
   SECTION("Bdev Runtime NewCopyTask all methods") {
     INFO("Testing Bdev Runtime::NewCopyTask for all methods");
 
-    auto orig_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
+    auto orig_c = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
     if (!orig_c.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kCreate, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::CreateTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kCreate, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::CreateTask>());
       CHI_IPC->DelTask(orig_c);
     }
 
-    auto orig_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
+    auto orig_d = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
     if (!orig_d.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kDestroy, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::DestroyTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kDestroy, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::DestroyTask>());
       CHI_IPC->DelTask(orig_d);
     }
 
-    auto orig_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto orig_a = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!orig_a.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_a.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kAllocateBlocks, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::AllocateBlocksTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kAllocateBlocks, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::AllocateBlocksTask>());
       CHI_IPC->DelTask(orig_a);
     }
 
-    auto orig_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto orig_f = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!orig_f.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_f.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kFreeBlocks, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::FreeBlocksTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kFreeBlocks, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::FreeBlocksTask>());
       CHI_IPC->DelTask(orig_f);
     }
 
-    auto orig_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto orig_w = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!orig_w.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_w.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kWrite, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::WriteTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kWrite, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::WriteTask>());
       CHI_IPC->DelTask(orig_w);
     }
 
-    auto orig_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto orig_r = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!orig_r.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_r.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kRead, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::ReadTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kRead, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::ReadTask>());
       CHI_IPC->DelTask(orig_r);
     }
 
-    auto orig_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto orig_s = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!orig_s.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_s.template Cast<chi::Task>();
-      auto copy = bdev_runtime.NewCopyTask(chimaera::bdev::Method::kGetStats, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::bdev::GetStatsTask>());
+      auto copy = bdev_runtime.NewCopyTask(clio_run::bdev::Method::kGetStats, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::bdev::GetStatsTask>());
       CHI_IPC->DelTask(orig_s);
     }
 
@@ -6553,8 +6553,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
   SECTION("Bdev Runtime Aggregate all methods") {
     INFO("Testing Bdev Runtime::Aggregate for all methods");
 
-    auto t1_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
-    auto t2_c = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
+    auto t1_c = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
+    auto t2_c = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
     if (!t1_c.IsNull() && !t2_c.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
@@ -6563,8 +6563,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
       CHI_IPC->DelTask(t2_c);
     }
 
-    auto t1_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
-    auto t2_d = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
+    auto t1_d = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
+    auto t2_d = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
     if (!t1_d.IsNull() && !t2_d.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
@@ -6573,8 +6573,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
       CHI_IPC->DelTask(t2_d);
     }
 
-    auto t1_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
-    auto t2_a = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto t1_a = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
+    auto t2_a = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!t1_a.IsNull() && !t2_a.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_a.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_a.template Cast<chi::Task>();
@@ -6583,8 +6583,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
       CHI_IPC->DelTask(t2_a);
     }
 
-    auto t1_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
-    auto t2_f = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto t1_f = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
+    auto t2_f = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!t1_f.IsNull() && !t2_f.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_f.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_f.template Cast<chi::Task>();
@@ -6593,8 +6593,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
       CHI_IPC->DelTask(t2_f);
     }
 
-    auto t1_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
-    auto t2_w = ipc_manager->NewTask<chimaera::bdev::WriteTask>();
+    auto t1_w = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
+    auto t2_w = ipc_manager->NewTask<clio_run::bdev::WriteTask>();
     if (!t1_w.IsNull() && !t2_w.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_w.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_w.template Cast<chi::Task>();
@@ -6603,8 +6603,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
       CHI_IPC->DelTask(t2_w);
     }
 
-    auto t1_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
-    auto t2_r = ipc_manager->NewTask<chimaera::bdev::ReadTask>();
+    auto t1_r = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
+    auto t2_r = ipc_manager->NewTask<clio_run::bdev::ReadTask>();
     if (!t1_r.IsNull() && !t2_r.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_r.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_r.template Cast<chi::Task>();
@@ -6613,8 +6613,8 @@ TEST_CASE("Autogen - Bdev Runtime Container Methods", "[autogen][bdev][runtime]"
       CHI_IPC->DelTask(t2_r);
     }
 
-    auto t1_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
-    auto t2_s = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto t1_s = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
+    auto t2_s = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!t1_s.IsNull() && !t2_s.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_s.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_s.template Cast<chi::Task>();
@@ -7102,48 +7102,48 @@ TEST_CASE("Autogen - CAE Task Serialization Methods", "[autogen][cae][serialize]
 TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][runtime]") {
   EnsureInitialized();
   auto* ipc_manager = CHI_IPC;
-  chimaera::MOD_NAME::Runtime mod_name_runtime;
+  clio_run::MOD_NAME::Runtime mod_name_runtime;
 
   SECTION("MOD_NAME Runtime NewTask all methods") {
     INFO("Testing MOD_NAME Runtime::NewTask for all methods");
 
     // Test kCreate
-    auto task_create = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCreate);
+    auto task_create = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCreate);
     REQUIRE_FALSE(task_create.IsNull());
     if (!task_create.IsNull()) {
       CHI_IPC->DelTask(task_create);
     }
 
     // Test kDestroy
-    auto task_destroy = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kDestroy);
+    auto task_destroy = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kDestroy);
     REQUIRE_FALSE(task_destroy.IsNull());
     if (!task_destroy.IsNull()) {
       CHI_IPC->DelTask(task_destroy);
     }
 
     // Test kCustom
-    auto task_custom = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCustom);
+    auto task_custom = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCustom);
     REQUIRE_FALSE(task_custom.IsNull());
     if (!task_custom.IsNull()) {
       CHI_IPC->DelTask(task_custom);
     }
 
     // Test kCoMutexTest
-    auto task_comutex = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoMutexTest);
+    auto task_comutex = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoMutexTest);
     REQUIRE_FALSE(task_comutex.IsNull());
     if (!task_comutex.IsNull()) {
       CHI_IPC->DelTask(task_comutex);
     }
 
     // Test kCoRwLockTest
-    auto task_corwlock = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoRwLockTest);
+    auto task_corwlock = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoRwLockTest);
     REQUIRE_FALSE(task_corwlock.IsNull());
     if (!task_corwlock.IsNull()) {
       CHI_IPC->DelTask(task_corwlock);
     }
 
     // Test kWaitTest
-    auto task_wait = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kWaitTest);
+    auto task_wait = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kWaitTest);
     REQUIRE_FALSE(task_wait.IsNull());
     if (!task_wait.IsNull()) {
       CHI_IPC->DelTask(task_wait);
@@ -7159,37 +7159,37 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
   SECTION("MOD_NAME Runtime DelTask all methods") {
     INFO("Testing MOD_NAME Runtime::DelTask for all methods");
 
-    auto task_create = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
+    auto task_create = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
     if (!task_create.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
-    auto task_destroy = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
+    auto task_destroy = ipc_manager->NewTask<clio_run::MOD_NAME::DestroyTask>();
     if (!task_destroy.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_destroy.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
-    auto task_custom = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto task_custom = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!task_custom.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_custom.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
-    auto task_comutex = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto task_comutex = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!task_comutex.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_comutex.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
-    auto task_corwlock = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto task_corwlock = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!task_corwlock.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_corwlock.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
     }
 
-    auto task_wait = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto task_wait = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!task_wait.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_wait.template Cast<chi::Task>();
       CHI_IPC->DelTask(task_ptr);
@@ -7208,108 +7208,108 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     INFO("Testing MOD_NAME Runtime::SaveTask/LoadTask for all methods");
 
     // Test kCreate
-    auto task_create = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
+    auto task_create = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
     if (!task_create.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_create.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCreate, save_archive, task_ptr);
+      mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCreate, save_archive, task_ptr);
 
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
       if (!loaded.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-        mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCreate, load_archive, loaded_ptr);
+        mod_name_runtime.LoadTask(clio_run::MOD_NAME::Method::kCreate, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task_create);
     }
 
     // Test kDestroy
-    auto task_destroy = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
+    auto task_destroy = ipc_manager->NewTask<clio_run::MOD_NAME::DestroyTask>();
     if (!task_destroy.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_destroy.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kDestroy, save_archive, task_ptr);
+      mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kDestroy, save_archive, task_ptr);
 
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::MOD_NAME::DestroyTask>();
       if (!loaded.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-        mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kDestroy, load_archive, loaded_ptr);
+        mod_name_runtime.LoadTask(clio_run::MOD_NAME::Method::kDestroy, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task_destroy);
     }
 
     // Test kCustom
-    auto task_custom = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto task_custom = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!task_custom.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_custom.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCustom, save_archive, task_ptr);
+      mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCustom, save_archive, task_ptr);
 
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
       if (!loaded.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-        mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCustom, load_archive, loaded_ptr);
+        mod_name_runtime.LoadTask(clio_run::MOD_NAME::Method::kCustom, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task_custom);
     }
 
     // Test kCoMutexTest
-    auto task_comutex = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto task_comutex = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!task_comutex.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_comutex.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, task_ptr);
+      mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCoMutexTest, save_archive, task_ptr);
 
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
       if (!loaded.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-        mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCoMutexTest, load_archive, loaded_ptr);
+        mod_name_runtime.LoadTask(clio_run::MOD_NAME::Method::kCoMutexTest, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task_comutex);
     }
 
     // Test kCoRwLockTest
-    auto task_corwlock = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto task_corwlock = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!task_corwlock.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_corwlock.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoRwLockTest, save_archive, task_ptr);
+      mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCoRwLockTest, save_archive, task_ptr);
 
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
       if (!loaded.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-        mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kCoRwLockTest, load_archive, loaded_ptr);
+        mod_name_runtime.LoadTask(clio_run::MOD_NAME::Method::kCoRwLockTest, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task_corwlock);
     }
 
     // Test kWaitTest
-    auto task_wait = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto task_wait = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!task_wait.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> task_ptr = task_wait.template Cast<chi::Task>();
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kWaitTest, save_archive, task_ptr);
+      mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kWaitTest, save_archive, task_ptr);
 
       chi::LoadTaskArchive load_archive(save_archive.GetData());
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      auto loaded = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+      auto loaded = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
       if (!loaded.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> loaded_ptr = loaded.template Cast<chi::Task>();
-        mod_name_runtime.LoadTask(chimaera::MOD_NAME::Method::kWaitTest, load_archive, loaded_ptr);
+        mod_name_runtime.LoadTask(clio_run::MOD_NAME::Method::kWaitTest, load_archive, loaded_ptr);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task_wait);
@@ -7334,15 +7334,15 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
 
     // Test kCreate
     {
-      auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
+      auto orig = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
       if (!orig.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-        mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCreate, save_archive, orig_ptr);
+        mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCreate, save_archive, orig_ptr);
 
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        auto loaded = mod_name_runtime.AllocLoadTask(chimaera::MOD_NAME::Method::kCreate, load_archive);
+        auto loaded = mod_name_runtime.AllocLoadTask(clio_run::MOD_NAME::Method::kCreate, load_archive);
         if (!loaded.IsNull()) {
           CHI_IPC->DelTask(loaded);
         }
@@ -7352,15 +7352,15 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
 
     // Test kCustom
     {
-      auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+      auto orig = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
       if (!orig.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-        mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCustom, save_archive, orig_ptr);
+        mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCustom, save_archive, orig_ptr);
 
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        auto loaded = mod_name_runtime.AllocLoadTask(chimaera::MOD_NAME::Method::kCustom, load_archive);
+        auto loaded = mod_name_runtime.AllocLoadTask(clio_run::MOD_NAME::Method::kCustom, load_archive);
         if (!loaded.IsNull()) {
           CHI_IPC->DelTask(loaded);
         }
@@ -7370,15 +7370,15 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
 
     // Test kCoMutexTest
     {
-      auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+      auto orig = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
       if (!orig.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-        mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, orig_ptr);
+        mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCoMutexTest, save_archive, orig_ptr);
 
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        auto loaded = mod_name_runtime.AllocLoadTask(chimaera::MOD_NAME::Method::kCoMutexTest, load_archive);
+        auto loaded = mod_name_runtime.AllocLoadTask(clio_run::MOD_NAME::Method::kCoMutexTest, load_archive);
         if (!loaded.IsNull()) {
           CHI_IPC->DelTask(loaded);
         }
@@ -7388,15 +7388,15 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
 
     // Test kCoRwLockTest
     {
-      auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+      auto orig = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
       if (!orig.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-        mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kCoRwLockTest, save_archive, orig_ptr);
+        mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kCoRwLockTest, save_archive, orig_ptr);
 
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        auto loaded = mod_name_runtime.AllocLoadTask(chimaera::MOD_NAME::Method::kCoRwLockTest, load_archive);
+        auto loaded = mod_name_runtime.AllocLoadTask(clio_run::MOD_NAME::Method::kCoRwLockTest, load_archive);
         if (!loaded.IsNull()) {
           CHI_IPC->DelTask(loaded);
         }
@@ -7406,15 +7406,15 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
 
     // Test kWaitTest
     {
-      auto orig = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+      auto orig = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
       if (!orig.IsNull()) {
         ctp::ipc::FullPtr<chi::Task> orig_ptr = orig.template Cast<chi::Task>();
         chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-        mod_name_runtime.SaveTask(chimaera::MOD_NAME::Method::kWaitTest, save_archive, orig_ptr);
+        mod_name_runtime.SaveTask(clio_run::MOD_NAME::Method::kWaitTest, save_archive, orig_ptr);
 
         chi::LoadTaskArchive load_archive(save_archive.GetData());
         load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-        auto loaded = mod_name_runtime.AllocLoadTask(chimaera::MOD_NAME::Method::kWaitTest, load_archive);
+        auto loaded = mod_name_runtime.AllocLoadTask(clio_run::MOD_NAME::Method::kWaitTest, load_archive);
         if (!loaded.IsNull()) {
           CHI_IPC->DelTask(loaded);
         }
@@ -7429,56 +7429,56 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     INFO("Testing MOD_NAME Runtime::NewCopyTask for all methods");
 
     // Test kCreate
-    auto orig_c = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
+    auto orig_c = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
     if (!orig_c.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_c.template Cast<chi::Task>();
-      auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCreate, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CreateTask>());
+      auto copy = mod_name_runtime.NewCopyTask(clio_run::MOD_NAME::Method::kCreate, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::MOD_NAME::CreateTask>());
       CHI_IPC->DelTask(orig_c);
     }
 
     // Test kDestroy
-    auto orig_d = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
+    auto orig_d = ipc_manager->NewTask<clio_run::MOD_NAME::DestroyTask>();
     if (!orig_d.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_d.template Cast<chi::Task>();
-      auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kDestroy, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::DestroyTask>());
+      auto copy = mod_name_runtime.NewCopyTask(clio_run::MOD_NAME::Method::kDestroy, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::MOD_NAME::DestroyTask>());
       CHI_IPC->DelTask(orig_d);
     }
 
     // Test kCustom
-    auto orig_cu = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto orig_cu = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!orig_cu.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cu.template Cast<chi::Task>();
-      auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCustom, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CustomTask>());
+      auto copy = mod_name_runtime.NewCopyTask(clio_run::MOD_NAME::Method::kCustom, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::MOD_NAME::CustomTask>());
       CHI_IPC->DelTask(orig_cu);
     }
 
     // Test kCoMutexTest
-    auto orig_cm = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto orig_cm = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!orig_cm.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cm.template Cast<chi::Task>();
-      auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCoMutexTest, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CoMutexTestTask>());
+      auto copy = mod_name_runtime.NewCopyTask(clio_run::MOD_NAME::Method::kCoMutexTest, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::MOD_NAME::CoMutexTestTask>());
       CHI_IPC->DelTask(orig_cm);
     }
 
     // Test kCoRwLockTest
-    auto orig_cr = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto orig_cr = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!orig_cr.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_cr.template Cast<chi::Task>();
-      auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kCoRwLockTest, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::CoRwLockTestTask>());
+      auto copy = mod_name_runtime.NewCopyTask(clio_run::MOD_NAME::Method::kCoRwLockTest, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::MOD_NAME::CoRwLockTestTask>());
       CHI_IPC->DelTask(orig_cr);
     }
 
     // Test kWaitTest
-    auto orig_w = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto orig_w = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!orig_w.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> orig_ptr = orig_w.template Cast<chi::Task>();
-      auto copy = mod_name_runtime.NewCopyTask(chimaera::MOD_NAME::Method::kWaitTest, orig_ptr, false);
-      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<chimaera::MOD_NAME::WaitTestTask>());
+      auto copy = mod_name_runtime.NewCopyTask(clio_run::MOD_NAME::Method::kWaitTest, orig_ptr, false);
+      if (!copy.IsNull()) CHI_IPC->DelTask(copy.template Cast<clio_run::MOD_NAME::WaitTestTask>());
       CHI_IPC->DelTask(orig_w);
     }
 
@@ -7497,8 +7497,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     INFO("Testing MOD_NAME Runtime::Aggregate for all methods");
 
     // Test kCreate
-    auto t1_c = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
-    auto t2_c = ipc_manager->NewTask<chimaera::MOD_NAME::CreateTask>();
+    auto t1_c = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
+    auto t2_c = ipc_manager->NewTask<clio_run::MOD_NAME::CreateTask>();
     if (!t1_c.IsNull() && !t2_c.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_c.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_c.template Cast<chi::Task>();
@@ -7508,8 +7508,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     }
 
     // Test kDestroy
-    auto t1_d = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
-    auto t2_d = ipc_manager->NewTask<chimaera::MOD_NAME::DestroyTask>();
+    auto t1_d = ipc_manager->NewTask<clio_run::MOD_NAME::DestroyTask>();
+    auto t2_d = ipc_manager->NewTask<clio_run::MOD_NAME::DestroyTask>();
     if (!t1_d.IsNull() && !t2_d.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_d.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_d.template Cast<chi::Task>();
@@ -7519,8 +7519,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     }
 
     // Test kCustom
-    auto t1_cu = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
-    auto t2_cu = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto t1_cu = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
+    auto t2_cu = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!t1_cu.IsNull() && !t2_cu.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cu.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cu.template Cast<chi::Task>();
@@ -7530,8 +7530,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     }
 
     // Test kCoMutexTest
-    auto t1_cm = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
-    auto t2_cm = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto t1_cm = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
+    auto t2_cm = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!t1_cm.IsNull() && !t2_cm.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cm.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cm.template Cast<chi::Task>();
@@ -7541,8 +7541,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     }
 
     // Test kCoRwLockTest
-    auto t1_cr = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
-    auto t2_cr = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto t1_cr = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
+    auto t2_cr = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!t1_cr.IsNull() && !t2_cr.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_cr.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_cr.template Cast<chi::Task>();
@@ -7552,8 +7552,8 @@ TEST_CASE("Autogen - MOD_NAME Runtime Container Methods", "[autogen][mod_name][r
     }
 
     // Test kWaitTest
-    auto t1_w = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
-    auto t2_w = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto t1_w = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
+    auto t2_w = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!t1_w.IsNull() && !t2_w.IsNull()) {
       ctp::ipc::FullPtr<chi::Task> ptr1 = t1_w.template Cast<chi::Task>();
       ctp::ipc::FullPtr<chi::Task> ptr2 = t2_w.template Cast<chi::Task>();
@@ -7584,7 +7584,7 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   auto* ipc_manager = CHI_IPC;
 
   SECTION("CustomTask SerializeIn/SerializeOut") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -7598,7 +7598,7 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("CoMutexTestTask SerializeIn/SerializeOut") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -7612,7 +7612,7 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("CoRwLockTestTask SerializeIn/SerializeOut") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -7626,7 +7626,7 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("WaitTestTask SerializeIn/SerializeOut") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -7640,8 +7640,8 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("CustomTask Copy and Aggregate") {
-    auto task1 = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Copy(task2);
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -7652,8 +7652,8 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("CoMutexTestTask Copy and Aggregate") {
-    auto task1 = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Copy(task2);
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -7664,8 +7664,8 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("CoRwLockTestTask Copy and Aggregate") {
-    auto task1 = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Copy(task2);
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -7676,8 +7676,8 @@ TEST_CASE("Autogen - MOD_NAME Task Serialization", "[autogen][mod_name][serializ
   }
 
   SECTION("WaitTestTask Copy and Aggregate") {
-    auto task1 = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
-    auto task2 = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto task1 = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
+    auto task2 = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!task1.IsNull() && !task2.IsNull()) {
       task1->Copy(task2);
       task1->Aggregate(task2.template Cast<chi::Task>());
@@ -7696,21 +7696,21 @@ TEST_CASE("Autogen - MOD_NAME CreateParams coverage", "[autogen][mod_name][creat
   EnsureInitialized();
 
   SECTION("CreateParams default constructor") {
-    chimaera::MOD_NAME::CreateParams params;
+    clio_run::MOD_NAME::CreateParams params;
     REQUIRE(params.worker_count_ == 1);
     REQUIRE(params.config_flags_ == 0);
     INFO("CreateParams default constructor test passed");
   }
 
   SECTION("CreateParams with parameters") {
-    chimaera::MOD_NAME::CreateParams params(4, 0x1234);
+    clio_run::MOD_NAME::CreateParams params(4, 0x1234);
     REQUIRE(params.worker_count_ == 4);
     REQUIRE(params.config_flags_ == 0x1234);
     INFO("CreateParams with parameters test passed");
   }
 
   SECTION("CreateParams chimod_lib_name") {
-    REQUIRE(chimaera::MOD_NAME::CreateParams::chimod_lib_name != nullptr);
+    REQUIRE(clio_run::MOD_NAME::CreateParams::chimod_lib_name != nullptr);
     INFO("CreateParams chimod_lib_name test passed");
   }
 }
@@ -8244,16 +8244,16 @@ TEST_CASE("Autogen - Admin Runtime AllocLoadTask coverage", "[autogen][admin][ru
   }
 
   SECTION("AllocLoadTask for CreateTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kCreate);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kCreate);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kCreate, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kCreate, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kCreate, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kCreate, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask for CreateTask succeeded");
         CHI_IPC->DelTask(loaded_task);
@@ -8263,16 +8263,16 @@ TEST_CASE("Autogen - Admin Runtime AllocLoadTask coverage", "[autogen][admin][ru
   }
 
   SECTION("AllocLoadTask for DestroyTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kDestroy);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kDestroy);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kDestroy, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kDestroy, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kDestroy, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kDestroy, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask for DestroyTask succeeded");
         CHI_IPC->DelTask(loaded_task);
@@ -8282,16 +8282,16 @@ TEST_CASE("Autogen - Admin Runtime AllocLoadTask coverage", "[autogen][admin][ru
   }
 
   SECTION("AllocLoadTask for FlushTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kFlush, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kFlush, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kFlush, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kFlush, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask for FlushTask succeeded");
         CHI_IPC->DelTask(loaded_task);
@@ -8301,16 +8301,16 @@ TEST_CASE("Autogen - Admin Runtime AllocLoadTask coverage", "[autogen][admin][ru
   }
 
   SECTION("AllocLoadTask for ClientConnectTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kClientConnect);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kClientConnect);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kClientConnect, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kClientConnect, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kClientConnect, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kClientConnect, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask for ClientConnectTask succeeded");
         CHI_IPC->DelTask(loaded_task);
@@ -8320,16 +8320,16 @@ TEST_CASE("Autogen - Admin Runtime AllocLoadTask coverage", "[autogen][admin][ru
   }
 
   SECTION("AllocLoadTask for MonitorTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kMonitor);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kMonitor);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kMonitor, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kMonitor, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kMonitor, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kMonitor, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask for MonitorTask succeeded");
         CHI_IPC->DelTask(loaded_task);
@@ -8352,7 +8352,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
   // Find the bdev container - need to look up by pool name
   // Bdev pools are created dynamically, so we'll create tasks directly
   SECTION("Bdev CreateTask serialization roundtrip") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_archive);
@@ -8360,7 +8360,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::CreateTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::CreateTask>();
       if (!task2.IsNull()) {
         task2->SerializeIn(load_archive);
         INFO("Bdev CreateTask serialization roundtrip passed");
@@ -8371,7 +8371,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
   }
 
   SECTION("Bdev DestroyTask serialization roundtrip") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_archive);
@@ -8379,7 +8379,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::DestroyTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::DestroyTask>();
       if (!task2.IsNull()) {
         task2->SerializeIn(load_archive);
         INFO("Bdev DestroyTask serialization roundtrip passed");
@@ -8390,7 +8390,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
   }
 
   SECTION("Bdev AllocateBlocksTask serialization roundtrip") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_archive);
@@ -8398,7 +8398,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::AllocateBlocksTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>();
       if (!task2.IsNull()) {
         task2->SerializeIn(load_archive);
         INFO("Bdev AllocateBlocksTask serialization roundtrip passed");
@@ -8409,7 +8409,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
   }
 
   SECTION("Bdev FreeBlocksTask serialization roundtrip") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_archive);
@@ -8417,7 +8417,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::FreeBlocksTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>();
       if (!task2.IsNull()) {
         task2->SerializeIn(load_archive);
         INFO("Bdev FreeBlocksTask serialization roundtrip passed");
@@ -8428,7 +8428,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
   }
 
   SECTION("Bdev GetStatsTask serialization roundtrip") {
-    auto task = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+    auto task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_archive);
@@ -8436,7 +8436,7 @@ TEST_CASE("Autogen - Bdev Runtime AllocLoadTask coverage", "[autogen][bdev][runt
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
 
-      auto task2 = ipc_manager->NewTask<chimaera::bdev::GetStatsTask>();
+      auto task2 = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>();
       if (!task2.IsNull()) {
         task2->SerializeIn(load_archive);
         INFO("Bdev GetStatsTask serialization roundtrip passed");
@@ -8553,7 +8553,7 @@ TEST_CASE("Autogen - MOD_NAME Task serialization coverage", "[autogen][modname][
   auto* ipc_manager = CHI_IPC;
 
   SECTION("CustomTask direct serialization") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::CustomTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::CustomTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8567,7 +8567,7 @@ TEST_CASE("Autogen - MOD_NAME Task serialization coverage", "[autogen][modname][
   }
 
   SECTION("CoMutexTestTask direct serialization") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::CoMutexTestTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::CoMutexTestTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8581,7 +8581,7 @@ TEST_CASE("Autogen - MOD_NAME Task serialization coverage", "[autogen][modname][
   }
 
   SECTION("CoRwLockTestTask direct serialization") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::CoRwLockTestTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::CoRwLockTestTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8595,7 +8595,7 @@ TEST_CASE("Autogen - MOD_NAME Task serialization coverage", "[autogen][modname][
   }
 
   SECTION("WaitTestTask direct serialization") {
-    auto task = ipc_manager->NewTask<chimaera::MOD_NAME::WaitTestTask>();
+    auto task = ipc_manager->NewTask<clio_run::MOD_NAME::WaitTestTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8619,7 +8619,7 @@ TEST_CASE("Autogen - Admin Additional Task coverage", "[autogen][admin][tasks][a
   auto* ipc_manager = CHI_IPC;
 
   SECTION("SendTask serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SendTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::SendTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8633,7 +8633,7 @@ TEST_CASE("Autogen - Admin Additional Task coverage", "[autogen][admin][tasks][a
   }
 
   SECTION("RecvTask serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::RecvTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::RecvTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8647,7 +8647,7 @@ TEST_CASE("Autogen - Admin Additional Task coverage", "[autogen][admin][tasks][a
   }
 
   SECTION("SubmitBatchTask serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8661,7 +8661,7 @@ TEST_CASE("Autogen - Admin Additional Task coverage", "[autogen][admin][tasks][a
   }
 
   SECTION("StopRuntimeTask serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8675,7 +8675,7 @@ TEST_CASE("Autogen - Admin Additional Task coverage", "[autogen][admin][tasks][a
   }
 
   SECTION("GetOrCreatePoolTask serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::GetOrCreatePoolTask<chimaera::admin::CreateParams>>();
+    auto task = ipc_manager->NewTask<clio_run::admin::GetOrCreatePoolTask<clio_run::admin::CreateParams>>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8689,7 +8689,7 @@ TEST_CASE("Autogen - Admin Additional Task coverage", "[autogen][admin][tasks][a
   }
 
   SECTION("DestroyPoolTask serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::DestroyPoolTask>();
+    auto task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_in(chi::MsgType::kSerializeIn);
       task->SerializeIn(save_in);
@@ -8735,9 +8735,9 @@ TEST_CASE("Autogen - Bdev Container NewCopyTask coverage", "[autogen][bdev][cont
   auto* container = pool_manager->GetStaticContainer(bdev_pool_id);
 
   SECTION("NewCopyTask for WriteTask") {
-    auto orig_task = container->NewTask(chimaera::bdev::Method::kWrite);
+    auto orig_task = container->NewTask(clio_run::bdev::Method::kWrite);
     if (!orig_task.IsNull()) {
-      auto copy_task = container->NewCopyTask(chimaera::bdev::Method::kWrite, orig_task, false);
+      auto copy_task = container->NewCopyTask(clio_run::bdev::Method::kWrite, orig_task, false);
       if (!copy_task.IsNull()) {
         INFO("NewCopyTask for WriteTask succeeded");
         CHI_IPC->DelTask(copy_task);
@@ -8747,9 +8747,9 @@ TEST_CASE("Autogen - Bdev Container NewCopyTask coverage", "[autogen][bdev][cont
   }
 
   SECTION("NewCopyTask for ReadTask") {
-    auto orig_task = container->NewTask(chimaera::bdev::Method::kRead);
+    auto orig_task = container->NewTask(clio_run::bdev::Method::kRead);
     if (!orig_task.IsNull()) {
-      auto copy_task = container->NewCopyTask(chimaera::bdev::Method::kRead, orig_task, false);
+      auto copy_task = container->NewCopyTask(clio_run::bdev::Method::kRead, orig_task, false);
       if (!copy_task.IsNull()) {
         INFO("NewCopyTask for ReadTask succeeded");
         CHI_IPC->DelTask(copy_task);
@@ -8759,8 +8759,8 @@ TEST_CASE("Autogen - Bdev Container NewCopyTask coverage", "[autogen][bdev][cont
   }
 
   SECTION("Aggregate for WriteTask") {
-    auto task1 = container->NewTask(chimaera::bdev::Method::kWrite);
-    auto task2 = container->NewTask(chimaera::bdev::Method::kWrite);
+    auto task1 = container->NewTask(clio_run::bdev::Method::kWrite);
+    auto task2 = container->NewTask(clio_run::bdev::Method::kWrite);
     if (!task1.IsNull() && !task2.IsNull()) {
       task1.ptr_->Aggregate(task2.template Cast<chi::Task>());
       INFO("Aggregate for WriteTask succeeded");
@@ -8787,9 +8787,9 @@ TEST_CASE("Autogen - Admin Container NewCopyTask coverage", "[autogen][admin][co
   }
 
   SECTION("NewCopyTask for SendTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kSend);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kSend);
     if (!orig_task.IsNull()) {
-      auto copy_task = container->NewCopyTask(chimaera::admin::Method::kSend, orig_task, false);
+      auto copy_task = container->NewCopyTask(clio_run::admin::Method::kSend, orig_task, false);
       if (!copy_task.IsNull()) {
         INFO("NewCopyTask for SendTask succeeded");
         CHI_IPC->DelTask(copy_task);
@@ -8799,9 +8799,9 @@ TEST_CASE("Autogen - Admin Container NewCopyTask coverage", "[autogen][admin][co
   }
 
   SECTION("NewCopyTask for RecvTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kRecv);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kRecv);
     if (!orig_task.IsNull()) {
-      auto copy_task = container->NewCopyTask(chimaera::admin::Method::kRecv, orig_task, false);
+      auto copy_task = container->NewCopyTask(clio_run::admin::Method::kRecv, orig_task, false);
       if (!copy_task.IsNull()) {
         INFO("NewCopyTask for RecvTask succeeded");
         CHI_IPC->DelTask(copy_task);
@@ -8811,8 +8811,8 @@ TEST_CASE("Autogen - Admin Container NewCopyTask coverage", "[autogen][admin][co
   }
 
   SECTION("Aggregate for SendTask") {
-    auto task1 = container->NewTask(chimaera::admin::Method::kSend);
-    auto task2 = container->NewTask(chimaera::admin::Method::kSend);
+    auto task1 = container->NewTask(clio_run::admin::Method::kSend);
+    auto task2 = container->NewTask(clio_run::admin::Method::kSend);
     if (!task1.IsNull() && !task2.IsNull()) {
       task1.ptr_->Aggregate(task2.template Cast<chi::Task>());
       INFO("Aggregate for SendTask succeeded");
@@ -8822,8 +8822,8 @@ TEST_CASE("Autogen - Admin Container NewCopyTask coverage", "[autogen][admin][co
   }
 
   SECTION("Aggregate for RecvTask") {
-    auto task1 = container->NewTask(chimaera::admin::Method::kRecv);
-    auto task2 = container->NewTask(chimaera::admin::Method::kRecv);
+    auto task1 = container->NewTask(clio_run::admin::Method::kRecv);
+    auto task2 = container->NewTask(clio_run::admin::Method::kRecv);
     if (!task1.IsNull() && !task2.IsNull()) {
       task1.ptr_->Aggregate(task2.template Cast<chi::Task>());
       INFO("Aggregate for RecvTask succeeded");
@@ -8922,80 +8922,80 @@ TEST_CASE("Autogen - Admin Container SaveTask SerializeOut coverage", "[autogen]
   }
 
   SECTION("SaveTask SerializeOut for CreateTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kCreate);
+    auto task = container->NewTask(clio_run::admin::Method::kCreate);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kCreate, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kCreate, save_archive, task);
       INFO("SaveTask SerializeOut for CreateTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for DestroyTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kDestroy);
+    auto task = container->NewTask(clio_run::admin::Method::kDestroy);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kDestroy, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kDestroy, save_archive, task);
       INFO("SaveTask SerializeOut for DestroyTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for GetOrCreatePoolTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto task = container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kGetOrCreatePool, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kGetOrCreatePool, save_archive, task);
       INFO("SaveTask SerializeOut for GetOrCreatePoolTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for DestroyPoolTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kDestroyPool);
+    auto task = container->NewTask(clio_run::admin::Method::kDestroyPool);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kDestroyPool, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kDestroyPool, save_archive, task);
       INFO("SaveTask SerializeOut for DestroyPoolTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for StopRuntimeTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto task = container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kStopRuntime, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kStopRuntime, save_archive, task);
       INFO("SaveTask SerializeOut for StopRuntimeTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for SendTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kSend);
+    auto task = container->NewTask(clio_run::admin::Method::kSend);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kSend, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kSend, save_archive, task);
       INFO("SaveTask SerializeOut for SendTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for RecvTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kRecv);
+    auto task = container->NewTask(clio_run::admin::Method::kRecv);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kRecv, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kRecv, save_archive, task);
       INFO("SaveTask SerializeOut for RecvTask passed");
       CHI_IPC->DelTask(task);
     }
   }
 
   SECTION("SaveTask SerializeOut for SubmitBatchTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto task = container->NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeOut);
-      container->SaveTask(chimaera::admin::Method::kSubmitBatch, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kSubmitBatch, save_archive, task);
       INFO("SaveTask SerializeOut for SubmitBatchTask passed");
       CHI_IPC->DelTask(task);
     }
@@ -9106,16 +9106,16 @@ TEST_CASE("Autogen - Admin Container AllocLoadTask full coverage", "[autogen][ad
   }
 
   SECTION("AllocLoadTask roundtrip for CreateTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kCreate);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kCreate);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kCreate, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kCreate, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kCreate, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kCreate, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask roundtrip for CreateTask passed");
         CHI_IPC->DelTask(loaded_task);
@@ -9125,16 +9125,16 @@ TEST_CASE("Autogen - Admin Container AllocLoadTask full coverage", "[autogen][ad
   }
 
   SECTION("AllocLoadTask roundtrip for DestroyTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kDestroy);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kDestroy);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kDestroy, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kDestroy, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kDestroy, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kDestroy, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask roundtrip for DestroyTask passed");
         CHI_IPC->DelTask(loaded_task);
@@ -9144,16 +9144,16 @@ TEST_CASE("Autogen - Admin Container AllocLoadTask full coverage", "[autogen][ad
   }
 
   SECTION("AllocLoadTask roundtrip for GetOrCreatePoolTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kGetOrCreatePool, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kGetOrCreatePool, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kGetOrCreatePool, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kGetOrCreatePool, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask roundtrip for GetOrCreatePoolTask passed");
         CHI_IPC->DelTask(loaded_task);
@@ -9163,16 +9163,16 @@ TEST_CASE("Autogen - Admin Container AllocLoadTask full coverage", "[autogen][ad
   }
 
   SECTION("AllocLoadTask roundtrip for DestroyPoolTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kDestroyPool);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kDestroyPool);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kDestroyPool, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kDestroyPool, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kDestroyPool, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kDestroyPool, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask roundtrip for DestroyPoolTask passed");
         CHI_IPC->DelTask(loaded_task);
@@ -9182,16 +9182,16 @@ TEST_CASE("Autogen - Admin Container AllocLoadTask full coverage", "[autogen][ad
   }
 
   SECTION("AllocLoadTask roundtrip for StopRuntimeTask") {
-    auto orig_task = container->NewTask(chimaera::admin::Method::kStopRuntime);
+    auto orig_task = container->NewTask(clio_run::admin::Method::kStopRuntime);
     if (!orig_task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kStopRuntime, save_archive, orig_task);
+      container->SaveTask(clio_run::admin::Method::kStopRuntime, save_archive, orig_task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
 
-      auto loaded_task = container->AllocLoadTask(chimaera::admin::Method::kStopRuntime, load_archive);
+      auto loaded_task = container->AllocLoadTask(clio_run::admin::Method::kStopRuntime, load_archive);
       if (!loaded_task.IsNull()) {
         INFO("AllocLoadTask roundtrip for StopRuntimeTask passed");
         CHI_IPC->DelTask(loaded_task);
@@ -9608,7 +9608,7 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcs NewTask and DelTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = container->NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
       CHI_IPC->DelTask(task);
       INFO("WreapDeadIpcs NewTask/DelTask completed");
@@ -9616,15 +9616,15 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcs SaveTask/LoadTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = container->NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kWreapDeadIpcs, save_archive, task);
 
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
-      container->LoadTask(chimaera::admin::Method::kWreapDeadIpcs, load_archive, task);
+      container->LoadTask(clio_run::admin::Method::kWreapDeadIpcs, load_archive, task);
 
       CHI_IPC->DelTask(task);
       INFO("WreapDeadIpcs SaveTask/LoadTask completed");
@@ -9632,9 +9632,9 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcs NewCopyTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = container->NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
-      auto copy = container->NewCopyTask(chimaera::admin::Method::kWreapDeadIpcs, task, false);
+      auto copy = container->NewCopyTask(clio_run::admin::Method::kWreapDeadIpcs, task, false);
       if (!copy.IsNull()) {
         CHI_IPC->DelTask(copy);
       }
@@ -9644,8 +9644,8 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcs Aggregate") {
-    auto t1 = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
-    auto t2 = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto t1 = container->NewTask(clio_run::admin::Method::kWreapDeadIpcs);
+    auto t2 = container->NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -9655,7 +9655,7 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcs LocalSaveTask/LocalLoadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::WreapDeadIpcsTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::WreapDeadIpcsTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -9666,12 +9666,12 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->LocalSaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task_ptr);
+    container->LocalSaveTask(clio_run::admin::Method::kWreapDeadIpcs, save_archive, task_ptr);
 
-    auto loaded_task = container->NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto loaded_task = container->NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!loaded_task.IsNull()) {
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      container->LocalLoadTask(chimaera::admin::Method::kWreapDeadIpcs, load_archive, loaded_task);
+      container->LocalLoadTask(clio_run::admin::Method::kWreapDeadIpcs, load_archive, loaded_task);
       INFO("WreapDeadIpcs LocalSaveTask/LocalLoadTask completed");
       CHI_IPC->DelTask(loaded_task);
     }
@@ -9680,7 +9680,7 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcs LocalAllocLoadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::WreapDeadIpcsTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::WreapDeadIpcsTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (orig_task.IsNull()) {
@@ -9691,10 +9691,10 @@ TEST_CASE("Autogen - Admin WreapDeadIpcs Container Methods", "[autogen][admin][w
     chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
     ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-    container->LocalSaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task_ptr);
+    container->LocalSaveTask(clio_run::admin::Method::kWreapDeadIpcs, save_archive, task_ptr);
 
     chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-    auto loaded = container->LocalAllocLoadTask(chimaera::admin::Method::kWreapDeadIpcs, load_archive);
+    auto loaded = container->LocalAllocLoadTask(clio_run::admin::Method::kWreapDeadIpcs, load_archive);
     if (!loaded.IsNull()) {
       INFO("WreapDeadIpcs LocalAllocLoadTask completed");
       CHI_IPC->DelTask(loaded);
@@ -9717,17 +9717,17 @@ TEST_CASE("Autogen - Admin LocalAllocLoadTask Additional Methods", "[autogen][ad
   }
 
   SECTION("Flush LocalAllocLoadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::FlushTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (!orig_task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
       ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-      container->LocalSaveTask(chimaera::admin::Method::kFlush, save_archive, task_ptr);
+      container->LocalSaveTask(clio_run::admin::Method::kFlush, save_archive, task_ptr);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = container->LocalAllocLoadTask(chimaera::admin::Method::kFlush, load_archive);
+      auto loaded = container->LocalAllocLoadTask(clio_run::admin::Method::kFlush, load_archive);
       if (!loaded.IsNull()) {
         INFO("Flush LocalAllocLoadTask completed");
         CHI_IPC->DelTask(loaded);
@@ -9737,17 +9737,17 @@ TEST_CASE("Autogen - Admin LocalAllocLoadTask Additional Methods", "[autogen][ad
   }
 
   SECTION("Monitor LocalAllocLoadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::MonitorTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::MonitorTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(), std::string("status"));
 
     if (!orig_task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
       ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-      container->LocalSaveTask(chimaera::admin::Method::kMonitor, save_archive, task_ptr);
+      container->LocalSaveTask(clio_run::admin::Method::kMonitor, save_archive, task_ptr);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = container->LocalAllocLoadTask(chimaera::admin::Method::kMonitor, load_archive);
+      auto loaded = container->LocalAllocLoadTask(clio_run::admin::Method::kMonitor, load_archive);
       if (!loaded.IsNull()) {
         INFO("Monitor LocalAllocLoadTask completed");
         CHI_IPC->DelTask(loaded);
@@ -9757,17 +9757,17 @@ TEST_CASE("Autogen - Admin LocalAllocLoadTask Additional Methods", "[autogen][ad
   }
 
   SECTION("ClientConnect LocalAllocLoadTask") {
-    auto orig_task = ipc_manager->NewTask<chimaera::admin::ClientConnectTask>(
+    auto orig_task = ipc_manager->NewTask<clio_run::admin::ClientConnectTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
 
     if (!orig_task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
       ctp::ipc::FullPtr<chi::Task> task_ptr = orig_task.template Cast<chi::Task>();
-      container->LocalSaveTask(chimaera::admin::Method::kClientConnect, save_archive, task_ptr);
+      container->LocalSaveTask(clio_run::admin::Method::kClientConnect, save_archive, task_ptr);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = container->LocalAllocLoadTask(chimaera::admin::Method::kClientConnect, load_archive);
+      auto loaded = container->LocalAllocLoadTask(clio_run::admin::Method::kClientConnect, load_archive);
       if (!loaded.IsNull()) {
         INFO("ClientConnect LocalAllocLoadTask completed");
         CHI_IPC->DelTask(loaded);
@@ -9787,20 +9787,20 @@ TEST_CASE("Autogen - MOD_NAME LocalSaveTask/LocalLoadTask Safe Methods", "[autog
   EnsureInitialized();
 
   auto* ipc_manager = CHI_IPC;
-  chimaera::MOD_NAME::Runtime mod_name_runtime;
+  clio_run::MOD_NAME::Runtime mod_name_runtime;
 
   // Safe: CoMutexTestTask has only u32 fields
   SECTION("CoMutexTest LocalSaveTask/LocalLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoMutexTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoMutexTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kCoMutexTest, save_archive, task);
 
-      auto loaded = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoMutexTest);
+      auto loaded = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoMutexTest);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        mod_name_runtime.LocalLoadTask(chimaera::MOD_NAME::Method::kCoMutexTest, load_archive, loaded);
+        mod_name_runtime.LocalLoadTask(clio_run::MOD_NAME::Method::kCoMutexTest, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -9810,16 +9810,16 @@ TEST_CASE("Autogen - MOD_NAME LocalSaveTask/LocalLoadTask Safe Methods", "[autog
 
   // Safe: CoRwLockTestTask has only u32/bool fields
   SECTION("CoRwLockTest LocalSaveTask/LocalLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoRwLockTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoRwLockTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kCoRwLockTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kCoRwLockTest, save_archive, task);
 
-      auto loaded = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoRwLockTest);
+      auto loaded = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoRwLockTest);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        mod_name_runtime.LocalLoadTask(chimaera::MOD_NAME::Method::kCoRwLockTest, load_archive, loaded);
+        mod_name_runtime.LocalLoadTask(clio_run::MOD_NAME::Method::kCoRwLockTest, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -9829,16 +9829,16 @@ TEST_CASE("Autogen - MOD_NAME LocalSaveTask/LocalLoadTask Safe Methods", "[autog
 
   // Safe: WaitTestTask has only u32 fields
   SECTION("WaitTest LocalSaveTask/LocalLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kWaitTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kWaitTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kWaitTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kWaitTest, save_archive, task);
 
-      auto loaded = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kWaitTest);
+      auto loaded = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kWaitTest);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        mod_name_runtime.LocalLoadTask(chimaera::MOD_NAME::Method::kWaitTest, load_archive, loaded);
+        mod_name_runtime.LocalLoadTask(clio_run::MOD_NAME::Method::kWaitTest, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -9851,17 +9851,17 @@ TEST_CASE("Autogen - MOD_NAME LocalAllocLoadTask Safe Methods", "[autogen][mod_n
   EnsureInitialized();
 
   auto* ipc_manager = CHI_IPC;
-  chimaera::MOD_NAME::Runtime mod_name_runtime;
+  clio_run::MOD_NAME::Runtime mod_name_runtime;
 
   SECTION("CoMutexTest LocalAllocLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoMutexTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoMutexTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kCoMutexTest, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = mod_name_runtime.LocalAllocLoadTask(chimaera::MOD_NAME::Method::kCoMutexTest, load_archive);
+      auto loaded = mod_name_runtime.LocalAllocLoadTask(clio_run::MOD_NAME::Method::kCoMutexTest, load_archive);
       if (!loaded.IsNull()) {
         CHI_IPC->DelTask(loaded);
       }
@@ -9871,14 +9871,14 @@ TEST_CASE("Autogen - MOD_NAME LocalAllocLoadTask Safe Methods", "[autogen][mod_n
   }
 
   SECTION("CoRwLockTest LocalAllocLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoRwLockTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoRwLockTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kCoRwLockTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kCoRwLockTest, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = mod_name_runtime.LocalAllocLoadTask(chimaera::MOD_NAME::Method::kCoRwLockTest, load_archive);
+      auto loaded = mod_name_runtime.LocalAllocLoadTask(clio_run::MOD_NAME::Method::kCoRwLockTest, load_archive);
       if (!loaded.IsNull()) {
         CHI_IPC->DelTask(loaded);
       }
@@ -9888,14 +9888,14 @@ TEST_CASE("Autogen - MOD_NAME LocalAllocLoadTask Safe Methods", "[autogen][mod_n
   }
 
   SECTION("WaitTest LocalAllocLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kWaitTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kWaitTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kWaitTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kWaitTest, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = mod_name_runtime.LocalAllocLoadTask(chimaera::MOD_NAME::Method::kWaitTest, load_archive);
+      auto loaded = mod_name_runtime.LocalAllocLoadTask(clio_run::MOD_NAME::Method::kWaitTest, load_archive);
       if (!loaded.IsNull()) {
         CHI_IPC->DelTask(loaded);
       }
@@ -9909,21 +9909,21 @@ TEST_CASE("Autogen - Bdev LocalSaveTask/LocalLoadTask Safe Methods", "[autogen][
   EnsureInitialized();
 
   auto* ipc_manager = CHI_IPC;
-  chimaera::bdev::Runtime bdev_runtime;
+  clio_run::bdev::Runtime bdev_runtime;
 
   // Safe: GetStatsTask has PerfMetrics (POD struct of doubles) + u64 in SerializeOut
   // SerializeIn has no extra fields
   SECTION("GetStats LocalSaveTask/LocalLoadTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      bdev_runtime.LocalSaveTask(chimaera::bdev::Method::kGetStats, save_archive, task);
+      bdev_runtime.LocalSaveTask(clio_run::bdev::Method::kGetStats, save_archive, task);
 
-      auto loaded = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+      auto loaded = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        bdev_runtime.LocalLoadTask(chimaera::bdev::Method::kGetStats, load_archive, loaded);
+        bdev_runtime.LocalLoadTask(clio_run::bdev::Method::kGetStats, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -9933,11 +9933,11 @@ TEST_CASE("Autogen - Bdev LocalSaveTask/LocalLoadTask Safe Methods", "[autogen][
 
   // Safe: FreeBlocks SerializeOut has no extra params (only base Task fields)
   SECTION("FreeBlocks LocalSaveTask only") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kFreeBlocks);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kFreeBlocks);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      bdev_runtime.LocalSaveTask(chimaera::bdev::Method::kFreeBlocks, save_archive, task);
+      bdev_runtime.LocalSaveTask(clio_run::bdev::Method::kFreeBlocks, save_archive, task);
       CHI_IPC->DelTask(task);
       INFO("Bdev FreeBlocks LocalSaveTask completed");
     }
@@ -9945,11 +9945,11 @@ TEST_CASE("Autogen - Bdev LocalSaveTask/LocalLoadTask Safe Methods", "[autogen][
 
   // Safe: Write SerializeOut has only u64 bytes_written_
   SECTION("Write LocalSaveTask only") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kWrite);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kWrite);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      bdev_runtime.LocalSaveTask(chimaera::bdev::Method::kWrite, save_archive, task);
+      bdev_runtime.LocalSaveTask(clio_run::bdev::Method::kWrite, save_archive, task);
       CHI_IPC->DelTask(task);
       INFO("Bdev Write LocalSaveTask completed");
     }
@@ -9957,18 +9957,18 @@ TEST_CASE("Autogen - Bdev LocalSaveTask/LocalLoadTask Safe Methods", "[autogen][
 
   // Safe: AllocateBlocks SerializeIn has only u64 size_
   SECTION("AllocateBlocks LocalLoadTask only") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kAllocateBlocks);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kAllocateBlocks);
     if (!task.IsNull()) {
       // Write enough data for LocalLoadTask to read from
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      bdev_runtime.LocalSaveTask(chimaera::bdev::Method::kAllocateBlocks, save_archive, task);
+      bdev_runtime.LocalSaveTask(clio_run::bdev::Method::kAllocateBlocks, save_archive, task);
 
       // Create new task and try LocalLoadTask
-      auto loaded = bdev_runtime.NewTask(chimaera::bdev::Method::kAllocateBlocks);
+      auto loaded = bdev_runtime.NewTask(clio_run::bdev::Method::kAllocateBlocks);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        bdev_runtime.LocalLoadTask(chimaera::bdev::Method::kAllocateBlocks, load_archive, loaded);
+        bdev_runtime.LocalLoadTask(clio_run::bdev::Method::kAllocateBlocks, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -9981,17 +9981,17 @@ TEST_CASE("Autogen - Bdev LocalAllocLoadTask Safe Methods", "[autogen][bdev][loc
   EnsureInitialized();
 
   auto* ipc_manager = CHI_IPC;
-  chimaera::bdev::Runtime bdev_runtime;
+  clio_run::bdev::Runtime bdev_runtime;
 
   SECTION("GetStats LocalAllocLoadTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      bdev_runtime.LocalSaveTask(chimaera::bdev::Method::kGetStats, save_archive, task);
+      bdev_runtime.LocalSaveTask(clio_run::bdev::Method::kGetStats, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-      auto loaded = bdev_runtime.LocalAllocLoadTask(chimaera::bdev::Method::kGetStats, load_archive);
+      auto loaded = bdev_runtime.LocalAllocLoadTask(clio_run::bdev::Method::kGetStats, load_archive);
       if (!loaded.IsNull()) {
         CHI_IPC->DelTask(loaded);
       }
@@ -10204,7 +10204,7 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   const chi::u32 invalid_method = 9999;
 
   SECTION("Default DelTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       CHI_IPC->DelTask(task);
       INFO("Admin default DelTask completed");
@@ -10212,7 +10212,7 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   }
 
   SECTION("Default SaveTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       container->SaveTask(invalid_method, save_archive, task);
@@ -10222,10 +10222,10 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   }
 
   SECTION("Default LoadTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      container->SaveTask(chimaera::admin::Method::kFlush, save_archive, task);
+      container->SaveTask(clio_run::admin::Method::kFlush, save_archive, task);
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
@@ -10236,11 +10236,11 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   }
 
   SECTION("Default LocalLoadTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      container->LocalSaveTask(chimaera::admin::Method::kFlush, save_archive, task);
+      container->LocalSaveTask(clio_run::admin::Method::kFlush, save_archive, task);
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       container->LocalLoadTask(invalid_method, load_archive, task);
       CHI_IPC->DelTask(task);
@@ -10249,7 +10249,7 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   }
 
   SECTION("Default LocalSaveTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
@@ -10260,7 +10260,7 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   }
 
   SECTION("Default NewCopyTask") {
-    auto task = container->NewTask(chimaera::admin::Method::kFlush);
+    auto task = container->NewTask(clio_run::admin::Method::kFlush);
     if (!task.IsNull()) {
       auto copy = container->NewCopyTask(invalid_method, task, false);
       if (!copy.IsNull()) {
@@ -10280,8 +10280,8 @@ TEST_CASE("Autogen - Admin Default Case Coverage", "[autogen][admin][default]") 
   }
 
   SECTION("Default Aggregate") {
-    auto t1 = container->NewTask(chimaera::admin::Method::kFlush);
-    auto t2 = container->NewTask(chimaera::admin::Method::kFlush);
+    auto t1 = container->NewTask(clio_run::admin::Method::kFlush);
+    auto t2 = container->NewTask(clio_run::admin::Method::kFlush);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -10295,12 +10295,12 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   EnsureInitialized();
 
   auto* ipc_manager = CHI_IPC;
-  chimaera::bdev::Runtime bdev_runtime;
+  clio_run::bdev::Runtime bdev_runtime;
 
   const chi::u32 invalid_method = 9999;
 
   SECTION("Default DelTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       CHI_IPC->DelTask(task);
       INFO("Bdev default DelTask completed");
@@ -10308,7 +10308,7 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   }
 
   SECTION("Default SaveTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
       bdev_runtime.SaveTask(invalid_method, save_archive, task);
@@ -10318,10 +10318,10 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   }
 
   SECTION("Default LoadTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_archive(chi::MsgType::kSerializeIn);
-      bdev_runtime.SaveTask(chimaera::bdev::Method::kGetStats, save_archive, task);
+      bdev_runtime.SaveTask(clio_run::bdev::Method::kGetStats, save_archive, task);
       std::string save_data = save_archive.GetData();
       chi::LoadTaskArchive load_archive(save_data);
       load_archive.msg_type_ = chi::MsgType::kSerializeIn;
@@ -10332,7 +10332,7 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   }
 
   SECTION("Default LocalSaveTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
@@ -10343,11 +10343,11 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   }
 
   SECTION("Default LocalLoadTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      bdev_runtime.LocalSaveTask(chimaera::bdev::Method::kGetStats, save_archive, task);
+      bdev_runtime.LocalSaveTask(clio_run::bdev::Method::kGetStats, save_archive, task);
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       bdev_runtime.LocalLoadTask(invalid_method, load_archive, task);
       CHI_IPC->DelTask(task);
@@ -10356,7 +10356,7 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   }
 
   SECTION("Default NewCopyTask") {
-    auto task = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto task = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!task.IsNull()) {
       auto copy = bdev_runtime.NewCopyTask(invalid_method, task, false);
       if (!copy.IsNull()) {
@@ -10376,8 +10376,8 @@ TEST_CASE("Autogen - Bdev Default Case Coverage", "[autogen][bdev][default]") {
   }
 
   SECTION("Default Aggregate") {
-    auto t1 = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
-    auto t2 = bdev_runtime.NewTask(chimaera::bdev::Method::kGetStats);
+    auto t1 = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
+    auto t2 = bdev_runtime.NewTask(clio_run::bdev::Method::kGetStats);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -10391,12 +10391,12 @@ TEST_CASE("Autogen - MOD_NAME Default Case Coverage", "[autogen][mod_name][defau
   EnsureInitialized();
 
   auto* ipc_manager = CHI_IPC;
-  chimaera::MOD_NAME::Runtime mod_name_runtime;
+  clio_run::MOD_NAME::Runtime mod_name_runtime;
 
   const chi::u32 invalid_method = 9999;
 
   SECTION("Default LocalSaveTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoMutexTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoMutexTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
@@ -10407,11 +10407,11 @@ TEST_CASE("Autogen - MOD_NAME Default Case Coverage", "[autogen][mod_name][defau
   }
 
   SECTION("Default LocalLoadTask") {
-    auto task = mod_name_runtime.NewTask(chimaera::MOD_NAME::Method::kCoMutexTest);
+    auto task = mod_name_runtime.NewTask(clio_run::MOD_NAME::Method::kCoMutexTest);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeOut, save_buf);
-      mod_name_runtime.LocalSaveTask(chimaera::MOD_NAME::Method::kCoMutexTest, save_archive, task);
+      mod_name_runtime.LocalSaveTask(clio_run::MOD_NAME::Method::kCoMutexTest, save_archive, task);
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       mod_name_runtime.LocalLoadTask(invalid_method, load_archive, task);
       CHI_IPC->DelTask(task);
@@ -10524,8 +10524,8 @@ TEST_CASE("Autogen - Bdev CreateParams constructors", "[autogen][bdev][createpar
   EnsureInitialized();
 
   SECTION("Default constructor") {
-    chimaera::bdev::CreateParams params;
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kFile);
+    clio_run::bdev::CreateParams params;
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kFile);
     REQUIRE(params.total_size_ == 0);
     REQUIRE(params.io_depth_ == 32);
     REQUIRE(params.alignment_ == 4096);
@@ -10538,9 +10538,9 @@ TEST_CASE("Autogen - Bdev CreateParams constructors", "[autogen][bdev][createpar
   }
 
   SECTION("Constructor with basic parameters - 2 args") {
-    chimaera::bdev::CreateParams params(
-        chimaera::bdev::BdevType::kRam, (chi::u64)(1024 * 1024));
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kRam);
+    clio_run::bdev::CreateParams params(
+        clio_run::bdev::BdevType::kRam, (chi::u64)(1024 * 1024));
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kRam);
     REQUIRE(params.total_size_ == 1024 * 1024);
     REQUIRE(params.io_depth_ == 32);  // default
     REQUIRE(params.alignment_ == 4096);  // default
@@ -10550,9 +10550,9 @@ TEST_CASE("Autogen - Bdev CreateParams constructors", "[autogen][bdev][createpar
   }
 
   SECTION("Constructor with basic parameters - 3 args") {
-    chimaera::bdev::CreateParams params(
-        chimaera::bdev::BdevType::kRam, (chi::u64)(1024 * 1024), (chi::u32)64);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kRam);
+    clio_run::bdev::CreateParams params(
+        clio_run::bdev::BdevType::kRam, (chi::u64)(1024 * 1024), (chi::u32)64);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kRam);
     REQUIRE(params.total_size_ == 1024 * 1024);
     REQUIRE(params.io_depth_ == 64);
     REQUIRE(params.alignment_ == 4096);  // default
@@ -10562,16 +10562,16 @@ TEST_CASE("Autogen - Bdev CreateParams constructors", "[autogen][bdev][createpar
   }
 
   SECTION("Constructor with custom PerfMetrics") {
-    chimaera::bdev::PerfMetrics custom_perf;
+    clio_run::bdev::PerfMetrics custom_perf;
     custom_perf.read_bandwidth_mbps_ = 500.0;
     custom_perf.write_bandwidth_mbps_ = 400.0;
     custom_perf.read_latency_us_ = 200.0;
     custom_perf.write_latency_us_ = 300.0;
     custom_perf.iops_ = 50000.0;
 
-    chimaera::bdev::CreateParams params(
-        chimaera::bdev::BdevType::kFile, 2048, 16, 4096, &custom_perf);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kFile);
+    clio_run::bdev::CreateParams params(
+        clio_run::bdev::BdevType::kFile, 2048, 16, 4096, &custom_perf);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kFile);
     REQUIRE(params.total_size_ == 2048);
     REQUIRE(params.io_depth_ == 16);
     REQUIRE(params.alignment_ == 4096);
@@ -10584,9 +10584,9 @@ TEST_CASE("Autogen - Bdev CreateParams constructors", "[autogen][bdev][createpar
   }
 
   SECTION("Constructor with nullptr PerfMetrics") {
-    chimaera::bdev::CreateParams params(
-        chimaera::bdev::BdevType::kRam, 4096, 8, 1024, nullptr);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kRam);
+    clio_run::bdev::CreateParams params(
+        clio_run::bdev::BdevType::kRam, 4096, 8, 1024, nullptr);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kRam);
     REQUIRE(params.total_size_ == 4096);
     // Should get default perf metrics
     REQUIRE(params.perf_metrics_.read_bandwidth_mbps_ == 100.0);
@@ -10599,7 +10599,7 @@ TEST_CASE("Autogen - Bdev PerfMetrics serialization", "[autogen][bdev][perfmetri
   EnsureInitialized();
 
   SECTION("PerfMetrics default constructor") {
-    chimaera::bdev::PerfMetrics metrics;
+    clio_run::bdev::PerfMetrics metrics;
     REQUIRE(metrics.read_bandwidth_mbps_ == 0.0);
     REQUIRE(metrics.write_bandwidth_mbps_ == 0.0);
     REQUIRE(metrics.read_latency_us_ == 0.0);
@@ -10616,8 +10616,8 @@ TEST_CASE("Autogen - Bdev PerfMetrics serialization", "[autogen][bdev][perfmetri
     }
 
     // Create a task that uses PerfMetrics
-    chimaera::bdev::CreateParams orig_params(
-        chimaera::bdev::BdevType::kFile, (chi::u64)8192);
+    clio_run::bdev::CreateParams orig_params(
+        clio_run::bdev::BdevType::kFile, (chi::u64)8192);
 
     // Use GlobalSerialize serialization
     std::vector<char> buf;
@@ -10627,7 +10627,7 @@ TEST_CASE("Autogen - Bdev PerfMetrics serialization", "[autogen][bdev][perfmetri
       oar.Finalize();
     }
 
-    chimaera::bdev::CreateParams loaded_params;
+    clio_run::bdev::CreateParams loaded_params;
     {
       ctp::ipc::GlobalDeserialize<std::vector<char>> iar(buf);
       loaded_params.serialize(iar);
@@ -10655,9 +10655,9 @@ TEST_CASE("Autogen - Bdev CreateParams LoadConfig", "[autogen][bdev][createparam
                           "io_depth: 64\n"
                           "alignment: 8192\n";
 
-    chimaera::bdev::CreateParams params;
+    clio_run::bdev::CreateParams params;
     params.LoadConfig(pool_config);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kFile);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kFile);
     REQUIRE(params.total_size_ == 1073741824ULL);  // 1GB
     REQUIRE(params.io_depth_ == 64);
     REQUIRE(params.alignment_ == 8192);
@@ -10669,9 +10669,9 @@ TEST_CASE("Autogen - Bdev CreateParams LoadConfig", "[autogen][bdev][createparam
     pool_config.config_ = "bdev_type: ram\n"
                           "capacity: 512MB\n";
 
-    chimaera::bdev::CreateParams params;
+    clio_run::bdev::CreateParams params;
     params.LoadConfig(pool_config);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kRam);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kRam);
     REQUIRE(params.total_size_ == 536870912ULL);  // 512MB
     INFO("LoadConfig with ram type verified");
   }
@@ -10689,9 +10689,9 @@ TEST_CASE("Autogen - Bdev CreateParams LoadConfig", "[autogen][bdev][createparam
                           "  write_latency_us: 150.0\n"
                           "  iops: 100000.0\n";
 
-    chimaera::bdev::CreateParams params;
+    clio_run::bdev::CreateParams params;
     params.LoadConfig(pool_config);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kFile);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kFile);
     REQUIRE(params.total_size_ == 2147483648ULL);  // 2GB
     REQUIRE(params.io_depth_ == 128);
     REQUIRE(params.perf_metrics_.read_bandwidth_mbps_ == 500.0);
@@ -10706,9 +10706,9 @@ TEST_CASE("Autogen - Bdev CreateParams LoadConfig", "[autogen][bdev][createparam
     chi::PoolConfig pool_config;
     pool_config.config_ = "bdev_type: ram\n";
 
-    chimaera::bdev::CreateParams params;
+    clio_run::bdev::CreateParams params;
     params.LoadConfig(pool_config);
-    REQUIRE(params.bdev_type_ == chimaera::bdev::BdevType::kRam);
+    REQUIRE(params.bdev_type_ == clio_run::bdev::BdevType::kRam);
     INFO("LoadConfig minimal config verified");
   }
 }
@@ -10736,7 +10736,7 @@ TEST_CASE("Autogen - Admin StopRuntimeTask full coverage", "[autogen][admin][sto
   }
 
   SECTION("StopRuntimeTask creation and serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       // Test GlobalSerialize serialization
@@ -10753,15 +10753,15 @@ TEST_CASE("Autogen - Admin StopRuntimeTask full coverage", "[autogen][admin][sto
       }
 
       // Test Copy
-      auto copy = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>(
+      auto copy = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!copy.IsNull()) {
-        copy->Copy(task.template Cast<chimaera::admin::StopRuntimeTask>());
+        copy->Copy(task.template Cast<clio_run::admin::StopRuntimeTask>());
         CHI_IPC->DelTask(copy);
       }
 
       // Test Aggregate
-      auto agg = ipc_manager->NewTask<chimaera::admin::StopRuntimeTask>(
+      auto agg = ipc_manager->NewTask<clio_run::admin::StopRuntimeTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!agg.IsNull()) {
         agg->Aggregate(task.template Cast<chi::Task>());
@@ -10784,7 +10784,7 @@ TEST_CASE("Autogen - Admin SendTask full coverage", "[autogen][admin][sendtask][
   }
 
   SECTION("SendTask creation and serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SendTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::SendTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       // Test GlobalSerialize serialization
@@ -10801,15 +10801,15 @@ TEST_CASE("Autogen - Admin SendTask full coverage", "[autogen][admin][sendtask][
       }
 
       // Test Copy
-      auto copy = ipc_manager->NewTask<chimaera::admin::SendTask>(
+      auto copy = ipc_manager->NewTask<clio_run::admin::SendTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!copy.IsNull()) {
-        copy->Copy(task.template Cast<chimaera::admin::SendTask>());
+        copy->Copy(task.template Cast<clio_run::admin::SendTask>());
         CHI_IPC->DelTask(copy);
       }
 
       // Test Aggregate
-      auto agg = ipc_manager->NewTask<chimaera::admin::SendTask>(
+      auto agg = ipc_manager->NewTask<clio_run::admin::SendTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!agg.IsNull()) {
         agg->Aggregate(task.template Cast<chi::Task>());
@@ -10832,7 +10832,7 @@ TEST_CASE("Autogen - Admin RecvTask full coverage", "[autogen][admin][recvtask][
   }
 
   SECTION("RecvTask creation and serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::RecvTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::RecvTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       // Test GlobalSerialize serialization
@@ -10849,10 +10849,10 @@ TEST_CASE("Autogen - Admin RecvTask full coverage", "[autogen][admin][recvtask][
       }
 
       // Test Copy
-      auto copy = ipc_manager->NewTask<chimaera::admin::RecvTask>(
+      auto copy = ipc_manager->NewTask<clio_run::admin::RecvTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!copy.IsNull()) {
-        copy->Copy(task.template Cast<chimaera::admin::RecvTask>());
+        copy->Copy(task.template Cast<clio_run::admin::RecvTask>());
         CHI_IPC->DelTask(copy);
       }
 
@@ -10872,7 +10872,7 @@ TEST_CASE("Autogen - Admin WreapDeadIpcsTask full coverage", "[autogen][admin][w
   }
 
   SECTION("WreapDeadIpcsTask creation and serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::WreapDeadIpcsTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::WreapDeadIpcsTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       // Test GlobalSerialize serialization
@@ -10889,15 +10889,15 @@ TEST_CASE("Autogen - Admin WreapDeadIpcsTask full coverage", "[autogen][admin][w
       }
 
       // Test Copy
-      auto copy = ipc_manager->NewTask<chimaera::admin::WreapDeadIpcsTask>(
+      auto copy = ipc_manager->NewTask<clio_run::admin::WreapDeadIpcsTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!copy.IsNull()) {
-        copy->Copy(task.template Cast<chimaera::admin::WreapDeadIpcsTask>());
+        copy->Copy(task.template Cast<clio_run::admin::WreapDeadIpcsTask>());
         CHI_IPC->DelTask(copy);
       }
 
       // Test Aggregate
-      auto agg = ipc_manager->NewTask<chimaera::admin::WreapDeadIpcsTask>(
+      auto agg = ipc_manager->NewTask<clio_run::admin::WreapDeadIpcsTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!agg.IsNull()) {
         agg->Aggregate(task.template Cast<chi::Task>());
@@ -10920,7 +10920,7 @@ TEST_CASE("Autogen - Admin SubmitBatchTask full coverage", "[autogen][admin][sub
   }
 
   SECTION("SubmitBatchTask creation and serialization") {
-    auto task = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>(
+    auto task = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
     if (!task.IsNull()) {
       // Test GlobalSerialize serialization
@@ -10937,10 +10937,10 @@ TEST_CASE("Autogen - Admin SubmitBatchTask full coverage", "[autogen][admin][sub
       }
 
       // Test Copy
-      auto copy = ipc_manager->NewTask<chimaera::admin::SubmitBatchTask>(
+      auto copy = ipc_manager->NewTask<clio_run::admin::SubmitBatchTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local());
       if (!copy.IsNull()) {
-        copy->Copy(task.template Cast<chimaera::admin::SubmitBatchTask>());
+        copy->Copy(task.template Cast<clio_run::admin::SubmitBatchTask>());
         CHI_IPC->DelTask(copy);
       }
 
@@ -10967,17 +10967,17 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   auto& admin_runtime = *container;
 
   SECTION("SaveTask and LoadTask for kStopRuntime") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
     if (!task.IsNull()) {
       // Save
       chi::SaveTaskArchive save_ar(chi::MsgType::kSerializeIn);
-      admin_runtime.SaveTask(chimaera::admin::Method::kStopRuntime, save_ar, task);
+      admin_runtime.SaveTask(clio_run::admin::Method::kStopRuntime, save_ar, task);
 
       // Load
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
       if (!load_task.IsNull()) {
         chi::LoadTaskArchive load_ar(save_ar.GetData());
-        admin_runtime.LoadTask(chimaera::admin::Method::kStopRuntime, load_ar, load_task);
+        admin_runtime.LoadTask(clio_run::admin::Method::kStopRuntime, load_ar, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -10986,15 +10986,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("SaveTask and LoadTask for kSend") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kSend);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_ar(chi::MsgType::kSerializeIn);
-      admin_runtime.SaveTask(chimaera::admin::Method::kSend, save_ar, task);
+      admin_runtime.SaveTask(clio_run::admin::Method::kSend, save_ar, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kSend);
       if (!load_task.IsNull()) {
         chi::LoadTaskArchive load_ar(save_ar.GetData());
-        admin_runtime.LoadTask(chimaera::admin::Method::kSend, load_ar, load_task);
+        admin_runtime.LoadTask(clio_run::admin::Method::kSend, load_ar, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11003,15 +11003,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("SaveTask and LoadTask for kRecv") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_ar(chi::MsgType::kSerializeIn);
-      admin_runtime.SaveTask(chimaera::admin::Method::kRecv, save_ar, task);
+      admin_runtime.SaveTask(clio_run::admin::Method::kRecv, save_ar, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
       if (!load_task.IsNull()) {
         chi::LoadTaskArchive load_ar(save_ar.GetData());
-        admin_runtime.LoadTask(chimaera::admin::Method::kRecv, load_ar, load_task);
+        admin_runtime.LoadTask(clio_run::admin::Method::kRecv, load_ar, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11020,15 +11020,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("SaveTask and LoadTask for kWreapDeadIpcs") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_ar(chi::MsgType::kSerializeIn);
-      admin_runtime.SaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_ar, task);
+      admin_runtime.SaveTask(clio_run::admin::Method::kWreapDeadIpcs, save_ar, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
       if (!load_task.IsNull()) {
         chi::LoadTaskArchive load_ar(save_ar.GetData());
-        admin_runtime.LoadTask(chimaera::admin::Method::kWreapDeadIpcs, load_ar, load_task);
+        admin_runtime.LoadTask(clio_run::admin::Method::kWreapDeadIpcs, load_ar, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11037,15 +11037,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("SaveTask and LoadTask for kSubmitBatch") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!task.IsNull()) {
       chi::SaveTaskArchive save_ar(chi::MsgType::kSerializeIn);
-      admin_runtime.SaveTask(chimaera::admin::Method::kSubmitBatch, save_ar, task);
+      admin_runtime.SaveTask(clio_run::admin::Method::kSubmitBatch, save_ar, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kSubmitBatch);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kSubmitBatch);
       if (!load_task.IsNull()) {
         chi::LoadTaskArchive load_ar(save_ar.GetData());
-        admin_runtime.LoadTask(chimaera::admin::Method::kSubmitBatch, load_ar, load_task);
+        admin_runtime.LoadTask(clio_run::admin::Method::kSubmitBatch, load_ar, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11054,9 +11054,9 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("NewCopyTask for kStopRuntime") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
     if (!task.IsNull()) {
-      auto copy = admin_runtime.NewCopyTask(chimaera::admin::Method::kStopRuntime, task, false);
+      auto copy = admin_runtime.NewCopyTask(clio_run::admin::Method::kStopRuntime, task, false);
       if (!copy.IsNull()) {
         CHI_IPC->DelTask(copy);
       }
@@ -11066,9 +11066,9 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("NewCopyTask for kSend") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kSend);
     if (!task.IsNull()) {
-      auto copy = admin_runtime.NewCopyTask(chimaera::admin::Method::kSend, task, false);
+      auto copy = admin_runtime.NewCopyTask(clio_run::admin::Method::kSend, task, false);
       if (!copy.IsNull()) {
         CHI_IPC->DelTask(copy);
       }
@@ -11078,9 +11078,9 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("NewCopyTask for kRecv") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
     if (!task.IsNull()) {
-      auto copy = admin_runtime.NewCopyTask(chimaera::admin::Method::kRecv, task, false);
+      auto copy = admin_runtime.NewCopyTask(clio_run::admin::Method::kRecv, task, false);
       if (!copy.IsNull()) {
         CHI_IPC->DelTask(copy);
       }
@@ -11090,9 +11090,9 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("NewCopyTask for kWreapDeadIpcs") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
-      auto copy = admin_runtime.NewCopyTask(chimaera::admin::Method::kWreapDeadIpcs, task, false);
+      auto copy = admin_runtime.NewCopyTask(clio_run::admin::Method::kWreapDeadIpcs, task, false);
       if (!copy.IsNull()) {
         CHI_IPC->DelTask(copy);
       }
@@ -11102,8 +11102,8 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("Aggregate for kStopRuntime") {
-    auto t1 = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
-    auto t2 = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+    auto t1 = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
+    auto t2 = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -11113,8 +11113,8 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("Aggregate for kSend") {
-    auto t1 = admin_runtime.NewTask(chimaera::admin::Method::kSend);
-    auto t2 = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+    auto t1 = admin_runtime.NewTask(clio_run::admin::Method::kSend);
+    auto t2 = admin_runtime.NewTask(clio_run::admin::Method::kSend);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -11124,8 +11124,8 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("Aggregate for kRecv") {
-    auto t1 = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
-    auto t2 = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+    auto t1 = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
+    auto t2 = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -11135,8 +11135,8 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("Aggregate for kWreapDeadIpcs") {
-    auto t1 = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
-    auto t2 = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto t1 = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
+    auto t2 = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!t1.IsNull() && !t2.IsNull()) {
       t1.ptr_->Aggregate(t2.template Cast<chi::Task>());
       CHI_IPC->DelTask(t2);
@@ -11146,16 +11146,16 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalSaveTask for kStopRuntime") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kStopRuntime, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kStopRuntime, save_archive, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
       if (!load_task.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        admin_runtime.LocalLoadTask(chimaera::admin::Method::kStopRuntime, load_archive, load_task);
+        admin_runtime.LocalLoadTask(clio_run::admin::Method::kStopRuntime, load_archive, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11164,16 +11164,16 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalSaveTask for kSend") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kSend);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kSend, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kSend, save_archive, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kSend);
       if (!load_task.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        admin_runtime.LocalLoadTask(chimaera::admin::Method::kSend, load_archive, load_task);
+        admin_runtime.LocalLoadTask(clio_run::admin::Method::kSend, load_archive, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11182,16 +11182,16 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalSaveTask for kRecv") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kRecv, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kRecv, save_archive, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
       if (!load_task.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        admin_runtime.LocalLoadTask(chimaera::admin::Method::kRecv, load_archive, load_task);
+        admin_runtime.LocalLoadTask(clio_run::admin::Method::kRecv, load_archive, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11200,16 +11200,16 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalSaveTask for kWreapDeadIpcs") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kWreapDeadIpcs, save_archive, task);
 
-      auto load_task = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+      auto load_task = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
       if (!load_task.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        admin_runtime.LocalLoadTask(chimaera::admin::Method::kWreapDeadIpcs, load_archive, load_task);
+        admin_runtime.LocalLoadTask(clio_run::admin::Method::kWreapDeadIpcs, load_archive, load_task);
         CHI_IPC->DelTask(load_task);
       }
       CHI_IPC->DelTask(task);
@@ -11222,15 +11222,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   // with binary serialization (LocalTaskArchive) under memory pressure.
 
   SECTION("LocalAllocLoadTask for kStopRuntime") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kStopRuntime);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kStopRuntime);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kStopRuntime, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kStopRuntime, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       auto alloc_task = admin_runtime.LocalAllocLoadTask(
-          chimaera::admin::Method::kStopRuntime, load_archive);
+          clio_run::admin::Method::kStopRuntime, load_archive);
       if (!alloc_task.IsNull()) {
         CHI_IPC->DelTask(alloc_task);
       }
@@ -11240,15 +11240,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalAllocLoadTask for kSend") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kSend);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kSend);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kSend, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kSend, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       auto alloc_task = admin_runtime.LocalAllocLoadTask(
-          chimaera::admin::Method::kSend, load_archive);
+          clio_run::admin::Method::kSend, load_archive);
       if (!alloc_task.IsNull()) {
         CHI_IPC->DelTask(alloc_task);
       }
@@ -11258,15 +11258,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalAllocLoadTask for kRecv") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kRecv);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kRecv);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kRecv, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kRecv, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       auto alloc_task = admin_runtime.LocalAllocLoadTask(
-          chimaera::admin::Method::kRecv, load_archive);
+          clio_run::admin::Method::kRecv, load_archive);
       if (!alloc_task.IsNull()) {
         CHI_IPC->DelTask(alloc_task);
       }
@@ -11276,15 +11276,15 @@ TEST_CASE("Autogen - Admin Container StopRuntime", "[autogen][admin][container][
   }
 
   SECTION("LocalAllocLoadTask for kWreapDeadIpcs") {
-    auto task = admin_runtime.NewTask(chimaera::admin::Method::kWreapDeadIpcs);
+    auto task = admin_runtime.NewTask(clio_run::admin::Method::kWreapDeadIpcs);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      admin_runtime.LocalSaveTask(chimaera::admin::Method::kWreapDeadIpcs, save_archive, task);
+      admin_runtime.LocalSaveTask(clio_run::admin::Method::kWreapDeadIpcs, save_archive, task);
 
       chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
       auto alloc_task = admin_runtime.LocalAllocLoadTask(
-          chimaera::admin::Method::kWreapDeadIpcs, load_archive);
+          clio_run::admin::Method::kWreapDeadIpcs, load_archive);
       if (!alloc_task.IsNull()) {
         CHI_IPC->DelTask(alloc_task);
       }
@@ -13625,14 +13625,14 @@ TEST_CASE("Autogen - Worker extended accessors", "[autogen][worker][extended]") 
 // ==========================================================================
 TEST_CASE("Autogen - Bdev Block struct", "[autogen][bdev][block]") {
   SECTION("Default constructor") {
-    chimaera::bdev::Block block;
+    clio_run::bdev::Block block;
     REQUIRE(block.offset_ == 0);
     REQUIRE(block.size_ == 0);
     REQUIRE(block.block_type_ == 0);
   }
 
   SECTION("Parameterized constructor") {
-    chimaera::bdev::Block block(1024, 4096, 2);
+    clio_run::bdev::Block block(1024, 4096, 2);
     REQUIRE(block.offset_ == 1024);
     REQUIRE(block.size_ == 4096);
     REQUIRE(block.block_type_ == 2);
@@ -13641,7 +13641,7 @@ TEST_CASE("Autogen - Bdev Block struct", "[autogen][bdev][block]") {
 
 TEST_CASE("Autogen - Bdev PerfMetrics struct", "[autogen][bdev][perfmetrics]") {
   SECTION("Default constructor") {
-    chimaera::bdev::PerfMetrics pm;
+    clio_run::bdev::PerfMetrics pm;
     REQUIRE(pm.read_bandwidth_mbps_ == 0.0);
     REQUIRE(pm.write_bandwidth_mbps_ == 0.0);
     REQUIRE(pm.read_latency_us_ == 0.0);
@@ -13650,7 +13650,7 @@ TEST_CASE("Autogen - Bdev PerfMetrics struct", "[autogen][bdev][perfmetrics]") {
   }
 
   SECTION("Set values") {
-    chimaera::bdev::PerfMetrics pm;
+    clio_run::bdev::PerfMetrics pm;
     pm.read_bandwidth_mbps_ = 500.0;
     pm.write_bandwidth_mbps_ = 400.0;
     pm.read_latency_us_ = 100.0;
@@ -13666,8 +13666,8 @@ TEST_CASE("Autogen - Bdev PerfMetrics struct", "[autogen][bdev][perfmetrics]") {
 
 TEST_CASE("Autogen - Bdev CreateParams struct", "[autogen][bdev][createparams]") {
   SECTION("Default constructor") {
-    chimaera::bdev::CreateParams cp;
-    REQUIRE(cp.bdev_type_ == chimaera::bdev::BdevType::kFile);
+    clio_run::bdev::CreateParams cp;
+    REQUIRE(cp.bdev_type_ == clio_run::bdev::BdevType::kFile);
     REQUIRE(cp.total_size_ == 0);
     REQUIRE(cp.io_depth_ == 32);
     REQUIRE(cp.alignment_ == 4096);
@@ -13676,10 +13676,10 @@ TEST_CASE("Autogen - Bdev CreateParams struct", "[autogen][bdev][createparams]")
   }
 
   SECTION("Basic constructor with perf metrics") {
-    chimaera::bdev::PerfMetrics pm;
+    clio_run::bdev::PerfMetrics pm;
     pm.read_bandwidth_mbps_ = 300.0;
-    chimaera::bdev::CreateParams cp(chimaera::bdev::BdevType::kRam, static_cast<chi::u64>(1024 * 1024), static_cast<chi::u32>(64), static_cast<chi::u32>(512), &pm);
-    REQUIRE(cp.bdev_type_ == chimaera::bdev::BdevType::kRam);
+    clio_run::bdev::CreateParams cp(clio_run::bdev::BdevType::kRam, static_cast<chi::u64>(1024 * 1024), static_cast<chi::u32>(64), static_cast<chi::u32>(512), &pm);
+    REQUIRE(cp.bdev_type_ == clio_run::bdev::BdevType::kRam);
     REQUIRE(cp.total_size_ == 1024 * 1024);
     REQUIRE(cp.io_depth_ == 64);
     REQUIRE(cp.alignment_ == 512);
@@ -13687,22 +13687,22 @@ TEST_CASE("Autogen - Bdev CreateParams struct", "[autogen][bdev][createparams]")
   }
 
   SECTION("Constructor with perf metrics") {
-    chimaera::bdev::PerfMetrics pm;
+    clio_run::bdev::PerfMetrics pm;
     pm.read_bandwidth_mbps_ = 200.0;
     pm.write_bandwidth_mbps_ = 150.0;
-    chimaera::bdev::CreateParams cp(chimaera::bdev::BdevType::kFile, 2048, 16, 4096, &pm);
+    clio_run::bdev::CreateParams cp(clio_run::bdev::BdevType::kFile, 2048, 16, 4096, &pm);
     REQUIRE(cp.perf_metrics_.read_bandwidth_mbps_ == 200.0);
     REQUIRE(cp.perf_metrics_.write_bandwidth_mbps_ == 150.0);
   }
 
   SECTION("Constructor with null perf metrics") {
-    chimaera::bdev::CreateParams cp(chimaera::bdev::BdevType::kFile, 2048, 16, 4096, nullptr);
+    clio_run::bdev::CreateParams cp(clio_run::bdev::BdevType::kFile, 2048, 16, 4096, nullptr);
     REQUIRE(cp.perf_metrics_.read_bandwidth_mbps_ == 100.0);
   }
 
   SECTION("BdevType enum") {
-    REQUIRE(static_cast<chi::u32>(chimaera::bdev::BdevType::kFile) == 0);
-    REQUIRE(static_cast<chi::u32>(chimaera::bdev::BdevType::kRam) == 1);
+    REQUIRE(static_cast<chi::u32>(clio_run::bdev::BdevType::kFile) == 0);
+    REQUIRE(static_cast<chi::u32>(clio_run::bdev::BdevType::kRam) == 1);
   }
 }
 
@@ -14303,37 +14303,37 @@ TEST_CASE("Autogen - ChimaeraManager extended", "[autogen][chimgr][extended]") {
 
 TEST_CASE("Autogen - MOD_NAME LocalSaveTask remaining methods", "[autogen][mod_name][localsave][remaining]") {
   EnsureInitialized();
-  chimaera::MOD_NAME::Runtime rt;
+  clio_run::MOD_NAME::Runtime rt;
 
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::MOD_NAME::Method::kCreate, "MOD_NAME Create")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::MOD_NAME::Method::kDestroy, "MOD_NAME Destroy")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::MOD_NAME::Method::kCustom, "MOD_NAME Custom")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::MOD_NAME::Method::kCreate, "MOD_NAME Create")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::MOD_NAME::Method::kDestroy, "MOD_NAME Destroy")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::MOD_NAME::Method::kCustom, "MOD_NAME Custom")
 }
 
 // ----------- Admin: kCreate, kDestroy, kGetOrCreatePool, kDestroyPool, kSubmitBatch ----
 
 TEST_CASE("Autogen - Admin LocalSaveTask remaining methods", "[autogen][admin][localsave][remaining]") {
   EnsureInitialized();
-  chimaera::admin::Runtime rt;
+  clio_run::admin::Runtime rt;
 
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::admin::Method::kCreate, "Admin Create")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::admin::Method::kDestroy, "Admin Destroy")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::admin::Method::kGetOrCreatePool, "Admin GetOrCreatePool")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::admin::Method::kDestroyPool, "Admin DestroyPool")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::admin::Method::kSubmitBatch, "Admin SubmitBatch")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::admin::Method::kCreate, "Admin Create")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::admin::Method::kDestroy, "Admin Destroy")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::admin::Method::kGetOrCreatePool, "Admin GetOrCreatePool")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::admin::Method::kDestroyPool, "Admin DestroyPool")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::admin::Method::kSubmitBatch, "Admin SubmitBatch")
 }
 
 // ----------- Bdev: kCreate, kDestroy, kFreeBlocks, kWrite, kRead ----------
 
 TEST_CASE("Autogen - Bdev LocalSaveTask remaining methods", "[autogen][bdev][localsave][remaining]") {
   EnsureInitialized();
-  chimaera::bdev::Runtime rt;
+  clio_run::bdev::Runtime rt;
 
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::bdev::Method::kCreate, "Bdev Create")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::bdev::Method::kDestroy, "Bdev Destroy")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::bdev::Method::kFreeBlocks, "Bdev FreeBlocks")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::bdev::Method::kWrite, "Bdev Write")
-  TEST_LOCAL_SAVE_ONLY(rt, chimaera::bdev::Method::kRead, "Bdev Read")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::bdev::Method::kCreate, "Bdev Create")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::bdev::Method::kDestroy, "Bdev Destroy")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::bdev::Method::kFreeBlocks, "Bdev FreeBlocks")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::bdev::Method::kWrite, "Bdev Write")
+  TEST_LOCAL_SAVE_ONLY(rt, clio_run::bdev::Method::kRead, "Bdev Read")
 }
 
 // ----------- CTE: all remaining uncovered methods --------------------------
@@ -14414,7 +14414,7 @@ TEST_CASE("Autogen - CAE LocalSaveTask all methods", "[autogen][cae][localsave][
 
 TEST_CASE("Autogen - MOD_NAME LocalLoadTask remaining methods", "[autogen][mod_name][localload][remaining]") {
   EnsureInitialized();
-  chimaera::MOD_NAME::Runtime rt;
+  clio_run::MOD_NAME::Runtime rt;
 
   // Custom has chi::priv::string - SerializeIn/Out differ
   // Create/Destroy use BaseCreateTask - SerializeIn/Out differ
@@ -14422,18 +14422,18 @@ TEST_CASE("Autogen - MOD_NAME LocalLoadTask remaining methods", "[autogen][mod_n
   // proper SerializeIn data for loading
 
   SECTION("MOD_NAME Custom LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::MOD_NAME::Method::kCustom);
+    auto task = rt.NewTask(clio_run::MOD_NAME::Method::kCustom);
     if (!task.IsNull()) {
       // Manually serialize using the task's SerializeIn to generate matching data
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::MOD_NAME::CustomTask>();
+      auto typed = task.template Cast<clio_run::MOD_NAME::CustomTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::MOD_NAME::Method::kCustom);
+      auto loaded = rt.NewTask(clio_run::MOD_NAME::Method::kCustom);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::MOD_NAME::Method::kCustom, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::MOD_NAME::Method::kCustom, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14442,17 +14442,17 @@ TEST_CASE("Autogen - MOD_NAME LocalLoadTask remaining methods", "[autogen][mod_n
   }
 
   SECTION("MOD_NAME Create LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::MOD_NAME::Method::kCreate);
+    auto task = rt.NewTask(clio_run::MOD_NAME::Method::kCreate);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::MOD_NAME::CreateTask>();
+      auto typed = task.template Cast<clio_run::MOD_NAME::CreateTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::MOD_NAME::Method::kCreate);
+      auto loaded = rt.NewTask(clio_run::MOD_NAME::Method::kCreate);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::MOD_NAME::Method::kCreate, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::MOD_NAME::Method::kCreate, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14461,17 +14461,17 @@ TEST_CASE("Autogen - MOD_NAME LocalLoadTask remaining methods", "[autogen][mod_n
   }
 
   SECTION("MOD_NAME Destroy LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::MOD_NAME::Method::kDestroy);
+    auto task = rt.NewTask(clio_run::MOD_NAME::Method::kDestroy);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::DestroyPoolTask>();
+      auto typed = task.template Cast<clio_run::admin::DestroyPoolTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::MOD_NAME::Method::kDestroy);
+      auto loaded = rt.NewTask(clio_run::MOD_NAME::Method::kDestroy);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::MOD_NAME::Method::kDestroy, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::MOD_NAME::Method::kDestroy, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14484,20 +14484,20 @@ TEST_CASE("Autogen - MOD_NAME LocalLoadTask remaining methods", "[autogen][mod_n
 
 TEST_CASE("Autogen - Admin LocalLoadTask remaining methods", "[autogen][admin][localload][remaining]") {
   EnsureInitialized();
-  chimaera::admin::Runtime rt;
+  clio_run::admin::Runtime rt;
 
   SECTION("Admin Create LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::admin::Method::kCreate);
+    auto task = rt.NewTask(clio_run::admin::Method::kCreate);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::CreateTask>();
+      auto typed = task.template Cast<clio_run::admin::CreateTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::admin::Method::kCreate);
+      auto loaded = rt.NewTask(clio_run::admin::Method::kCreate);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::admin::Method::kCreate, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::admin::Method::kCreate, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14506,17 +14506,17 @@ TEST_CASE("Autogen - Admin LocalLoadTask remaining methods", "[autogen][admin][l
   }
 
   SECTION("Admin Destroy LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::admin::Method::kDestroy);
+    auto task = rt.NewTask(clio_run::admin::Method::kDestroy);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::DestroyPoolTask>();
+      auto typed = task.template Cast<clio_run::admin::DestroyPoolTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::admin::Method::kDestroy);
+      auto loaded = rt.NewTask(clio_run::admin::Method::kDestroy);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::admin::Method::kDestroy, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::admin::Method::kDestroy, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14525,17 +14525,17 @@ TEST_CASE("Autogen - Admin LocalLoadTask remaining methods", "[autogen][admin][l
   }
 
   SECTION("Admin GetOrCreatePool LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::admin::Method::kGetOrCreatePool);
+    auto task = rt.NewTask(clio_run::admin::Method::kGetOrCreatePool);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::GetOrCreatePoolTask<chimaera::admin::CreateParams>>();
+      auto typed = task.template Cast<clio_run::admin::GetOrCreatePoolTask<clio_run::admin::CreateParams>>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::admin::Method::kGetOrCreatePool);
+      auto loaded = rt.NewTask(clio_run::admin::Method::kGetOrCreatePool);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::admin::Method::kGetOrCreatePool, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::admin::Method::kGetOrCreatePool, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14544,17 +14544,17 @@ TEST_CASE("Autogen - Admin LocalLoadTask remaining methods", "[autogen][admin][l
   }
 
   SECTION("Admin DestroyPool LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::admin::Method::kDestroyPool);
+    auto task = rt.NewTask(clio_run::admin::Method::kDestroyPool);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::DestroyPoolTask>();
+      auto typed = task.template Cast<clio_run::admin::DestroyPoolTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::admin::Method::kDestroyPool);
+      auto loaded = rt.NewTask(clio_run::admin::Method::kDestroyPool);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::admin::Method::kDestroyPool, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::admin::Method::kDestroyPool, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14563,17 +14563,17 @@ TEST_CASE("Autogen - Admin LocalLoadTask remaining methods", "[autogen][admin][l
   }
 
   SECTION("Admin SubmitBatch LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::admin::Method::kSubmitBatch);
+    auto task = rt.NewTask(clio_run::admin::Method::kSubmitBatch);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::SubmitBatchTask>();
+      auto typed = task.template Cast<clio_run::admin::SubmitBatchTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::admin::Method::kSubmitBatch);
+      auto loaded = rt.NewTask(clio_run::admin::Method::kSubmitBatch);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::admin::Method::kSubmitBatch, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::admin::Method::kSubmitBatch, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14586,20 +14586,20 @@ TEST_CASE("Autogen - Admin LocalLoadTask remaining methods", "[autogen][admin][l
 
 TEST_CASE("Autogen - Bdev LocalLoadTask remaining methods", "[autogen][bdev][localload][remaining]") {
   EnsureInitialized();
-  chimaera::bdev::Runtime rt;
+  clio_run::bdev::Runtime rt;
 
   SECTION("Bdev Create LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::bdev::Method::kCreate);
+    auto task = rt.NewTask(clio_run::bdev::Method::kCreate);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::GetOrCreatePoolTask<chimaera::bdev::CreateParams>>();
+      auto typed = task.template Cast<clio_run::admin::GetOrCreatePoolTask<clio_run::bdev::CreateParams>>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::bdev::Method::kCreate);
+      auto loaded = rt.NewTask(clio_run::bdev::Method::kCreate);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::bdev::Method::kCreate, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::bdev::Method::kCreate, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14608,17 +14608,17 @@ TEST_CASE("Autogen - Bdev LocalLoadTask remaining methods", "[autogen][bdev][loc
   }
 
   SECTION("Bdev Destroy LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::bdev::Method::kDestroy);
+    auto task = rt.NewTask(clio_run::bdev::Method::kDestroy);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::admin::DestroyPoolTask>();
+      auto typed = task.template Cast<clio_run::admin::DestroyPoolTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::bdev::Method::kDestroy);
+      auto loaded = rt.NewTask(clio_run::bdev::Method::kDestroy);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::bdev::Method::kDestroy, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::bdev::Method::kDestroy, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14627,17 +14627,17 @@ TEST_CASE("Autogen - Bdev LocalLoadTask remaining methods", "[autogen][bdev][loc
   }
 
   SECTION("Bdev FreeBlocks LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::bdev::Method::kFreeBlocks);
+    auto task = rt.NewTask(clio_run::bdev::Method::kFreeBlocks);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::bdev::FreeBlocksTask>();
+      auto typed = task.template Cast<clio_run::bdev::FreeBlocksTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::bdev::Method::kFreeBlocks);
+      auto loaded = rt.NewTask(clio_run::bdev::Method::kFreeBlocks);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::bdev::Method::kFreeBlocks, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::bdev::Method::kFreeBlocks, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14646,17 +14646,17 @@ TEST_CASE("Autogen - Bdev LocalLoadTask remaining methods", "[autogen][bdev][loc
   }
 
   SECTION("Bdev Write LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::bdev::Method::kWrite);
+    auto task = rt.NewTask(clio_run::bdev::Method::kWrite);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::bdev::WriteTask>();
+      auto typed = task.template Cast<clio_run::bdev::WriteTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::bdev::Method::kWrite);
+      auto loaded = rt.NewTask(clio_run::bdev::Method::kWrite);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::bdev::Method::kWrite, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::bdev::Method::kWrite, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);
@@ -14665,17 +14665,17 @@ TEST_CASE("Autogen - Bdev LocalLoadTask remaining methods", "[autogen][bdev][loc
   }
 
   SECTION("Bdev Read LocalLoadTask") {
-    auto task = rt.NewTask(chimaera::bdev::Method::kRead);
+    auto task = rt.NewTask(clio_run::bdev::Method::kRead);
     if (!task.IsNull()) {
       chi::priv::vector<char> save_buf(CHI_PRIV_ALLOC);
     chi::DefaultSaveArchive save_archive(chi::LocalMsgType::kSerializeIn, save_buf);
-      auto typed = task.template Cast<chimaera::bdev::ReadTask>();
+      auto typed = task.template Cast<clio_run::bdev::ReadTask>();
       typed.ptr_->SerializeIn(save_archive);
 
-      auto loaded = rt.NewTask(chimaera::bdev::Method::kRead);
+      auto loaded = rt.NewTask(clio_run::bdev::Method::kRead);
       if (!loaded.IsNull()) {
         chi::DefaultLoadArchive load_archive(save_archive.GetMutableData());
-        rt.LocalLoadTask(chimaera::bdev::Method::kRead, load_archive, loaded);
+        rt.LocalLoadTask(clio_run::bdev::Method::kRead, load_archive, loaded);
         CHI_IPC->DelTask(loaded);
       }
       CHI_IPC->DelTask(task);

@@ -72,15 +72,15 @@ bool client_register_target(rust::Str target_path, uint64_t size) {
   std::string path(target_path.data(), target_path.size());
   // Create a bdev pool for this target
   chi::PoolId bdev_pool_id(800, 0);
-  chimaera::bdev::Client bdev_client(bdev_pool_id);
+  clio_run::bdev::Client bdev_client(bdev_pool_id);
   auto create_task = bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(), path, bdev_pool_id,
-      chimaera::bdev::BdevType::kFile);
+      clio_run::bdev::BdevType::kFile);
   create_task.Wait();
   // Register with CTE
   auto *client = CLIO_CTE_CLIENT;
   auto reg_task = client->AsyncRegisterTarget(
-      path, chimaera::bdev::BdevType::kFile, size,
+      path, clio_run::bdev::BdevType::kFile, size,
       chi::PoolQuery::Local(), bdev_pool_id);
   reg_task.Wait();
   return true;

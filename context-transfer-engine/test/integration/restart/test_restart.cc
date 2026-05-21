@@ -137,7 +137,7 @@ int VerifyBlobs() {
 
   // Call RestartContainers via admin client
   HLOG(kInfo, "Phase 2: Calling RestartContainers...");
-  chimaera::admin::Client admin_client(chi::kAdminPoolId);
+  clio_run::admin::Client admin_client(chi::kAdminPoolId);
   auto restart_task = admin_client.AsyncRestartContainers(chi::PoolQuery::Local());
   restart_task.Wait();
 

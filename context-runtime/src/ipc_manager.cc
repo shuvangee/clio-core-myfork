@@ -778,7 +778,7 @@ bool IpcManager::WaitForLocalServer() {
 retry_attempt:
   ++attempt_idx;
   // Send a ClientConnectTask via the lightbeam transport
-  auto task = NewTask<chimaera::admin::ClientConnectTask>(
+  auto task = NewTask<clio_run::admin::ClientConnectTask>(
       CreateTaskId(), kAdminPoolId, PoolQuery::Local());
   auto future = IpcCpu2CpuZmq::ClientSend(this,task, ipc_mode_);
 
@@ -862,7 +862,7 @@ bool IpcManager::WaitForLocalRuntimeStop(u32 timeout_sec) {
 
   for (u32 elapsed = 0; elapsed < timeout_sec; ++elapsed) {
     // Send a ClientConnectTask with a 1-second timeout
-    auto task = NewTask<chimaera::admin::ClientConnectTask>(
+    auto task = NewTask<clio_run::admin::ClientConnectTask>(
         CreateTaskId(), kAdminPoolId, PoolQuery::Local());
     auto future = IpcCpu2CpuZmq::ClientSend(this,task, ipc_mode_);
 
@@ -1682,7 +1682,7 @@ bool IpcManager::IncreaseClientShm(size_t size) {
     // Tell the runtime server to attach to this new shared memory segment.
     // Use kAdminPoolId directly (not admin_client->pool_id_) because
     // the admin client may not be initialized yet during ClientInit.
-    auto reg_task = NewTask<chimaera::admin::RegisterMemoryTask>(
+    auto reg_task = NewTask<clio_run::admin::RegisterMemoryTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(),
         alloc_id);
     IpcCpu2CpuZmq::ClientSend(this,reg_task, IpcMode::kTcp).Wait();
@@ -2085,7 +2085,7 @@ bool IpcManager::ReconnectToOriginalHost() {
     // Re-register per-process shared memory segments with new server
     for (auto *alloc : alloc_vector_) {
       auto alloc_id = alloc->GetId();
-      auto reg_task = NewTask<chimaera::admin::RegisterMemoryTask>(
+      auto reg_task = NewTask<clio_run::admin::RegisterMemoryTask>(
           chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(),
           alloc_id);
       IpcCpu2CpuZmq::ClientSend(this,reg_task, IpcMode::kTcp).Wait();
@@ -2435,24 +2435,24 @@ ctp::ipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
       return result;
     }
   } else {
-    chimaera::admin::MemoryType admin_kind =
-        chimaera::admin::MemoryType::kPinnedHostMemory;
+    clio_run::admin::MemoryType admin_kind =
+        clio_run::admin::MemoryType::kPinnedHostMemory;
     switch (kind) {
       case gpu::IpcManager::MemKind::kPinnedHost:
-        admin_kind = chimaera::admin::MemoryType::kPinnedHostMemory;
+        admin_kind = clio_run::admin::MemoryType::kPinnedHostMemory;
         break;
       case gpu::IpcManager::MemKind::kManagedUvm:
-        admin_kind = chimaera::admin::MemoryType::kManagedUvm;
+        admin_kind = clio_run::admin::MemoryType::kManagedUvm;
         break;
       case gpu::IpcManager::MemKind::kDeviceMem:
-        admin_kind = chimaera::admin::MemoryType::kGpuDeviceMemory;
+        admin_kind = clio_run::admin::MemoryType::kGpuDeviceMemory;
         break;
     }
     ctp::ipc::MemoryBackendId backend_id(alloc_id.major_, alloc_id.minor_);
     char ipc_handle_bytes[64] = {0};
     std::memcpy(ipc_handle_bytes, &base, sizeof(char *));
 
-    auto reg_task = NewTask<chimaera::admin::RegisterMemoryTask>(
+    auto reg_task = NewTask<clio_run::admin::RegisterMemoryTask>(
         chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(),
         backend_id, admin_kind, gpu_id, static_cast<u64>(bytes),
         ipc_handle_bytes);

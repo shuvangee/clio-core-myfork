@@ -44,7 +44,7 @@ bool initializeRuntime() {
   }
   auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->RegisterTarget(ctp::ipc::MemContext(), kBackend,
-                             chimaera::bdev::BdevType::kFile,
+                             clio_run::bdev::BdevType::kFile,
                              kPayload * 4);
   initialized = true;
   return true;

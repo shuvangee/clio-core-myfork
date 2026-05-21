@@ -54,7 +54,7 @@
 
 namespace clio_cte::core {
 
-using MonitorTask = chimaera::admin::MonitorTask;
+using MonitorTask = clio_run::admin::MonitorTask;
 
 // CTE Core Pool ID constant (major: 512, minor: 0)
 static constexpr chi::PoolId kCtePoolId(512, 0);
@@ -193,13 +193,13 @@ struct CreateParams {
  * method) Non-admin modules should use GetOrCreatePoolTask instead of
  * BaseCreateTask
  */
-using CreateTask = chimaera::admin::GetOrCreatePoolTask<CreateParams>;
+using CreateTask = clio_run::admin::GetOrCreatePoolTask<CreateParams>;
 
 /**
  * DestroyTask - Destroy the CTE Core container
  * Type alias for DestroyPoolTask (uses kDestroy method)
  */
-using DestroyTask = chimaera::admin::DestroyTask;
+using DestroyTask = clio_run::admin::DestroyTask;
 
 /**
  * Target information structure
@@ -207,7 +207,7 @@ using DestroyTask = chimaera::admin::DestroyTask;
 struct TargetInfo {
   chi::priv::string target_name_;
   chi::priv::string bdev_pool_name_;
-  chimaera::bdev::Client bdev_client_;  // Bdev client for this target
+  clio_run::bdev::Client bdev_client_;  // Bdev client for this target
   chi::PoolQuery target_query_;         // Target pool query for bdev API calls
   chi::u64 bytes_read_;
   chi::u64 bytes_written_;
@@ -215,12 +215,12 @@ struct TargetInfo {
   chi::u64 ops_written_;
   float target_score_;        // Target score (0-1, normalized log bandwidth)
   chi::u64 remaining_space_;  // Remaining allocatable space in bytes
-  chimaera::bdev::PerfMetrics perf_metrics_;  // Performance metrics from bdev
-  chimaera::bdev::PersistenceLevel persistence_level_;
+  clio_run::bdev::PerfMetrics perf_metrics_;  // Performance metrics from bdev
+  clio_run::bdev::PersistenceLevel persistence_level_;
   // Underlying bdev type, captured at RegisterTarget time. Used by the
   // GPU metadata cache projection to decide whether a blob landed in a
   // GPU-reachable tier (kRam / kHbm / kPinned).
-  chimaera::bdev::BdevType bdev_type_;
+  clio_run::bdev::BdevType bdev_type_;
 
   CTP_CROSS_FUN TargetInfo()
       : target_name_(CHI_PRIV_ALLOC),
@@ -231,8 +231,8 @@ struct TargetInfo {
         ops_written_(0),
         target_score_(0.0f),
         remaining_space_(0),
-        persistence_level_(chimaera::bdev::PersistenceLevel::kVolatile),
-        bdev_type_(chimaera::bdev::BdevType::kFile) {}
+        persistence_level_(clio_run::bdev::PersistenceLevel::kVolatile),
+        bdev_type_(clio_run::bdev::BdevType::kFile) {}
 
 #if CTP_IS_HOST
   TargetInfo(const std::string &name, const std::string &bdev_name)
@@ -244,7 +244,7 @@ struct TargetInfo {
         ops_written_(0),
         target_score_(0.0f),
         remaining_space_(0),
-        persistence_level_(chimaera::bdev::PersistenceLevel::kVolatile) {}
+        persistence_level_(clio_run::bdev::PersistenceLevel::kVolatile) {}
 #endif
 
   CTP_CROSS_FUN TargetInfo(const TargetInfo &other)
@@ -289,7 +289,7 @@ struct RegisterTargetTask : public chi::Task {
   // Task-specific data using CTP macros
   IN chi::priv::string
       target_name_;  // Name and file path of the target to register
-  IN chimaera::bdev::BdevType bdev_type_;  // Block device type enum
+  IN clio_run::bdev::BdevType bdev_type_;  // Block device type enum
   IN chi::u64 total_size_;                 // Total size for allocation
   IN chi::PoolQuery target_query_;  // Target pool query for bdev API calls
   IN chi::PoolId bdev_id_;          // PoolId to create for the underlying bdev
@@ -298,7 +298,7 @@ struct RegisterTargetTask : public chi::Task {
   CTP_CROSS_FUN RegisterTargetTask()
       : chi::Task(),
         target_name_(CHI_PRIV_ALLOC),
-        bdev_type_(chimaera::bdev::BdevType::kFile),
+        bdev_type_(clio_run::bdev::BdevType::kFile),
         total_size_(0),
         bdev_id_(chi::PoolId::GetNull()) {}
 
@@ -306,7 +306,7 @@ struct RegisterTargetTask : public chi::Task {
   CTP_CROSS_FUN explicit RegisterTargetTask(
       const chi::TaskId &task_id, const chi::PoolId &pool_id,
       const chi::PoolQuery &pool_query, const std::string &target_name,
-      chimaera::bdev::BdevType bdev_type, chi::u64 total_size,
+      clio_run::bdev::BdevType bdev_type, chi::u64 total_size,
       const chi::PoolQuery &target_query, const chi::PoolId &bdev_id)
       : chi::Task(task_id, pool_id, pool_query, Method::kRegisterTarget),
         target_name_(CHI_PRIV_ALLOC, target_name),
@@ -714,14 +714,14 @@ struct TagInfo {
  * Each block represents a portion of a blob stored in a target
  */
 struct BlobBlock {
-  chimaera::bdev::Client bdev_client_;  // Bdev client for this block's target
+  clio_run::bdev::Client bdev_client_;  // Bdev client for this block's target
   chi::PoolQuery target_query_;         // Target pool query for bdev API calls
   chi::u64 target_offset_;  // Offset within target where this block is stored
   chi::u64 size_;           // Size of this block in bytes
 
   CTP_CROSS_FUN BlobBlock() : target_offset_(0), size_(0) {}
 
-  CTP_CROSS_FUN BlobBlock(const chimaera::bdev::Client &client,
+  CTP_CROSS_FUN BlobBlock(const clio_run::bdev::Client &client,
                            const chi::PoolQuery &target_query, chi::u64 offset,
                            chi::u64 size)
       : bdev_client_(client),

@@ -59,9 +59,9 @@ NB_MODULE(clio_cte_core_ext, m) {
       .value("kGetTagSize", clio_cte::core::CteOp::kGetTagSize);
 
   // Bind BdevType enum
-  nb::enum_<chimaera::bdev::BdevType>(m, "BdevType")
-      .value("kFile", chimaera::bdev::BdevType::kFile)
-      .value("kRam", chimaera::bdev::BdevType::kRam);
+  nb::enum_<clio_run::bdev::BdevType>(m, "BdevType")
+      .value("kFile", clio_run::bdev::BdevType::kFile)
+      .value("kRam", clio_run::bdev::BdevType::kRam);
 
   // Bind ChimaeraMode enum
   nb::enum_<chi::ChimaeraMode>(m, "ChimaeraMode")
@@ -173,7 +173,7 @@ NB_MODULE(clio_cte_core_ext, m) {
          "Query blobs by tag and blob regex patterns, returns vector of (tag_name, blob_name) pairs")
      .def("RegisterTarget",
          [](clio_cte::core::Client &self,
-            const std::string &target_name, chimaera::bdev::BdevType bdev_type,
+            const std::string &target_name, clio_run::bdev::BdevType bdev_type,
             uint64_t total_size, const chi::PoolQuery &target_query, const chi::PoolId &bdev_id) {
            auto task = self.AsyncRegisterTarget(target_name, bdev_type, total_size, target_query, bdev_id);
            task.Wait();
@@ -184,7 +184,7 @@ NB_MODULE(clio_cte_core_ext, m) {
          "Register a storage target. Returns 0 on success, non-zero on failure")
      .def("RegisterTarget",
          [](clio_cte::core::Client &self,
-            const std::string &target_name, chimaera::bdev::BdevType bdev_type,
+            const std::string &target_name, clio_run::bdev::BdevType bdev_type,
             uint64_t total_size) {
            auto task = self.AsyncRegisterTarget(target_name, bdev_type, total_size);
            task.Wait();

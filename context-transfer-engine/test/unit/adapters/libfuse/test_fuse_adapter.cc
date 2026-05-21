@@ -119,16 +119,16 @@ class FuseAdapterTestFixture {
     auto *cte_client = CLIO_CTE_CLIENT;
 
     chi::PoolId bdev_pool_id(950, 0);
-    chimaera::bdev::Client bdev_client(bdev_pool_id);
+    clio_run::bdev::Client bdev_client(bdev_pool_id);
     auto create_task =
         bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), test_storage_path_,
-                                bdev_pool_id, chimaera::bdev::BdevType::kFile);
+                                bdev_pool_id, clio_run::bdev::BdevType::kFile);
     create_task.Wait();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     auto reg_task = cte_client->AsyncRegisterTarget(
-        test_storage_path_, chimaera::bdev::BdevType::kFile, kTestTargetSize,
+        test_storage_path_, clio_run::bdev::BdevType::kFile, kTestTargetSize,
         chi::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     REQUIRE(reg_task->GetReturnCode() == 0);

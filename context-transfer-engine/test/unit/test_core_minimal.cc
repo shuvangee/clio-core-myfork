@@ -176,13 +176,13 @@ TEST_CASE("Register Target", "[cte][core][target]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("File-based target configuration") {
     const std::string target_name = "cte_test_target";
-    const chimaera::bdev::BdevType bdev_type = chimaera::bdev::BdevType::kFile;
+    const clio_run::bdev::BdevType bdev_type = clio_run::bdev::BdevType::kFile;
     
     // Validate target configuration parameters
     REQUIRE(!target_name.empty());
     REQUIRE(!fixture->test_storage_path_.empty());
     REQUIRE(CTECoreTestFixture::kTestTargetSize > 0);
-    REQUIRE(bdev_type == chimaera::bdev::BdevType::kFile);
+    REQUIRE(bdev_type == clio_run::bdev::BdevType::kFile);
     
     INFO("Target configuration validated:");
     INFO("  Name: " << target_name);

@@ -36,7 +36,7 @@
  *
  * Regression + stress coverage for the policy:
  *   a RAM bdev / CTE storage tier configured with capacity "0g" (or 0)
- *   defaults to 80% of total system DRAM (chimaera::bdev::
+ *   defaults to 80% of total system DRAM (clio_run::bdev::
  *   DefaultRamCapacityBytes()) instead of being rejected (old CTE
  *   behavior) or treated as unbounded (old bdev behavior).
  *
@@ -62,7 +62,7 @@
  */
 
 #include <clio_runtime/clio_runtime.h>
-#include <clio_runtime/bdev/bdev_tasks.h>  // chimaera::bdev::DefaultRamCapacityBytes
+#include <clio_runtime/bdev/bdev_tasks.h>  // clio_run::bdev::DefaultRamCapacityBytes
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_tasks.h>
 
@@ -211,7 +211,7 @@ static DramDefaultTieringFixture *g_fixture = nullptr;
 TEST_CASE("DramDefault - 80% policy is sane and >= working set",
           "[tiered][dram-default][policy]") {
   chi::u64 total_dram = ctp::SystemInfo::GetRamCapacity();
-  chi::u64 defaulted = chimaera::bdev::DefaultRamCapacityBytes();
+  chi::u64 defaulted = clio_run::bdev::DefaultRamCapacityBytes();
 
   INFO("Total system DRAM: " << total_dram << " bytes");
   INFO("0g default (80%):  " << defaulted << " bytes");
