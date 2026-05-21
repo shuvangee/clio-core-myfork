@@ -8,7 +8,7 @@
 # Requirements:
 #   - Docker with --cap-add SYS_ADMIN and /dev/fuse access
 #   - libfuse3 installed in the container image
-#   - clio_cte_fuse binary built with -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON
+#   - clio_cte_fuse binary built with -DCLIO_CTE_ENABLE_FUSE_ADAPTER=ON
 
 services:
   cte-fuse-test:
