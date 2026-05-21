@@ -78,7 +78,7 @@ pip install iowarp-core
 
 The wheel includes the Clio runtime, the `chimaera` CLI, the CTE,
 CAE, and CEE engines, and the `clio_cee` Python bindings. A default
-configuration is seeded at `~/.chimaera/chimaera.yaml` on first import.
+configuration is seeded at `~/.clio/clio.yaml` (legacy: `~/.chimaera/chimaera.yaml`) on first import.
 
 Newer extensions and advanced/accelerated features are not in the
 portable wheel — switch to a source build below if you need any of:
@@ -189,7 +189,7 @@ Interactive tools and interfaces for exploring scientific data contents and meta
 
 ### Starting the Runtime
 
-Installation seeds a default configuration at `~/.chimaera/chimaera.yaml`, so
+Installation seeds a default configuration at `~/.clio/clio.yaml` (legacy: `~/.chimaera/chimaera.yaml`), so
 the runtime works out of the box:
 
 ```bash

@@ -98,17 +98,30 @@ bool ConfigManager::LoadYaml(const std::string &config_path) {
 }
 
 std::string ConfigManager::GetServerConfigPath() const {
-  // Check CHI_SERVER_CONF first (primary)
-  const char *chi_env_path = chi::env::GetCompat("SERVER_CONF");
-  if (chi_env_path) {
-    return std::string(chi_env_path);
+  // Check env var first: CLIO_SERVER_CONF preferred, CHI_SERVER_CONF legacy.
+  const char *env_path = chi::env::GetCompat("SERVER_CONF");
+  if (env_path) {
+    return std::string(env_path);
   }
 
-  // Fall back to ~/.chimaera/chimaera.yaml
-  std::string home_config =
-      ctp::ConfigParse::ExpandPath("${HOME}/.chimaera/chimaera.yaml");
-  if (std::filesystem::exists(home_config)) {
-    return home_config;
+  // Fall back to a per-user config file. Lookup order, first hit wins:
+  //   1. ~/.clio/clio.yaml      (new canonical name)
+  //   2. ~/.clio/chimaera.yaml  (legacy filename in the new dir)
+  //   3. ~/.chimaera/clio.yaml  (new filename in the legacy dir)
+  //   4. ~/.chimaera/chimaera.yaml  (legacy)
+  // All four are supported; installers seed both ~/.clio/ AND ~/.chimaera/
+  // with identical content so either layout works in the wild.
+  const char *kCandidates[] = {
+      "${HOME}/.clio/clio.yaml",
+      "${HOME}/.clio/chimaera.yaml",
+      "${HOME}/.chimaera/clio.yaml",
+      "${HOME}/.chimaera/chimaera.yaml",
+  };
+  for (const char *tmpl : kCandidates) {
+    std::string path = ctp::ConfigParse::ExpandPath(tmpl);
+    if (std::filesystem::exists(path)) {
+      return path;
+    }
   }
 
   return std::string();

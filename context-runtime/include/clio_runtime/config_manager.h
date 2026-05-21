@@ -87,8 +87,13 @@ struct ComposeConfig {
  * Configuration manager singleton
  *
  * Inherits from ctp BaseConfig and manages YAML configuration parsing.
- * Config lookup: CHI_SERVER_CONF env -> ~/.chimaera/chimaera.yaml ->
- * bare minimum defaults.
+ * Config lookup, first hit wins:
+ *   1. CLIO_SERVER_CONF env (or legacy CHI_SERVER_CONF via env_compat)
+ *   2. ~/.clio/clio.yaml
+ *   3. ~/.clio/chimaera.yaml
+ *   4. ~/.chimaera/clio.yaml
+ *   5. ~/.chimaera/chimaera.yaml
+ *   6. Bare-minimum defaults (no compose)
  * Uses CTP global cross pointer variable singleton pattern.
  */
 class ConfigManager : public ctp::BaseConfig {
@@ -122,11 +127,16 @@ class ConfigManager : public ctp::BaseConfig {
   bool LoadYaml(const std::string& config_path);
 
   /**
-   * Get server configuration file path
-   * Lookup order:
-   *   1. CHI_SERVER_CONF env var
-   *   2. ~/.chimaera/chimaera.yaml (if it exists)
-   *   3. Empty string (bare minimum defaults, no compose)
+   * Get server configuration file path.
+   * Lookup order (first hit wins):
+   *   1. CLIO_SERVER_CONF env var (or legacy CHI_SERVER_CONF via env_compat)
+   *   2. ~/.clio/clio.yaml         (new canonical user config)
+   *   3. ~/.clio/chimaera.yaml     (legacy filename in new dir)
+   *   4. ~/.chimaera/clio.yaml     (new filename in legacy dir)
+   *   5. ~/.chimaera/chimaera.yaml (legacy)
+   *   6. Empty string (bare-minimum defaults, no compose)
+   * Both per-user directories are seeded with identical content by
+   * `make install` and by the iowarp_core pip wheel's _setup() hook.
    * @return Configuration file path or empty string if no config found
    */
   std::string GetServerConfigPath() const;

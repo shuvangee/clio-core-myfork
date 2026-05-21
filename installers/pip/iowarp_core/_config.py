@@ -1,34 +1,45 @@
 """Configuration resolution helpers for IOWarp.
 
-Provides utilities for locating the Chimaera server configuration file,
-checking standard locations in order of precedence.
+Provides utilities for locating the Clio server configuration file,
+checking standard locations in order of precedence. Mirrors the C++
+runtime's ConfigManager::GetServerConfigPath.
 """
 
 import os
 
 
 def find_config():
-    """Find the Chimaera configuration file.
+    """Find the Clio server configuration file.
 
     Search order:
-    1. CLIO_SERVER_CONF environment variable
-    2. ~/.chimaera/chimaera.yaml
-    3. Bundled default in the package data/ directory
+    1. CLIO_SERVER_CONF env var (preferred), or CHI_SERVER_CONF (legacy)
+    2. ~/.clio/clio.yaml        (new canonical user config)
+    3. ~/.clio/chimaera.yaml    (legacy filename in new dir)
+    4. ~/.chimaera/clio.yaml    (new filename in legacy dir)
+    5. ~/.chimaera/chimaera.yaml (legacy)
+    6. Bundled default in the package data/ directory
 
     Returns:
         str: Path to the configuration file, or None if not found.
     """
-    # 1. Environment variable override
-    env_conf = os.environ.get("CLIO_SERVER_CONF")
-    if env_conf and os.path.isfile(env_conf):
-        return env_conf
+    # 1. Environment variable override (new name, then legacy fallback)
+    for var in ("CLIO_SERVER_CONF", "CHI_SERVER_CONF"):
+        env_conf = os.environ.get(var)
+        if env_conf and os.path.isfile(env_conf):
+            return env_conf
 
-    # 2. User-local config
-    user_conf = os.path.expanduser("~/.chimaera/chimaera.yaml")
-    if os.path.isfile(user_conf):
-        return user_conf
+    # 2-5. User-local config — new dir/name combos first, legacy last
+    for rel in (
+        "~/.clio/clio.yaml",
+        "~/.clio/chimaera.yaml",
+        "~/.chimaera/clio.yaml",
+        "~/.chimaera/chimaera.yaml",
+    ):
+        path = os.path.expanduser(rel)
+        if os.path.isfile(path):
+            return path
 
-    # 3. Bundled default
+    # 6. Bundled default
     package_dir = os.path.dirname(os.path.abspath(__file__))
     default_conf = os.path.join(package_dir, "data", "chimaera_default.yaml")
     if os.path.isfile(default_conf):

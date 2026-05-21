@@ -74,7 +74,9 @@
       "Bash(pkill -9 -f \"clio_cte_bench\")",
       "Bash(pkill -9 -f \"chi_rss\")",
       "Bash(ps -eo pid,cmd)",
-      "Bash(pkill -9 -f chi_rss)"
+      "Bash(pkill -9 -f chi_rss)",
+      "Read(//home/iowarp/.clio/**)",
+      "Bash(pkill -9 -f 'clio_run runtime\\\\|chimaera runtime')"
     ],
     "deny": [],
     "ask": []

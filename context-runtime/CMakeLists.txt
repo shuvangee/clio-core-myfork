@@ -151,10 +151,13 @@ install(DIRECTORY config/
   FILES_MATCHING PATTERN "*"
 )
 
-# Seed ~/.chimaera/chimaera.yaml for the real user (handles sudo)
-# Only creates the file if it doesn't already exist
+# Seed the user's default config — both ~/.clio/clio.yaml (preferred) and
+# ~/.chimaera/chimaera.yaml (legacy) so either location continues to work
+# in the wild. Runtime lookup order is documented in
+# ConfigManager::GetServerConfigPath; the new ~/.clio takes priority.
+# Existing files are never overwritten.
 install(CODE "
-  # Determine real user's home directory
+  # Determine real user's home directory (handles sudo install)
   set(_HOME \"\")
   if(DEFINED ENV{SUDO_USER})
     set(_SUDO_USER \"\$ENV{SUDO_USER}\")
@@ -168,22 +171,28 @@ install(CODE "
     set(_HOME \"\$ENV{HOME}\")
   endif()
 
-  set(_DEST \"\${_HOME}/.chimaera\")
-  set(_FILE \"\${_DEST}/chimaera.yaml\")
-  if(NOT EXISTS \"\${_FILE}\")
-    file(MAKE_DIRECTORY \"\${_DEST}\")
-    file(COPY_FILE
-      \"\${CMAKE_INSTALL_PREFIX}/etc/chimaera/chimaera_default.yaml\"
-      \"\${_FILE}\"
-    )
-    message(STATUS \"Seeded default config: \${_FILE}\")
-    # Fix ownership when running under sudo
-    if(DEFINED ENV{SUDO_USER})
-      execute_process(COMMAND chown -R \"\$ENV{SUDO_USER}:\$ENV{SUDO_USER}\" \"\${_DEST}\")
+  set(_DEFAULT_SRC \"\${CMAKE_INSTALL_PREFIX}/etc/chimaera/chimaera_default.yaml\")
+
+  # Per-destination seeding helper: directory + filename + optional chown
+  foreach(_entry
+      \"\${_HOME}/.clio|clio.yaml\"       # new canonical location
+      \"\${_HOME}/.chimaera|chimaera.yaml\")  # legacy location, kept seeded
+    string(REPLACE \"|\" \";\" _parts \"\${_entry}\")
+    list(GET _parts 0 _DEST)
+    list(GET _parts 1 _NAME)
+    set(_FILE \"\${_DEST}/\${_NAME}\")
+    if(NOT EXISTS \"\${_FILE}\")
+      file(MAKE_DIRECTORY \"\${_DEST}\")
+      file(COPY_FILE \"\${_DEFAULT_SRC}\" \"\${_FILE}\")
+      message(STATUS \"Seeded default config: \${_FILE}\")
+      if(DEFINED ENV{SUDO_USER})
+        execute_process(
+          COMMAND chown -R \"\$ENV{SUDO_USER}:\$ENV{SUDO_USER}\" \"\${_DEST}\")
+      endif()
+    else()
+      message(STATUS \"User config already exists: \${_FILE} (not overwriting)\")
     endif()
-  else()
-    message(STATUS \"User config already exists: \${_FILE} (not overwriting)\")
-  endif()
+  endforeach()
 ")
 
 # Export targets file for main library
