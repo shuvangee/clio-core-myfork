@@ -1,447 +1,113 @@
 /**
  * External CTE Core Integration Test
- * 
- * This test demonstrates how external applications can link to and use 
- * the CTE Core library. It serves as both a test and an example of 
- * proper CTE Core usage patterns.
+ *
+ * Validates the C++ example in the top-level README.md against the
+ * installed `clio-core` package surface.  The test deliberately mirrors
+ * the README snippet line-for-line (singleton CLIO_CTE_CLIENT + async
+ * AsyncGetOrCreateTag / AsyncPutBlob / AsyncGetBlob / AsyncDelTag) so
+ * that any README drift surfaces as a build/test failure here.
+ *
+ * If you edit this file, please mirror the change to README.md's
+ * "Context Transfer Engine C++ Example" section, and vice versa.
  */
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <memory>
-#include <chrono>
-#include <thread>
+#include <clio_cte/core/core_client.h>
+#include <clio_runtime/ipc_manager.h>
 
-// Logging
+#include <cstring>
+#include <iostream>
+#include <vector>
+
 #include <clio_ctp/util/logging.h>
 
-// CTE Core includes
-#include <clio_cte/core/core_client.h>
-#include <clio_cte/core/core_tasks.h>
-#include <clio_cte/core/content_transfer_engine.h>
-#include <clio_runtime/clio_runtime.h>
-
-// CTP includes
-#include <clio_ctp/util/singleton.h>
-
 namespace {
-    constexpr size_t kTestDataSize = 1024;  // 1KB test data
-    constexpr const char* kTestTagName = "external_test_tag";
-    constexpr const char* kTestBlobName = "external_test_blob";
+
+// Run the exact code path documented in README.md.  Returns 0 on
+// success (matches the README's `return 0;` semantics so the test
+// binary's exit code is the README example's exit code).
+int RunReadmeExample() {
+  // ---- begin README example ----------------------------------------
+  // (Keep the body of this block identical to the README's
+  //  "Context Transfer Engine C++ Example" code block.)
+
+  // 1. Initialize the CTE client.  This auto-connects to the runtime
+  //    started by `clio_run start` and creates the CTE pool on the
+  //    first call (no separate CLIO_INIT / runtime-mode setup needed
+  //    in the consumer process).  Storage targets are configured
+  //    declaratively via the runtime's compose YAML — no
+  //    RegisterTarget call needed here either.
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) return 1;
+  auto *cte = CLIO_CTE_CLIENT;
+
+  // 2. Get-or-create a named container for blobs.  The async APIs
+  //    return a chi::Future immediately; Wait() blocks for completion.
+  auto tag_future = cte->AsyncGetOrCreateTag("my_tag");
+  tag_future.Wait();
+  auto tag_id = tag_future->tag_id_;
+
+  // 3. Stage blob data into a CTE-managed shm buffer and submit the
+  //    PutBlob asynchronously.  Submit-then-Wait is the canonical
+  //    pattern; multiple AsyncPutBlob calls can be in flight before
+  //    the first Wait() to pipeline I/O.  The async signatures take a
+  //    type-erased `ShmPtr<>` so we wrap `put_buf.shm_` (a typed
+  //    `ShmPtr<char>`) in the void-typed view.
+  constexpr size_t kSize = 4096;
+  auto put_buf = CLIO_IPC->AllocateBuffer(kSize);
+  std::memset(put_buf.ptr_, 'A', kSize);
+  ctp::ipc::ShmPtr<> put_data(put_buf.shm_);
+  auto put_future = cte->AsyncPutBlob(tag_id, "my_blob",
+                                       /*offset=*/0, kSize,
+                                       put_data);
+  put_future.Wait();
+  CLIO_IPC->FreeBuffer(put_buf);
+
+  // 4. Pre-allocate the receive buffer in shm, fire an async GetBlob,
+  //    then Wait — the buffer holds the blob data on return.
+  auto get_buf = CLIO_IPC->AllocateBuffer(kSize);
+  ctp::ipc::ShmPtr<> get_data(get_buf.shm_);
+  auto get_future = cte->AsyncGetBlob(tag_id, "my_blob",
+                                       /*offset=*/0, kSize,
+                                       /*flags=*/0,
+                                       get_data);
+  get_future.Wait();
+  // get_buf.ptr_ now holds the retrieved bytes.
+
+  // ---- end of README example body ---------------------------------
+  // The README returns here; below the line is test-only verification
+  // that the round-trip actually transferred the expected bytes.
+
+  // Verify the GetBlob returned the data we wrote.
+  for (size_t i = 0; i < kSize; ++i) {
+    if (get_buf.ptr_[i] != 'A') {
+      HLOG(kError,
+           "GetBlob roundtrip mismatch at byte {}: expected 'A', got {}",
+           i, static_cast<int>(get_buf.ptr_[i]));
+      CLIO_IPC->FreeBuffer(get_buf);
+      cte->AsyncDelTag(tag_id).Wait();
+      return 2;
+    }
+  }
+  CLIO_IPC->FreeBuffer(get_buf);
+
+  // 5. Clean up.
+  cte->AsyncDelTag(tag_id).Wait();
+  return 0;
 }
 
-class ExternalCteTest {
-private:
-    std::unique_ptr<clio::cte::core::Client> cte_client_;
-    bool initialized_;
-
-public:
-    ExternalCteTest() : initialized_(false) {}
-
-    ~ExternalCteTest() {
-        Cleanup();
-    }
-
-    bool Initialize() {
-        HLOG(kInfo, "=== External CTE Core Integration Test ===");
-        HLOG(kInfo, "Initializing CTE Core system...");
-
-        try {
-            // Step 1: Initialize CLIO Runtime (runtime + client)
-            HLOG(kInfo, "1. Initializing Chimaera...");
-            bool chimaera_init = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
-            if (!chimaera_init) {
-                HLOG(kError, "Failed to initialize Chimaera");
-                return false;
-            }
-
-            // Step 2: Initialize CTE subsystem
-            HLOG(kInfo, "2. Initializing CTE subsystem...");
-            bool cte_init = clio::cte::core::CLIO_CTE_CLIENT_INIT();
-            if (!cte_init) {
-                HLOG(kError, "Failed to initialize CTE subsystem");
-                return false;
-            }
-
-            // Step 4: Get CTE client instance
-            HLOG(kInfo, "4. Getting CTE client instance...");
-            auto *global_client = CLIO_CTE_CLIENT;
-            if (!global_client) {
-                HLOG(kError, "Failed to get CTE client instance");
-                return false;
-            }
-
-            // Create our own client instance for testing
-            cte_client_ = std::make_unique<clio::cte::core::Client>();
-
-            // Step 5: Create CTE container
-            HLOG(kInfo, "5. Creating CTE container...");
-            clio::cte::core::CreateParams create_params;
-
-            try{
-                // Use CTE Core constants from core_tasks.h
-                cte_client_->Create(ctp::ipc::MemContext(), chi::PoolQuery::Dynamic(),
-                                   clio::cte::core::kCtePoolName,
-                                   clio::cte::core::kCtePoolId, create_params);
-                HLOG(kInfo, "CTE container created successfully");
-            } catch (const std::exception& e) {
-                HLOG(kError, "Failed to create CTE container: {}", e.what());
-                return false;
-            }
-
-            initialized_ = true;
-            HLOG(kSuccess, "CTE Core initialization completed successfully!");
-            return true;
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception during initialization: {}", e.what());
-            return false;
-        }
-    }
-
-    bool RunTests() {
-        if (!initialized_) {
-            HLOG(kError, "Cannot run tests - system not initialized");
-            return false;
-        }
-
-        HLOG(kInfo, "\n=== Running CTE Core API Tests ===");
-
-        bool all_tests_passed = true;
-
-        // Test 1: Register a storage target
-        all_tests_passed &= TestRegisterTarget();
-
-        // Test 2: Create tag and store blob
-        all_tests_passed &= TestCreateTagAndBlob();
-
-        // Test 3: Retrieve blob data
-        all_tests_passed &= TestRetrieveBlob();
-
-        // Test 4: Test telemetry collection
-        all_tests_passed &= TestTelemetryCollection();
-
-        // Test 5: List targets
-        all_tests_passed &= TestListTargets();
-
-        // Test 6: Get tag size
-        all_tests_passed &= TestGetTagSize();
-
-        // Test 7: Cleanup operations
-        all_tests_passed &= TestCleanupOperations();
-
-        if (all_tests_passed) {
-            HLOG(kSuccess, "\nAll tests passed!");
-        } else {
-            HLOG(kError, "\nSome tests failed!");
-        }
-
-        return all_tests_passed;
-    }
-
-private:
-    bool TestRegisterTarget() {
-        HLOG(kInfo, "\n--- Test 1: Register Storage Target ---");
-
-        try {
-            std::string target_name = "/tmp/cte_external_test_target";
-            chi::u64 target_size = 100 * 1024 * 1024;  // 100MB
-
-            chi::u32 result = cte_client_->RegisterTarget(
-                ctp::ipc::MemContext(),
-                target_name,
-                clio::run::bdev::BdevType::kFile,
-                target_size
-            );
-
-            if (result == 0) {
-                HLOG(kSuccess, "Storage target registered successfully");
-                return true;
-            } else {
-                HLOG(kError, "Failed to register storage target (code: {})", result);
-                return false;
-            }
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestRegisterTarget: {}", e.what());
-            return false;
-        }
-    }
-
-    bool TestCreateTagAndBlob() {
-        HLOG(kInfo, "\n--- Test 2: Create Tag and Store Blob ---");
-
-        try {
-            // Create test data
-            std::vector<char> test_data(kTestDataSize);
-            for (size_t i = 0; i < kTestDataSize; ++i) {
-                test_data[i] = static_cast<char>(i % 256);
-            }
-
-            // Allocate shared memory for the data
-            ctp::ipc::FullPtr<char> shared_data = CLIO_IPC->AllocateBuffer(kTestDataSize);
-            if (shared_data.IsNull()) {
-                HLOG(kError, "Failed to allocate shared memory buffer");
-                return false;
-            }
-
-            // Copy data to shared memory
-            memcpy(shared_data.ptr_, test_data.data(), kTestDataSize);
-
-            // Create or get tag
-            clio::cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                ctp::ipc::MemContext(),
-                kTestTagName,
-                clio::cte::core::TagId::GetNull()
-            );
-
-            HLOG(kSuccess, "Tag created/retrieved with ID: {}", tag_id);
-
-            // Store blob data
-            bool put_result = cte_client_->PutBlob(
-                ctp::ipc::MemContext(),
-                tag_id,
-                kTestBlobName,
-                0,  // offset
-                kTestDataSize,
-                shared_data.shm_,  // Use .shm_ to get the Pointer
-                0.8f,  // score
-                0  // flags
-            );
-
-            if (put_result) {
-                HLOG(kSuccess, "Blob stored successfully");
-                return true;
-            } else {
-                HLOG(kError, "Failed to store blob");
-                return false;
-            }
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestCreateTagAndBlob: {}", e.what());
-            return false;
-        }
-    }
-
-    bool TestRetrieveBlob() {
-        HLOG(kInfo, "\n--- Test 3: Retrieve Blob Data ---");
-
-        try {
-            // Get the tag ID first
-            clio::cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                ctp::ipc::MemContext(),
-                kTestTagName,
-                clio::cte::core::TagId::GetNull()
-            );
-
-            // Allocate buffer for reading
-            ctp::ipc::FullPtr<char> read_buffer = CLIO_IPC->AllocateBuffer(kTestDataSize);
-            if (read_buffer.IsNull()) {
-                HLOG(kError, "Failed to allocate read buffer");
-                return false;
-            }
-
-            // Retrieve blob data
-            bool get_result = cte_client_->GetBlob(
-                ctp::ipc::MemContext(),
-                tag_id,
-                kTestBlobName,
-                0,  // offset
-                kTestDataSize,
-                0,  // flags
-                read_buffer.shm_
-            );
-
-            if (get_result) {
-                // Verify data integrity
-                const char* read_data = static_cast<const char*>(read_buffer.ptr_);
-                bool data_matches = true;
-
-                for (size_t i = 0; i < kTestDataSize; ++i) {
-                    if (read_data[i] != static_cast<char>(i % 256)) {
-                        data_matches = false;
-                        break;
-                    }
-                }
-
-                if (data_matches) {
-                    HLOG(kSuccess, "Blob retrieved and data verified successfully");
-                    return true;
-                } else {
-                    HLOG(kError, "Data verification failed");
-                    return false;
-                }
-            } else {
-                HLOG(kError, "Failed to retrieve blob");
-                return false;
-            }
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestRetrieveBlob: {}", e.what());
-            return false;
-        }
-    }
-
-    bool TestTelemetryCollection() {
-        HLOG(kInfo, "\n--- Test 4: Test Telemetry Collection ---");
-
-        try {
-            // Poll telemetry log
-            std::vector<clio::cte::core::CteTelemetry> telemetry =
-                cte_client_->PollTelemetryLog(ctp::ipc::MemContext(), 0);
-
-            HLOG(kSuccess, "Retrieved {} telemetry entries", telemetry.size());
-
-            // Display first few entries
-            size_t display_count = std::min(static_cast<size_t>(3), telemetry.size());
-            for (size_t i = 0; i < display_count; ++i) {
-                const auto& entry = telemetry[i];
-                HLOG(kInfo, "Entry {}: op={}, size={}, logical_time={}", i,
-                     static_cast<int>(entry.op_), entry.size_, entry.logical_time_);
-            }
-
-            return true;
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestTelemetryCollection: {}", e.what());
-            return false;
-        }
-    }
-
-    bool TestListTargets() {
-        HLOG(kInfo, "\n--- Test 5: List Storage Targets ---");
-
-        try {
-            std::vector<std::string> targets =
-                cte_client_->ListTargets(ctp::ipc::MemContext());
-
-            HLOG(kSuccess, "Found {} registered targets", targets.size());
-
-            for (size_t i = 0; i < targets.size(); ++i) {
-                const auto& target_name = targets[i];
-                HLOG(kInfo, "Target {}: {}", i, target_name);
-            }
-
-            return true;
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestListTargets: {}", e.what());
-            return false;
-        }
-    }
-
-    bool TestGetTagSize() {
-        HLOG(kInfo, "\n--- Test 6: Get Tag Size ---");
-
-        try {
-            // Get the tag ID first
-            clio::cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                ctp::ipc::MemContext(),
-                kTestTagName,
-                clio::cte::core::TagId::GetNull()
-            );
-
-            size_t tag_size = cte_client_->GetTagSize(ctp::ipc::MemContext(), tag_id);
-
-            HLOG(kSuccess, "Tag size: {} bytes", tag_size);
-
-            // Verify it matches our expected size
-            if (tag_size >= kTestDataSize) {
-                HLOG(kSuccess, "Tag size verification passed");
-                return true;
-            } else {
-                HLOG(kError, "Tag size verification failed (expected >= {}, got {})",
-                     kTestDataSize, tag_size);
-                return false;
-            }
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestGetTagSize: {}", e.what());
-            return false;
-        }
-    }
-
-    bool TestCleanupOperations() {
-        HLOG(kInfo, "\n--- Test 7: Cleanup Operations ---");
-
-        try {
-            // Get the tag ID
-            clio::cte::core::TagId tag_id = cte_client_->GetOrCreateTag(
-                ctp::ipc::MemContext(),
-                kTestTagName,
-                clio::cte::core::TagId::GetNull()
-            );
-
-            // Delete the blob
-            bool del_blob_result = cte_client_->DelBlob(
-                ctp::ipc::MemContext(),
-                tag_id,
-                kTestBlobName
-            );
-
-            if (del_blob_result) {
-                HLOG(kSuccess, "Blob deleted successfully");
-            } else {
-                HLOG(kWarning, "Blob deletion failed (may not exist)");
-            }
-
-            // Delete the tag
-            bool del_tag_result = cte_client_->DelTag(ctp::ipc::MemContext(), kTestTagName);
-
-            if (del_tag_result) {
-                HLOG(kSuccess, "Tag deleted successfully");
-            } else {
-                HLOG(kWarning, "Tag deletion failed (may not exist)");
-            }
-
-            return true;
-
-        } catch (const std::exception& e) {
-            HLOG(kError, "Exception in TestCleanupOperations: {}", e.what());
-            return false;
-        }
-    }
-
-    void Cleanup() {
-        if (initialized_) {
-            HLOG(kInfo, "\n=== Cleanup ===");
-            HLOG(kInfo, "Cleaning up CTE Core resources...");
-
-            // CTE and CLIO Runtime cleanup would happen automatically
-            // through destructors and singleton cleanup
-
-            initialized_ = false;
-            HLOG(kInfo, "Cleanup completed.");
-        }
-    }
-};
-
-int main(int argc, char* argv[]) {
-    // Suppress unused parameter warnings
-    (void)argc;
-    (void)argv;
-
-    // Create test instance
-    ExternalCteTest test;
-
-    // Initialize the system
-    if (!test.Initialize()) {
-        HLOG(kError, "Failed to initialize CTE Core system");
-        return 1;
-    }
-
-    // Run the tests
-    bool success = test.RunTests();
-
-    // Print final result
-    HLOG(kInfo, "\n=== Test Results ===");
-    if (success) {
-        HLOG(kSuccess, "External CTE Core integration test PASSED!");
-        HLOG(kInfo, "The CTE Core library is properly linkable and functional.");
-        return 0;
-    } else {
-        HLOG(kError, "External CTE Core integration test FAILED!");
-        HLOG(kInfo, "Check the error messages above for details.");
-        return 1;
-    }
+}  // namespace
+
+int main() {
+  HLOG(kInfo, "=== External CTE Integration Test (README example) ===");
+  HLOG(kInfo,
+       "Validating that the top-level README.md C++ example builds and "
+       "runs against the installed clio-core surface.");
+
+  const int rc = RunReadmeExample();
+  if (rc == 0) {
+    HLOG(kInfo, "PASS: README CTE example completed successfully.");
+  } else {
+    HLOG(kError,
+         "FAIL: README CTE example returned non-zero exit code: {}", rc);
+  }
+  return rc;
 }
