@@ -1,0 +1,85 @@
+# clio_cte_bench on NCSA Delta -- 4-node, CPU partition, baremetal.
+#
+# Mirror of pipelines/ares/clio_cte_bench_baremetal_sbatch_2n.yaml,
+# adapted for Delta (Cray EX, x86_64, Slingshot HSN). Each node runs a
+# clio_runtime daemon + clio_cte pool + clio_cte_bench (Put). The bench
+# connects to its LOCAL daemon via SHM IPC and issues PutBlob;
+# cross-node placement (neighborhood=1) keeps writes local, so this is
+# a sanity check that the 4-node chimaera + CTE stack stands up on
+# Delta inside a SLURM allocation.
+#
+# Usage:
+#   jarvis ppl submit \
+#     ${IOWARP}/jarvis_clio_core/pipelines/delta/clio_cte_bench_baremetal_sbatch_4n.yaml
+#
+# To write the sbatch script without submitting:
+#   jarvis ppl submit ... +no_submit
+
+name: clio_cte_bench_baremetal_sbatch_4n_delta
+
+# jarvis-cd's native SLURM integration: it writes
+# ${SHARED_DIR}/submit.slurm and runs sbatch; inside the allocation it
+# builds the hostfile from $SLURM_JOB_NODELIST and binds self.hostfile
+# for every package. See jarvis-cd/docs/scheduler.md.
+scheduler:
+  name: slurm
+  account: bekn-delta-cpu
+  partition: cpu
+  nodes: 4
+  ntasks_per_node: 1
+  # Generous core count: chimaera has num_threads=4 workers + 1 net
+  # worker, plus the bench, FUSE if added, and helper threads. Stay
+  # well above num_threads so the net worker isn't starved by Slurm's
+  # cgroup cpuset.
+  cpus_per_task: 16
+  time: "00:05:00"
+  job_name: clio_cte_bench_4n_delta
+  output: slurm-%j.out
+  error: slurm-%j.err
+
+# Pin chimaera's node-local memfd symlink dir to /tmp (node-local NVMe
+# on Delta; ~800 GB per node, purged at job end). MUST NOT live on
+# /u or /work (shared NFS/Lustre) -- the symlinks point into
+# /proc/<daemon_pid>/fd/<n>, only resolvable on the host that created
+# them, so a shared-FS dir lets nodes clobber each other's entries and
+# the loser-node's client gets ENOENT on shm_open.
+env:
+  CLIO_MEMFD_DIR: "/tmp/clio_memfd_${USER}_${HOSTNAME}"
+  # LIGHTBEAM_TCP_DEVICE: hsn0   # uncomment to pin daemon<->daemon ZMQ
+  #                              # to a specific Slingshot rail
+
+pkgs:
+  - pkg_type: jarvis_clio_core.clio_runtime
+    pkg_name: runtime
+    num_threads: 4
+    client_data_segment_size: "2G"
+    port: 9413
+    # SHM is fine -- bench is co-located with its local daemon on each
+    # node. Cross-node daemon<->daemon uses a separate ZMQ transport,
+    # independent of this setting.
+    ipc_mode: "shm"
+    log_level: "info"
+    sleep: 4
+
+  - pkg_type: jarvis_clio_core.clio_cte
+    pkg_name: cte_core
+    devices:
+      - ["ram::cte_ram_tier1", "8GB", 1.0]
+    dpe_type: "max_bw"
+    neighborhood: 1
+    default_target_timeout_ms: 30000
+    poll_period_ms: 5000
+    pool_query: "local"
+
+  - pkg_type: jarvis_clio_core.clio_cte_bench
+    pkg_name: bench
+    # 1 thread * depth 8 in-flight * 4096 ops * 1 MiB = 4 GiB per node.
+    # Drop io_count if you want to stay well inside the 5-minute wall.
+    test_case: Put
+    num_threads: 1
+    depth: 8
+    io_size: "1m"
+    io_count: 4096
+    nprocs: 4
+    ppn: 1
+    init_runtime: false
