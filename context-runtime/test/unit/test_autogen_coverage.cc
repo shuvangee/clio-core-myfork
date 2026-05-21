@@ -14104,15 +14104,14 @@ TEST_CASE("Autogen - Task flag combinations", "[autogen][task][flags]") {
 
   SECTION("All flags") {
     chi::Task task;
-    task.SetFlags(TASK_PERIODIC | TASK_ROUTED | TASK_DATA_OWNER | TASK_REMOTE | TASK_FORCE_NET | TASK_STARTED);
+    task.SetFlags(TASK_PERIODIC | TASK_ROUTED | TASK_DATA_OWNER | TASK_REMOTE | TASK_STARTED);
     REQUIRE(task.IsPeriodic());
     REQUIRE(task.IsRouted());
     REQUIRE(task.IsDataOwner());
     REQUIRE(task.IsRemote());
-    REQUIRE(task.task_flags_.Any(TASK_FORCE_NET));
     REQUIRE(task.task_flags_.Any(TASK_STARTED));
 
-    task.ClearFlags(TASK_PERIODIC | TASK_ROUTED | TASK_DATA_OWNER | TASK_REMOTE | TASK_FORCE_NET | TASK_STARTED);
+    task.ClearFlags(TASK_PERIODIC | TASK_ROUTED | TASK_DATA_OWNER | TASK_REMOTE | TASK_STARTED);
     REQUIRE(!task.IsPeriodic());
     REQUIRE(!task.IsRouted());
     REQUIRE(!task.IsDataOwner());

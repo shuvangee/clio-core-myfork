@@ -438,9 +438,13 @@ struct AddressHash {
 #define TASK_ROUTED BIT_OPT(chi::u32, 1)
 #define TASK_DATA_OWNER BIT_OPT(chi::u32, 2)
 #define TASK_REMOTE BIT_OPT(chi::u32, 3)
-#define TASK_FORCE_NET \
-  BIT_OPT(chi::u32,    \
-          4)  ///< Force task through network code even for local execution
+// Bit 4 was TASK_FORCE_NET — removed in favor of the CLIO_FORCE_NET env
+// variable (read by IpcManager::ServerInit, stored as force_net_, checked
+// in IsTaskLocal). The per-task flag was redundant and noisier: every
+// task site had to remember to set/clear it, vs. a single startup switch
+// that flips the runtime's routing decision once. Bit position kept
+// reserved so existing on-wire/persisted flag values keep their bit
+// numbering.
 #define TASK_STARTED \
   BIT_OPT(chi::u32, 5)  ///< Task execution has been started (set in BeginTask,
                         ///< unset in ReschedulePeriodicTask)

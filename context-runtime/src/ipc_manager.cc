@@ -281,6 +281,21 @@ bool IpcManager::ServerInit() {
     return true;
   }
 
+  // CLIO_FORCE_NET (legacy CHI_FORCE_NET also honored via GetCompat):
+  // when set to anything non-empty, every task whose PoolQuery isn't
+  // explicitly Local() is routed via the network path even on a
+  // single-node deployment. Used by the bench to stress the ZMQ
+  // serialize/send/recv loop without needing a real multi-node
+  // setup.  Read once here; IsTaskLocal consults force_net_ on the
+  // hot path.
+  if (const char *env = chi::env::GetCompat("FORCE_NET")) {
+    if (*env != '\0' && std::strcmp(env, "0") != 0) {
+      force_net_ = true;
+      HLOG(kInfo, "IpcManager: CLIO_FORCE_NET=1 — routing all non-Local "
+                  "tasks via network path");
+    }
+  }
+
   // Create chi_cur_worker_key_ TLS key early in server path.
   // ServerInitGpuQueues() calls RegisterGpuAllocator() which acquires a
   // CoRwLock, which calls GetCurrentLockOwnerId() → pthread_getspecific().
@@ -2601,10 +2616,20 @@ RouteResult IpcManager::RouteTask(Future<Task> &future, bool force_enqueue) {
   }
 }
 
-bool IpcManager::IsTaskLocal(const FullPtr<Task> &task_ptr,
+bool IpcManager::IsTaskLocal(const FullPtr<Task> & /*task_ptr*/,
                              const std::vector<PoolQuery> &pool_queries) {
-  // If task has TASK_FORCE_NET flag, force it through network code
-  if (task_ptr->task_flags_.Any(TASK_FORCE_NET)) {
+  // A single explicit Local() query is always local — bypasses the
+  // force_net_ stress switch since "the caller asked for local" is a
+  // stronger signal than "pretend we're networked."
+  if (pool_queries.size() == 1 &&
+      pool_queries[0].GetRoutingMode() == RoutingMode::Local) {
+    return true;
+  }
+
+  // CLIO_FORCE_NET stress mode: any non-Local query routes via the
+  // network path even on single-node deployments.  Read once in
+  // ServerInit; see force_net_ in ipc_manager.h.
+  if (force_net_) {
     return false;
   }
 

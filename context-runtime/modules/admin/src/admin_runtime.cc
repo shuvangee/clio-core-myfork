@@ -1132,7 +1132,7 @@ void Runtime::RecvIn(ctp::ipc::FullPtr<RecvTask> task,
       set_flags |= TASK_DATA_OWNER;
     }
     task_ptr->SetFlags(set_flags);
-    task_ptr->ClearFlags(TASK_PERIODIC | TASK_FORCE_NET | TASK_ROUTED |
+    task_ptr->ClearFlags(TASK_PERIODIC | TASK_ROUTED |
                          TASK_RUN_CTX_EXISTS | TASK_STARTED);
 
     // Add task to recv_map for later lookup
@@ -1374,7 +1374,8 @@ void Runtime::RecvOut(ctp::ipc::FullPtr<RecvTask> task,
       }
 
       // Set container in origin RunContext (may be null if task was routed
-      // globally without passing through RouteLocal, e.g. TASK_FORCE_NET)
+      // globally without passing through RouteLocal — e.g. when the runtime
+      // is started with CLIO_FORCE_NET=1)
       if (container) {
         origin_rctx->container_ = container;
       }

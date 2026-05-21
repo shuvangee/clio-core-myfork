@@ -1268,6 +1268,14 @@ class IpcManager {
 
   bool is_initialized_ = false;
 
+  // CLIO_FORCE_NET: read once at ServerInit (and only on the server
+  // path — clients route via the server's IsTaskLocal decision so a
+  // client-side override would be a no-op).  When set, every task
+  // whose PoolQuery isn't explicitly Local() is treated as remote so
+  // the ZMQ serialize / send / deserialize loop gets exercised even
+  // on a single-node bench.  See IsTaskLocal for the predicate.
+  bool force_net_ = false;
+
   // Shared memory backend for main segment (task data, FutureShm)
   ctp::ipc::PosixShmMmap main_backend_;
 
