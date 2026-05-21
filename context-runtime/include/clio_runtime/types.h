@@ -464,18 +464,18 @@ constexpr PoolId kAdminPoolId =
 
 // Allocator type aliases using CTP conventions
 //
-// CHI_QUEUE_ALLOC_T: BuddyAllocator on both CPU and GPU (queue ring buffers)
+// CLIO_QUEUE_ALLOC_T: BuddyAllocator on both CPU and GPU (queue ring buffers)
 //
-// CHI_TASK_ALLOC_T: allocator for task data and chi::priv structures
+// CLIO_TASK_ALLOC_T: allocator for task data and chi::priv structures
 //   CPU: MultiProcessAllocator — shared across processes in the main SHM segment
 //   GPU: BuddyAllocator       — per-thread GPU allocator
 //
-// CHI_PRIV_ALLOC_T / CHI_PRIV_ALLOC: private data allocator and instance
+// CLIO_PRIV_ALLOC_T / CLIO_PRIV_ALLOC: private data allocator and instance
 //   CPU: MallocAllocator / CTP_MALLOC
-//   GPU: CHI_TASK_ALLOC_T   / CHI_IPC->GetMainAllocator()
+//   GPU: CLIO_TASK_ALLOC_T  / CLIO_IPC->GetMainAllocator()
 //        (task constructors are never called from GPU kernels, so the GPU
-//         CHI_PRIV_ALLOC is only used for dynamic chi::priv operations in kernels)
-#define CHI_QUEUE_ALLOC_T ctp::ipc::BuddyAllocator
+//         CLIO_PRIV_ALLOC is only used for dynamic chi::priv operations in kernels)
+#define CLIO_QUEUE_ALLOC_T ctp::ipc::BuddyAllocator
 
 /** Allocator scope for NewObj: private (warp-local) or shared (cross-warp) */
 enum class AllocScope { kPrivate, kShared };
@@ -487,45 +487,57 @@ enum class AllocScope { kPrivate, kShared };
 // avoid the host-only MallocAllocatorSingleton (whose function-local
 // static is rejected by SYCL kernels).
 #if !CTP_IS_DEVICE_PASS
-#define CHI_TASK_ALLOC_T  ctp::ipc::MultiProcessAllocator
-#define CHI_PRIV_ALLOC_T  ctp::ipc::MallocAllocator
-#define CHI_PRIV_ALLOC    CTP_MALLOC
+#define CLIO_TASK_ALLOC_T  ctp::ipc::MultiProcessAllocator
+#define CLIO_PRIV_ALLOC_T  ctp::ipc::MallocAllocator
+#define CLIO_PRIV_ALLOC    CTP_MALLOC
 // On CPU, shared == private (single-threaded MallocAllocator)
-#define CHI_PRIV_SHARED_ALLOC_T ctp::ipc::MallocAllocator
-#define CHI_PRIV_SHARED_ALLOC   CTP_MALLOC
+#define CLIO_PRIV_SHARED_ALLOC_T ctp::ipc::MallocAllocator
+#define CLIO_PRIV_SHARED_ALLOC   CTP_MALLOC
 #else
-#define CHI_TASK_ALLOC_T  ctp::ipc::BuddyAllocator
-// GPU: CHI_PRIV_ALLOC uses a cached PrivateBuddyAllocator* per warp.
+#define CLIO_TASK_ALLOC_T  ctp::ipc::BuddyAllocator
+// GPU: CLIO_PRIV_ALLOC uses a cached PrivateBuddyAllocator* per warp.
 // The pointer is resolved once during GPU init (from PartitionedAllocator) and
 // cached in IpcManager::warp_priv_alloc_[], eliminating the per-allocation
 // PartitionedAllocator indirection (GetAutoTid + LazyInitThread + GetThreadBlock).
-#define CHI_PRIV_ALLOC_T  ctp::ipc::PrivateBuddyAllocator
+#define CLIO_PRIV_ALLOC_T  ctp::ipc::PrivateBuddyAllocator
 /**
  * Get the GPU private allocator (cached PrivateBuddyAllocator for this warp).
- * Declared here; defined in ipc_manager.h after CHI_IPC is available.
+ * Declared here; defined in ipc_manager.h after CLIO_IPC is available.
  *
  * @return Pointer to the warp's cached BuddyAllocator
  */
 CTP_GPU_FUN ctp::ipc::PrivateBuddyAllocator *GetPrivAllocGpu();
-#define CHI_PRIV_ALLOC    (::chi::GetPrivAllocGpu())
-// GPU: CHI_PRIV_SHARED_ALLOC returns the PartitionedAllocator (PartitionedAllocator)
+#define CLIO_PRIV_ALLOC    (::chi::GetPrivAllocGpu())
+// GPU: CLIO_PRIV_SHARED_ALLOC returns the PartitionedAllocator (PartitionedAllocator)
 // which dispatches allocations to the calling warp's partition via GetAutoTid().
 // Use for cross-warp data structures (shared maps, vectors) where multiple warps
 // may allocate/free concurrently.
-#define CHI_PRIV_SHARED_ALLOC_T ctp::ipc::RoundRobinAllocator
+#define CLIO_PRIV_SHARED_ALLOC_T ctp::ipc::RoundRobinAllocator
 CTP_GPU_FUN ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu();
-#define CHI_PRIV_SHARED_ALLOC   (::chi::GetSharedAllocGpu())
+#define CLIO_PRIV_SHARED_ALLOC   (::chi::GetSharedAllocGpu())
 #endif
 
 // ---------------------------------------------------------------------------
 // Historical macro aliases
 //
-// `CHI_TASK_ALLOC_T` was previously named `CHI_MAIN_ALLOC_T`. The old name
+// `CLIO_TASK_ALLOC_T` was previously named `CLIO_MAIN_ALLOC_T`. The old name
 // kept appearing in downstream snapshots of the runtime header (e.g.
 // vendored copies inside chimods that haven't pulled in a fresh runtime
 // sync). Re-exporting both spellings here lets that code compile without
 // any source changes.
-#define CHI_MAIN_ALLOC_T CHI_TASK_ALLOC_T
+#define CLIO_MAIN_ALLOC_T CLIO_TASK_ALLOC_T
+
+// Backward-compat aliases (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged. These are
+// text-substitution aliases — they resolve to whichever CLIO_* def is
+// active for the current compilation pass (host vs device).
+#define CHI_QUEUE_ALLOC_T        CLIO_QUEUE_ALLOC_T
+#define CHI_TASK_ALLOC_T         CLIO_TASK_ALLOC_T
+#define CHI_PRIV_ALLOC_T         CLIO_PRIV_ALLOC_T
+#define CHI_PRIV_ALLOC           CLIO_PRIV_ALLOC
+#define CHI_PRIV_SHARED_ALLOC_T  CLIO_PRIV_SHARED_ALLOC_T
+#define CHI_PRIV_SHARED_ALLOC    CLIO_PRIV_SHARED_ALLOC
+#define CHI_MAIN_ALLOC_T         CLIO_MAIN_ALLOC_T
 
 // Memory segment identifiers
 enum MemorySegment {

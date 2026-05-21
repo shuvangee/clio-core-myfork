@@ -97,55 +97,30 @@ void CHIMAERA_FINALIZE();
 }  // namespace chi
 
 //==============================================================================
-// CLIO_* backward-compat aliases (rebranding: chimaera -> clio_runtime).
+// CLIO_* runtime API surface (rebranding: chimaera -> clio_runtime).
 //
-// All historical CHI_*/CHIMAERA_* identifiers remain valid; the CLIO_* form
-// is the new canonical name. Both work indefinitely; existing external code
-// keeps building without changes. See rebranding.md for the full migration
-// table.
+// All CLIO_* singleton / class-body / allocator macros are now defined at
+// their canonical site in the individual subsystem headers (admin.h,
+// chimaera_manager.h, config_manager.h, container.h, ipc_manager.h,
+// module_manager.h, pool_manager.h, task.h, types.h, work_orchestrator.h,
+// worker.h). Each of those headers also declares its `#define CHI_<X>
+// CLIO_<X>` backward-compat alias, so legacy code that still uses the
+// CHI_* spelling keeps working unchanged. See rebranding.md for the full
+// migration table.
 //
-// The aliases live in the umbrella header (this file) so they are visible to
-// any TU that already includes <clio_runtime/clio_runtime.h>; the macros they
-// reference are guaranteed to be defined by the includes above.
+// Only two things need to live in this umbrella:
+//   1. The init / finalize macros (their RHS is a function call, not a
+//      macro defined elsewhere).
+//   2. The CLIO_RUNTIME_MANAGER alias — the only macro whose CLIO_ form
+//      is a genuinely renamed alias rather than a flipped canonical.
 //==============================================================================
 
 // --- Init / finalize ---
 #define CLIO_RUNTIME_INIT      ::chi::CHIMAERA_INIT
 #define CLIO_RUNTIME_FINALIZE  ::chi::CHIMAERA_FINALIZE
 
-// --- Singletons / global accessors ---
-#define CLIO_ADMIN              CHI_ADMIN
-#define CLIO_CHIMAERA_MANAGER   CHI_CHIMAERA_MANAGER     // legacy name
-#define CLIO_RUNTIME_MANAGER    CHI_CHIMAERA_MANAGER     // new name
-#define CLIO_CONFIG_MANAGER     CHI_CONFIG_MANAGER
-#define CLIO_IPC                CHI_IPC
-#define CLIO_CPU_IPC            CHI_CPU_IPC
-#define CLIO_MODULE_MANAGER     CHI_MODULE_MANAGER
-#define CLIO_POOL_MANAGER       CHI_POOL_MANAGER
-#define CLIO_WORK_ORCHESTRATOR  CHI_WORK_ORCHESTRATOR
-#define CLIO_CUR_WORKER         CHI_CUR_WORKER
-
-// --- ChiMod / Task class-body macros ---
-#define CLIO_CHIMOD_CC          CHI_CHIMOD_CC
-#define CLIO_TASK_CC            CHI_TASK_CC
-
-// --- Task-body / coroutine-await macros ---
-#define CLIO_TASK_BODY_BEGIN    CHI_TASK_BODY_BEGIN
-#define CLIO_TASK_BODY_END      CHI_TASK_BODY_END
-#define CLIO_CO_AWAIT           CHI_CO_AWAIT
-#define CLIO_CO_RETURN          CHI_CO_RETURN
-
-// --- Allocator type / instance aliases ---
-#define CLIO_QUEUE_ALLOC_T          CHI_QUEUE_ALLOC_T
-#define CLIO_TASK_ALLOC_T           CHI_TASK_ALLOC_T
-// CLIO_MAIN_ALLOC_T: historical name for what is now CLIO_TASK_ALLOC_T. Kept
-// as an alias so older vendored snapshots of the runtime header (e.g. inside
-// downstream chimods) keep compiling against the current install.
-#define CLIO_MAIN_ALLOC_T           CHI_TASK_ALLOC_T
-#define CLIO_PRIV_ALLOC_T           CHI_PRIV_ALLOC_T
-#define CLIO_PRIV_ALLOC             CHI_PRIV_ALLOC
-#define CLIO_PRIV_SHARED_ALLOC_T    CHI_PRIV_SHARED_ALLOC_T
-#define CLIO_PRIV_SHARED_ALLOC      CHI_PRIV_SHARED_ALLOC
+// --- Renamed alias for the (canonical) CLIO_CHIMAERA_MANAGER ---
+#define CLIO_RUNTIME_MANAGER   CLIO_CHIMAERA_MANAGER
 
 // --- Module namespace alias (chimaera:: -> clio_run::) ---
 // Pulled in last so the alias is visible to every TU that includes this

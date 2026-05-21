@@ -53,6 +53,9 @@ class Client;
 CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_run::admin::Client, g_admin);
 
 // Macro for accessing the Admin singleton using global pointer variable
-#define CHI_ADMIN CTP_GET_GLOBAL_PTR_VAR(::clio_run::admin::Client, g_admin)
+#define CLIO_ADMIN CTP_GET_GLOBAL_PTR_VAR(::clio_run::admin::Client, g_admin)
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_ADMIN  CLIO_ADMIN
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_ADMIN_H_

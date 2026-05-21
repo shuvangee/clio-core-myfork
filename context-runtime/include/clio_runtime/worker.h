@@ -113,11 +113,14 @@ struct WorkerStats {
 // Macro for accessing CTP thread-local storage (worker thread context)
 // This macro allows access to the current worker from any thread
 // Example usage in ChiMod container code:
-//   Worker* worker = CHI_CUR_WORKER;
+//   Worker* worker = CLIO_CUR_WORKER;
 //   FullPtr<Task> current_task = worker->GetCurrentTask();
 //   RunContext* run_ctx = worker->GetCurrentRunContext();
-#define CHI_CUR_WORKER \
+#define CLIO_CUR_WORKER \
   (CTP_THREAD_MODEL->GetTls<chi::Worker>(chi::chi_cur_worker_key_))
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_CUR_WORKER  CLIO_CUR_WORKER
 
 /**
  * Worker class for executing tasks
@@ -425,7 +428,7 @@ class Worker {
   float load_;          // Estimated total CPU time (us) of active tasks
   bool did_work_;       // Tracks if any work was done in current loop iteration
   bool task_did_work_;  // Tracks if current task did actual work (set by tasks
-                        // via CHI_CUR_WORKER)
+                        // via CLIO_CUR_WORKER)
 
   // Current RunContext for this worker thread
   RunContext *current_run_context_;

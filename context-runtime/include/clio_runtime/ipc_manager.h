@@ -1495,15 +1495,24 @@ class IpcManager {
 // Global pointer variable declaration for IPC manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
 
-#define CHI_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
-#define CHI_CPU_IPC CHI_IPC
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_CPU_IPC CLIO_IPC
 
-// Include local_task_archives after CHI_IPC is defined, since on GPU
-// CHI_PRIV_ALLOC expands to chi::GetPrivAllocGpu() (defined below)
+// Backward-compat aliases (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged. These are
+// text-substitution aliases — they resolve to whichever CLIO_* def is
+// active in the current pass (host / GPU host pass / GPU device pass /
+// SYCL device pass), surviving any later #undef/#define cycle on
+// CLIO_IPC / CLIO_CPU_IPC further down in this file.
+#define CHI_IPC      CLIO_IPC
+#define CHI_CPU_IPC  CLIO_CPU_IPC
+
+// Include local_task_archives after CLIO_IPC is defined, since on GPU
+// CLIO_PRIV_ALLOC expands to chi::GetPrivAllocGpu() (defined below)
 #include "clio_runtime/local_task_archives.h"
 
 // ================================================================
-// GPU translation unit support: override CHI_IPC for device code
+// GPU translation unit support: override CLIO_IPC for device code
 // ================================================================
 #if CTP_IS_GPU_COMPILER
 
@@ -1519,7 +1528,7 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 }  // namespace gpu
 }  // namespace chi
 
-// CHI_IPC needs different expansions in nvcc/hipcc's two passes:
+// CLIO_IPC needs different expansions in nvcc/hipcc's two passes:
 //   - Device pass (CTP_IS_GPU=1): GetBlockIpcManager() — the per-block
 //     `__shared__` singleton initialized by CHIMAERA_GPU_INIT.
 //   - Host pass (CTP_IS_GPU=0): the global host pointer accessor —
@@ -1527,14 +1536,14 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 //     (bdev_client::AsyncCreate, etc.) gets compiled in this pass too
 //     when the test .cc lives in an nvcc TU; it must reach the real
 //     host IpcManager, not nullptr. Mirrors the SYCL two-form override.
-#undef CHI_IPC
+#undef CLIO_IPC
 #if CTP_IS_GPU
-#define CHI_IPC (::chi::gpu::GetGpuIpcManager())
+#define CLIO_IPC (::chi::gpu::GetGpuIpcManager())
 #else
-#define CHI_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 #endif
-#undef CHI_CPU_IPC
-#define CHI_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#undef CLIO_CPU_IPC
+#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 
 namespace chi {
 // Producer-only model: kernels do not allocate. The legacy
@@ -1559,26 +1568,26 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
 
 // SYCL has no analogue of CUDA's __shared__-backed GetBlockIpcManager(),
 // and DPC++ rejects function-local static variables in device code. The
-// CUDA path lets CHI_IPC auto-resolve via a static method; the SYCL path
+// CUDA path lets CLIO_IPC auto-resolve via a static method; the SYCL path
 // instead binds a kernel-scope local variable named `g_ipc_manager_ptr`
-// in the CHIMAERA_GPU_*_INIT macros (see gpu_ipc_manager.h), and CHI_IPC
+// in the CHIMAERA_GPU_*_INIT macros (see gpu_ipc_manager.h), and CLIO_IPC
 // is a macro that resolves to that local via plain C++ name lookup.
 //
-// Consequence: CHI_IPC works inside the kernel body and inside any
+// Consequence: CLIO_IPC works inside the kernel body and inside any
 // device function called from the kernel where `g_ipc_manager_ptr` is
 // in lexical scope (typically because the function takes it as a
 // parameter or is inlined into the kernel). Free functions that take
-// no parameters and reach for CHI_IPC will not compile under SYCL —
+// no parameters and reach for CLIO_IPC will not compile under SYCL —
 // pass the IpcManager pointer through explicitly. The chimaera runtime
 // follows this convention: chimod methods are called from the worker's
 // kernel body, where g_ipc_manager_ptr is in scope.
 //
-// CHI_CPU_IPC remains the host-side global pointer accessor for code
+// CLIO_CPU_IPC remains the host-side global pointer accessor for code
 // that runs on the CPU even in a SYCL build.
 namespace chi {
 // SYCL stubs for the per-warp allocator getters that types.h's
-// CHI_PRIV_ALLOC macro expands to under any device pass. Code that wants
-// a private allocator under SYCL should reach CHI_IPC->gpu_alloc_
+// CLIO_PRIV_ALLOC macro expands to under any device pass. Code that wants
+// a private allocator under SYCL should reach CLIO_IPC->gpu_alloc_
 // directly; these stubs preserve build-time compatibility for paths that
 // happened to call them.
 inline ctp::ipc::PrivateBuddyAllocator *GetPrivAllocGpu() { return nullptr; }
@@ -1603,7 +1612,7 @@ inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() { return nullptr; }
 // conflicting definitions.
 inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 
-// CHI_IPC under SYCL needs different expansions in the two compilation
+// CLIO_IPC under SYCL needs different expansions in the two compilation
 // passes that DPC++ runs over a SYCL TU:
 //
 //   - Device pass (CTP_IS_SYCL_DEVICE=1): resolve to the kernel-scope
@@ -1616,14 +1625,14 @@ inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 //
 // The two-form expansion lets CTP_CROSS_FUN-tagged code (compiled in
 // both passes) get the right pointer in each.
-#undef CHI_IPC
+#undef CLIO_IPC
 #if CTP_IS_SYCL_DEVICE
-#define CHI_IPC (g_ipc_manager_ptr)
+#define CLIO_IPC (g_ipc_manager_ptr)
 #else
-#define CHI_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 #endif
-#undef CHI_CPU_IPC
-#define CHI_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#undef CLIO_CPU_IPC
+#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 
 #endif  // CTP_IS_SYCL_COMPILER
 

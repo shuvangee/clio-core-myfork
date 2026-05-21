@@ -134,6 +134,9 @@ class Chimaera {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::Chimaera, g_chimaera_manager);
 
 // Macro for accessing the CLIO Runtime manager singleton using global pointer variable
-#define CHI_CHIMAERA_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::Chimaera, g_chimaera_manager)
+#define CLIO_CHIMAERA_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::Chimaera, g_chimaera_manager)
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_CHIMAERA_MANAGER  CLIO_CHIMAERA_MANAGER
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CHIMAERA_MANAGER_H_

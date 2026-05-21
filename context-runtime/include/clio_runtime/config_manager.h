@@ -377,6 +377,9 @@ class ConfigManager : public ctp::BaseConfig {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::ConfigManager, g_config_manager);
 
 // Macro for accessing the Configuration manager singleton using global pointer variable
-#define CHI_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ConfigManager, g_config_manager)
+#define CLIO_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ConfigManager, g_config_manager)
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_CONFIG_MANAGER  CLIO_CONFIG_MANAGER
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_

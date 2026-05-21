@@ -1293,18 +1293,24 @@ inline chi::TaskResume make_task_fiber(F&& fn) {
 // Cross-compiler macros for task bodies (co_await / co_return replacements)
 // ============================================================================
 #ifndef __NVCOMPILER
-#  define CHI_TASK_BODY_BEGIN
-#  define CHI_TASK_BODY_END
-#  define CHI_CO_AWAIT(expr)  co_await (expr)
-#  define CHI_CO_RETURN       co_return
+#  define CLIO_TASK_BODY_BEGIN
+#  define CLIO_TASK_BODY_END
+#  define CLIO_CO_AWAIT(expr)  co_await (expr)
+#  define CLIO_CO_RETURN       co_return
 #else
-#  define CHI_TASK_BODY_BEGIN return chi::detail::make_task_fiber([=, &rctx]() mutable {
-#  define CHI_TASK_BODY_END   });
-#  define CHI_CO_AWAIT(expr)  chi::detail::fiber_co_await((expr), rctx)
+#  define CLIO_TASK_BODY_BEGIN return chi::detail::make_task_fiber([=, &rctx]() mutable {
+#  define CLIO_TASK_BODY_END   });
+#  define CLIO_CO_AWAIT(expr)  chi::detail::fiber_co_await((expr), rctx)
 // Use plain return so RAII destructors (e.g. ScopedCoMutex) run before the
 // fiber stack is freed. fiber_trampoline handles the final swapcontext back
 // to the worker after the lambda returns.
-#  define CHI_CO_RETURN       return
+#  define CLIO_CO_RETURN       return
 #endif
+// Backward-compat aliases (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_TASK_BODY_BEGIN  CLIO_TASK_BODY_BEGIN
+#define CHI_TASK_BODY_END    CLIO_TASK_BODY_END
+#define CHI_CO_AWAIT         CLIO_CO_AWAIT
+#define CHI_CO_RETURN        CLIO_CO_RETURN
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_TASK_H_

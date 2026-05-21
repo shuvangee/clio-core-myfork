@@ -610,10 +610,10 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
 /**
  * Macro to define ChiMod entry points in runtime source file (deprecated)
  *
- * Usage: CHI_CHIMOD_CC(MyContainerClass, "my_chimod_name")
- * Note: Use CHI_TASK_CC instead for new modules
+ * Usage: CLIO_CHIMOD_CC(MyContainerClass, "my_chimod_name")
+ * Note: Use CLIO_TASK_CC instead for new modules
  */
-#define CHI_CHIMOD_CC(CONTAINER_CLASS, MOD_NAME)                     \
+#define CLIO_CHIMOD_CC(CONTAINER_CLASS, MOD_NAME)                    \
   extern "C" {                                                       \
   chi::Container* alloc_chimod() {                                   \
     return reinterpret_cast<chi::Container*>(new CONTAINER_CLASS()); \
@@ -635,16 +635,19 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
                                                                      \
   static bool is_chimaera_chimod_ = true;                            \
   }
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_CHIMOD_CC  CLIO_CHIMOD_CC
 
 /**
  * Macro to define ChiMod entry points for task-based modules
  *
- * Usage: CHI_TASK_CC(MyContainerClass)
+ * Usage: CLIO_TASK_CC(MyContainerClass)
  * This macro provides a cleaner interface for modules that use the Container
  * base class. The ChiMod name is automatically retrieved from
  * CONTAINER_CLASS::CreateParams::chimod_lib_name.
  */
-#define CHI_TASK_CC(CONTAINER_CLASS)                                 \
+#define CLIO_TASK_CC(CONTAINER_CLASS)                                \
   extern "C" {                                                       \
   chi::Container* alloc_chimod() {                                   \
     return reinterpret_cast<chi::Container*>(new CONTAINER_CLASS()); \
@@ -667,5 +670,8 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
                                                                      \
   static bool is_chimaera_chimod_ = true;                            \
   }
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_TASK_CC  CLIO_TASK_CC
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_

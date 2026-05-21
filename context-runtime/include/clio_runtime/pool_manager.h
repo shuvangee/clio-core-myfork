@@ -320,6 +320,9 @@ class PoolManager {
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::PoolManager, g_pool_manager);
 
 // Macro for accessing the Pool manager singleton using global pointer variable
-#define CHI_POOL_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::PoolManager, g_pool_manager)
+#define CLIO_POOL_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::PoolManager, g_pool_manager)
+// Backward-compat alias (clio_run rebrand). External code that still
+// uses the legacy CHI_* spelling keeps working unchanged.
+#define CHI_POOL_MANAGER  CLIO_POOL_MANAGER
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_POOL_MANAGER_H_
