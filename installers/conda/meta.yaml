@@ -1,9 +1,13 @@
-{# Version is driven by PKG_VERSION which the workflow exports from
-   CMakeLists.txt's `project(iowarp-core VERSION ...)` before invoking
-   `conda build` (so the conda package version tracks the same single
-   source of truth as the pip wheel). The "1.0.0" fallback keeps local
-   `conda build installers/conda/` working without setup. #}
-{% set version = environ.get('PKG_VERSION', '1.0.0') %}
+{# Conda package version.  Originally driven by an environ.get(PKG_VERSION,
+   '1.0.0') jinja, mirroring the pip wheel.  conda-build 26.x sandboxed
+   the jinja `environ` so neither the PKG_VERSION env var nor the
+   default fallback resolves anymore — `version` evaluates to the
+   literal string "None" and the resulting "iowarp-core-None-..." pkg
+   name then fails libmamba's _test_env solve.  Hardcode until conda-
+   build exposes a working environ-bridge again; the CMake-side source
+   of truth is in /CMakeLists.txt project(iowarp-core VERSION X.Y.Z),
+   keep this number in sync when bumping. #}
+{% set version = "1.5.7" %}
 {% set preset = environ.get('IOWARP_PRESET', 'release') %}
 
 package:
@@ -18,7 +22,6 @@ build:
   string: {{ preset.replace('-', '_') }}_h{{ PKG_HASH }}
   script_env:
     - IOWARP_PRESET
-    - PKG_VERSION
 
 requirements:
   build:
