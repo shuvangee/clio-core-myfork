@@ -137,7 +137,7 @@ static inline void DumpNetStatsIfDue(chi::u64 self_node_id, size_t num_peers) {
         s.rout_count == 0) {
       continue;
     }
-    HLOG(kInfo,
+    HLOG(kDebug,
          "[NetStats] self={} peer={} sin={}/{}MiB sout={}/{}MiB "
          "rin={}/{}MiB rout={}/{}MiB "
          "sin_lbm_ms={:.1f} sout_lbm_ms={:.1f} "
@@ -163,7 +163,7 @@ static inline void DumpNetStatsIfDue(chi::u64 self_node_id, size_t num_peers) {
     tot_rin_des += s.rin_des_ns;
     tot_rout_des += s.rout_des_ns;
   }
-  HLOG(kInfo,
+  HLOG(kDebug,
        "[NetStats] self={} TOTAL sin={}/{}MiB sout={}/{}MiB "
        "rin={}/{}MiB rout={}/{}MiB "
        "sin_lbm_ms={:.1f} sout_lbm_ms={:.1f} "
