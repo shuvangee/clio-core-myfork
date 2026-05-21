@@ -54,7 +54,7 @@ If you add new methods to a chimod, please edit clio_mod.yaml and use the clio_r
 
 ## GPU Producer-Only Model
 
-The GPU side of Chimaera is a **pure task producer** — kernels do not allocate
+The GPU side of CLIO Runtime is a **pure task producer** — kernels do not allocate
 tasks, FutureShm, or data buffers. All allocations happen on the host before
 kernel launch into client-owned device-memory backends that are registered
 with the runtime via `admin::RegisterMemoryTask`. Inside a kernel the only
@@ -87,7 +87,7 @@ __global__ void MyKernel(IpcManagerGpuInfo info,
   if (threadIdx.x == 0) {
     // Mutate POD task fields. No NewTask, no AllocateBuffer.
     task->some_input_ = ...;
-    auto fut = CHI_IPC->Send(task);
+    auto fut = CLIO_IPC->Send(task);
     fut.Wait();
     // Read result fields back from the same POD task.
   }
@@ -105,7 +105,7 @@ method on the local CPU runtime, and signals `FUTURE_COMPLETE` on the
 device-side gpu::FutureShm so the kernel poll-loop unblocks.
 
 ### Forbidden on the GPU
-- `CHI_IPC->NewTask(...)`, `CHI_IPC->NewObj(...)`, `CHI_IPC->AllocateBuffer(...)`
+- `CLIO_IPC->NewTask(...)`, `CLIO_IPC->NewObj(...)`, `CLIO_IPC->AllocateBuffer(...)`
   — these are host-only.
 - `PoolQuery::ToLocalGpu(...)`, `PoolQuery::LocalGpuBcast()` — both removed.
   Use `PoolQuery::ToLocalCpu()` exclusively for kernel→runtime submission.
@@ -201,13 +201,13 @@ All timing prints MUST include units of measurement in milliseconds (ms). Always
 
 ### Automatic IPC Cleanup on RuntimeInit
 
-When Chimaera RuntimeInit is called (via `IpcManager::ServerInit()`), it automatically cleans up leftover shared memory segments from previous runs or crashed processes by calling `IpcManager::ClearUserIpcs()`.
+When CLIO Runtime RuntimeInit is called (via `IpcManager::ServerInit()`), it automatically cleans up leftover shared memory segments from previous runs or crashed processes by calling `IpcManager::ClearUserIpcs()`.
 
 **ClearUserIpcs() Behavior:**
 - Scans the per-user chimaera directory (`SystemInfo::GetMemfdDir()`, i.e. `/tmp/chimaera_$USER/`)
 - Removes all memfd symlinks and IPC socket files from that directory
 - Silently ignores permission errors (EACCES, EPERM) to support multi-user systems
-- Other users' active Chimaera processes are not affected
+- Other users' active CLIO Runtime processes are not affected
 - Logs successfully removed segments at kDebug level
 - Returns the count of segments removed
 
@@ -292,20 +292,20 @@ Always use CTP_MCTX macro unless we are writing GPU code, which necessitates a s
 
 ### Module Build Patterns
 
-This project follows the Chimaera MODULE_DEVELOPMENT_GUIDE.md patterns for proper Module development:
+This project follows the CLIO Runtime MODULE_DEVELOPMENT_GUIDE.md patterns for proper Module development:
 
 **Required Packages for Module Development:**
 ```cmake
 # Core Clio framework (includes ChimaeraCommon.cmake functions)
 find_package(chimaera REQUIRED)              # Core library (chimaera::cxx)
-find_package(clio_admin REQUIRED)        # Admin Module (required for most ChiMods)
+find_package(clio_admin REQUIRED)        # Admin Module (required for most Modules)
 ```
 
 **Module Creation Pattern:**
 ```cmake
 # Use modern Module build functions instead of manual add_library
+# Module name and namespace come from clio_mod.yaml in the source dir.
 add_clio_module_runtime(
-  CHIMOD_NAME core
   SOURCES
     src/core_runtime.cc
     src/core_config.cc
@@ -313,7 +313,6 @@ add_clio_module_runtime(
 )
 
 add_clio_module_client(
-  CHIMOD_NAME core
   SOURCES
     src/core_client.cc
     src/content_transfer_engine.cc
@@ -321,9 +320,10 @@ add_clio_module_client(
 ```
 
 **Target Naming:**
-- **Actual Targets**: `${NAMESPACE}_${CHIMOD_NAME}_runtime`, `${NAMESPACE}_${CHIMOD_NAME}_client`
-- **CMake Aliases**: `${NAMESPACE}::${CHIMOD_NAME}_runtime`, `${NAMESPACE}::${CHIMOD_NAME}_client` (recommended)
-- **Package Names**: `${NAMESPACE}_${CHIMOD_NAME}` (for external find_package)
+- **Actual Targets**: `${NAMESPACE}_${MODULE_NAME}_runtime`, `${NAMESPACE}_${MODULE_NAME}_client` (or `${LIB_NAME}_runtime`/`_client` if `LIB_NAME` is passed to override — used e.g. by the bdev module which installs as `clio_bdev_*`)
+- **CMake Aliases**: `${NAMESPACE}::${MODULE_NAME}_runtime`, `${NAMESPACE}::${MODULE_NAME}_client` (recommended)
+- **Legacy Aliases**: For chimaera-renamed modules (admin / bdev / MOD_NAME, now under `clio_run::`), the install layout still exposes `chimaera::<module>_<x>` aliases so external consumers (e.g. coeus-adapter) keep working.
+- **Package Names**: `${NAMESPACE}_${MODULE_NAME}` for clio_cte/clio_cae; pinned to `chimaera_${MODULE_NAME}` for clio_run-namespace modules to keep `find_package(chimaera_admin/_bdev/_MOD_NAME)` backward compat.
 
 ## Worker Method Return Types
 
@@ -440,7 +440,7 @@ Use `TaskLane*` for all lane pointers in RunContext and other interfaces. Avoid 
 ```cpp
 // Recommended: Use Dynamic() for automatic caching
 admin_client.Create(mctx, chi::PoolQuery::Dynamic(), "admin");
-bdev_client.Create(mctx, chi::PoolQuery::Dynamic(), file_path, chimaera::bdev::BdevType::kFile);
+bdev_client.Create(mctx, chi::PoolQuery::Dynamic(), file_path, clio_run::bdev::BdevType::kFile);
 ```
 
 ### CreateTask Pool Assignment
@@ -485,15 +485,15 @@ The admin pool name MUST always be "admin". Multiple admin pools are NOT support
 Module libraries use consistent underscore-based naming:
 
 **Target Names:**
-- Runtime: `${NAMESPACE}_${CHIMOD_NAME}_runtime` (e.g., `chimaera_admin_runtime`)
-- Client: `${NAMESPACE}_${CHIMOD_NAME}_client` (e.g., `chimaera_admin_client`)
+- Runtime: `${NAMESPACE}_${MODULE_NAME}_runtime` (e.g., `clio_admin_runtime`)
+- Client: `${NAMESPACE}_${MODULE_NAME}_client` (e.g., `clio_admin_client`)
 
 **CMake Aliases:**
-- Runtime: `${NAMESPACE}::${CHIMOD_NAME}_runtime` (e.g., `chimaera::admin_runtime`)
-- Client: `${NAMESPACE}::${CHIMOD_NAME}_client` (e.g., `chimaera::admin_client`)
+- Runtime: `${NAMESPACE}::${MODULE_NAME}_runtime` (e.g., `chimaera::admin_runtime`)
+- Client: `${NAMESPACE}::${MODULE_NAME}_client` (e.g., `chimaera::admin_client`)
 
 **Package Names:**
-- Format: `${NAMESPACE}_${CHIMOD_NAME}` (e.g., `chimaera_admin`)
+- Format: `${NAMESPACE}_${MODULE_NAME}` (e.g., `chimaera_admin`)
 - Used with `find_package(clio_admin REQUIRED)`
 - Core package: `chimaera` (provides `chimaera::cxx`)
 
@@ -503,11 +503,11 @@ Module libraries automatically handle common dependencies:
 **Automatic Dependencies for Runtime Code:**
 - `rt` library: Automatically linked to all Module runtime targets for POSIX real-time library support (async I/O)
 - Admin Module: Automatically linked to all non-admin Module runtime and client targets
-- Admin includes: Automatically added to include directories for non-admin ChiMods
+- Admin includes: Automatically added to include directories for non-admin Modules
 
 **For External Applications:**
 
-Use the unified `find_package(iowarp-core)` which automatically includes all components and ChiMods:
+Use the unified `find_package(iowarp-core)` which automatically includes all components and Modules:
 
 ```cmake
 # Single find_package call includes everything
@@ -518,11 +518,11 @@ find_package(iowarp-core REQUIRED)
 #     - chimaera::cxx (core runtime library)
 #     - Module build utilities (add_clio_module_client, add_clio_module_runtime, etc.)
 #
-#   Core ChiMods (Always Available):
+#   Core Modules (Always Available):
 #     - chimaera::admin_client, chimaera::admin_runtime
 #     - chimaera::bdev_client, chimaera::bdev_runtime
 #
-#   Optional ChiMods (if enabled at build time):
+#   Optional Modules (if enabled at build time):
 #     - clio_cte::core_client, clio_cte::core_runtime (if CLIO_CORE_ENABLE_CTE=ON)
 #     - clio_cae::core_client, clio_cae::core_runtime (if CLIO_CORE_ENABLE_CAE=ON)
 
@@ -679,7 +679,7 @@ Runtime code (`*_runtime.cc` files) should **NEVER** duplicate autogenerated cod
 The clio_run runtime provides two simplified coroutine-aware synchronization primitives for runtime code:
 
 **CoMutex (Coroutine Mutex)**
-- **Header**: `chimaera/comutex.h`
+- **Header**: `clio_runtime/comutex.h`
 - **Purpose**: Simplified mutex that uses Yield for blocking
 - Uses a single `std::atomic<bool>` for lock state
 - Tasks that cannot acquire the lock call `Yield()` to be placed in the blocked queue
@@ -687,7 +687,7 @@ The clio_run runtime provides two simplified coroutine-aware synchronization pri
 - No complex data structures (no vectors, maps, or lists)
 
 **CoRwLock (Coroutine Reader-Writer Lock)**
-- **Header**: `chimaera/corwlock.h`
+- **Header**: `clio_runtime/corwlock.h`
 - **Purpose**: Simplified reader-writer lock that uses Yield for blocking
 - Uses `std::atomic<int>` for reader count and `std::atomic<bool>` for writer state
 - Supports multiple concurrent readers or a single writer
@@ -747,7 +747,7 @@ create_task->Wait();
 ASSERT_EQ(create_task->GetReturnCode(), 0) << "Create task failed with return code: " << create_task->GetReturnCode();
 ```
 
-This requirement applies to ALL Module Create operations in unit tests including admin, bdev, and any custom ChiMods.
+This requirement applies to ALL Module Create operations in unit tests including admin, bdev, and any custom Modules.
 
 ### Test Framework Requirements
 
@@ -756,7 +756,7 @@ This requirement applies to ALL Module Create operations in unit tests including
 **Catch2 Incompatibility:**
 - Catch2's test framework causes segmentation faults when used with Clio runtime initialization
 - This issue was confirmed by copying working test code from `test_bdev_chimod.cc` (which uses simple_test.h) to a Catch2-based test - the identical code segfaulted with Catch2 but worked with simple_test.h
-- Root cause: Catch2's test runner infrastructure conflicts with Chimaera's runtime initialization
+- Root cause: Catch2's test runner infrastructure conflicts with CLIO Runtime's runtime initialization
 
 **Required Test Framework:**
 - Use `#include "../../../context-runtime/test/simple_test.h"` instead of Catch2
@@ -776,28 +776,28 @@ TEST_CASE("My Test", "[mytag]") {
 SIMPLE_TEST_MAIN()
 ```
 
-### Chimaera Initialization in Unit Tests
+### CLIO Runtime Initialization in Unit Tests
 
-**CRITICAL**: All unit tests MUST use the unified `CHIMAERA_INIT()` function. Do NOT use deprecated initialization functions or direct calls to `CHIMAERA_RUNTIME_INIT()` or `CHIMAERA_CLIENT_INIT()`.
+**CRITICAL**: All unit tests MUST use the unified `CLIO_RUNTIME_INIT()` macro (the umbrella entry point). Do NOT call any private/legacy init functions directly.
 
 **Required Pattern for All Unit Tests:**
 ```cpp
 // At the beginning of your test or test fixture setup
-bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+bool success = CLIO_RUNTIME_INIT(chi::ChimaeraMode::kClient, true);
 REQUIRE(success);
 
 // Optional: Wait for initialization to complete
 std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
 // Verify core managers are available
-REQUIRE(CHI_IPC != nullptr);
-REQUIRE(CHI_IPC->IsInitialized());
+REQUIRE(CLIO_IPC != nullptr);
+REQUIRE(CLIO_IPC->IsInitialized());
 ```
 
 **Initialization Parameters:**
 - **Mode**: Always use `chi::ChimaeraMode::kClient` for unit tests
 - **default_with_runtime**: Always use `true` for unit tests (starts runtime automatically)
-- **Environment Variable**: `CLIO_X` is handled automatically by `CHIMAERA_INIT()`
+- **Environment Variable**: `CLIO_X` is handled automatically by `CLIO_RUNTIME_INIT()`
   - If set to `1`: Runtime will be started
   - If set to `0`: Only client initialization (useful for external runtime scenarios)
   - If not set: Uses the `default_with_runtime` parameter value
@@ -806,24 +806,22 @@ REQUIRE(CHI_IPC->IsInitialized());
 - `initializeBoth()` - Remove from all test fixtures
 - `initializeRuntime()` - Remove from all test fixtures
 - `initializeClient()` - Remove from all test fixtures
-- `chi::CHIMAERA_RUNTIME_INIT()` - Do not call directly in tests
-- `chi::CHIMAERA_CLIENT_INIT()` - Do not call directly in tests
 
 **Example Test Fixture:**
 ```cpp
 class MyTestFixture {
 public:
   MyTestFixture() {
-    // Initialize Chimaera with client mode and runtime
-    bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+    // Initialize CLIO Runtime with client mode and runtime
+    bool success = CLIO_RUNTIME_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
 
     // Give runtime time to initialize
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Verify initialization
-    REQUIRE(CHI_IPC != nullptr);
-    REQUIRE(CHI_POOL_MANAGER != nullptr);
+    REQUIRE(CLIO_IPC != nullptr);
+    REQUIRE(CLIO_POOL_MANAGER != nullptr);
   }
 
   ~MyTestFixture() {
@@ -874,15 +872,15 @@ docker-compose down
 Configure via environment variables in docker-compose.yml:
 ```yaml
 environment:
-  - CHI_SCHED_WORKERS=8
-  - CHI_MAIN_SEGMENT_SIZE=1G
-  - CHI_CLIENT_DATA_SEGMENT_SIZE=512M
-  - CHI_RUNTIME_DATA_SEGMENT_SIZE=512M
+  - CLIO_SCHED_WORKERS=8
+  - CLIO_MAIN_SEGMENT_SIZE=1G
+  - CLIO_CLIENT_DATA_SEGMENT_SIZE=512M
+  - CLIO_RUNTIME_DATA_SEGMENT_SIZE=512M
   - CLIO_PORT=9413              # Override RPC port (default: 9413)
   - CLIO_SERVER_ADDR=127.0.0.1 # Override server address for clients
   - CLIO_X=TCP          # SHM, TCP (default), or IPC
-  - CHI_LOG_LEVEL=info
-  - CHI_SHM_SIZE=2147483648
+  - CLIO_LOG_LEVEL=info
+  - CLIO_SHM_SIZE=2147483648
 ```
 
 ### Critical Requirements
@@ -906,12 +904,12 @@ Mount in docker-compose.yml:
 volumes:
   - ./hostfile:/etc/iowarp/hostfile:ro
 environment:
-  - CHI_HOSTFILE=/etc/iowarp/hostfile
+  - CLIO_HOSTFILE=/etc/iowarp/hostfile
 ```
 
 ## IPC Transport Modes
 
-Chimaera clients communicate with the runtime server using one of three IPC transport modes, controlled by the `CLIO_X` environment variable. This variable is read during `IpcManager::ClientInit()`.
+CLIO Runtime clients communicate with the runtime server using one of three IPC transport modes, controlled by the `CLIO_X` environment variable. This variable is read during `IpcManager::ClientInit()`.
 
 **Values:**
 
@@ -1049,7 +1047,7 @@ echo "CMake cleanup completed!"
 
 ## Module Development
 
-When creating or modifying ChiMods (Chimaera modules), refer to the comprehensive module development guide:
+When creating or modifying Modules (CLIO Runtime modules), refer to the comprehensive module development guide:
 
 **📖 See [context-transport-primitives/docs/MODULE_DEVELOPMENT_GUIDE.md](context-transport-primitives/docs/MODULE_DEVELOPMENT_GUIDE.md) for complete Module development documentation**
 
