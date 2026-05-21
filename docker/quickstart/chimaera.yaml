@@ -36,13 +36,13 @@ runtime:
 
 # -- Compose ------------------------------------------------------------------
 # Modules started automatically with the runtime.
-# Only chimaera_bdev is required. CTE (clio_cte_core) and CAE (clio_cae_core)
+# Only clio_bdev is required. CTE (clio_cte_core) and CAE (clio_cae_core)
 # are optional — remove their entries if you do not need them.
 compose:
 
   # === Block Device (DRAM) ===
   # Required: provides the shared memory allocator used by other modules.
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
@@ -51,7 +51,7 @@ compose:
 
   # === Block Device (File) ===
   # Uncomment to add a file-backed block device (e.g., for NVMe or HDD storage).
-  # - mod_name: chimaera_bdev
+  # - mod_name: clio_bdev
   #   pool_name: "/mnt/nvme/chi_bdev"
   #   pool_query: local
   #   pool_id: "302.0"

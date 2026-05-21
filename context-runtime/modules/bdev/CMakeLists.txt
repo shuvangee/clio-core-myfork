@@ -14,8 +14,12 @@ elseif(CLIO_CORE_ENABLE_ROCM)
   list(APPEND BDEV_GPU_LIBS ctp::rocm_cxx)
 endif()
 
-# Client library — ctp::aio provides async I/O headers via its INTERFACE includes
+# Client library — ctp::aio provides async I/O headers via its INTERFACE includes.
+# LIB_NAME pins the library to `clio_bdev_client` (the new brand-aligned
+# name); ALIAS keeps `chimaera_bdev_client` working as a CMake target for
+# any in-tree or out-of-tree consumer that still references the old name.
 add_chimod_client(
+  LIB_NAME clio_bdev
   SOURCES
     src/bdev_client.cc
   LINK_LIBRARIES
@@ -23,9 +27,11 @@ add_chimod_client(
     ctp::aio
     ${BDEV_OPTIONAL_LIBS}
 )
+add_library(chimaera_bdev_client ALIAS clio_bdev_client)
 
-# Runtime library
+# Runtime library (see client block above for the LIB_NAME + ALIAS rationale).
 add_chimod_runtime(
+  LIB_NAME clio_bdev
   SOURCES
     src/bdev_runtime.cc
     src/autogen/bdev_lib_exec.cc
@@ -35,16 +41,17 @@ add_chimod_runtime(
     ${BDEV_OPTIONAL_LIBS}
     ${BDEV_GPU_LIBS}
 )
+add_library(chimaera_bdev_runtime ALIAS clio_bdev_runtime)
 
 # SYCL HBM bdev support: a separate task. Adding -fsycl to
-# chimaera_bdev_runtime conflicts with the runtime's precompiled
+# clio_bdev_runtime conflicts with the runtime's precompiled
 # headers (clang-offload-bundler rejects .pch). When that's resolved
 # (likely needs PCH disabled for SYCL builds), enable here:
 #
-#   if(CLIO_CORE_ENABLE_SYCL AND TARGET chimaera_bdev_runtime)
-#     set_target_properties(chimaera_bdev_runtime PROPERTIES
+#   if(CLIO_CORE_ENABLE_SYCL AND TARGET clio_bdev_runtime)
+#     set_target_properties(clio_bdev_runtime PROPERTIES
 #       DISABLE_PRECOMPILE_HEADERS ON)
-#     wrp_core_apply_sycl_flags(chimaera_bdev_runtime)
+#     wrp_core_apply_sycl_flags(clio_bdev_runtime)
 #   endif()
 #
 # Until then, the kHbm bdev path under SYCL is compiled out by the

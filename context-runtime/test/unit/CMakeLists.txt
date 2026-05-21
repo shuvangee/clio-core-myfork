@@ -171,8 +171,8 @@ target_include_directories(${SAVE_LOAD_TASK_TEST_TARGET} PRIVATE
 target_link_libraries(${SAVE_LOAD_TASK_TEST_TARGET}
   chimaera_admin_runtime          # Admin module runtime
   chimaera_admin_client           # Admin module client
-  chimaera_bdev_runtime           # Bdev module runtime
-  chimaera_bdev_client            # Bdev module client
+  clio_bdev_runtime           # Bdev module runtime
+  clio_bdev_client            # Bdev module client
   ctp::cxx                       # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}       # Threading support
 )
@@ -199,8 +199,8 @@ target_include_directories(${LOCAL_TASK_ARCHIVE_TEST_TARGET} PRIVATE
 target_link_libraries(${LOCAL_TASK_ARCHIVE_TEST_TARGET}
   chimaera_admin_runtime          # Admin module runtime
   chimaera_admin_client           # Admin module client
-  chimaera_bdev_runtime           # Bdev module runtime
-  chimaera_bdev_client            # Bdev module client
+  clio_bdev_runtime           # Bdev module runtime
+  clio_bdev_client            # Bdev module client
   ctp::cxx                       # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}       # Threading support
 )
@@ -255,10 +255,10 @@ add_executable(${AUTOGEN_COVERAGE_TEST_TARGET} ${AUTOGEN_COVERAGE_TEST_SOURCES})
     clio_cte_core_runtime
     clio_cae_core_runtime
     clio_cae_core_client
-    chimaera_bdev_runtime
+    clio_bdev_runtime
     chimaera_admin_runtime
     clio_cte_core_client
-    chimaera_bdev_client
+    clio_bdev_client
     chimaera_admin_client
     chimaera_cxx
     ctp::cxx
@@ -382,7 +382,7 @@ target_include_directories(${IPC_TRANSPORT_MODES_TEST_TARGET} PRIVATE
 
 target_link_libraries(${IPC_TRANSPORT_MODES_TEST_TARGET}
   chimaera_cxx               # Main Chimaera library
-  chimaera_bdev_client        # Bdev module client
+  clio_bdev_client        # Bdev module client
   chimaera_admin_client       # Admin module client
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
@@ -409,7 +409,7 @@ target_include_directories(${CLIENT_RETRY_TEST_TARGET} PRIVATE
 
 target_link_libraries(${CLIENT_RETRY_TEST_TARGET}
   chimaera_cxx               # Main Chimaera library
-  chimaera_bdev_client        # Bdev module client
+  clio_bdev_client        # Bdev module client
   chimaera_admin_client       # Admin module client
   ctp::cxx                  # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
@@ -1037,7 +1037,7 @@ if(CLIO_CORE_ENABLE_MPI)
 
   target_link_libraries(${MPI_BDEV_TRANSPORT_TEST_TARGET}
     chimaera_cxx
-    chimaera_bdev_client
+    clio_bdev_client
     chimaera_admin_client
     ctp::cxx
     ctp::mpi

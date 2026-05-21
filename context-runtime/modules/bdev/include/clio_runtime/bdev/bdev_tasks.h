@@ -159,7 +159,7 @@ struct CreateParams {
   PersistenceLevel persistence_level_ = PersistenceLevel::kVolatile;
 
   // Required: chimod library name for module manager
-  static constexpr const char *chimod_lib_name = "chimaera_bdev";
+  static constexpr const char *chimod_lib_name = "clio_bdev";
 
   // Default constructor (defaults to file-based with conservative performance
   // estimates)

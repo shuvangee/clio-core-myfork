@@ -1285,8 +1285,8 @@ set(PIP_LIB_TARGETS clio_ctp_host chimaera_cxx)
 if(TARGET chimaera_admin_client)
   list(APPEND PIP_LIB_TARGETS chimaera_admin_client chimaera_admin_runtime)
 endif()
-if(TARGET chimaera_bdev_client)
-  list(APPEND PIP_LIB_TARGETS chimaera_bdev_client chimaera_bdev_runtime)
+if(TARGET clio_bdev_client)
+  list(APPEND PIP_LIB_TARGETS clio_bdev_client clio_bdev_runtime)
 endif()
 # Template chimod (used by clio_run_thrpt_benchmark's "latency" test case via
 # chimaera::MOD_NAME_client).  Without this the benchmark binary's NEEDED list

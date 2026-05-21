@@ -543,7 +543,7 @@ If you need finer control, you can still find packages individually:
 find_package(ClioCtp REQUIRED)        # Provides ctp::* targets
 find_package(chimaera REQUIRED)         # Provides chimaera::cxx
 find_package(chimaera_admin REQUIRED)   # Provides admin Module
-find_package(chimaera_bdev REQUIRED)    # Provides bdev Module
+find_package(chimaera_bdev REQUIRED)    # Provides bdev Module (library now: clio_bdev_*)
 find_package(clio_cte_core REQUIRED)     # Provides CTE Module (if enabled)
 find_package(clio_cae_core REQUIRED)     # Provides CAE Module (if enabled)
 ```

@@ -46,7 +46,7 @@ namespace chi {
  * Configuration for a single pool in the compose section
  */
 struct PoolConfig {
-  std::string mod_name_;     /**< Module name (e.g., "chimaera_bdev") */
+  std::string mod_name_;     /**< Module name (e.g., "clio_bdev") */
   std::string pool_name_;    /**< Pool name or identifier */
   PoolId pool_id_;           /**< Pool ID for this module */
   PoolQuery pool_query_;     /**< Pool query routing (Dynamic or Local) */

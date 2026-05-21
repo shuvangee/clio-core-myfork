@@ -27,7 +27,7 @@ runtime:
 # Compose section - creates CTE and CAE pools automatically
 compose:
   # Block Device (required by CTE and CAE)
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"

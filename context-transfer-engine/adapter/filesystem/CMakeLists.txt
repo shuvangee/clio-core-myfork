@@ -6,7 +6,7 @@ add_library(clio_cte_fs_base SHARED
         filesystem_mdm.h)
 
 # Local includes for adapter headers
-# Note: bdev headers come transitively via chimaera_bdev_client
+# Note: bdev headers come transitively via clio_bdev_client
 # Note: core headers come transitively via clio_cte_core_client
 target_include_directories(clio_cte_fs_base PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}       # For local headers

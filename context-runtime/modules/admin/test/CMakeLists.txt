@@ -33,8 +33,8 @@ target_link_libraries(${COMPOSE_TEST_TARGET}
   cxx                             # Core Chimaera runtime library
   chimaera_admin_runtime          # Admin module runtime
   chimaera_admin_client           # Admin module client
-  chimaera_bdev_runtime           # BDev module runtime
-  chimaera_bdev_client            # BDev module client
+  clio_bdev_runtime           # BDev module runtime
+  clio_bdev_client            # BDev module client
   ctp::cxx                       # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}       # Threading support
 )

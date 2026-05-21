@@ -149,7 +149,26 @@ bool ModuleManager::LoadChiMod(const std::string &lib_path) {
 
 ChiModInfo *ModuleManager::GetChiMod(const std::string &chimod_name) {
   auto it = chimods_.find(chimod_name);
-  return (it != chimods_.end()) ? it->second.get() : nullptr;
+  if (it != chimods_.end()) {
+    return it->second.get();
+  }
+  // Backward-compat alias table: when a module is renamed, list the legacy
+  // name here so older YAML configs (compose entries, persistent pool
+  // metadata in the WAL) keep loading the module under the old `mod_name`.
+  // The table is checked only on cache miss, so the rename does not slow
+  // down the hot path. See docs/deprecation-notes.md for the public list.
+  static const std::pair<const char *, const char *> kAliases[] = {
+      {"chimaera_bdev", "clio_bdev"},  // renamed 2026
+  };
+  for (const auto &alias : kAliases) {
+    if (chimod_name == alias.first) {
+      it = chimods_.find(alias.second);
+      if (it != chimods_.end()) {
+        return it->second.get();
+      }
+    }
+  }
+  return nullptr;
 }
 
 Container *ModuleManager::CreateContainer(const std::string &chimod_name,

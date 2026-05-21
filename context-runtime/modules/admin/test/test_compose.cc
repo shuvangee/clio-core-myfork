@@ -59,7 +59,7 @@ std::string CreateComposeConfig() {
     config_file << "  port: 9413\n";
     config_file << "\n";
     config_file << "compose:\n";
-    config_file << "- mod_name: chimaera_bdev\n";
+    config_file << "- mod_name: clio_bdev\n";
     config_file << "  pool_name: /tmp/test_bdev.dat\n";
     config_file << "  pool_query: dynamic\n";
     config_file << "  pool_id: 200.0\n";
@@ -130,10 +130,10 @@ TEST_CASE("Parse compose configuration", "[compose]") {
   // (there may be more from server initialization)
   REQUIRE(compose_config.pools_.size() >= 1);
 
-  // Find our test pool configuration (chimaera_bdev with pool_name /tmp/test_bdev.dat)
+  // Find our test pool configuration (clio_bdev with pool_name /tmp/test_bdev.dat)
   bool found_test_pool = false;
   for (const auto& pool_config : compose_config.pools_) {
-    if (pool_config.mod_name_ == "chimaera_bdev" &&
+    if (pool_config.mod_name_ == "clio_bdev" &&
         pool_config.pool_name_ == "/tmp/test_bdev.dat") {
       // Verify pool configuration
       REQUIRE(pool_config.pool_id_.major_ == 200);

@@ -1930,7 +1930,7 @@ chi::TaskResume Runtime::MonitorBdevStats(ctp::ipc::FullPtr<MonitorTask> task) {
   std::vector<chi::PoolId> bdev_pools;
   for (const auto &pid : all_pool_ids) {
     const auto *info = pool_manager->GetPoolInfo(pid);
-    if (info && info->chimod_name_ == "chimaera_bdev") {
+    if (info && (info->chimod_name_ == "clio_bdev" || info->chimod_name_ == "chimaera_bdev")) {
       bdev_pools.push_back(pid);
     }
   }

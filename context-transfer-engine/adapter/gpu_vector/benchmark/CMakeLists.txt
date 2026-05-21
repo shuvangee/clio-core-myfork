@@ -44,7 +44,7 @@ if(CLIO_CORE_ENABLE_CUDA)
             chimaera_cxx
             chimaera_cxx_gpu
             chimaera_admin_client
-            chimaera_bdev_client
+            clio_bdev_client
             clio_cte_core_client
             clio_cte_core_runtime
             clio_cte::gpu_vector
@@ -66,7 +66,7 @@ if(CLIO_CORE_ENABLE_CUDA)
         LINK_LIBS
             chimaera_cxx
             chimaera_admin_client
-            chimaera_bdev_client
+            clio_bdev_client
             clio_cte_core_client
             clio_cte_core_runtime
             ctp::cuda_cxx
@@ -87,7 +87,7 @@ if(CLIO_CORE_ENABLE_CUDA)
         LINK_LIBS
             chimaera_cxx
             chimaera_admin_client
-            chimaera_bdev_client
+            clio_bdev_client
             clio_cte_core_client
             clio_cte_core_runtime
             ctp::cuda_cxx
@@ -140,7 +140,7 @@ if(CLIO_CORE_ENABLE_ROCM)
         chimaera_cxx
         chimaera_cxx_gpu
         chimaera_admin_client
-        chimaera_bdev_client
+        clio_bdev_client
         clio_cte_core_client
         clio_cte_core_runtime
         clio_cte::gpu_vector
@@ -170,7 +170,7 @@ if(CLIO_CORE_ENABLE_ROCM)
     target_link_libraries(clio_traditional_oom_bench PUBLIC
         chimaera_cxx
         chimaera_admin_client
-        chimaera_bdev_client
+        clio_bdev_client
         clio_cte_core_client
         clio_cte_core_runtime
         ctp::rocm_cxx
@@ -199,7 +199,7 @@ if(CLIO_CORE_ENABLE_ROCM)
     target_link_libraries(clio_uvm_bench PUBLIC
         chimaera_cxx
         chimaera_admin_client
-        chimaera_bdev_client
+        clio_bdev_client
         clio_cte_core_client
         clio_cte_core_runtime
         ctp::rocm_cxx

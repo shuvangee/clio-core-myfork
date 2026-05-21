@@ -857,7 +857,7 @@ function(add_chimod_client)
   cmake_parse_arguments(
     ARG
     ""
-    ""
+    "LIB_NAME"
     "SOURCES;COMPILE_DEFINITIONS;LINK_LIBRARIES;LINK_DIRECTORIES;INCLUDE_LIBRARIES;INCLUDE_DIRECTORIES"
     ${ARGN}
   )
@@ -865,8 +865,15 @@ function(add_chimod_client)
   # Read module configuration
   chimaera_read_module_config(${CMAKE_CURRENT_SOURCE_DIR})
 
-  # Create target name
-  set(TARGET_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_client")
+  # Create target name. The optional LIB_NAME argument lets a module
+  # override the auto-derived `<namespace>_<module>` prefix (used e.g.
+  # by the bdev module to install as `clio_bdev_*` while the C++
+  # namespace stays `clio_run::bdev`).
+  if(ARG_LIB_NAME)
+    set(TARGET_NAME "${ARG_LIB_NAME}_client")
+  else()
+    set(TARGET_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_client")
+  endif()
 
   # Create the library
   add_library(${TARGET_NAME} SHARED ${ARG_SOURCES})
@@ -943,10 +950,16 @@ function(add_chimod_client)
   # Create alias for external use
   add_library(${CHIMAERA_NAMESPACE}::${CHIMAERA_MODULE_NAME}_client ALIAS ${TARGET_NAME})
 
-  # Set properties for installation
+  # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
+  # so the .so file on disk matches the CMake target.
+  if(ARG_LIB_NAME)
+    set(_chimod_output_name "${ARG_LIB_NAME}_client")
+  else()
+    set(_chimod_output_name "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_client")
+  endif()
   set_target_properties(${TARGET_NAME} PROPERTIES
     EXPORT_NAME "${CHIMAERA_MODULE_NAME}_client"
-    OUTPUT_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_client"
+    OUTPUT_NAME "${_chimod_output_name}"
   )
 
   # Install the client library
@@ -1007,7 +1020,7 @@ function(add_chimod_runtime)
   cmake_parse_arguments(
     ARG
     ""
-    ""
+    "LIB_NAME"
     "SOURCES;COMPILE_DEFINITIONS;LINK_LIBRARIES;LINK_DIRECTORIES;INCLUDE_LIBRARIES;INCLUDE_DIRECTORIES"
     ${ARGN}
   )
@@ -1015,8 +1028,12 @@ function(add_chimod_runtime)
   # Read module configuration
   chimaera_read_module_config(${CMAKE_CURRENT_SOURCE_DIR})
 
-  # Create target name
-  set(TARGET_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_runtime")
+  # Create target name (see add_chimod_client for LIB_NAME rationale).
+  if(ARG_LIB_NAME)
+    set(TARGET_NAME "${ARG_LIB_NAME}_runtime")
+  else()
+    set(TARGET_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_runtime")
+  endif()
 
   # The GPU companion library concept (separate _gpu.cc files compiled
   # into a *_runtime_gpu shared library) was removed along with the GPU
@@ -1113,10 +1130,16 @@ function(add_chimod_runtime)
   # Create alias for external use
   add_library(${CHIMAERA_NAMESPACE}::${CHIMAERA_MODULE_NAME}_runtime ALIAS ${TARGET_NAME})
 
-  # Set properties for installation
+  # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
+  # so the .so file on disk matches the CMake target.
+  if(ARG_LIB_NAME)
+    set(_chimod_output_name "${ARG_LIB_NAME}_runtime")
+  else()
+    set(_chimod_output_name "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_runtime")
+  endif()
   set_target_properties(${TARGET_NAME} PROPERTIES
     EXPORT_NAME "${CHIMAERA_MODULE_NAME}_runtime"
-    OUTPUT_NAME "${CHIMAERA_NAMESPACE}_${CHIMAERA_MODULE_NAME}_runtime"
+    OUTPUT_NAME "${_chimod_output_name}"
   )
 
   # Use cmake_language(DEFER) to link to client after all targets are processed

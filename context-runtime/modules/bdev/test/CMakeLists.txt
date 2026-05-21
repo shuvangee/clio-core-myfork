@@ -25,8 +25,8 @@ target_include_directories(${BDEV_TEST_TARGET} PRIVATE
 target_link_libraries(${BDEV_TEST_TARGET}
   chimaera_admin_runtime          # Admin module runtime
   chimaera_admin_client           # Admin module client
-  chimaera_bdev_runtime           # Bdev module runtime
-  chimaera_bdev_client            # Bdev module client
+  clio_bdev_runtime           # Bdev module runtime
+  clio_bdev_client            # Bdev module client
   ctp::cxx                       # ClioCtp library
   ${CMAKE_THREAD_LIBS_INIT}       # Threading support
 )

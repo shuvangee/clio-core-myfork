@@ -710,7 +710,7 @@ if(CLIO_CORE_ENABLE_CUDA)
       chimaera_cxx
       chimaera_cxx_gpu
       chimaera_admin_client
-      chimaera_bdev_client
+      clio_bdev_client
       clio_cte_core_client
       clio_cte_core_runtime
       ctp::cuda_cxx
@@ -752,7 +752,7 @@ if(CLIO_CORE_ENABLE_ROCM)
     chimaera_cxx
     chimaera_cxx_gpu
     chimaera_admin_client
-    chimaera_bdev_client
+    clio_bdev_client
     clio_cte_core_client
     clio_cte_core_runtime
     ctp::rocm_cxx

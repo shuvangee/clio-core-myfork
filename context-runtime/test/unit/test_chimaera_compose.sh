@@ -39,7 +39,7 @@ networking:
   port: 9413
 
 compose:
-- mod_name: chimaera_bdev
+- mod_name: clio_bdev
   pool_name: /tmp/test_compose_util_bdev.dat
   pool_query: dynamic
   pool_id: 300.0
