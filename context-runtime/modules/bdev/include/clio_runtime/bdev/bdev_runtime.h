@@ -127,12 +127,21 @@ class WorkerBlockMap {
   WorkerBlockMap();
 
   /**
-   * Allocate a block from the cache
+   * Allocate a block from the cache.
+   *
+   * For buckets where every freed block is exactly the nominal class size
+   * the head element is always a fit, so the search is O(1). The largest
+   * bucket doubles as the fallthrough sink for over-cap blocks (size >
+   * kBlockSizes[max]) and therefore holds heterogeneous sizes; the
+   * `min_size` filter is what keeps a caller from being handed a
+   * spuriously undersized block out of that bucket.
+   *
    * @param block_type Block size category index
    * @param block Output block to populate
-   * @return true if allocation succeeded, false if cache is empty
+   * @param min_size Reject any block whose size_ is smaller than this
+   * @return true if allocation succeeded, false otherwise
    */
-  bool AllocateBlock(int block_type, Block& block);
+  bool AllocateBlock(int block_type, Block& block, size_t min_size = 0);
 
   /**
    * Free a block back to the cache

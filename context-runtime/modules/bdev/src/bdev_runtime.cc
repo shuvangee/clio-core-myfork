@@ -142,20 +142,33 @@ WorkerBlockMap::WorkerBlockMap() {
   blocks_.resize(static_cast<size_t>(BlockSizeCategory::kMaxCategories));
 }
 
-bool WorkerBlockMap::AllocateBlock(int block_type, Block &block) {
+bool WorkerBlockMap::AllocateBlock(int block_type, Block &block,
+                                   size_t min_size) {
   if (block_type < 0 ||
       block_type >= static_cast<int>(BlockSizeCategory::kMaxCategories)) {
     return false;
   }
 
-  // Pop from the head of the list for this block type
-  if (blocks_[block_type].empty()) {
+  auto &list = blocks_[block_type];
+  if (list.empty()) {
     return false;
   }
 
-  block = blocks_[block_type].front();
-  blocks_[block_type].pop_front();
-  return true;
+  // For block_types where every freed block is exactly the bucket's nominal
+  // size, the head element is always a fit and we exit on the first pop.
+  // The largest bucket (kMaxCategories-1) is the fallthrough sink for any
+  // freed block whose actual size exceeds the largest cached class — those
+  // blocks can be any size >= kBlockSizes[max], so an explicit min_size
+  // check is needed to avoid returning an undersized block to a caller
+  // that asked for, say, 2 MiB.
+  for (auto it = list.begin(); it != list.end(); ++it) {
+    if (static_cast<size_t>(it->size_) >= min_size) {
+      block = *it;
+      list.erase(it);
+      return true;
+    }
+  }
+  return false;
 }
 
 void WorkerBlockMap::FreeBlock(Block block) {
@@ -192,17 +205,25 @@ bool GlobalBlockMap::AllocateBlock(int worker, size_t io_size, Block &block) {
 
   size_t worker_idx = static_cast<size_t>(worker);
 
-  // Find the next block size that is larger than this
+  // Find the next block size that is larger than this. When io_size exceeds
+  // every cached class FindBlockType returns -1; mirror FreeBlocks' fallthrough
+  // (which files such oversized blocks into the largest bucket via
+  // FindBlockTypeForSize) so they stay reachable here too.  Without this
+  // fallthrough, every freed 2 MiB block lands in bucket-max but AllocateBlock
+  // never consults that bucket — so 2 MiB AllocateBlocks always falls through
+  // to heap_.Allocate, growing the bdev's footprint monotonically with op
+  // count.  WorkerBlockMap::AllocateBlock validates min_size for the
+  // largest bucket so we don't accidentally return an undersized block.
   int block_type = FindBlockType(io_size);
   if (block_type == -1) {
-    return false;  // No suitable cached size
+    block_type = static_cast<int>(BlockSizeCategory::kMaxCategories) - 1;
   }
 
   // Acquire this worker's mutex using ScopedCoMutex
   {
     chi::ScopedCoMutex lock(worker_locks_[worker_idx]);
     // First attempt to allocate from this worker's map
-    if (worker_maps_[worker_idx].AllocateBlock(block_type, block)) {
+    if (worker_maps_[worker_idx].AllocateBlock(block_type, block, io_size)) {
       return true;
     }
   }
@@ -212,7 +233,7 @@ bool GlobalBlockMap::AllocateBlock(int worker, size_t io_size, Block &block) {
   for (size_t i = 1; i <= 4 && i < num_workers; ++i) {
     size_t other_worker = (worker_idx + i) % num_workers;
     chi::ScopedCoMutex lock(worker_locks_[other_worker]);
-    if (worker_maps_[other_worker].AllocateBlock(block_type, block)) {
+    if (worker_maps_[other_worker].AllocateBlock(block_type, block, io_size)) {
       return true;
     }
   }
@@ -566,28 +587,20 @@ chi::TaskResume Runtime::AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> ta
   // Create local vector in private memory to build up the block list
   std::vector<Block> local_blocks;
 
-  // Divide the I/O request into blocks
-  // If I/O size >= largest cached block, divide into units of that size
-  // Else, just use this I/O size
+  // Allocate the request as a SINGLE contiguous block (no kMaxBlock-chunk
+  // splitting).  The old splitting path divided e.g. a 2 MiB ExtendBlob into
+  // two 1 MiB Blocks, but the only consumer (CTE's AllocateFromTarget) reads
+  // `allocated_blocks[0].offset_` and discards the rest — it tracks one
+  // `BlobBlock(size=2 MiB)` covering the first allocator chunk plus an
+  // un-tracked tail.  On overwrite, the corresponding FreeBlocks returns one
+  // 2 MiB block to the largest free-list bucket, but the heap had consumed
+  // two 1 MiB chunks; on the next AllocateBlocks the first 1 MiB sub-alloc
+  // pops the 2 MiB block (with my min_size filter) but wastes its tail,
+  // and the second 1 MiB falls through to heap_.  Net leak: 1 MiB per
+  // 2 MiB overwrite.  Keeping the alloc one block end-to-end matches what
+  // CTE actually stores and lets the free-list reuse cycle close cleanly.
   std::vector<size_t> io_divisions;
-
-  const size_t kMaxBlock =
-      kBlockSizes[static_cast<int>(BlockSizeCategory::kMaxCategories) - 1];
-  if (total_size >= kMaxBlock) {
-    // Divide into max-block-sized chunks
-    chi::u64 remaining = total_size;
-    while (remaining >= kMaxBlock) {
-      io_divisions.push_back(kMaxBlock);
-      remaining -= kMaxBlock;
-    }
-    // Add remaining bytes if any
-    if (remaining > 0) {
-      io_divisions.push_back(static_cast<size_t>(remaining));
-    }
-  } else {
-    // Use the entire I/O size as a single division
-    io_divisions.push_back(static_cast<size_t>(total_size));
-  }
+  io_divisions.push_back(static_cast<size_t>(total_size));
 
   // For each expected I/O size division, allocate a block
   for (size_t io_size : io_divisions) {
