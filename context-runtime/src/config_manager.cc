@@ -66,16 +66,22 @@ bool ConfigManager::ClientInit() {
     }
   }
 
-  // Check CHI_PORT env var (overrides YAML and default)
-  std::string port_env = ctp::SystemInfo::Getenv("CHI_PORT");
-  if (!port_env.empty()) {
-    port_ = std::stoul(port_env);
+  // Check CLIO_PORT env var (overrides YAML and default).
+  // GetCompat reads CLIO_PORT first, falls back to CHI_PORT for old deployments.
+  if (const char *env = chi::env::GetCompat("PORT")) {
+    std::string port_env(env);
+    if (!port_env.empty()) {
+      port_ = std::stoul(port_env);
+    }
   }
 
-  // Check CHI_SERVER_ADDR env var (overrides default 127.0.0.1)
-  std::string addr_env = ctp::SystemInfo::Getenv("CHI_SERVER_ADDR");
-  if (!addr_env.empty()) {
-    server_addr_ = addr_env;
+  // Check CLIO_SERVER_ADDR env var (overrides default 127.0.0.1).
+  // GetCompat reads CLIO_SERVER_ADDR first, falls back to CHI_SERVER_ADDR.
+  if (const char *env = chi::env::GetCompat("SERVER_ADDR")) {
+    std::string addr_env(env);
+    if (!addr_env.empty()) {
+      server_addr_ = addr_env;
+    }
   }
 
   is_initialized_ = true;

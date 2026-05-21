@@ -138,6 +138,10 @@ void CHIMAERA_FINALIZE();
 // --- Allocator type / instance aliases ---
 #define CLIO_QUEUE_ALLOC_T          CHI_QUEUE_ALLOC_T
 #define CLIO_TASK_ALLOC_T           CHI_TASK_ALLOC_T
+// CLIO_MAIN_ALLOC_T: historical name for what is now CLIO_TASK_ALLOC_T. Kept
+// as an alias so older vendored snapshots of the runtime header (e.g. inside
+// downstream chimods) keep compiling against the current install.
+#define CLIO_MAIN_ALLOC_T           CHI_TASK_ALLOC_T
 #define CLIO_PRIV_ALLOC_T           CHI_PRIV_ALLOC_T
 #define CLIO_PRIV_ALLOC             CHI_PRIV_ALLOC
 #define CLIO_PRIV_SHARED_ALLOC_T    CHI_PRIV_SHARED_ALLOC_T

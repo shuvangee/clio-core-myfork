@@ -517,6 +517,16 @@ CTP_GPU_FUN ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu();
 #define CHI_PRIV_SHARED_ALLOC   (::chi::GetSharedAllocGpu())
 #endif
 
+// ---------------------------------------------------------------------------
+// Historical macro aliases
+//
+// `CHI_TASK_ALLOC_T` was previously named `CHI_MAIN_ALLOC_T`. The old name
+// kept appearing in downstream snapshots of the runtime header (e.g.
+// vendored copies inside chimods that haven't pulled in a fresh runtime
+// sync). Re-exporting both spellings here lets that code compile without
+// any source changes.
+#define CHI_MAIN_ALLOC_T CHI_TASK_ALLOC_T
+
 // Memory segment identifiers
 enum MemorySegment {
   kMainSegment = 0,
