@@ -284,28 +284,22 @@ bool IpcCpu2CpuZmq::RuntimeSend(
       // On read responses each task ships a 1 MiB bulk frame; at high
       // concurrency the ROUTER socket can transiently return EAGAIN.
       // Without retry the response is lost and the client spins on
-      // FUTURE_COMPLETE forever, so re-queue on failure.  Note: even
-      // on failure the transport DOES still invoke on_send_complete
-      // (via zmq_msg_close), so we do NOT want a retry path to also
-      // delete the task — fix is below: only enqueue for retry, and
-      // skip the on_send_complete delete by clearing the callback
-      // BEFORE Send() if we want to handle lifetime ourselves on
-      // failure. But the natural semantic is "Send takes ownership;
-      // on failure the task is already gone." Re-queueing a freed
-      // task would be a UAF on the next attempt. So drop the retry
-      // here and trust the transport's lifetime contract: Send always
-      // ends with the task freed.
+      // FUTURE_COMPLETE forever, so re-queue on failure.
+      //
+      // Lifetime contract with lightbeam (see SendCompletion's
+      // `cancelled` flag): on rc==0 the transport fires on_send_complete
+      // exactly once after every bulk flushes (DelTask runs there). On
+      // rc!=0 the transport cancels the callback — the task stays alive
+      // and the caller owns its lifetime, so re-queueing is safe.
       int rc = response_transport->Send(archive, send_ctx);
       if (rc != 0) {
         size_t fail_total =
             send_fail_counter.fetch_add(1, std::memory_order_relaxed) + 1;
         HLOG(kError,
-             "[CountSend] Send rc={} fail#{} (priority={}) — task is "
-             "freed by transport's on_send_complete; client will retry "
-             "on FUTURE_COMPLETE timeout",
+             "[CountSend] Send rc={} fail#{} — re-queueing client response "
+             "(priority={})",
              rc, fail_total, static_cast<int>(priority));
-        // No retry: the task buffer is already on its way to deletion
-        // via the transport's release_bulk -> on_send_complete chain.
+        ipc->EnqueueNetTask(queued_future, priority);
         continue;
       }
 

@@ -88,21 +88,31 @@ struct SendCompletion {
   std::atomic<size_t> pending{0};
   void (*user_cb)(void *) = nullptr;
   void *user_data = nullptr;
+  // Set by Send() before it returns a non-zero error code (meta /
+  // id / delim / bulk frame send failed). Suppresses the user
+  // callback when refcount reaches zero — the caller is then
+  // responsible for the buffer's lifetime on the failure path
+  // (re-queue for retry, free directly, etc.). The holder itself
+  // still self-destructs.
+  std::atomic<bool> cancelled{false};
 };
 
 /**
  * zmq_msg_init_data free function: decrements the holder's pending
- * count and, on transition to zero, fires the user callback and
- * deletes the holder. Called either inline from `zmq_msg_close`
- * (failure path) or asynchronously from ZMQ's I/O thread when the
- * message is finally on the wire (success path). The user callback
- * must be thread-safe — IpcCpu2CpuZmq's typical use (DelTask, which
- * is just `task->~T(); operator delete(task);`) is fine.
+ * count and, on transition to zero, fires the user callback (unless
+ * the Send marked the completion as cancelled) and deletes the
+ * holder. Called either inline from `zmq_msg_close` (failure path)
+ * or asynchronously from ZMQ's I/O thread when the message is
+ * finally on the wire (success path). The user callback must be
+ * thread-safe — IpcCpu2CpuZmq's typical use (DelTask, which is
+ * just `task->~T(); operator delete(task);`) is fine.
  */
 inline void release_bulk(void * /*data*/, void *hint) {
   auto *c = static_cast<SendCompletion *>(hint);
   if (c->pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-    if (c->user_cb) c->user_cb(c->user_data);
+    if (!c->cancelled.load(std::memory_order_acquire) && c->user_cb) {
+      c->user_cb(c->user_data);
+    }
     delete c;
   }
 }
@@ -810,6 +820,8 @@ class ZeroMqTransport : public Transport {
       if (rc == -1) {
         HLOG(kError, "ZeroMqTransport::Send(ROUTER) - identity frame FAILED: {}",
              zmq_strerror(zmq_errno()));
+        if (completion)
+          completion->cancelled.store(true, std::memory_order_release);
         return zmq_errno();
       }
       // Send empty delimiter frame
@@ -818,6 +830,8 @@ class ZeroMqTransport : public Transport {
       if (rc == -1) {
         HLOG(kError, "ZeroMqTransport::Send(ROUTER) - delimiter frame FAILED: {}",
              zmq_strerror(zmq_errno()));
+        if (completion)
+          completion->cancelled.store(true, std::memory_order_release);
         return zmq_errno();
       }
     } else
@@ -830,6 +844,8 @@ class ZeroMqTransport : public Transport {
       if (rc == -1) {
         HLOG(kError, "ZeroMqTransport::Send(DEALER) - delimiter frame FAILED: {}",
              zmq_strerror(zmq_errno()));
+        if (completion)
+          completion->cancelled.store(true, std::memory_order_release);
         return zmq_errno();
       }
     } else {
@@ -848,6 +864,8 @@ class ZeroMqTransport : public Transport {
     if (rc == -1) {
       HLOG(kError, "ZeroMqTransport::Send - meta FAILED: {}",
            zmq_strerror(zmq_errno()));
+      if (completion)
+        completion->cancelled.store(true, std::memory_order_release);
       return zmq_errno();
     }
 
@@ -895,8 +913,14 @@ class ZeroMqTransport : public Transport {
     // function. If every bulk has already released (zero-bulk Send,
     // or all bulks flushed synchronously) the user callback fires
     // there; otherwise the last late release on ZMQ's I/O thread
-    // fires it.
+    // fires it.  Caller-side contract: on rc==0 the callback will
+    // fire exactly once; on rc!=0 the callback is cancelled (the
+    // holder still self-destructs once all bulk refs release) and
+    // the caller owns the buffer lifetime — typically to re-queue
+    // for retry, since some / all data wasn't accepted.
     if (bulk_send_rc != 0) {
+      if (completion)
+        completion->cancelled.store(true, std::memory_order_release);
       return bulk_send_rc;
     }
     uint64_t t_bulk_end = stamp();

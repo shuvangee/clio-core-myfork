@@ -773,16 +773,14 @@ void Runtime::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
   auto *ipc_manager = CLIO_IPC;
   auto *pool_manager = CLIO_POOL_MANAGER;
 
-  // Flush deferred deletes from previous invocation (zero-copy send safety).
-  // SendOut runs only from net_send_worker SendPoll; static is fine.
-  static std::vector<ctp::ipc::FullPtr<chi::Task>> deferred_deletes;
-  for (auto &t : deferred_deletes) {
-    auto *del_container = pool_manager->GetStaticContainer(t->pool_id_);
-    if (del_container) {
-      del_container->DelTask(t->method_, t);
-    }
-  }
-  deferred_deletes.clear();
+  // Task lifetime across the zero-copy ZMQ send is handled by lightbeam
+  // (via LbmContext::on_send_complete set just before Send below). The
+  // transport keeps origin_task's serialization buffer alive via an
+  // atomic refcount tied to each zmq_msg_init_data ref; when every bulk
+  // has flushed (or been released via zmq_msg_close on a failure path)
+  // the callback fires and DelTask runs.  No deferred-delete queue,
+  // no time-based deferral — the same event-driven mechanism that
+  // IpcCpu2CpuZmq::RuntimeSend uses on the client-response path.
 
   // Validate origin_task
   if (origin_task.IsNull()) {
@@ -861,6 +859,23 @@ void Runtime::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
   uint64_t sout_ser_dt = HrtNs() - sout_ser_t0;
 
   ctp::lbm::LbmContext ctx(0);
+  // Lifetime-safe zero-copy: lightbeam will fire on_send_complete exactly
+  // once when ZMQ has finished with every bulk frame (success OR failure
+  // path); DelTask is `~Task() + operator delete` so it's safe to run
+  // from ZMQ's I/O thread.  See ipc_cpu2cpu_zmq.cc's RuntimeSend for the
+  // canonical use of this pattern.
+  ctx.on_send_complete = +[](void *user_data) {
+    auto *task_raw = static_cast<chi::Task *>(user_data);
+    if (!task_raw) return;
+    auto *pm = CLIO_POOL_MANAGER;
+    if (!pm) return;
+    auto *del = pm->GetStaticContainer(task_raw->pool_id_);
+    if (del) {
+      del->DelTask(task_raw->method_,
+                   ctp::ipc::FullPtr<chi::Task>(task_raw));
+    }
+  };
+  ctx.on_send_complete_data = origin_task.ptr_;
   uint64_t sout_lbm_t0 = HrtNs();
   int rc = lbm_transport->Send(archive, ctx);
   uint64_t sout_lbm_dt = HrtNs() - sout_lbm_t0;
@@ -905,8 +920,9 @@ void Runtime::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
     }
   }
 
-  // Defer task delete one iteration to let ZMQ flush the bulk.
-  deferred_deletes.push_back(origin_task);
+  // Task delete is handled by lightbeam — on rc==0 the on_send_complete
+  // callback set above runs DelTask once ZMQ has flushed every bulk;
+  // nothing for us to do here.
 }
 
 /**
