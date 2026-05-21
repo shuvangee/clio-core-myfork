@@ -217,6 +217,7 @@ class Transport {
 
   // Event registration API
   void RegisterEventManager(EventManager &em);
+  void UnregisterEventManager();
 
   // Liveness check
   bool IsServerAlive(const LbmContext& ctx = LbmContext()) const;

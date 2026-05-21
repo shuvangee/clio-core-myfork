@@ -186,6 +186,14 @@ inline void Transport::RegisterEventManager(EventManager &em) {
   }
 }
 
+inline void Transport::UnregisterEventManager() {
+  // Only SocketTransport currently tracks the EventManager pointer
+  // beyond a single Recv call. ZMQ/SHM/etc. are no-ops here.
+  if (type_ == TransportType::kSocket) {
+    static_cast<SocketTransport*>(this)->UnregisterEventManager();
+  }
+}
+
 inline bool Transport::IsServerAlive(const LbmContext& ctx) const {
   switch (type_) {
 #if CTP_ENABLE_ZMQ

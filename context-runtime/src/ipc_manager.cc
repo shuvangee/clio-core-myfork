@@ -2375,6 +2375,14 @@ void IpcManager::RecvZmqClientThread() {
       em.Wait(100);  // 100μs (precise with epoll_pwait2)
     }
   }
+  // `em` is about to be destroyed (stack-allocated). The transport
+  // stashed a raw pointer to it in RegisterEventManager — clear that
+  // before unwinding, otherwise ClientFinalize's later ~SocketTransport
+  // calls em_->RemoveEvent on freed memory (ASan: heap-use-after-free
+  // in EventManager::RemoveEvent → std::unordered_map::find).
+  if (zmq_transport_) {
+    zmq_transport_->UnregisterEventManager();
+  }
 }
 
 void IpcManager::HeartbeatThread() {

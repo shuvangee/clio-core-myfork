@@ -106,6 +106,26 @@ void LoadTaskArchive::bulk(ctp::ipc::ShmPtr<> &ptr, size_t size, uint32_t flags)
           ptr = buf.shm_.template Cast<void>();
           recv[current_bulk_index_].data = buf;
           ++daemon_allocated_bulk_count_;
+        } else if (recv[current_bulk_index_].data.shm_.alloc_id_ ==
+                       ctp::ipc::AllocatorId(UINT32_MAX - 1,
+                                              UINT32_MAX - 1)) {
+          // SocketTransport (IPC/TCP-socket) recv: the buffer was
+          // std::malloc'd in SocketTransport::RecvBulks and tagged with
+          // the (UINT32_MAX-1, UINT32_MAX-1) sentinel. ClearRecvHandles
+          // will std::free it immediately after AllocLoadTask returns —
+          // pointing the task straight at recv[i].data leaves a dangling
+          // ptr that the worker later memcpy()s in e.g.
+          // bdev::Runtime::WriteToRam (ASan: heap-use-after-free). Mirror
+          // the ZMQ path: copy into a CTP buffer the task owns via
+          // TASK_DATA_OWNER, leaving recv[i].data alone so
+          // ClearRecvHandles still frees the malloc'd buffer.
+          ctp::ipc::FullPtr<char> buf = CLIO_IPC->AllocateBuffer(size);
+          char *src = recv[current_bulk_index_].data.ptr_;
+          if (buf.ptr_ && src) {
+            memcpy(buf.ptr_, src, size);
+          }
+          ptr = buf.shm_.template Cast<void>();
+          ++daemon_allocated_bulk_count_;
         } else {
           // Valid ShmPtr, no zmq handle: SHM transport (data already in
           // shared memory) — keep zero-copy.
