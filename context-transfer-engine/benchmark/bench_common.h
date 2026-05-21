@@ -131,11 +131,14 @@ struct BenchArgs {
                                   // across all threads (split evenly)
   double time_limit_s = 0.0;      // 0 = run io_count ops; else run for N s
   // PoolQuery flavor each AsyncPutBlob/AsyncGetBlob is issued with.
-  //   "local"   — PoolQuery::Local()    (default; the natural same-node case)
-  //   "dynamic" — PoolQuery::Dynamic()  (scheduler resolves; under
-  //               CLIO_FORCE_NET=1 the resolution becomes a DirectId and
-  //               IsTaskLocal returns false, so every op goes through the
-  //               ZMQ loopback path — used to stress-test the network code)
+  //   "local"   — PoolQuery::Local()       (default; same-node, in-process)
+  //   "dynamic" — PoolQuery::Dynamic()     (scheduler picks; on single-node
+  //               this resolves to Local so IsTaskLocal returns true even
+  //               with CLIO_FORCE_NET=1)
+  //   "direct0" — PoolQuery::DirectHash(0) (explicitly non-Local routing;
+  //               under CLIO_FORCE_NET=1 this forces every op through the
+  //               ZMQ loopback path, the point being to stress-test the
+  //               network code on a single host)
   std::string query_type = "local";
   bool ok = false;                // false => caller should print usage & exit
 
@@ -154,7 +157,7 @@ inline void PrintUsage(const char *argv0) {
   HLOG(kError, "Usage: {} [--op Put|Get|PutGet] [--threads N] [--depth N]",
        argv0);
   HLOG(kError, "       [--io-size 1m] [--io-count N] [--max-total-blobs N] "
-               "[--time-limit SECONDS] [--query-type local|dynamic]");
+               "[--time-limit SECONDS] [--query-type local|dynamic|direct0]");
   HLOG(kError, "  Legacy positional form (still supported):");
   HLOG(kError, "       {} <test_case> <threads> <depth> <io_size> <io_count>",
        argv0);
@@ -213,8 +216,11 @@ inline BenchArgs ParseBenchArgs(int argc, char **argv) {
       } else if (f == "--query-type" || f == "--query") {
         const char *v = need(++i); if (!v) return a;
         a.query_type = v;
-        if (a.query_type != "local" && a.query_type != "dynamic") {
-          HLOG(kError, "--query-type must be 'local' or 'dynamic' (got '{}')",
+        if (a.query_type != "local" && a.query_type != "dynamic" &&
+            a.query_type != "direct0") {
+          HLOG(kError,
+               "--query-type must be 'local', 'dynamic', or 'direct0' "
+               "(got '{}')",
                a.query_type);
           return a;
         }

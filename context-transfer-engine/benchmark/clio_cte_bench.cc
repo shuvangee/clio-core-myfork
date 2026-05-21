@@ -113,6 +113,11 @@ class CTEBenchmark {
     if (a_.query_type == "dynamic") {
       return chi::PoolQuery::Dynamic();
     }
+    if (a_.query_type == "direct0") {
+      // DirectHash(0) — routing mode is non-Local, so under CLIO_FORCE_NET=1
+      // every op takes the loopback ZMQ path even on single-node.
+      return chi::PoolQuery::DirectHash(0);
+    }
     return chi::PoolQuery::Local();
   }
 
