@@ -95,12 +95,18 @@ endif()
 # This provides all ctp::* modular targets
 include("${CMAKE_CURRENT_LIST_DIR}/../ClioCtp/ClioCtpCoreConfig.cmake")
 
-# Include Chimaera runtime export file directly
-# This provides chimaera::cxx and chimaera build utilities
-include("${CMAKE_CURRENT_LIST_DIR}/../chimaera/chimaera_coreTargets.cmake")
+# Include CLIO Runtime export file directly. This provides clio_run::cxx
+# (+ chimaera::cxx alias) and clio_run build utilities. The install
+# path follows CLIO_RUN_NAMESPACE (driven by context-runtime/clio_repo.yaml,
+# canonically "clio_run") — substituted at configure time so this stays
+# correct if someone overrides the namespace.
+include("${CMAKE_CURRENT_LIST_DIR}/../@CLIO_RUN_NAMESPACE@/@CLIO_RUN_NAMESPACE@_coreTargets.cmake")
 
-# Include Chimaera ChiMods based on enabled features
-# Core ChiMods that are always available:
+# Include CLIO Runtime ChiMods that are always available.  The module
+# install paths are PINNED to `chimaera_<name>` (see ClioCoreCommon.cmake
+# add_clio_module_client/runtime lines ~982-986) even when the namespace
+# is `clio_run`, so external find_package(chimaera_admin) consumers like
+# coeus-adapter keep working.  Keep these references aligned with that pin.
 include("${CMAKE_CURRENT_LIST_DIR}/../chimaera_admin/chimaera_admin.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../chimaera_bdev/chimaera_bdev.cmake")
 
