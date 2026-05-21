@@ -41,7 +41,7 @@
 #include "clio_runtime/work_orchestrator.h"
 #include "clio_runtime/worker.h"
 
-namespace chi {
+namespace clio::run {
 
 void DefaultScheduler::DivideWorkers(WorkOrchestrator *work_orch) {
   if (!work_orch) {
@@ -245,4 +245,4 @@ void DefaultScheduler::AdjustPolling(RunContext *run_ctx) {
   run_ctx->yield_time_us_ = run_ctx->true_period_ns_ / 1000.0;
 }
 
-}  // namespace chi
+}  // namespace clio::run

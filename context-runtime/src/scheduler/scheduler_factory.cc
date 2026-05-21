@@ -37,7 +37,7 @@
 #include "clio_runtime/scheduler/default_sched.h"
 #include "clio_runtime/scheduler/local_sched.h"
 
-namespace chi {
+namespace clio::run {
 
 std::unique_ptr<Scheduler> SchedulerFactory::Get(const std::string &sched_name) {
   if (sched_name == "default") {
@@ -53,4 +53,4 @@ std::unique_ptr<Scheduler> SchedulerFactory::Get(const std::string &sched_name) 
   return std::make_unique<DefaultScheduler>();
 }
 
-}  // namespace chi
+}  // namespace clio::run

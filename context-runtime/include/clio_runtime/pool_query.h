@@ -36,7 +36,7 @@
 
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Routing algorithm modes for PoolQuery
@@ -393,6 +393,6 @@ class PoolQuery {
 };
 
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_POOL_QUERY_H_

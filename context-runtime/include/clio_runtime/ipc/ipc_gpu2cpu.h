@@ -13,7 +13,7 @@
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
 
-namespace chi {
+namespace clio::run {
 
 class IpcManager;
 namespace gpu { class IpcManager; }
@@ -68,7 +68,7 @@ struct IpcGpu2Cpu {
       RunContext *run_ctx, Container *container);
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_GPU2CPU_H_

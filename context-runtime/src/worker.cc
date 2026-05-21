@@ -65,7 +65,7 @@
 #include "clio_runtime/local_task_archives.h"
 #include "clio_runtime/work_orchestrator.h"
 
-namespace chi {
+namespace clio::run {
 
 // Stack detection is now handled by WorkOrchestrator during initialization
 
@@ -1391,4 +1391,4 @@ RunContext *GetCurrentRunContextFromWorker() {
   return nullptr;
 }
 
-}  // namespace chi
+}  // namespace clio::run

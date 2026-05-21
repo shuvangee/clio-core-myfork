@@ -30,7 +30,7 @@
 #include <memory>
 #include <new>
 
-namespace chi {
+namespace clio::run {
 
 namespace {
 class chimaera_sycl_init_queue_kernel;
@@ -173,6 +173,6 @@ bool ChiServerBootstrapSyclGpu(IpcManager *self, chi::u32 queue_depth,
 
 #endif  // CTP_IS_HOST
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CTP_ENABLE_SYCL && !(CUDA||ROCM)

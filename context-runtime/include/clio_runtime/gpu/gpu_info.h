@@ -37,7 +37,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/task.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Per-device GPU IPC handle passed by value to GPU kernels.
@@ -60,6 +60,6 @@ struct IpcManagerGpuInfo {
   CTP_CROSS_FUN IpcManagerGpuInfo() = default;
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_GPU_INFO_H_

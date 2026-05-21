@@ -37,7 +37,7 @@
 #include <clio_ctp/thread/lock/rwlock.h>
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * CoRwLock - Reentrant cooperative read-write lock for coroutine-based
@@ -143,6 +143,6 @@ struct ScopedCoRwWriteLock {
   ~ScopedCoRwWriteLock() { lock_.WriteUnlock(); }
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_CORWLOCK_H_

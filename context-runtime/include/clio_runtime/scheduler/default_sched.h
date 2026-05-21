@@ -40,7 +40,7 @@
 
 #include "clio_runtime/scheduler/scheduler.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Default scheduler implementation with I/O-size-based routing.
@@ -83,6 +83,6 @@ class DefaultScheduler : public Scheduler {
   std::atomic<u32> next_io_idx_{0};       ///< Round-robin index for I/O workers
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_DEFAULT_SCHED_H_

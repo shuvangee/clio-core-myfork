@@ -38,7 +38,7 @@
 #include "clio_runtime/task.h"
 #include "clio_runtime/ipc_manager.h"
 
-namespace chi {
+namespace clio::run {
 
 void Task::DestroyRunCtx() {
   if (host_run_ctx_) {
@@ -51,4 +51,4 @@ Task::~Task() {
   DestroyRunCtx();
 }
 
-}  // namespace chi
+}  // namespace clio::run

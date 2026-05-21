@@ -46,7 +46,7 @@
 
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declaration
 class Task;
@@ -83,7 +83,7 @@ struct LocalTaskInfo {
   }
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Add local serialization support for LocalTaskInfo in ctp::ipc namespace
 namespace ctp::ipc {
@@ -134,7 +134,7 @@ CTP_CROSS_FUN void load(Ar &ar, chi::LocalTaskInfo &info) {
 
 }  // namespace ctp::ipc
 
-namespace chi {
+namespace clio::run {
 
 // Base type for LbmMeta inheritance: use CLIO_PRIV_ALLOC_T so that
 // ShmTransport::Recv can allocate internal buffers on GPU (BuddyAllocator)
@@ -937,6 +937,6 @@ class GpuLoadTaskArchive {
 };
 
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_LOCAL_TASK_ARCHIVES_H_

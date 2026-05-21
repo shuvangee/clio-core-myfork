@@ -40,7 +40,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/pool_query.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Configuration for a single pool in the compose section
@@ -371,7 +371,7 @@ class ConfigManager : public ctp::BaseConfig {
   std::string conf_dir_ = "/tmp/chimaera";
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global pointer variable declaration for Configuration manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::ConfigManager, g_config_manager);

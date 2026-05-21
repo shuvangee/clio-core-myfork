@@ -53,7 +53,7 @@
 #include "clio_ctp/lightbeam/transport_factory_impl.h"
 #include "clio_ctp/memory/allocator/malloc_allocator.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declaration to avoid circular dependency
 using WorkQueue =
@@ -502,6 +502,6 @@ class Worker {
   Scheduler *scheduler_;
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_WORKERS_WORKER_H_

@@ -41,7 +41,7 @@
 #include "clio_ctp/memory/allocator/allocator.h"
 #include "clio_ctp/util/logging.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declarations
 class Task;
@@ -734,6 +734,6 @@ class Future {
   }
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_FUTURE_H_

@@ -11,7 +11,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/task.h"
 
-namespace chi {
+namespace clio::run {
 
 class IpcManager;
 
@@ -68,6 +68,6 @@ struct IpcCpu2CpuZmq {
   static void ResendTask(IpcManager *ipc, Future<TaskT> &future);
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_CPU2CPU_ZMQ_H_

@@ -83,7 +83,7 @@ CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::IpcManager, g_ipc_manager);
 
 #include <clio_runtime/device_memcpy.h>
 
-namespace chi {
+namespace clio::run {
 
 // Definitions of the device-aware memcpy + IsDevicePointer hooks
 // declared in chimaera/device_memcpy.h. ServerInitGpuQueuesSycl (or
@@ -95,9 +95,9 @@ namespace chi {
 std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy{nullptr};
 std::atomic<IsDevicePointerFn> g_is_device_pointer{nullptr};
 
-}  // namespace chi
+}  // namespace clio::run
 
-namespace chi {
+namespace clio::run {
 
 // Host struct methods
 
@@ -3022,4 +3022,4 @@ void IpcManager::SendRuntime(
   }
 }
 
-}  // namespace chi
+}  // namespace clio::run

@@ -10,7 +10,7 @@
 
 #include "clio_runtime/ipc/ipc_cpu2cpu.h"
 
-namespace chi {
+namespace clio::run {
 
 template <typename TaskT>
 Future<TaskT> IpcCpu2Cpu::ClientSend(IpcManager *ipc,
@@ -106,6 +106,6 @@ bool IpcCpu2Cpu::ClientRecv(IpcManager *ipc,
   return true;
 }
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_CPU2CPU_IMPL_H_

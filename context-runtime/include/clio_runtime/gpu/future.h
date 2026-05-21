@@ -37,7 +37,7 @@
 #include "clio_runtime/types.h"
 #include "clio_ctp/memory/allocator/allocator.h"
 
-namespace chi {
+namespace clio::run {
 // Forward-declared so gpu::Future::operator chi::Future<>() can resolve
 // without dragging the full chi::Future header into device-pass code.
 template <typename TaskT, typename AllocT>
@@ -200,6 +200,6 @@ using GpuTaskQueue =
 /** Single lane within a GpuTaskQueue. */
 using GpuTaskLane = GpuTaskQueue::ring_buffer_type;
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_GPU_FUTURE_H_

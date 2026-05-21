@@ -38,7 +38,7 @@
 #include <memory>
 #include <string>
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Main CLIO Runtime manager singleton class
@@ -128,7 +128,7 @@ class Chimaera {
 
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global pointer variable declaration for CLIO Runtime manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::Chimaera, g_chimaera_manager);

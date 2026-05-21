@@ -51,7 +51,7 @@
 #include "clio_runtime/types.h"
 
 // Forward declarations to avoid circular dependencies
-namespace chi {
+namespace clio::run {
 class WorkOrchestrator;
 }
 
@@ -63,7 +63,7 @@ class WorkOrchestrator;
  * queue and lane management functionality out of the box.
  */
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Monitor mode identifiers for task scheduling
@@ -589,7 +589,7 @@ class ContainerClient {
   ctp::ipc::FullPtr<TaskT> AllocateTask(MemorySegment segment, Args&&... args);
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 /**
  * ChiMod Entry Point Macros

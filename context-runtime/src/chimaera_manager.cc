@@ -52,7 +52,7 @@ static void ChimaeraCleanupAtExit() {
   }
 }
 
-namespace chi {
+namespace clio::run {
 
 // CTP Thread-local storage key definitions
 ctp::ThreadLocalKey chi_cur_worker_key_;
@@ -392,4 +392,4 @@ bool Chimaera::IsInitializing() const {
   return client_is_initializing_ || runtime_is_initializing_;
 }
 
-}  // namespace chi
+}  // namespace clio::run

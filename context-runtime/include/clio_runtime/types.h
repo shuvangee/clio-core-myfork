@@ -52,7 +52,15 @@
  * Core type definitions for CLIO Runtime distributed task execution framework
  */
 
-namespace chi {
+// Canonical runtime namespace: clio::run.  `chi` is kept as a permanent
+// alias so the millions of existing chi::Foo qualified lookups in this
+// codebase (and in every downstream chimod) keep resolving unchanged.
+// The forward-decl ensures the alias resolves even at this top-of-file
+// position where the clio::run namespace hasn't been opened yet.
+namespace clio { namespace run {} }
+namespace chi = clio::run;
+
+namespace clio::run {
 
 // Backward-compat env-var helper alias. Canonical lives in clio_ctp
 // (ctp::env::GetCompat) so ctp-internal code can use it without an upward
@@ -646,9 +654,9 @@ enum class IpcMode : u32 {
   kShm = 2,  ///< Shared memory (existing behavior)
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
-namespace chi::priv {
+namespace clio::run::priv {
 typedef ctp::priv::string<CLIO_PRIV_ALLOC_T> string;
 
 template <typename T>
@@ -669,9 +677,9 @@ using shared_vector = ctp::priv::vector<T, CLIO_PRIV_SHARED_ALLOC_T>;
 template <typename Key, typename T>
 using shared_unordered_map =
     ctp::priv::unordered_map_ll<Key, T, CLIO_PRIV_SHARED_ALLOC_T>;
-}  // namespace chi::priv
+}  // namespace clio::run::priv
 
-namespace chi::ipc {
+namespace clio::run::ipc {
 // Queue structures use CLIO_QUEUE_ALLOC_T (BuddyAllocator)
 template <typename T>
 using multi_mpsc_ring_buffer =
@@ -682,7 +690,7 @@ using mpsc_ring_buffer = ctp::ipc::mpsc_ring_buffer<T, CLIO_QUEUE_ALLOC_T>;
 
 template <typename T>
 using vector = ctp::ipc::vector<T, CLIO_QUEUE_ALLOC_T>;
-}  // namespace chi::ipc
+}  // namespace clio::run::ipc
 
 // Hash function specializations for std::unordered_map
 namespace std {

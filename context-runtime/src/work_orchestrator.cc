@@ -51,7 +51,7 @@
 // Global pointer variable definition for Work Orchestrator singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::WorkOrchestrator, g_work_orchestrator);
 
-namespace chi {
+namespace clio::run {
 
 //===========================================================================
 // Work Orchestrator Implementation
@@ -413,4 +413,4 @@ bool WorkOrchestrator::HasWorkRemaining(u64 &total_work_remaining) const {
   return total_work_remaining > 0;
 }
 
-} // namespace chi
+}  // namespace clio::run

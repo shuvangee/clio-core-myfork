@@ -36,7 +36,7 @@
 #include "clio_runtime/worker.h"
 #include "clio_runtime/singletons.h"
 
-namespace chi {
+namespace clio::run {
 
 Future<Task> IpcCpu2Self::ClientSend(IpcManager *ipc,
                                       const ctp::ipc::FullPtr<Task> &task_ptr) {
@@ -121,4 +121,4 @@ void IpcCpu2Self::RuntimeSend(const FullPtr<Task> &task_ptr,
   }
 }
 
-}  // namespace chi
+}  // namespace clio::run

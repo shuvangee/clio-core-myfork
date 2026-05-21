@@ -39,7 +39,7 @@
 #include <cstddef>
 #include <cstring>
 
-namespace chi {
+namespace clio::run {
 
 /** Device-aware memcpy signature. Same shape as std::memcpy. */
 using DeviceAwareMemcpyFn = void (*)(void *dst, const void *src, std::size_t n);
@@ -93,6 +93,6 @@ inline bool IsDevicePointer(const void *ptr) {
   return fn ? fn(ptr) : false;
 }
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_DEVICE_MEMCPY_H_

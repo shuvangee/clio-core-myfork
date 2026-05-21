@@ -40,7 +40,7 @@
 #include "clio_runtime/ipc_manager.h"
 #include "clio_ctp/util/logging.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * SaveTaskArchive bulk transfer implementation
@@ -164,4 +164,4 @@ void LoadTaskArchive::bulk(ctp::ipc::ShmPtr<> &ptr, size_t size, uint32_t flags)
   // kHeartbeat has no bulk transfers
 }
 
-} // namespace chi
+}  // namespace clio::run

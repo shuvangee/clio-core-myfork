@@ -14,7 +14,7 @@
 #include "clio_runtime/gpu/gpu_ipc_manager.h"
 #include "clio_runtime/ipc_manager.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * RuntimeRecv: producer-only — the GPU never serializes a task through
@@ -93,6 +93,6 @@ void IpcGpu2Cpu::RuntimeSend(
   (void)ipc;
 }
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL

@@ -40,7 +40,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace chi {
+namespace clio::run {
 
 UniqueId UniqueId::FromString(const std::string& str) {
   // Parse format "major.minor"
@@ -76,4 +76,4 @@ LockOwnerId GetCurrentLockOwnerId() {
   return id;
 }
 
-}  // namespace chi
+}  // namespace clio::run

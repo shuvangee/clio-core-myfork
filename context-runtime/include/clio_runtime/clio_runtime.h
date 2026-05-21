@@ -48,7 +48,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/worker.h"
 
-namespace chi {
+namespace clio::run {
 
 
 
@@ -94,7 +94,7 @@ bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime = false,
  */
 void CHIMAERA_FINALIZE();
 
-}  // namespace chi
+}  // namespace clio::run
 
 //==============================================================================
 // CLIO_* runtime API surface (rebranding: chimaera -> clio_runtime).

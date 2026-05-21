@@ -40,7 +40,7 @@
 #include <atomic>
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declarations for ChiMod system
 // Container is always a class forward declaration (defined in container.h)
@@ -314,7 +314,7 @@ class PoolManager {
 
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global pointer variable declaration for Pool manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::PoolManager, g_pool_manager);

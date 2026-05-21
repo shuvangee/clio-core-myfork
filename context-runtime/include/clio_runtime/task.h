@@ -73,7 +73,7 @@ class basic_string;
 #ifdef __NVCOMPILER
 #include <ucontext.h>
 #include <functional>
-namespace chi::detail {
+namespace clio::run::detail {
   static constexpr size_t FIBER_STACK_SIZE = 256 * 1024;
   // Forward declare RunContext for FiberState
   struct FiberState;
@@ -127,10 +127,10 @@ namespace chi::detail {
     bool operator==(std::nullptr_t) const noexcept { return state_ == nullptr; }
     bool operator!=(std::nullptr_t) const noexcept { return state_ != nullptr; }
   };
-} // namespace chi::detail
+}  // namespace clio::run::detail
 #endif // __NVCOMPILER
 
-namespace chi {
+namespace clio::run {
 
 // Forward declarations
 class Task;
@@ -502,14 +502,14 @@ class Task {
   CTP_CROSS_FUN void FixupAfterCopy() {}
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // FutureShm and Future classes (must be before RunContext which uses Future)
 #include "clio_runtime/future.h"
 
 // FutureShm and Future are defined in chimaera/future.h (included above)
 
-namespace chi {
+namespace clio::run {
 
 // ============================================================================
 // Task Queue types (must be after Future for TaskLane typedef)
@@ -565,12 +565,12 @@ using TaskLane =
  */
 typedef ctp::ipc::multi_mpsc_ring_buffer<Future<Task>, CLIO_QUEUE_ALLOC_T> TaskQueue;
 
-}  // namespace chi
+}  // namespace clio::run
 
 // GPU Future types (must be after chi::Future and chi::Task are complete)
 #include "clio_runtime/gpu/future.h"
 
-namespace chi {
+namespace clio::run {
 
 // ============================================================================
 // RunContext (uses Future<Task> and TaskLane* - both must be complete above)
@@ -1216,14 +1216,14 @@ inline YieldAwaiter yield(double us = 0.0) { return YieldAwaiter(us); }
 #undef CLASS_NAME
 #undef CLASS_NEW_ARGS
 
-}  // namespace chi
+}  // namespace clio::run
 
 // ============================================================================
 // NVHPC fiber_co_await overloads and make_task_fiber
 // (outside chi namespace, in chi::detail namespace)
 // ============================================================================
 #ifdef __NVCOMPILER
-namespace chi::detail {
+namespace clio::run::detail {
 
 /// Yield awaiter overload: suspends fiber and marks rctx as yielded
 inline void fiber_co_await(chi::YieldAwaiter ya, chi::RunContext& rctx) {
@@ -1286,7 +1286,7 @@ inline chi::TaskResume make_task_fiber(F&& fn) {
   return chi::TaskResume(FiberHandle(state));
 }
 
-} // namespace chi::detail
+}  // namespace clio::run::detail
 #endif // __NVCOMPILER
 
 // ============================================================================

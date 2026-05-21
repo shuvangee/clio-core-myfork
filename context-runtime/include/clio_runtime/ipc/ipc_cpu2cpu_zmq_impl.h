@@ -10,7 +10,7 @@
 
 #include "clio_runtime/ipc/ipc_cpu2cpu_zmq.h"
 
-namespace chi {
+namespace clio::run {
 
 template <typename TaskT>
 Future<TaskT> IpcCpu2CpuZmq::ClientSend(IpcManager *ipc,
@@ -158,6 +158,6 @@ void IpcCpu2CpuZmq::ResendTask(IpcManager *ipc, Future<TaskT> &future) {
   }
 }
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_CPU2CPU_ZMQ_IMPL_H_

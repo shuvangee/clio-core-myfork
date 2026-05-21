@@ -76,7 +76,7 @@
 #endif
 #endif
 
-namespace chi {
+namespace clio::run {
 
 // Forward declaration of gpu::IpcManager
 namespace gpu { class IpcManager; }
@@ -1490,7 +1490,7 @@ class IpcManager {
   static constexpr float kShmAllocationMultiplier = 2.5f;
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global pointer variable declaration for IPC manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
@@ -1516,7 +1516,7 @@ CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
 // ================================================================
 #if CTP_IS_GPU_COMPILER
 
-namespace chi {
+namespace clio::run {
 namespace gpu {
 CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 #if CTP_IS_GPU
@@ -1526,7 +1526,7 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 #endif
 }
 }  // namespace gpu
-}  // namespace chi
+}  // namespace clio::run
 
 // CLIO_IPC needs different expansions in nvcc/hipcc's two passes:
 //   - Device pass (CTP_IS_GPU=1): GetBlockIpcManager() — the per-block
@@ -1545,7 +1545,7 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 #undef CLIO_CPU_IPC
 #define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 
-namespace chi {
+namespace clio::run {
 // Producer-only model: kernels do not allocate. The legacy
 // GetPrivAllocGpu / GetSharedAllocGpu helpers (which returned a private
 // BuddyAllocator and the shared RoundRobinAllocator) returned null /
@@ -1560,7 +1560,7 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
   return nullptr;
 }
 #endif
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CTP_IS_GPU_COMPILER
 
@@ -1584,7 +1584,7 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
 //
 // CLIO_CPU_IPC remains the host-side global pointer accessor for code
 // that runs on the CPU even in a SYCL build.
-namespace chi {
+namespace clio::run {
 // SYCL stubs for the per-warp allocator getters that types.h's
 // CLIO_PRIV_ALLOC macro expands to under any device pass. Code that wants
 // a private allocator under SYCL should reach CLIO_IPC->gpu_alloc_
@@ -1593,7 +1593,7 @@ namespace chi {
 inline ctp::ipc::PrivateBuddyAllocator *GetPrivAllocGpu() { return nullptr; }
 inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() { return nullptr; }
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global-namespace fallback for `g_ipc_manager_ptr`. Code inside the
 // kernel scope shadows this with a local established by
@@ -1639,7 +1639,7 @@ inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 // ================================================================
 // Future method implementations (unified for CPU and GPU TUs)
 // ================================================================
-namespace chi {
+namespace clio::run {
 
 // ~Future() - frees resources if consumed (via Wait/await_resume)
 template <typename TaskT, typename AllocT>
@@ -2017,7 +2017,7 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
 // gpu::Future::Wait() is defined in chimaera/ipc/ipc_gpu2cpu_impl.h
 // alongside IpcGpu2Cpu::ClientSend.
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Template implementations for transport classes (need full IpcManager definition)
 #include "clio_runtime/ipc/ipc_cpu2cpu_impl.h"

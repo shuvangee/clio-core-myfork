@@ -41,7 +41,7 @@
 #include <functional>
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declarations for ChiMod system
 // Container is always a class forward declaration (defined in container.h)
@@ -214,7 +214,7 @@ class ModuleManager {
   std::map<std::string, std::unique_ptr<ChiModInfo>> chimods_;
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global pointer variable declaration for Module manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::ModuleManager, g_module_manager);

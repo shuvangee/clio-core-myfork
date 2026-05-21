@@ -12,7 +12,7 @@
 #include <mutex>
 #include <vector>
 
-namespace chi {
+namespace clio::run {
 
 //==============================================================================
 // RuntimeRecv: poll ZMQ transports for incoming client tasks
@@ -335,4 +335,4 @@ bool IpcCpu2CpuZmq::RuntimeSend(
   return did_work;
 }
 
-}  // namespace chi
+}  // namespace clio::run

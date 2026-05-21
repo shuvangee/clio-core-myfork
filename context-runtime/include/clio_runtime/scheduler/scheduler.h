@@ -38,7 +38,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/task.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declarations
 class IpcManager;
@@ -138,6 +138,6 @@ class Scheduler {
   virtual Worker *GetNetRecvWorker() const { return GetNetWorker(); }
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_SCHEDULER_H_

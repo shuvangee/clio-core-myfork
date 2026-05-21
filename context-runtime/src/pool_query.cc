@@ -39,7 +39,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-namespace chi {
+namespace clio::run {
 
 // Constructor, copy constructor, assignment operator, and destructor
 // are now inline in pool_query.h for GPU compatibility
@@ -179,4 +179,4 @@ std::string PoolQuery::ToString() const {
 
 // Getter methods are now inline in pool_query.h for GPU compatibility
 
-}  // namespace chi
+}  // namespace clio::run

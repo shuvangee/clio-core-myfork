@@ -41,7 +41,7 @@
 #include "clio_runtime/work_orchestrator.h"
 #include "clio_runtime/worker.h"
 
-namespace chi {
+namespace clio::run {
 
 void LocalScheduler::DivideWorkers(WorkOrchestrator *work_orch) {
   if (!work_orch) {
@@ -209,4 +209,4 @@ u32 LocalScheduler::MapByPidTid(u32 num_lanes) {
   return static_cast<u32>(combined_hash % num_lanes);
 }
 
-}  // namespace chi
+}  // namespace clio::run

@@ -8,7 +8,7 @@
 #include "clio_runtime/ipc/ipc_cpu2cpu.h"
 #include "clio_runtime/ipc_manager.h"
 
-namespace chi {
+namespace clio::run {
 
 ctp::ipc::FullPtr<Task> IpcCpu2Cpu::RuntimeRecv(
     IpcManager *ipc, Future<Task> &future, Container *container,
@@ -70,4 +70,4 @@ void IpcCpu2Cpu::RuntimeSend(
   container->DelTask(task_ptr->method_, task_ptr);
 }
 
-}  // namespace chi
+}  // namespace clio::run

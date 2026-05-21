@@ -46,7 +46,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace chi {
+namespace clio::run {
 namespace gpu {
 
 /**
@@ -254,7 +254,7 @@ class IpcManager {
 };
 
 }  // namespace gpu
-}  // namespace chi
+}  // namespace clio::run
 
 // gpu::Future::Wait + IpcGpu2Cpu::ClientSend (both reach into gpu_info_).
 #include "clio_runtime/ipc/ipc_gpu2cpu_impl.h"

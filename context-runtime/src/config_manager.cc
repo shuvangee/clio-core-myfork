@@ -44,7 +44,7 @@
 // Global pointer variable definition for Configuration manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::ConfigManager, g_config_manager);
 
-namespace chi {
+namespace clio::run {
 
 // Constructor and destructor removed - handled by CTP singleton pattern
 
@@ -400,4 +400,4 @@ size_t ConfigManager::CalculateQueueSegmentSize() const {
   return BASE_OVERHEAD + worker_queues_size + net_queue_size;
 }
 
-} // namespace chi
+}  // namespace clio::run

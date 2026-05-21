@@ -41,7 +41,7 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace chi {
+namespace clio::run {
 
 bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime, bool is_restart) {
   // Static guard to prevent double initialization
@@ -116,4 +116,4 @@ void CHIMAERA_FINALIZE() {
   }
 }
 
-}  // namespace chi
+}  // namespace clio::run

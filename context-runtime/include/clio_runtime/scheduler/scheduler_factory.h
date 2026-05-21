@@ -40,7 +40,7 @@
 
 #include "clio_runtime/scheduler/scheduler.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Factory class for creating scheduler instances based on name.
@@ -56,6 +56,6 @@ class SchedulerFactory {
   static std::unique_ptr<Scheduler> Get(const std::string &sched_name);
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_SCHEDULER_FACTORY_H_

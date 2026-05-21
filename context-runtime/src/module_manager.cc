@@ -51,7 +51,7 @@
 // Global pointer variable definition for Module manager singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::ModuleManager, g_module_manager);
 
-namespace chi {
+namespace clio::run {
 
 // Helper function to get a symbol address for dladdr
 // This avoids issues with member function pointer casts
@@ -334,4 +334,4 @@ bool ModuleManager::ValidateChiMod(ctp::SharedLibrary &lib) const {
           name_func != nullptr && destroy_func != nullptr);
 }
 
-}  // namespace chi
+}  // namespace clio::run

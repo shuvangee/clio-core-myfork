@@ -48,7 +48,7 @@
 
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declaration
 class Task;
@@ -430,6 +430,6 @@ public:
 
 };
 
-} // namespace chi
+}  // namespace clio::run
 
 #endif // CHIMAERA_INCLUDE_CHIMAERA_TASK_ARCHIVES_H_

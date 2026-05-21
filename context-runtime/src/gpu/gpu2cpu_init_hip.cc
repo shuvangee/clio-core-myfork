@@ -30,7 +30,7 @@
 #include <memory>
 #include <new>
 
-namespace chi {
+namespace clio::run {
 
 // Note: queue construction happens host-side (see ServerInitGpuQueues).
 // We previously launched a single-thread kernel to construct the
@@ -254,6 +254,6 @@ bool ChiServerBootstrapHipGpu(IpcManager *self, chi::u32 queue_depth,
 
 #endif  // CTP_IS_HOST
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // (CTP_ENABLE_CUDA || CTP_ENABLE_ROCM) && !CTP_ENABLE_SYCL

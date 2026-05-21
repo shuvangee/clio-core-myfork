@@ -11,7 +11,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/task.h"
 
-namespace chi {
+namespace clio::run {
 
 class IpcManager;
 
@@ -41,6 +41,6 @@ struct IpcCpu2Cpu {
                           Future<TaskT> &future, float max_sec);
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_CPU2CPU_H_

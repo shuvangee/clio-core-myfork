@@ -37,7 +37,7 @@
 #include <clio_ctp/thread/lock/mutex.h>
 #include "clio_runtime/types.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * CoMutex - Reentrant cooperative mutex for coroutine-based task execution.
@@ -98,6 +98,6 @@ struct ScopedCoMutex {
   ~ScopedCoMutex() { lock_.Unlock(); }
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_COMUTEX_H_

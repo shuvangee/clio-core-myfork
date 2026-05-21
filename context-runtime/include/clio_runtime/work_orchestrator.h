@@ -43,7 +43,7 @@
 #include "clio_runtime/worker.h"
 #include "clio_runtime/scheduler/scheduler.h"
 
-namespace chi {
+namespace clio::run {
 
 // Forward declarations
 class Worker;
@@ -191,7 +191,7 @@ class WorkOrchestrator {
 
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 // Global pointer variable declaration for Work Orchestrator singleton
 CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::WorkOrchestrator, g_work_orchestrator);

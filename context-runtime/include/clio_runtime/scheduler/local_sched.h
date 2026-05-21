@@ -40,7 +40,7 @@
 
 #include "clio_runtime/scheduler/scheduler.h"
 
-namespace chi {
+namespace clio::run {
 
 /**
  * Local scheduler implementation.
@@ -70,6 +70,6 @@ class LocalScheduler : public Scheduler {
   std::atomic<u32> next_sched_idx_{0};
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_LOCAL_SCHED_H_

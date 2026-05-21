@@ -37,7 +37,7 @@
 #include "clio_runtime/types.h"
 #include "clio_runtime/task.h"
 
-namespace chi {
+namespace clio::run {
 
 class IpcManager;
 class Worker;
@@ -129,6 +129,6 @@ struct IpcCpu2Self {
   }
 };
 
-}  // namespace chi
+}  // namespace clio::run
 
 #endif  // CHIMAERA_INCLUDE_CHIMAERA_IPC_CPU2SELF_H_
