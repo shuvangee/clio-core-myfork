@@ -179,7 +179,7 @@ private:
             }
 
             // Allocate shared memory for the data
-            ctp::ipc::FullPtr<char> shared_data = CHI_IPC->AllocateBuffer(kTestDataSize);
+            ctp::ipc::FullPtr<char> shared_data = CLIO_IPC->AllocateBuffer(kTestDataSize);
             if (shared_data.IsNull()) {
                 HLOG(kError, "Failed to allocate shared memory buffer");
                 return false;
@@ -235,7 +235,7 @@ private:
             );
 
             // Allocate buffer for reading
-            ctp::ipc::FullPtr<char> read_buffer = CHI_IPC->AllocateBuffer(kTestDataSize);
+            ctp::ipc::FullPtr<char> read_buffer = CLIO_IPC->AllocateBuffer(kTestDataSize);
             if (read_buffer.IsNull()) {
                 HLOG(kError, "Failed to allocate read buffer");
                 return false;
