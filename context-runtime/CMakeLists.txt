@@ -116,12 +116,19 @@ if(TARGET cereal)
     set(_CEREAL_TARGET cereal)
 endif()
 
-# Collect GPU target if it exists. The GPU twin is defined in
-# context-runtime/src/CMakeLists.txt as `${CLIO_RUN_NAMESPACE}_cxx_gpu`
-# (== clio_run_cxx_gpu) for CUDA/SYCL/ROCm builds.
+# Collect GPU target if it exists.
+#
+# The GPU twin is defined in context-runtime/src/CMakeLists.txt as
+# `${CHIMAERA_LIB_NAME}_gpu` where CHIMAERA_LIB_NAME is hardcoded to
+# "clio_run_cxx" — so the literal target name is `clio_run_cxx_gpu`,
+# NOT `${CLIO_RUN_NAMESPACE}_cxx_gpu`.  These can differ: the user-
+# facing namespace deliberately stays `chimaera` for downstream
+# find_package compat (see context-runtime/clio_repo.yaml), while the
+# canonical .so / target names already use the new `clio_run_cxx`
+# prefix.  Check the literal so this works regardless of the namespace.
 set(_GPU_TARGET "")
-if(TARGET ${CLIO_RUN_NAMESPACE}_cxx_gpu)
-  set(_GPU_TARGET ${CLIO_RUN_NAMESPACE}_cxx_gpu)
+if(TARGET clio_run_cxx_gpu)
+  set(_GPU_TARGET clio_run_cxx_gpu)
 endif()
 
 # Install main library (and GPU library if built). The canonical target name

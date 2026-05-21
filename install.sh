@@ -240,6 +240,23 @@ mkdir -p "$OUTPUT_DIR"
 
 export IOWARP_PRESET="$PRESET"
 
+# Extract PKG_VERSION from CMakeLists.txt's `project(iowarp-core VERSION X.Y.Z)`
+# and export it so meta.yaml's `environ.get('PKG_VERSION', '1.0.0')` jinja
+# resolves to the real version.  Without this, conda-build 26.x's jinja
+# returns the literal string "None" for the unset env var (instead of the
+# fallback default), and the package name ends up "iowarp-core-None-...",
+# which then breaks at the _test_env solve step with
+# `libmambapy.bindings.specs.ParseError: invalid version predicate in "None"`.
+# Mirrors the same extraction step in .github/workflows/install-conda.yml.
+if [ -z "${PKG_VERSION:-}" ]; then
+    PKG_VERSION="$(grep -oP 'project\(iowarp-core VERSION \K[\d.]+' "$SCRIPT_DIR/CMakeLists.txt" || true)"
+    if [ -z "$PKG_VERSION" ]; then
+        PKG_VERSION="1.0.0"
+    fi
+    export PKG_VERSION
+fi
+echo -e "${BLUE}Package version: $PKG_VERSION${NC}"
+
 # Build/target Python comes from the recipe pin (computed above as
 # $PYVER), NOT from the active interpreter. See the comment at the top.
 echo -e "${BLUE}Target Python version: $PYVER (from conda_build_config.yaml)${NC}"
