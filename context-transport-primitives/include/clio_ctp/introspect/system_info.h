@@ -58,6 +58,10 @@ namespace ctp {
 /** Dynamically load shared libraries */
 struct SharedLibrary {
   void *handle_ = nullptr;
+  // Windows: captured from FormatMessageA on the most recent Load() failure.
+  // POSIX: unused (we route GetError() through dlerror() which has its own
+  // thread-local string slot).
+  std::string error_string_;
 
   SharedLibrary() = default;
   CTP_DLL SharedLibrary(const std::string &name);
@@ -203,6 +207,11 @@ class SystemInfo {
 
   CTP_DLL static void *AlignedAlloc(size_t alignment, size_t size);
 
+  /** Free memory returned by AlignedAlloc. POSIX accepts plain free()
+   *  for aligned_alloc() pointers, but Windows _aligned_malloc() requires
+   *  the matching _aligned_free() — using free() corrupts the CRT heap. */
+  CTP_DLL static void AlignedFree(void *ptr);
+
   CTP_DLL static std::string Getenv(
       const char *name, size_t max_size = ctp::Unit<size_t>::Megabytes(1));
 
@@ -238,12 +247,24 @@ class SystemInfo {
   /** Set the calling thread's name (best-effort; truncated to OS limits). */
   CTP_DLL static void SetCurrentThreadName(const std::string &name);
 
-  /** Terminate the calling process immediately with the given exit code.
-   *  Skips C++ static destructors, atexit handlers, and CRT cleanup. On
-   *  Windows this is TerminateProcess; on POSIX it's `::_exit`. Used by
-   *  the test framework on Windows to dodge a libzmq teardown abort —
-   *  see GH issue tracking the long-term fix. */
-  [[noreturn]] CTP_DLL static void TerminateProcessNow(int exit_code);
+  /** Total CPU time (user + kernel) consumed by the calling thread, in
+   *  nanoseconds. POSIX uses clock_gettime(CLOCK_THREAD_CPUTIME_ID),
+   *  Windows uses GetThreadTimes. Returns 0 on platforms without thread
+   *  CPU-time support. */
+  CTP_DLL static uint64_t ThreadCpuTimeNs();
+
+  /** Terminate the calling process immediately on platforms that need it,
+   *  skipping C++ static destructors, atexit handlers, and CRT cleanup.
+   *  Windows: TerminateProcess(exit_code) — used to dodge the libzmq
+   *  teardown abort that fires during ZMQ destructor unwind on Windows.
+   *  POSIX: no-op (returns) so static destructors, leak sanitizers, and
+   *  coverage instrumentation can finish normally.
+   *
+   *  Call sites should follow with `return exit_code;` so the Linux path
+   *  has a normal-return out of main(). This API is deliberately NOT
+   *  marked [[noreturn]] — its no-op behaviour on Linux means it can
+   *  fall through. */
+  CTP_DLL static void TerminateProcessNow(int exit_code);
 
   /** IPv4/IPv6 addresses bound to local interfaces (loopback included). */
   CTP_DLL static std::vector<std::string> GetLocalInterfaceIps();
@@ -269,6 +290,13 @@ class SystemInfo {
   CTP_DLL static char GetPathListSeparator();
 
   CTP_DLL static std::string GetSharedLibExtension();
+
+  /** Name of a shared library that's universally available on this OS
+   *  and exports the standard libm math symbols (sin/cos/tan/...). Used
+   *  by the cross-platform SharedLibrary smoke tests so they don't have
+   *  to compile-switch on the library name. POSIX: "libm.so.6";
+   *  Windows: "ucrtbase.dll" (UCRT exports the C math entry points). */
+  CTP_DLL static std::string GetMathLibraryName();
 };
 
 }  // namespace ctp

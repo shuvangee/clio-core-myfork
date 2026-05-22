@@ -39,32 +39,32 @@
 #include <string>
 #include <sys/types.h>
 #ifdef _WIN32
-#include <BaseTsd.h>  // SSIZE_T
-#include <fcntl.h>
-#include <io.h>
-// MSVC's <sys/types.h> doesn't provide mode_t / ssize_t; mirror the POSIX
-// typedefs. SSIZE_T is the Win32 spelling of ssize_t.
+// MSVC's <sys/types.h> doesn't provide mode_t / ssize_t. Define them from
+// fixed-width portable types so we don't have to pull in <BaseTsd.h> here
+// (which transitively drags in much of windows.h). The Win32 SSIZE_T is
+// `long long` on x64 / `long` on x86; intptr_t matches both widths.
 typedef int mode_t;
-typedef SSIZE_T ssize_t;
-// MSVC names the POSIX file-open flags with a leading underscore; alias the
-// un-prefixed forms so cross-platform call sites stay readable.
-#ifndef O_RDWR
-#  define O_RDWR    _O_RDWR
+typedef intptr_t ssize_t;
+// POSIX file-open flag values matching MSVC's <fcntl.h> _O_* constants.
+// We hand-roll these so the header doesn't need <fcntl.h> / <io.h>.
+// (Cross-platform: identical bit pattern.)
+#ifndef O_RDONLY
+#  define O_RDONLY 0x0000
 #endif
 #ifndef O_WRONLY
-#  define O_WRONLY  _O_WRONLY
+#  define O_WRONLY 0x0001
 #endif
-#ifndef O_RDONLY
-#  define O_RDONLY  _O_RDONLY
-#endif
-#ifndef O_CREAT
-#  define O_CREAT   _O_CREAT
-#endif
-#ifndef O_TRUNC
-#  define O_TRUNC   _O_TRUNC
+#ifndef O_RDWR
+#  define O_RDWR   0x0002
 #endif
 #ifndef O_APPEND
-#  define O_APPEND  _O_APPEND
+#  define O_APPEND 0x0008
+#endif
+#ifndef O_CREAT
+#  define O_CREAT  0x0100
+#endif
+#ifndef O_TRUNC
+#  define O_TRUNC  0x0200
 #endif
 #endif
 

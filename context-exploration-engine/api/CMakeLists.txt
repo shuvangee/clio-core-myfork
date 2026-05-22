@@ -35,6 +35,11 @@ set_target_properties(clio_cee_api PROPERTIES
   SOVERSION 1
   CXX_STANDARD 20
   CXX_STANDARD_REQUIRED ON
+  # Auto-export non-static symbols on Windows so the test binaries can
+  # link against clio_cee_api.lib without each public function needing
+  # an explicit __declspec(dllexport). Mirrors the same property on
+  # every other shared target in this project.
+  WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
 #------------------------------------------------------------------------------

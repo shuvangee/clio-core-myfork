@@ -11477,7 +11477,9 @@ TEST_CASE("Autogen - SystemInfo basic functions", "[autogen][systeminfo][basic]"
     void* ptr = ctp::SystemInfo::AlignedAlloc(64, 256);
     REQUIRE(ptr != nullptr);
     REQUIRE(((uintptr_t)ptr % 64) == 0);
-    free(ptr);
+    // Windows _aligned_malloc requires _aligned_free; plain free corrupts
+    // the CRT heap. SystemInfo::AlignedFree routes to the right one.
+    ctp::SystemInfo::AlignedFree(ptr);
     INFO("AlignedAlloc completed");
   }
 }
@@ -11599,15 +11601,18 @@ TEST_CASE("Autogen - SystemInfo SharedMemory", "[autogen][systeminfo][shm]") {
 }
 
 TEST_CASE("Autogen - SystemInfo SharedLibrary", "[autogen][systeminfo][sharedlib]") {
+  // SystemInfo::GetMathLibraryName picks the right libm-equivalent
+  // for the current OS so this test stays portable.
+  const std::string kTestMathLib = ctp::SystemInfo::GetMathLibraryName();
   SECTION("Load valid library") {
-    ctp::SharedLibrary lib("libm.so.6");
+    ctp::SharedLibrary lib(kTestMathLib);
     void* sym = lib.GetSymbol("sin");
     REQUIRE(sym != nullptr);
     INFO("SharedLibrary load completed");
   }
 
   SECTION("Move constructor") {
-    ctp::SharedLibrary lib1("libm.so.6");
+    ctp::SharedLibrary lib1(kTestMathLib);
     ctp::SharedLibrary lib2(std::move(lib1));
     void* sym = lib2.GetSymbol("cos");
     REQUIRE(sym != nullptr);
@@ -11615,8 +11620,8 @@ TEST_CASE("Autogen - SystemInfo SharedLibrary", "[autogen][systeminfo][sharedlib
   }
 
   SECTION("Move assignment") {
-    ctp::SharedLibrary lib1("libm.so.6");
-    ctp::SharedLibrary lib2("libm.so.6");
+    ctp::SharedLibrary lib1(kTestMathLib);
+    ctp::SharedLibrary lib2(kTestMathLib);
     lib2 = std::move(lib1);
     void* sym = lib2.GetSymbol("tan");
     REQUIRE(sym != nullptr);

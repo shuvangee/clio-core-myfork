@@ -11,6 +11,10 @@ if(WIN32)
         system_info.cc
         malloc_allocator.cc
         socket_win.cc
+        # Windows-specific backends whose impl pulls in <windows.h>.
+        # Headers stay Win32-clean; impls live here.
+        iocp_io.cc
+        event_manager_win.cc
     )
 else()
     set(SRC_FILES

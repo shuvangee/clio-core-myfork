@@ -369,12 +369,19 @@ bool IpcManager::ServerInit() {
     u32 port = config->GetPort();
 
     try {
-      // TCP ROUTER server on port+3
+      // TCP ROUTER server on port+3. Honor CLIO_BIND_ADDR so this matches
+      // whatever LoadHostfile picked; otherwise tests on Windows can't
+      // avoid the Defender Firewall prompt on the ROUTER port even when
+      // the main server is on loopback.
+      std::string router_bind = "0.0.0.0";
+      if (const char *env = chi::env::GetCompat("BIND_ADDR")) {
+        if (*env) router_bind = env;
+      }
       client_tcp_transport_ = ctp::lbm::TransportFactory::Get(
-          "0.0.0.0", ctp::lbm::TransportType::kZeroMq,
+          router_bind, ctp::lbm::TransportType::kZeroMq,
           ctp::lbm::TransportMode::kServer, "tcp", port + 3);
-      HLOG(kInfo, "IpcManager: TCP ROUTER transport bound on port {}",
-           port + 3);
+      HLOG(kInfo, "IpcManager: TCP ROUTER transport bound on {}:{}",
+           router_bind, port + 3);
     } catch (const std::exception &e) {
       HLOG(kError, "IpcManager::ServerInit: Failed to bind TCP server: {}",
            e.what());
@@ -903,16 +910,26 @@ bool IpcManager::LoadHostfile() {
   hosts_cache_valid_ = false;
 
   if (hostfile_path.empty()) {
-    // No hostfile configured: bind on all local interfaces (0.0.0.0).
-    // GetServerAddr() defaults to 127.0.0.1 — fine for the client DEALER
-    // target on a single host, but useless as a hostfile entry because
-    // IdentifyThisHost matches entries against gethostname() and on real
-    // multi-rail hosts (e.g. Aurora's `x4315c7s0b0n0`) the hostname is
-    // never literally `127.0.0.1`. Pushing "0.0.0.0" here, combined with
-    // the wildcard match in IdentifyThisHost, lets the runtime come up
-    // anywhere without forcing every user to write a one-line hostfile.
-    HLOG(kDebug, "No hostfile configured, binding wildcard 0.0.0.0 as node 0");
-    Host host("0.0.0.0", 0);
+    // No hostfile configured: bind on all local interfaces (0.0.0.0) by
+    // default. GetServerAddr() defaults to 127.0.0.1 — fine for the
+    // client DEALER target on a single host, but useless as a hostfile
+    // entry because IdentifyThisHost matches entries against
+    // gethostname() and on real multi-rail hosts (e.g. Aurora's
+    // `x4315c7s0b0n0`) the hostname is never literally `127.0.0.1`.
+    // Pushing "0.0.0.0" here, combined with the wildcard match in
+    // IdentifyThisHost, lets the runtime come up anywhere without
+    // forcing every user to write a one-line hostfile.
+    //
+    // CLIO_BIND_ADDR env override: when set, replaces the wildcard with
+    // the requested address. Used by tests on Windows to pin to
+    // 127.0.0.1 so the Defender Firewall doesn't pop "Allow access?"
+    // for every new test binary that binds a fresh port.
+    std::string bind_addr = "0.0.0.0";
+    if (const char *env = chi::env::GetCompat("BIND_ADDR")) {
+      if (*env) bind_addr = env;
+    }
+    HLOG(kDebug, "No hostfile configured, binding {} as node 0", bind_addr);
+    Host host(bind_addr, 0);
     hostfile_map_[0] = host;
     return true;
   }
@@ -1198,20 +1215,31 @@ bool IpcManager::IdentifyThisHost() {
                  HostMatchesLocalIp(host.ip_address, local_ips);
     if (!is_me) continue;
 
-    HLOG(kDebug, "Hostfile entry {} matches local host {}; binding 0.0.0.0",
-         host.ip_address, local_host);
+    // Bind to whatever address the hostfile entry advertises so an
+    // override like CLIO_BIND_ADDR=127.0.0.1 actually pins the listener
+    // to loopback (no Defender Firewall prompt). The fallback "0.0.0.0"
+    // path is preserved for the synthetic wildcard and hostname-only
+    // entries that don't resolve to a literal local IP.
+    std::string bind_target =
+        (host.ip_address == "0.0.0.0" ||
+         host.ip_address == local_host ||
+         entry_short == local_short || suffix_match)
+            ? std::string("0.0.0.0")
+            : host.ip_address;
+    HLOG(kDebug, "Hostfile entry {} matches local host {}; binding {}",
+         host.ip_address, local_host, bind_target);
 
     try {
-      if (TryStartMainServer("0.0.0.0")) {
+      if (TryStartMainServer(bind_target)) {
         HLOG(kInfo,
-             "SUCCESS: Main server started on 0.0.0.0:{} "
+             "SUCCESS: Main server started on {}:{} "
              "(advertised as {}, node={})",
-             port, host.ip_address, host.node_id);
+             bind_target, port, host.ip_address, host.node_id);
         this_host_ = host;
         return true;
       }
     } catch (const std::exception &e) {
-      HLOG(kDebug, "Failed to bind 0.0.0.0:{} for {}: {}",
+      HLOG(kDebug, "Failed to bind {}:{} for {}: {}", bind_target,
            port, host.ip_address, e.what());
     } catch (...) {
       HLOG(kDebug, "Failed to bind 0.0.0.0:{} for {}: unknown error",

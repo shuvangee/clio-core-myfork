@@ -33,27 +33,6 @@
 
 #pragma once
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#ifdef Yield
-#undef Yield
-#endif
-#ifdef SendMessage
-#undef SendMessage
-#endif
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-#endif
 #include <atomic>
 #include <cerrno>
 #include <cstdlib>
@@ -115,16 +94,7 @@ class ShmTransport
   /** Check if the server is still alive via PID probe. */
   bool IsServerAlive(const LbmContext& ctx = LbmContext()) const {
     if (ctx.server_pid_ > 0) {
-#ifdef _WIN32
-      HANDLE h = OpenProcess(SYNCHRONIZE, FALSE,
-                             static_cast<DWORD>(ctx.server_pid_));
-      if (!h) return false;
-      DWORD wait = WaitForSingleObject(h, 0);
-      CloseHandle(h);
-      if (wait != WAIT_TIMEOUT) return false;
-#else
-      if (kill(ctx.server_pid_, 0) == -1 && errno == ESRCH) return false;
-#endif
+      if (!ctp::SystemInfo::IsProcessAlive(ctx.server_pid_)) return false;
     }
     return true;
   }

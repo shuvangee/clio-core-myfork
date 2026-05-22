@@ -39,7 +39,7 @@ if(BUILD_TESTING)
         PROPERTIES
         LABELS "python;bindings;monitor;msan_skip"
         TIMEOUT 120
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     )
 
     set_tests_properties(

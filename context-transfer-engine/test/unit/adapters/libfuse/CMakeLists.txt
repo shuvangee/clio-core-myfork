@@ -67,7 +67,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300
         LABELS "unit;adapter;fuse"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
 )
 
 # ------------------------------------------------------------------------------
@@ -108,7 +108,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 600
         LABELS "unit;adapter;fuse;copy_workspace"
-        ENVIRONMENT "CHI_WITH_RUNTIME=1;CTP_LOG_LEVEL=error;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/cte_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "CHI_WITH_RUNTIME=1;CTP_LOG_LEVEL=error;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/cte_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
         RESOURCE_LOCK "chimaera_runtime"
 )
 

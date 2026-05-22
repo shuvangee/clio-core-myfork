@@ -35,33 +35,14 @@
 #define CTP_TIMER_H
 
 #include <time.h>
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#ifdef Yield
-#undef Yield
-#endif
-#ifdef SendMessage
-#undef SendMessage
-#endif
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-#endif
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <vector>
 
 #include "clio_ctp/constants/macros.h"
+#include "clio_ctp/introspect/system_info.h"
 // #include "clio_ctp/data_structures/internal/shm_archive.h"
 #include "singleton.h"
 
@@ -176,45 +157,20 @@ typedef TimepointBase<std::chrono::high_resolution_clock> HighResCpuTimepoint;
 typedef TimepointBase<std::chrono::steady_clock> HighResMonotonicTimepoint;
 typedef HighResMonotonicTimepoint Timepoint;
 
-/** Timer that measures actual CPU time for the calling thread */
+/** Timer that measures actual CPU time for the calling thread. Reads
+ *  through ctp::SystemInfo::ThreadCpuTimeNs() so this header doesn't
+ *  need any platform-specific includes. */
 class CpuTimer {
  public:
   double time_ns_ = 0;
-#ifdef _WIN32
-  // Total kernel+user time in 100ns ticks at start
-  unsigned long long start_ns_ = 0;
-#else
-  struct timespec start_{0, 0};
-#endif
-
-#ifdef _WIN32
-  static CTP_INLINE_CROSS_FUN unsigned long long ThreadCpuNs() {
-    FILETIME create_t, exit_t, kernel_t, user_t;
-    GetThreadTimes(GetCurrentThread(), &create_t, &exit_t, &kernel_t, &user_t);
-    auto to_u64 = [](FILETIME f) {
-      ULARGE_INTEGER u; u.LowPart = f.dwLowDateTime; u.HighPart = f.dwHighDateTime;
-      return u.QuadPart;  // 100-ns intervals
-    };
-    return (to_u64(kernel_t) + to_u64(user_t)) * 100ull;
-  }
-#endif
+  uint64_t start_ns_ = 0;
 
   CTP_INLINE_CROSS_FUN void Resume() {
-#ifdef _WIN32
-    start_ns_ = ThreadCpuNs();
-#else
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_);
-#endif
+    start_ns_ = SystemInfo::ThreadCpuTimeNs();
   }
   CTP_INLINE_CROSS_FUN double Pause() {
-#ifdef _WIN32
-    time_ns_ += static_cast<double>(ThreadCpuNs() - start_ns_);
-#else
-    struct timespec end;
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
-    time_ns_ += (end.tv_sec - start_.tv_sec) * 1e9
-              + (end.tv_nsec - start_.tv_nsec);
-#endif
+    uint64_t now = SystemInfo::ThreadCpuTimeNs();
+    time_ns_ += static_cast<double>(now - start_ns_);
     return time_ns_;
   }
   CTP_INLINE_CROSS_FUN void Reset() { time_ns_ = 0; Resume(); }

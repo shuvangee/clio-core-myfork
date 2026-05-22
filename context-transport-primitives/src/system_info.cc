@@ -102,6 +102,24 @@
 
 namespace ctp {
 
+#if CTP_ENABLE_WINDOWS_SYSINFO
+// Translate a POSIX shm_open()-style name ("/ctp_xxx") into a Win32
+// kernel-object name. Win32 names can't contain `/`; the "Local\" prefix
+// places the object in the user's session namespace, which is correct
+// for per-host SHM. Returns the cleaned name suitable for both
+// CreateFileMapping and OpenFileMapping.
+static std::string WinShmName(const std::string &posix_name) {
+  std::string base = posix_name;
+  while (!base.empty() && (base.front() == '/' || base.front() == '\\')) {
+    base.erase(0, 1);
+  }
+  for (auto &c : base) {
+    if (c == '/' || c == '\\') c = '_';
+  }
+  return "Local\\" + base;
+}
+#endif
+
 void SystemInfo::RefreshCpuFreqKhz() {
 #if CTP_IS_HOST
   for (int i = 0; i < ncpu_; ++i) {
@@ -478,13 +496,19 @@ bool SystemInfo::CreateNewSharedMemory(File &fd, const std::string &name,
   return true;
 #endif
 #elif CTP_ENABLE_WINDOWS_SYSINFO
+  // POSIX shared memory names start with `/` (e.g. "/ctp_shm_42"). Win32
+  // kernel object names can't contain `/`, so map to "Local\<base>" — the
+  // per-session namespace, which is right for single-host SHM. Without
+  // this the mapping was created anonymously (nullptr name) and could
+  // not be reopened by name, breaking every OpenSharedMemory.
+  std::string win_name = WinShmName(name);
   fd.windows_fd_ =
-      CreateFileMapping(INVALID_HANDLE_VALUE,  // use paging file
-                        nullptr,               // default security
-                        PAGE_READWRITE,        // read/write access
-                        0,         // maximum object size (high-order DWORD)
-                        size,      // maximum object size (low-order DWORD)
-                        nullptr);  // name of mapping object
+      CreateFileMapping(INVALID_HANDLE_VALUE,    // use paging file
+                        nullptr,                 // default security
+                        PAGE_READWRITE,          // read/write access
+                        0,           // maximum object size (high-order DWORD)
+                        static_cast<DWORD>(size),  // low-order DWORD
+                        win_name.c_str());         // mapping object name
   return fd.windows_fd_ != nullptr;
 #endif
 }
@@ -500,7 +524,9 @@ bool SystemInfo::OpenSharedMemory(File &fd, const std::string &name) {
   return fd.posix_fd_ >= 0;
 #endif
 #elif CTP_ENABLE_WINDOWS_SYSINFO
-  fd.windows_fd_ = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name.c_str());
+  std::string win_name = WinShmName(name);
+  fd.windows_fd_ =
+      OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, win_name.c_str());
   return fd.windows_fd_ != nullptr;
 #endif
 }
@@ -596,6 +622,14 @@ void *SystemInfo::AlignedAlloc(size_t alignment, size_t size) {
 #endif
 }
 
+void SystemInfo::AlignedFree(void *ptr) {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  free(ptr);
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  _aligned_free(ptr);
+#endif
+}
+
 bool SystemInfo::IsProcessAlive(int pid) {
 #if CTP_ENABLE_PROCFS_SYSINFO
   return kill(pid, 0) != -1 || errno != ESRCH;
@@ -636,14 +670,50 @@ std::string SystemInfo::GetModuleDirectory() {
 #endif
 }
 
+uint64_t SystemInfo::ThreadCpuTimeNs() {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  struct timespec ts;
+#ifdef CLOCK_THREAD_CPUTIME_ID
+  if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0) {
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+           static_cast<uint64_t>(ts.tv_nsec);
+  }
+#endif
+  return 0;
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  FILETIME create_t, exit_t, kernel_t, user_t;
+  if (!::GetThreadTimes(::GetCurrentThread(), &create_t, &exit_t, &kernel_t,
+                         &user_t)) {
+    return 0;
+  }
+  auto to_u64 = [](FILETIME f) {
+    ULARGE_INTEGER u;
+    u.LowPart = f.dwLowDateTime;
+    u.HighPart = f.dwHighDateTime;
+    return u.QuadPart;  // 100-ns intervals
+  };
+  return (to_u64(kernel_t) + to_u64(user_t)) * 100ull;
+#endif
+}
+
+std::string SystemInfo::GetMathLibraryName() {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  return "libm.so.6";
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  return "ucrtbase.dll";
+#endif
+}
+
 void SystemInfo::TerminateProcessNow(int exit_code) {
 #if CTP_ENABLE_PROCFS_SYSINFO
-  // _exit skips atexit handlers, static destructors, and CRT cleanup.
-  ::_exit(exit_code);
+  // No-op on POSIX: callers fall through and main() returns normally,
+  // so static destructors, atexit handlers, leak sanitizers, and coverage
+  // instrumentation all run as they should.
+  (void)exit_code;
 #elif CTP_ENABLE_WINDOWS_SYSINFO
-  // TerminateProcess is more aggressive than _exit on Windows: it skips
-  // DLL detach notifications too, which is exactly what we need to dodge
-  // libzmq's signaler abort during shutdown.
+  // TerminateProcess skips DLL detach notifications and the entire
+  // destructor chain, which is exactly what we need to dodge libzmq's
+  // signaler abort during shutdown on Windows.
   ::TerminateProcess(::GetCurrentProcess(), static_cast<UINT>(exit_code));
   // Fallback in case TerminateProcess somehow returns (it shouldn't).
   ::_exit(exit_code);
@@ -937,14 +1007,32 @@ void SharedLibrary::Load(const std::string &name) {
   handle_ = dlopen(name.c_str(), RTLD_GLOBAL | RTLD_NOW);
 #elif CTP_ENABLE_WINDOWS_SYSINFO
   handle_ = LoadLibraryA(name.c_str());
+  if (!handle_) {
+    DWORD err = ::GetLastError();
+    char *buf = nullptr;
+    DWORD len = ::FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        reinterpret_cast<LPSTR>(&buf), 0, nullptr);
+    if (buf) {
+      error_string_.assign(buf, len);
+      ::LocalFree(buf);
+    } else {
+      error_string_ = "LoadLibraryA failed: " + std::to_string(err);
+    }
+  } else {
+    error_string_.clear();
+  }
 #endif
 }
 
 std::string SharedLibrary::GetError() const {
 #if CTP_ENABLE_PROCFS_SYSINFO
-  return std::string(dlerror());
+  const char *err = dlerror();
+  return err ? std::string(err) : std::string();
 #elif CTP_ENABLE_WINDOWS_SYSINFO
-  return std::string();
+  return error_string_;
 #endif
 }
 

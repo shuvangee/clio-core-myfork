@@ -50,6 +50,10 @@
 #include <clio_runtime/bdev/bdev_tasks.h>
 #include <fstream>
 #include <cstdlib>
+#include <filesystem>
+#include <system_error>
+
+#include <clio_ctp/introspect/system_info.h>
 
 using namespace clio::cae::core;
 
@@ -104,7 +108,10 @@ public:
       g_initialized = true;
     }
 
-    test_data_dir_ = std::string(std::getenv("HOME")) + "/cae_test_data";
+    // ctp::SystemInfo::GetHomeDir() returns HOME on POSIX, USERPROFILE
+    // on Windows. Plain getenv("HOME") segfaults on Windows because the
+    // var isn't set and std::string(nullptr) is UB.
+    test_data_dir_ = ctp::SystemInfo::GetHomeDir() + "/cae_test_data";
     test_binary_file_ = test_data_dir_ + "/test_binary.bin";
     test_hdf5_file_ = "/workspace/context-assimilation-engine/data/A46_xx.h5";
   }
@@ -138,8 +145,12 @@ public:
   }
 
   void SetupTestData() {
-    // Create test data directory
-    (void)system(("mkdir -p " + test_data_dir_).c_str());
+    // Use std::filesystem instead of `system("mkdir -p ...")` — Windows
+    // cmd.exe doesn't take -p and a forked `mkdir` against a path with
+    // spaces or backslashes blows up. create_directories returns false
+    // if the dir already exists, which is harmless.
+    std::error_code _ec;
+    std::filesystem::create_directories(test_data_dir_, _ec);
 
     // Generate small binary test file
     GenerateBinaryFile(test_binary_file_, kSmallFileSize);
