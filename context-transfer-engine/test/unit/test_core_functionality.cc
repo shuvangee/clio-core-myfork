@@ -1825,7 +1825,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Comprehensive Integration",
 
   // Verify runtime initialization (test should FAIL if not properly
   // initialized)
-  REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+  REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
   REQUIRE(CLIO_IPC != nullptr);
   REQUIRE(CLIO_POOL_MANAGER != nullptr);
   REQUIRE(CLIO_MODULE_MANAGER != nullptr);

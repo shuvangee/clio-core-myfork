@@ -244,7 +244,7 @@ int main(int argc, char **argv) {
   }
   struct ClientFinalizeGuard {
     ~ClientFinalizeGuard() {
-      auto *mgr = CLIO_CHIMAERA_MANAGER;
+      auto *mgr = CLIO_RUNTIME_MANAGER;
       if (mgr) mgr->ClientFinalize();
     }
   } finalize_guard;

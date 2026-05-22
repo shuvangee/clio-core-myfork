@@ -88,7 +88,7 @@ class ReconnectTestFixture {
         // intentionally kills the local runtime.  Calling CHIMAERA_FINALIZE
         // after the server is dead would hang or crash.
         std::this_thread::sleep_for(500ms);
-        REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+        REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
         REQUIRE(CLIO_IPC != nullptr);
         REQUIRE(CLIO_POOL_MANAGER != nullptr);
         REQUIRE(CLIO_IPC->IsInitialized());

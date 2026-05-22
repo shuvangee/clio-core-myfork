@@ -37,20 +37,6 @@
 
 #include "clio_runtime/ipc_manager.h"
 
-#ifndef _WIN32
-#include <arpa/inet.h>
-#include <dirent.h>
-#include <endian.h>
-#include <ifaddrs.h>
-#include <netdb.h>
-#include <signal.h>
-#include <sys/epoll.h>
-#include <sys/mman.h>
-#include <sys/socket.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
 #include <clio_ctp/lightbeam/transport_factory_impl.h>
 #include <zmq.h>
 
@@ -66,7 +52,7 @@
 
 #include "clio_runtime/admin.h"
 #include "clio_runtime/admin/admin_client.h"
-#include "clio_runtime/chimaera_manager.h"
+#include "clio_runtime/manager.h"
 #include "clio_runtime/config_manager.h"
 #include "clio_runtime/container.h"
 #include "clio_runtime/local_task_archives.h"
@@ -79,7 +65,7 @@
 #endif
 
 // Global pointer variable definition for IPC manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::IpcManager, g_ipc_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::IpcManager, g_ipc_manager);
 
 #include <clio_runtime/device_memcpy.h>
 
@@ -92,8 +78,8 @@ namespace clio::run {
 // route memcpys involving device USM through the GPU runtime, and
 // stage through host buffers only when the data is actually on the
 // device.
-std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy{nullptr};
-std::atomic<IsDevicePointerFn> g_is_device_pointer{nullptr};
+CLIO_RUN_API std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy{nullptr};
+CLIO_RUN_API std::atomic<IsDevicePointerFn> g_is_device_pointer{nullptr};
 
 }  // namespace clio::run
 
@@ -509,9 +495,9 @@ void IpcManager::AwakenWorker(TaskLane *lane) {
   // absorbed harmlessly by signalfd — at worst the worker wakes one
   // extra time and re-checks its (empty) queue. Worth it.
 
-  pid_t tid = lane->GetTid();
+  int tid = lane->GetTid();
   if (tid > 0) {
-    pid_t runtime_pid = runtime_pid_ ? runtime_pid_ : getpid();
+    int runtime_pid = runtime_pid_ ? runtime_pid_ : ctp::SystemInfo::GetPid();
 
     // Send SIGUSR1 to the worker thread in the runtime process
     int result = ctp::lbm::EventManager::Signal(runtime_pid, tid);
@@ -626,7 +612,7 @@ bool IpcManager::ServerInitQueues() {
 
   try {
     // Initialize runtime metadata
-    runtime_pid_ = getpid();
+    runtime_pid_ = ctp::SystemInfo::GetPid();
     server_generation_.store(
         static_cast<u64>(
             std::chrono::steady_clock::now().time_since_epoch().count()),
@@ -697,9 +683,9 @@ void IpcManager::AssignGpuLanesToWorker() {
   // The worker may have entered sleep before gpu_lanes_ was set.
   TaskLane *lane = gpu_worker->GetLane();
   if (lane) {
-    pid_t tid = lane->GetTid();
+    int tid = lane->GetTid();
     if (tid > 0) {
-      ctp::lbm::EventManager::Signal(getpid(), tid);
+      ctp::lbm::EventManager::Signal(ctp::SystemInfo::GetPid(), tid);
     }
   }
 }
@@ -845,7 +831,7 @@ retry_attempt:
     client_generation_ = task->server_generation_;
     worker_queues_off_ = task->worker_queues_off_;
     if (task->server_pid_ > 0) {
-      runtime_pid_ = static_cast<pid_t>(task->server_pid_);
+      runtime_pid_ = static_cast<int>(task->server_pid_);
     }
     HLOG(kInfo, "Successfully connected to runtime (generation={}, server_pid={})",
          client_generation_, runtime_pid_);
@@ -1110,34 +1096,8 @@ namespace {
 // interface IPs) as "this node" — hostname string matching alone breaks
 // when the hostfile uses addresses instead of names.
 std::set<std::string> CollectLocalInterfaceIps() {
-  std::set<std::string> ips;
-  struct ifaddrs *ifaddr = nullptr;
-  if (getifaddrs(&ifaddr) != 0 || ifaddr == nullptr) {
-    return ips;  // Best-effort: empty set just disables IP matching.
-  }
-  for (struct ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-    if (ifa->ifa_addr == nullptr) {
-      continue;
-    }
-    char buf[INET6_ADDRSTRLEN] = {0};
-    const int fam = ifa->ifa_addr->sa_family;
-    if (fam == AF_INET) {
-      auto *sa = reinterpret_cast<struct sockaddr_in *>(ifa->ifa_addr);
-      if (inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf))) {
-        ips.insert(buf);
-      }
-    } else if (fam == AF_INET6) {
-      auto *sa = reinterpret_cast<struct sockaddr_in6 *>(ifa->ifa_addr);
-      if (inet_ntop(AF_INET6, &sa->sin6_addr, buf, sizeof(buf))) {
-        // Strip a zone index (e.g. "fe80::1%eth0") for comparison.
-        std::string s(buf);
-        auto pct = s.find('%');
-        ips.insert(pct == std::string::npos ? s : s.substr(0, pct));
-      }
-    }
-  }
-  freeifaddrs(ifaddr);
-  return ips;
+  auto v = ctp::SystemInfo::GetLocalInterfaceIps();
+  return std::set<std::string>(v.begin(), v.end());
 }
 
 // True when `entry` (an IP literal or a resolvable hostname from the
@@ -1147,47 +1107,12 @@ std::set<std::string> CollectLocalInterfaceIps() {
 // local NIC IP whose reverse name differs from gethostname().
 bool HostMatchesLocalIp(const std::string &entry,
                         const std::set<std::string> &local_ips) {
-  if (entry.empty() || local_ips.empty()) {
-    return false;
+  if (entry.empty() || local_ips.empty()) return false;
+  if (local_ips.count(entry)) return true;  // already an IP literal we hold
+  for (const auto &ip : ctp::SystemInfo::ResolveHostname(entry)) {
+    if (local_ips.count(ip)) return true;
   }
-  // Fast path: the entry is itself a literal IP we already hold.
-  if (local_ips.count(entry)) {
-    return true;
-  }
-  // Otherwise resolve the entry (works for both IP literals and names)
-  // and test each resolved address against the local interface set.
-  struct addrinfo hints {};
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  struct addrinfo *res = nullptr;
-  if (getaddrinfo(entry.c_str(), nullptr, &hints, &res) != 0 ||
-      res == nullptr) {
-    return false;
-  }
-  bool matched = false;
-  for (struct addrinfo *ai = res; ai != nullptr && !matched;
-       ai = ai->ai_next) {
-    char buf[INET6_ADDRSTRLEN] = {0};
-    if (ai->ai_family == AF_INET) {
-      auto *sa = reinterpret_cast<struct sockaddr_in *>(ai->ai_addr);
-      if (inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf)) &&
-          local_ips.count(buf)) {
-        matched = true;
-      }
-    } else if (ai->ai_family == AF_INET6) {
-      auto *sa = reinterpret_cast<struct sockaddr_in6 *>(ai->ai_addr);
-      if (inet_ntop(AF_INET6, &sa->sin6_addr, buf, sizeof(buf))) {
-        std::string s(buf);
-        auto pct = s.find('%');
-        if (local_ips.count(pct == std::string::npos ? s
-                                                     : s.substr(0, pct))) {
-          matched = true;
-        }
-      }
-    }
-  }
-  freeaddrinfo(res);
-  return matched;
+  return false;
 }
 
 }  // namespace
@@ -1227,12 +1152,11 @@ bool IpcManager::IdentifyThisHost() {
   // is on the wrong interface). Solution: identify by hostname match,
   // then bind the actual server on "0.0.0.0" so it listens on every
   // local interface (mirrors how `client_tcp_transport_` is bound).
-  char local_host_buf[256] = {0};
-  if (gethostname(local_host_buf, sizeof(local_host_buf) - 1) != 0) {
-    HLOG(kError, "Error: gethostname() failed: {}", std::strerror(errno));
+  std::string local_host = ctp::SystemInfo::GetHostname();
+  if (local_host.empty()) {
+    HLOG(kError, "Error: GetHostname() failed");
     return false;
   }
-  std::string local_host(local_host_buf);
   std::string local_short =
       local_host.substr(0, local_host.find('.'));
 
@@ -1381,7 +1305,7 @@ FullPtr<char> IpcManager::AllocateBuffer(size_t size) {
 
   // RUNTIME PATH: Use private memory (CTP_MALLOC) — runtime never uses
   // per-process shared memory segments
-  if (CLIO_CHIMAERA_MANAGER && CLIO_CHIMAERA_MANAGER->IsRuntime()) {
+  if (CLIO_RUNTIME_MANAGER && CLIO_RUNTIME_MANAGER->IsRuntime()) {
     // Use CTP_MALLOC allocator for private memory allocation
     FullPtr<char> buffer = CTP_MALLOC->AllocateObjs<char>(size);
     if (buffer.IsNull()) {
@@ -1632,7 +1556,7 @@ bool IpcManager::IncreaseClientShm(size_t size) {
   // This ensures exclusive access to the allocator_map_ structures
   allocator_map_lock_.WriteLock();
 
-  pid_t pid = getpid();
+  int pid = ctp::SystemInfo::GetPid();
   u32 index = shm_count_.fetch_add(1, std::memory_order_relaxed);
 
   // Create shared memory name: chimaera_{pid}_{index}
@@ -1721,7 +1645,7 @@ bool IpcManager::RegisterMemory(const ctp::ipc::AllocatorId &alloc_id) {
   allocator_map_lock_.WriteLock();
 
   // Derive shm_name from alloc_id: chimaera_{pid}_{index}
-  pid_t owner_pid = static_cast<pid_t>(alloc_id.major_);
+  int owner_pid = static_cast<int>(alloc_id.major_);
   u32 shm_index = alloc_id.minor_;
   std::string shm_name =
       "chimaera_" + std::to_string(owner_pid) + "_" + std::to_string(shm_index);
@@ -1792,7 +1716,7 @@ ClientShmInfo IpcManager::GetClientShmInfo(u32 index) const {
     return ClientShmInfo();  // Return empty info
   }
 
-  pid_t pid = getpid();
+  int pid = ctp::SystemInfo::GetPid();
   std::string shm_name =
       "chimaera_" + std::to_string(pid) + "_" + std::to_string(index);
 
@@ -1814,7 +1738,7 @@ size_t IpcManager::WreapDeadIpcs() {
   // Acquire writer lock on allocator_map_lock_ during reaping
   allocator_map_lock_.WriteLock();
 
-  pid_t current_pid = getpid();
+  int current_pid = ctp::SystemInfo::GetPid();
   size_t reaped_count = 0;
 
   // Build list of allocator keys to remove (can't modify map while iterating)
@@ -1833,14 +1757,13 @@ size_t IpcManager::WreapDeadIpcs() {
     }
 
     // Skip our own process's segments
-    pid_t owner_pid = static_cast<pid_t>(major);
+    int owner_pid = static_cast<int>(major);
     if (owner_pid == current_pid) {
       continue;
     }
 
-    // Check if the owning process is still alive
-    // kill(pid, 0) returns 0 if process exists, -1 with ESRCH if not
-    if (kill(owner_pid, 0) == -1 && errno == ESRCH) {
+    // Check if the owning process is still alive.
+    if (!ctp::SystemInfo::IsProcessAlive(owner_pid)) {
       // Process is dead - mark for removal
       HLOG(kInfo,
            "WreapDeadIpcs: Process {} is dead, marking allocator ({}.{}) for "
@@ -2002,35 +1925,15 @@ size_t IpcManager::ClearUserIpcs() {
   size_t removed_count = 0;
   std::string memfd_dir = ctp::SystemInfo::GetMemfdDir();
 
-  // Open per-user memfd symlink directory
-  DIR *dir = opendir(memfd_dir.c_str());
-  if (dir == nullptr) {
-    // Directory may not exist yet, that's fine
-    return 0;
-  }
-
-  // Iterate through directory entries and remove all symlinks
-  struct dirent *entry;
-  while ((entry = readdir(dir)) != nullptr) {
-    // Skip "." and ".."
-    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-      continue;
-    }
-
-    // Construct full path and remove the symlink
-    std::string full_path = memfd_dir + "/" + entry->d_name;
-    if (unlink(full_path.c_str()) == 0) {
-      HLOG(kDebug, "ClearUserIpcs: Removed memfd symlink: {}", entry->d_name);
+  for (const auto &name : ctp::SystemInfo::ListDirectory(memfd_dir)) {
+    std::string full_path = memfd_dir + "/" + name;
+    if (ctp::SystemInfo::RemoveFile(full_path)) {
+      HLOG(kDebug, "ClearUserIpcs: Removed memfd symlink: {}", name);
       removed_count++;
     } else {
-      if (errno != EACCES && errno != EPERM && errno != ENOENT) {
-        HLOG(kDebug, "ClearUserIpcs: Could not remove {} ({}): {}",
-             entry->d_name, errno, strerror(errno));
-      }
+      HLOG(kDebug, "ClearUserIpcs: Could not remove {}", name);
     }
   }
-
-  closedir(dir);
 
   if (removed_count > 0) {
     HLOG(kInfo, "ClearUserIpcs: Removed {} memfd symlinks from previous runs",
@@ -2437,13 +2340,14 @@ ctp::ipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
 
   // Mint AllocatorId from PID + a counter (mirror IncreaseClientShm).
   u32 idx = shm_count_.fetch_add(1, std::memory_order_relaxed);
-  ctp::ipc::AllocatorId alloc_id(static_cast<u32>(getpid()), idx);
+  ctp::ipc::AllocatorId alloc_id(
+      static_cast<u32>(ctp::SystemInfo::GetPid()), idx);
 
   // In-process registration: when this IpcManager *is* the runtime
   // (kServer mode), short-circuit the admin RegisterMemoryTask round-trip
   // and call gpu_ipc_->RegisterClientBackend directly. Otherwise send the
   // admin task over the wire so the runtime can register it on our behalf.
-  if (CLIO_CHIMAERA_MANAGER->IsRuntime() && gpu_ipc_) {
+  if (CLIO_RUNTIME_MANAGER->IsRuntime() && gpu_ipc_) {
     gpu::IpcManager::ClientBackend b;
     b.alloc_id = alloc_id;
     b.gpu_id = gpu_id;

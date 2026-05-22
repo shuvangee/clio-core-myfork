@@ -62,9 +62,15 @@
 #define CTP_MSAN_UNPOISON(ptr, size) ((void)0)
 #endif
 #if CTP_ENABLE_PROCFS_SYSINFO
-#include <limits.h>
+#include <arpa/inet.h>
+#include <dirent.h>
 #include <dlfcn.h>
+#include <ifaddrs.h>
+#include <libgen.h>
+#include <limits.h>
+#include <netdb.h>
 #include <signal.h>
+#include <sys/socket.h>
 // LINUX
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -82,7 +88,13 @@
 #endif
 // WINDOWS
 #elif CTP_ENABLE_WINDOWS_SYSINFO
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
 #include <windows.h>
+#include <filesystem>
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
 #else
 #error \
     "Must define either CTP_ENABLE_PROCFS_SYSINFO or CTP_ENABLE_WINDOWS_SYSINFO"
@@ -621,6 +633,178 @@ std::string SystemInfo::GetModuleDirectory() {
   auto pos2 = path_str.rfind('\\');
   if (pos2 == std::string::npos) pos2 = path_str.rfind('/');
   return (pos2 != std::string::npos) ? path_str.substr(0, pos2) : std::string();
+#endif
+}
+
+void SystemInfo::SetCurrentThreadName(const std::string &name) {
+#if CTP_ENABLE_PROCFS_SYSINFO
+#ifdef __linux__
+  // pthread_setname_np truncates names longer than 15 chars (+ NUL).
+  pthread_setname_np(pthread_self(), name.substr(0, 15).c_str());
+#endif
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  // SetThreadDescription needs wide chars.
+  std::wstring wname(name.begin(), name.end());
+  SetThreadDescription(GetCurrentThread(), wname.c_str());
+#endif
+}
+
+std::string SystemInfo::GetHostname() {
+  char buf[256] = {0};
+#if CTP_ENABLE_PROCFS_SYSINFO
+  if (gethostname(buf, sizeof(buf) - 1) != 0) return "";
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  DWORD len = sizeof(buf);
+  if (!GetComputerNameExA(ComputerNameDnsHostname, buf, &len)) return "";
+#endif
+  return std::string(buf);
+}
+
+std::string SystemInfo::GetModuleDirectoryFor(void *symbol) {
+  if (!symbol) return "";
+#if CTP_ENABLE_PROCFS_SYSINFO
+  Dl_info dl_info;
+  if (dladdr(symbol, &dl_info) == 0) return "";
+  char resolved[PATH_MAX];
+  if (realpath(dl_info.dli_fname, resolved) == nullptr) return "";
+  std::string resolved_str(resolved);
+  auto pos = resolved_str.rfind('/');
+  return (pos != std::string::npos) ? resolved_str.substr(0, pos)
+                                    : std::string();
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  HMODULE hModule = nullptr;
+  if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCSTR>(symbol), &hModule)) {
+    return "";
+  }
+  char path[MAX_PATH];
+  if (GetModuleFileNameA(hModule, path, MAX_PATH) == 0) return "";
+  std::string path_str(path);
+  auto pos2 = path_str.rfind('\\');
+  if (pos2 == std::string::npos) pos2 = path_str.rfind('/');
+  return (pos2 != std::string::npos) ? path_str.substr(0, pos2) : std::string();
+#endif
+}
+
+std::vector<std::string> SystemInfo::GetLocalInterfaceIps() {
+  std::vector<std::string> ips;
+#if CTP_ENABLE_PROCFS_SYSINFO
+  struct ifaddrs *ifaddr = nullptr;
+  if (getifaddrs(&ifaddr) != 0 || ifaddr == nullptr) return ips;
+  for (struct ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+    if (ifa->ifa_addr == nullptr) continue;
+    char buf[INET6_ADDRSTRLEN] = {0};
+    const int fam = ifa->ifa_addr->sa_family;
+    if (fam == AF_INET) {
+      auto *sa = reinterpret_cast<struct sockaddr_in *>(ifa->ifa_addr);
+      if (inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf))) {
+        ips.emplace_back(buf);
+      }
+    } else if (fam == AF_INET6) {
+      auto *sa = reinterpret_cast<struct sockaddr_in6 *>(ifa->ifa_addr);
+      if (inet_ntop(AF_INET6, &sa->sin6_addr, buf, sizeof(buf))) {
+        std::string s(buf);
+        auto pct = s.find('%');
+        ips.push_back(pct == std::string::npos ? s : s.substr(0, pct));
+      }
+    }
+  }
+  freeifaddrs(ifaddr);
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  ULONG buf_len = 16 * 1024;
+  std::vector<char> buf(buf_len);
+  auto *addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+  const ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
+                      GAA_FLAG_SKIP_DNS_SERVER;
+  ULONG rc = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &buf_len);
+  if (rc == ERROR_BUFFER_OVERFLOW) {
+    buf.resize(buf_len);
+    addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+    rc = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &buf_len);
+  }
+  if (rc != NO_ERROR) return ips;
+  for (auto *a = addrs; a != nullptr; a = a->Next) {
+    for (auto *u = a->FirstUnicastAddress; u != nullptr; u = u->Next) {
+      char text[INET6_ADDRSTRLEN] = {0};
+      auto *sa = u->Address.lpSockaddr;
+      if (sa->sa_family == AF_INET) {
+        auto *in4 = reinterpret_cast<sockaddr_in *>(sa);
+        if (inet_ntop(AF_INET, &in4->sin_addr, text, sizeof(text))) {
+          ips.emplace_back(text);
+        }
+      } else if (sa->sa_family == AF_INET6) {
+        auto *in6 = reinterpret_cast<sockaddr_in6 *>(sa);
+        if (inet_ntop(AF_INET6, &in6->sin6_addr, text, sizeof(text))) {
+          std::string s(text);
+          auto pct = s.find('%');
+          ips.push_back(pct == std::string::npos ? s : s.substr(0, pct));
+        }
+      }
+    }
+  }
+#endif
+  return ips;
+}
+
+std::vector<std::string> SystemInfo::ResolveHostname(const std::string &host) {
+  std::vector<std::string> ips;
+  struct addrinfo hints {};
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  struct addrinfo *res = nullptr;
+  if (getaddrinfo(host.c_str(), nullptr, &hints, &res) != 0 || res == nullptr) {
+    return ips;
+  }
+  for (struct addrinfo *p = res; p != nullptr; p = p->ai_next) {
+    char buf[INET6_ADDRSTRLEN] = {0};
+    if (p->ai_family == AF_INET) {
+      auto *sa = reinterpret_cast<struct sockaddr_in *>(p->ai_addr);
+      if (inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf))) {
+        ips.emplace_back(buf);
+      }
+    } else if (p->ai_family == AF_INET6) {
+      auto *sa = reinterpret_cast<struct sockaddr_in6 *>(p->ai_addr);
+      if (inet_ntop(AF_INET6, &sa->sin6_addr, buf, sizeof(buf))) {
+        std::string s(buf);
+        auto pct = s.find('%');
+        ips.push_back(pct == std::string::npos ? s : s.substr(0, pct));
+      }
+    }
+  }
+  freeaddrinfo(res);
+  return ips;
+}
+
+std::vector<std::string> SystemInfo::ListDirectory(const std::string &path) {
+  std::vector<std::string> entries;
+#if CTP_ENABLE_PROCFS_SYSINFO
+  DIR *dir = opendir(path.c_str());
+  if (dir == nullptr) return entries;
+  while (struct dirent *entry = readdir(dir)) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+    entries.emplace_back(entry->d_name);
+  }
+  closedir(dir);
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  std::error_code ec;
+  if (!std::filesystem::is_directory(path, ec)) return entries;
+  for (auto &p : std::filesystem::directory_iterator(path, ec)) {
+    if (ec) break;
+    entries.push_back(p.path().filename().string());
+  }
+#endif
+  return entries;
+}
+
+bool SystemInfo::RemoveFile(const std::string &path) {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  return ::unlink(path.c_str()) == 0;
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  std::error_code ec;
+  return std::filesystem::remove(path, ec);
 #endif
 }
 

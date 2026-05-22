@@ -894,23 +894,29 @@ if(CLIO_CORE_ENABLE_TESTS)
          rm -rf \"${CMAKE_BINARY_DIR}\"/cee_test_data 2>/dev/null; \
          exit 0")
 
-    add_test(
-        NAME chimaera_pre_test_cleanup
-        COMMAND bash -c "${_chimaera_cleanup_cmd}"
-    )
-    set_tests_properties(chimaera_pre_test_cleanup PROPERTIES
-        TIMEOUT 30
-        FIXTURES_SETUP chimaera_test_cleanup_fixture
-    )
+    # POSIX-only: the cleanup script shells out to bash + fuser/rm and touches
+    # /tmp and /dev/shm, none of which exist on Windows. The fixture-dependent
+    # tests are also skipped on Windows (fork-based), so simply not registering
+    # this fixture there is the correct behavior.
+    if(UNIX)
+      add_test(
+          NAME chimaera_pre_test_cleanup
+          COMMAND bash -c "${_chimaera_cleanup_cmd}"
+      )
+      set_tests_properties(chimaera_pre_test_cleanup PROPERTIES
+          TIMEOUT 30
+          FIXTURES_SETUP chimaera_test_cleanup_fixture
+      )
 
-    add_test(
-        NAME chimaera_post_test_cleanup
-        COMMAND bash -c "${_chimaera_cleanup_cmd}"
-    )
-    set_tests_properties(chimaera_post_test_cleanup PROPERTIES
-        TIMEOUT 30
-        FIXTURES_CLEANUP chimaera_test_cleanup_fixture
-    )
+      add_test(
+          NAME chimaera_post_test_cleanup
+          COMMAND bash -c "${_chimaera_cleanup_cmd}"
+      )
+      set_tests_properties(chimaera_post_test_cleanup PROPERTIES
+          TIMEOUT 30
+          FIXTURES_CLEANUP chimaera_test_cleanup_fixture
+      )
+    endif()
 endif()
 
 #------------------------------------------------------------------------------
@@ -1322,7 +1328,12 @@ message(STATUS "")
 # it up at startup.
 
 # Shared libraries -> iowarp_core/lib/
-set(PIP_LIB_TARGETS clio_ctp_host clio_run_cxx)
+set(PIP_LIB_TARGETS)
+foreach(_t clio_ctp_host clio_run_cxx)
+  if(TARGET ${_t})
+    list(APPEND PIP_LIB_TARGETS ${_t})
+  endif()
+endforeach()
 if(TARGET clio_admin_client)
   list(APPEND PIP_LIB_TARGETS clio_admin_client clio_admin_runtime)
 endif()
@@ -1347,12 +1358,14 @@ if(CLIO_CORE_ENABLE_CEE AND TARGET clio_cee_api)
   list(APPEND PIP_LIB_TARGETS clio_cee_api)
 endif()
 
-install(TARGETS ${PIP_LIB_TARGETS}
-  COMPONENT pip_package
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  PUBLIC_HEADER DESTINATION include/chimaera)
+if(PIP_LIB_TARGETS)
+  install(TARGETS ${PIP_LIB_TARGETS}
+    COMPONENT pip_package
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    PUBLIC_HEADER DESTINATION include/chimaera)
+endif()
 
 # CLI binary -> iowarp_core/bin/
 # Install the canonical `clio_run` binary plus a legacy `chimaera` symlink.

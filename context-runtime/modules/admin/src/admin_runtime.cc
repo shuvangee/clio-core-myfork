@@ -40,7 +40,7 @@
 
 #include "clio_runtime/admin/admin_runtime.h"
 
-#include <clio_runtime/chimaera_manager.h>
+#include <clio_runtime/manager.h>
 #include <clio_runtime/module_manager.h>
 #include <clio_runtime/pool_manager.h>
 #include <clio_runtime/task_archives.h>
@@ -247,7 +247,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   // Dedicated single peer recv thread: polls the main p2p transport
   // (port 9413 by default) and dispatches inbound task forwards/responses.
   peer_recv_thread_ = std::thread([this]() {
-    pthread_setname_np(pthread_self(), "chi-peer-recv");
+    ctp::SystemInfo::SetCurrentThreadName("chi-peer-recv");
     auto *ipc_manager = CLIO_IPC;
     ctp::lbm::Transport *lbm_transport = nullptr;
     for (int spin = 0; spin < 1000 && !recv_shutdown_.load(); ++spin) {
@@ -309,7 +309,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   // Dedicated single client recv thread: drains TCP (port 9416) and IPC
   // (unix socket) client transports via IpcCpu2CpuZmq::RuntimeRecv.
   client_recv_thread_ = std::thread([this]() {
-    pthread_setname_np(pthread_self(), "chi-client-recv");
+    ctp::SystemInfo::SetCurrentThreadName("chi-client-recv");
     auto *ipc_manager = CLIO_IPC;
     HLOG(kInfo, "[ClientRecvThread] started");
     while (!recv_shutdown_.load(std::memory_order_acquire)) {
@@ -508,9 +508,9 @@ void Runtime::InitiateShutdown(chi::u32 grace_period_ms) {
   is_shutdown_requested_ = true;
 
   // Get CLIO Runtime manager to initiate shutdown
-  auto *chimaera_manager = CLIO_CHIMAERA_MANAGER;
-  if (chimaera_manager) {
-    // chimaera_manager->InitiateShutdown(grace_period_ms);
+  auto *runtime_manager = CLIO_RUNTIME_MANAGER;
+  if (runtime_manager) {
+    // runtime_manager->InitiateShutdown(grace_period_ms);
   }
   std::abort();
 }

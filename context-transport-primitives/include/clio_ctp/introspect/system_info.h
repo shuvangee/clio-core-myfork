@@ -228,7 +228,30 @@ class SystemInfo {
 
   CTP_DLL static bool IsProcessAlive(int pid);
 
+  /** Local hostname (best-effort, empty on failure). */
+  CTP_DLL static std::string GetHostname();
+
+  /** Set the calling thread's name (best-effort; truncated to OS limits). */
+  CTP_DLL static void SetCurrentThreadName(const std::string &name);
+
+  /** IPv4/IPv6 addresses bound to local interfaces (loopback included). */
+  CTP_DLL static std::vector<std::string> GetLocalInterfaceIps();
+
+  /** Resolve a hostname/IP literal to a list of IP strings (best-effort). */
+  CTP_DLL static std::vector<std::string> ResolveHostname(
+      const std::string &host);
+
+  /** List non-special entries of a directory ("." and ".." filtered out). */
+  CTP_DLL static std::vector<std::string> ListDirectory(
+      const std::string &path);
+
+  /** Remove a file (returns true on success). */
+  CTP_DLL static bool RemoveFile(const std::string &path);
+
   CTP_DLL static std::string GetModuleDirectory();
+
+  /** Directory of the shared library containing the given symbol. */
+  CTP_DLL static std::string GetModuleDirectoryFor(void *symbol);
 
   CTP_DLL static std::string GetLibrarySearchPathVar();
 

@@ -40,8 +40,6 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
-#include <pthread.h>
-#include <unistd.h>
 
 #include "clio_runtime/container.h"
 #include "clio_runtime/pool_manager.h"
@@ -49,7 +47,7 @@
 #include "clio_runtime/ipc_manager.h"
 
 // Global pointer variable definition for Work Orchestrator singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::WorkOrchestrator, g_work_orchestrator);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::WorkOrchestrator, g_work_orchestrator);
 
 namespace clio::run {
 
@@ -164,14 +162,14 @@ void WorkOrchestrator::StopWorkers() {
   HLOG(kDebug, "Stopping {} worker threads...", all_workers_.size());
 
   // Stop all workers and wake them from epoll_wait
-  pid_t runtime_pid = getpid();
+  int runtime_pid = ctp::SystemInfo::GetPid();
   for (auto *worker : all_workers_) {
     if (worker) {
       worker->Stop();
       // Wake worker from epoll_wait so it can observe is_running_ == false
       TaskLane *lane = worker->GetLane();
       if (lane) {
-        pid_t tid = lane->GetTid();
+        int tid = lane->GetTid();
         if (tid > 0) {
           ctp::lbm::EventManager::Signal(runtime_pid, tid);
         }
@@ -179,50 +177,19 @@ void WorkOrchestrator::StopWorkers() {
     }
   }
 
-  // Wait for worker threads with a hard 5-second deadline per thread.
-  // ctp::Thread uses pthread_create internally, so we use pthread_thread_
-  // directly — std_thread_ is never populated when using the Pthread model.
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-
+  // Wait for worker threads with a hard 5-second deadline (5000 ms) per
+  // thread; detach if a thread doesn't exit in time so the destructor
+  // can't block. The thread-model abstraction handles the per-OS join
+  // mechanism (pthread_timedjoin_np on Linux, blocking std::thread::join
+  // on others).
+  auto thread_model = CTP_THREAD_MODEL;
   size_t joined_count = 0;
+  constexpr uint64_t kJoinTimeoutMs = 5000;
   for (auto &thread : worker_threads_) {
-    // pthread_thread_ is 0 when the ctp Thread was never started
-    if (thread.pthread_thread_ == 0) {
+    if (thread_model->TimedJoinOrDetach(thread, kJoinTimeoutMs)) {
       ++joined_count;
-      continue;
-    }
-
-    // Compute absolute deadline for this join attempt.
-    auto remaining =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            deadline - std::chrono::steady_clock::now()).count();
-    if (remaining <= 0) {
-      HLOG(kError, "StopWorkers: deadline exceeded, detaching remaining "
-                   "worker threads");
-      pthread_detach(thread.pthread_thread_);
-      thread.pthread_thread_ = 0;
-      continue;
-    }
-
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec  += remaining / 1000000000LL;
-    ts.tv_nsec += remaining % 1000000000LL;
-    if (ts.tv_nsec >= 1000000000LL) {
-      ts.tv_sec++;
-      ts.tv_nsec -= 1000000000LL;
-    }
-
-    int r = pthread_timedjoin_np(thread.pthread_thread_, nullptr, &ts);
-    if (r == 0) {
-      ++joined_count;
-      thread.pthread_thread_ = 0;
     } else {
-      // ETIMEDOUT or other error — detach so the destructor doesn't block.
-      HLOG(kError, "StopWorkers: thread join timed out (err={}), detaching",
-           r);
-      pthread_detach(thread.pthread_thread_);
-      thread.pthread_thread_ = 0;
+      HLOG(kError, "StopWorkers: thread join timed out, detached");
     }
   }
 

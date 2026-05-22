@@ -213,11 +213,17 @@ class Unit {
   }
 };
 
-/** DWORD type for windows compatability */
-typedef u32 DWORD;
-
-/** HANDLE type for windows compatability */
+/** DWORD type for windows compatability.
+ * On Windows, mirror the platform definition (`unsigned long`) so that the
+ * unqualified DWORD inside namespace ctp implicitly converts to ::DWORD and
+ * can be passed to Win32 APIs like WSASend expecting LPDWORD. */
+#ifdef _WIN32
+typedef unsigned long DWORD;
 typedef void *HANDLE;
+#else
+typedef u32 DWORD;
+typedef void *HANDLE;
+#endif
 
 }  // namespace ctp
 

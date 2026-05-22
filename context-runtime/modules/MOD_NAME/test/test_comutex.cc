@@ -112,7 +112,7 @@ public:
         std::this_thread::sleep_for(100ms);
 
         // Verify core managers are available
-        REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+        REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
         REQUIRE(CLIO_IPC != nullptr);
         REQUIRE(CLIO_POOL_MANAGER != nullptr);
         REQUIRE(CLIO_MODULE_MANAGER != nullptr);

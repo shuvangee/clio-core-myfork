@@ -42,7 +42,7 @@
 #ifndef CHIMAERA_INCLUDE_CHIMAERA_SINGLETONS_H_
 #define CHIMAERA_INCLUDE_CHIMAERA_SINGLETONS_H_
 
-#include "clio_runtime/chimaera_manager.h"
+#include "clio_runtime/manager.h"
 #include "clio_runtime/config_manager.h"
 #include "clio_runtime/ipc_manager.h"
 #include "clio_runtime/pool_manager.h"
@@ -58,7 +58,7 @@
  */
 
 // Core Framework Singleton Access
-// CLIO_CHIMAERA_MANAGER - Main CLIO Runtime framework coordinator
+// CLIO_RUNTIME_MANAGER - Main CLIO Runtime framework coordinator
 // CLIO_CONFIG_MANAGER   - Configuration manager for YAML parsing
 // CLIO_IPC              - IPC manager for shared memory and networking
 // CLIO_POOL_MANAGER     - Pool manager for ChiPools and ChiContainers
@@ -67,7 +67,7 @@
 // CLIO_ADMIN            - Admin ChiMod client singleton
 
 // All macros are defined in their respective header files:
-// - CLIO_CHIMAERA_MANAGER defined in chimaera/chimaera_manager.h
+// - CLIO_RUNTIME_MANAGER defined in clio_runtime/manager.h
 // - CLIO_CONFIG_MANAGER defined in chimaera/config_manager.h
 // - CLIO_IPC defined in chimaera/ipc_manager.h
 // - CLIO_POOL_MANAGER defined in chimaera/pool_manager.h

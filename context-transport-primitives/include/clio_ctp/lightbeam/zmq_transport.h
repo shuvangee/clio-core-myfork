@@ -33,8 +33,8 @@
 
 #pragma once
 #if CTP_ENABLE_ZMQ
-#ifndef _WIN32
 #include <clio_ctp/util/env_compat.h>
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 #include <zmq.h>
@@ -656,7 +656,8 @@ class ZeroMqTransport : public Transport {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 500000;
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
+               reinterpret_cast<const char*>(&tv), sizeof(tv));
     struct sockaddr_in sa;
     std::memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;

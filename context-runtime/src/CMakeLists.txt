@@ -201,6 +201,9 @@ endif()
 # Add CMAKE_INSTALL_PREFIX as a compile definition for ChiMod search paths
 target_compile_definitions(${CHIMAERA_LIB_NAME} PRIVATE
   CHI_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}"
+  # Tell clio_runtime/api.h to emit dllexport (instead of the default
+  # dllimport that consumer DLLs see).
+  CLIO_RUN_BUILDING_DLL=1
 )
 
 # Link libraries
@@ -221,6 +224,10 @@ set_target_properties(${CHIMAERA_LIB_NAME} PROPERTIES
   SOVERSION 1
   PUBLIC_HEADER "${CLIO_RUN_ROOT}/include/clio_runtime/clio_runtime.h"
   OUTPUT_NAME "clio_run_cxx"
+  # On Windows, auto-export all non-static symbols so dependent modules
+  # (clio_admin_client, etc.) can link against clio_run_cxx without each
+  # symbol needing an explicit __declspec(dllexport).
+  WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
 # Export target for parent scope. EXPORT_NAME is intentionally `cxx` so the

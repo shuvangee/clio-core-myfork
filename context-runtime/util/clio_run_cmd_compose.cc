@@ -60,7 +60,7 @@ int Compose(int argc, char** argv) {
   // (via GetGlobalPtrVar) and its destructor is never invoked by the runtime.
   struct ClientFinalizeGuard {
     ~ClientFinalizeGuard() {
-      auto* mgr = CLIO_CHIMAERA_MANAGER;
+      auto* mgr = CLIO_RUNTIME_MANAGER;
       if (mgr) {
         mgr->ClientFinalize();
       }

@@ -94,11 +94,11 @@ TEST_CASE("Basic Chimaera Initialization", "[runtime][basic]") {
     REQUIRE(g_initialized);
 
     // Verify core managers are available (if not null)
-    if (CLIO_CHIMAERA_MANAGER != nullptr) {
+    if (CLIO_RUNTIME_MANAGER != nullptr) {
       INFO("Chimaera manager is available");
-      REQUIRE(CLIO_CHIMAERA_MANAGER->IsInitialized());
-      REQUIRE(CLIO_CHIMAERA_MANAGER->IsRuntime());
-      REQUIRE(CLIO_CHIMAERA_MANAGER->IsClient());
+      REQUIRE(CLIO_RUNTIME_MANAGER->IsInitialized());
+      REQUIRE(CLIO_RUNTIME_MANAGER->IsRuntime());
+      REQUIRE(CLIO_RUNTIME_MANAGER->IsClient());
     } else {
       INFO("Chimaera manager is not available");
     }
@@ -129,7 +129,7 @@ TEST_CASE("Combined Initialization", "[runtime][client][combined]") {
       INFO("Both runtime and client initialized successfully");
       
       // Check if managers are available
-      if (CLIO_CHIMAERA_MANAGER != nullptr) {
+      if (CLIO_RUNTIME_MANAGER != nullptr) {
         INFO("Chimaera manager available");
       }
       if (CLIO_IPC != nullptr) {

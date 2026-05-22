@@ -315,8 +315,7 @@ class BdevChimodFixture {
   void cleanup() {
     // Remove test file if it exists
     if (!current_test_file_.empty()) {
-      if (access(current_test_file_.c_str(), F_OK) == 0) {
-        unlink(current_test_file_.c_str());
+      if (ctp::SystemInfo::RemoveFile(current_test_file_)) {
         HLOG(kInfo, "Cleaned up test file: {}", current_test_file_);
       }
     }
@@ -1364,7 +1363,7 @@ TEST_CASE("bdev_file_explicit_backend_shm", "[bdev][file][explicit][shm]") {
     INFO("Skipping: CHI_IPC_MODE=" + std::string(ipc_mode) + " (need SHM)");
     return;
   }
-  setenv("CLIO_IPC_MODE", "SHM", 1);
+  ctp::SystemInfo::Setenv("CLIO_IPC_MODE", "SHM", 1);
   run_bdev_file_explicit_backend_test("shm");
 }
 
@@ -1374,7 +1373,7 @@ TEST_CASE("bdev_file_explicit_backend_tcp", "[bdev][file][explicit][tcp]") {
     INFO("Skipping: CHI_IPC_MODE=" + std::string(ipc_mode) + " (need TCP)");
     return;
   }
-  setenv("CLIO_IPC_MODE", "TCP", 1);
+  ctp::SystemInfo::Setenv("CLIO_IPC_MODE", "TCP", 1);
   run_bdev_file_explicit_backend_test("tcp");
 }
 
@@ -1384,7 +1383,7 @@ TEST_CASE("bdev_file_explicit_backend_ipc", "[bdev][file][explicit][ipc]") {
     INFO("Skipping: CHI_IPC_MODE=" + std::string(ipc_mode) + " (need IPC)");
     return;
   }
-  setenv("CLIO_IPC_MODE", "IPC", 1);
+  ctp::SystemInfo::Setenv("CLIO_IPC_MODE", "IPC", 1);
   run_bdev_file_explicit_backend_test("ipc");
 }
 

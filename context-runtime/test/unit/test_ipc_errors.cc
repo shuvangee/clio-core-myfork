@@ -358,7 +358,7 @@ TEST_CASE("IpcErrors - Concurrent Init/Finalize", "[ipc][errors][multiproc]") {
           ipc->GetNumSchedQueues();
 
           // Finalize using CLIO Runtime API
-          CLIO_CHIMAERA_MANAGER->ServerFinalize();
+          CLIO_RUNTIME_MANAGER->ServerFinalize();
         }
         exit(0);
       } else {

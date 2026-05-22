@@ -40,11 +40,6 @@
 
 #include "clio_runtime/worker.h"
 
-#ifndef _WIN32
-#include <sys/syscall.h>
-#include <unistd.h>
-#endif
-
 #ifndef __NVCOMPILER
 #include <coroutine>
 #endif
@@ -226,7 +221,7 @@ void Worker::Run() {
   is_running_ = true;
 
   // Set up thread ID and signal event via EventManager
-  pid_t tid = static_cast<pid_t>(syscall(SYS_gettid));
+  int tid = ctp::SystemInfo::GetTid();
   if (assigned_lane_) {
     assigned_lane_->SetTid(tid);
   }

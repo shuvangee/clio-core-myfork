@@ -40,7 +40,7 @@
 
 #include "clio_runtime/simple_mod/simple_mod_runtime.h"
 
-#include <clio_runtime/chimaera_manager.h>
+#include <clio_runtime/manager.h>
 #include <clio_runtime/module_manager.h>
 #include <clio_runtime/pool_manager.h>
 #include <clio_runtime/task_archives.h>

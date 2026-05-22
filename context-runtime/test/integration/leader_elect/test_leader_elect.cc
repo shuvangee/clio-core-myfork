@@ -88,7 +88,7 @@ class LeaderElectFixture {
       if (success) {
         g_initialized = true;
         std::this_thread::sleep_for(500ms);
-        REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+        REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
         REQUIRE(CLIO_IPC != nullptr);
         REQUIRE(CLIO_POOL_MANAGER != nullptr);
         REQUIRE(CLIO_IPC->IsInitialized());
@@ -185,7 +185,7 @@ TEST_CASE("System healthy after leader restart",
   bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
   REQUIRE(success);
   std::this_thread::sleep_for(500ms);
-  REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+  REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
   REQUIRE(CLIO_IPC != nullptr);
   REQUIRE(CLIO_POOL_MANAGER != nullptr);
   REQUIRE(CLIO_IPC->IsInitialized());

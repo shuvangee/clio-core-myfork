@@ -12632,7 +12632,7 @@ TEST_CASE("Autogen - PoolManager operations", "[autogen][poolmanager][ops]") {
 // ==========================================================================
 TEST_CASE("Autogen - ChimaeraManager accessors", "[autogen][chimaera][manager]") {
   EnsureInitialized();
-  auto* chimaera_mgr = CLIO_CHIMAERA_MANAGER;
+  auto* chimaera_mgr = CLIO_RUNTIME_MANAGER;
 
   SECTION("IsInitialized") {
     REQUIRE(chimaera_mgr->IsInitialized() == true);
@@ -14227,7 +14227,7 @@ TEST_CASE("Autogen - PoolManager extended", "[autogen][poolmgr][extended]") {
 // ==========================================================================
 TEST_CASE("Autogen - ChimaeraManager extended", "[autogen][chimgr][extended]") {
   EnsureInitialized();
-  auto* chi_mgr = CLIO_CHIMAERA_MANAGER;
+  auto* chi_mgr = CLIO_RUNTIME_MANAGER;
 
   SECTION("GetCurrentHostname") {
     std::string hostname = chi_mgr->GetCurrentHostname();
