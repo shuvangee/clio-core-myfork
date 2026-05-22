@@ -95,7 +95,7 @@ public:
     REQUIRE(cte_client != nullptr);
 
     // Setup test paths
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
 
     test_config_path_ = home_dir + "/adios2_test_config.xml";

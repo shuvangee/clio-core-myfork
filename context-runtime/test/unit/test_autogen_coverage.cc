@@ -11533,7 +11533,7 @@ TEST_CASE("Autogen - SystemInfo TLS", "[autogen][systeminfo][tls]") {
 
 TEST_CASE("Autogen - SystemInfo env", "[autogen][systeminfo][env]") {
   SECTION("Getenv existing") {
-    std::string home = ctp::SystemInfo::Getenv("HOME");
+    std::string home = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home.empty());
     INFO("HOME=" + home);
   }
@@ -11800,7 +11800,7 @@ TEST_CASE("Autogen - ConfigParse ExpandPath", "[autogen][configparse][expandpath
   }
 
   SECTION("With HOME env var") {
-    std::string home = ctp::SystemInfo::Getenv("HOME");
+    std::string home = ctp::SystemInfo::GetHomeDir();
     std::string path = ctp::ConfigParse::ExpandPath("${HOME}/test");
     REQUIRE(path == home + "/test");
   }

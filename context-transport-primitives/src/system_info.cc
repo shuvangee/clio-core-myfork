@@ -636,6 +636,20 @@ std::string SystemInfo::GetModuleDirectory() {
 #endif
 }
 
+void SystemInfo::TerminateProcessNow(int exit_code) {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  // _exit skips atexit handlers, static destructors, and CRT cleanup.
+  ::_exit(exit_code);
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  // TerminateProcess is more aggressive than _exit on Windows: it skips
+  // DLL detach notifications too, which is exactly what we need to dodge
+  // libzmq's signaler abort during shutdown.
+  ::TerminateProcess(::GetCurrentProcess(), static_cast<UINT>(exit_code));
+  // Fallback in case TerminateProcess somehow returns (it shouldn't).
+  ::_exit(exit_code);
+#endif
+}
+
 void SystemInfo::SetCurrentThreadName(const std::string &name) {
 #if CTP_ENABLE_PROCFS_SYSINFO
 #ifdef __linux__
@@ -646,6 +660,22 @@ void SystemInfo::SetCurrentThreadName(const std::string &name) {
   // SetThreadDescription needs wide chars.
   std::wstring wname(name.begin(), name.end());
   SetThreadDescription(GetCurrentThread(), wname.c_str());
+#endif
+}
+
+std::string SystemInfo::GetHomeDir() {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  const char *home = std::getenv("HOME");
+  return home ? std::string(home) : std::string();
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  // USERPROFILE is the canonical home on Windows (C:\Users\<name>).
+  // Fall back to HOMEDRIVE+HOMEPATH or HOME if a user explicitly set them.
+  char buf[MAX_PATH];
+  DWORD len = ::GetEnvironmentVariableA("USERPROFILE", buf, sizeof(buf));
+  if (len > 0 && len < sizeof(buf)) return std::string(buf, len);
+  len = ::GetEnvironmentVariableA("HOME", buf, sizeof(buf));
+  if (len > 0 && len < sizeof(buf)) return std::string(buf, len);
+  return std::string();
 #endif
 }
 
@@ -861,7 +891,19 @@ void SystemInfo::Setenv(const char *name, const std::string &value,
 #if CTP_ENABLE_PROCFS_SYSINFO
   setenv(name, value.c_str(), overwrite);
 #elif CTP_ENABLE_WINDOWS_SYSINFO
-  SetEnvironmentVariable(name, value.c_str());
+  // _putenv_s updates BOTH the CRT environment block (which std::getenv
+  // reads) and the Win32 process environment block (which
+  // GetEnvironmentVariable reads). SetEnvironmentVariable only touches
+  // the Win32 block, which would leave std::getenv blind to the new
+  // value — and chi::env::GetCompat goes through std::getenv. Honor the
+  // overwrite flag manually since _putenv_s always overwrites.
+  if (!overwrite) {
+    char probe[2];
+    if (::GetEnvironmentVariableA(name, probe, sizeof(probe)) != 0) {
+      return;  // already set, caller asked us not to overwrite
+    }
+  }
+  (void)_putenv_s(name, value.c_str());
 #endif
 }
 
@@ -869,7 +911,9 @@ void SystemInfo::Unsetenv(const char *name) {
 #if CTP_ENABLE_PROCFS_SYSINFO
   unsetenv(name);
 #elif CTP_ENABLE_WINDOWS_SYSINFO
-  SetEnvironmentVariable(name, nullptr);
+  // Setting an env var to an empty string via _putenv_s removes it from
+  // both the CRT and Win32 environment blocks.
+  (void)_putenv_s(name, "");
 #endif
 }
 

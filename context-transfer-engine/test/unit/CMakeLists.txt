@@ -625,7 +625,11 @@ set_tests_properties(
 endif()
 
 # Tests that start a full CLIO Runtime runtime share /tmp/chimaera_iowarp SHM
-# segments and TCP/IPC ports, so they must NOT run in parallel.
+# segments and TCP/IPC ports, so they must NOT run in parallel. They also
+# need the chimaera cleanup fixture so a previous runtime process holding
+# 0.0.0.0:9416 doesn't break the next test's `IpcManager::ServerInit` with
+# "Address in use" (especially on Windows, where TIME_WAIT can hang on for
+# minutes and SIMPLE_TEST_PROCESS_EXIT skips libzmq's own socket close).
 set_tests_properties(
     cte_query_tag_exact
     cte_query_tag_wildcard
@@ -655,7 +659,16 @@ set_tests_properties(
     cte_tiered_dram_default_all
     cte_block_reuse_all
     cte_reorganize_all
-    PROPERTIES RESOURCE_LOCK "chimaera_runtime"
+    PROPERTIES
+        RESOURCE_LOCK "chimaera_runtime"
+        FIXTURES_REQUIRED "chimaera_test_cleanup_fixture"
+        # Move the runtime off port 9413 (and its derivatives 9414/9416) onto
+        # a high range so that an IDE / random local server squatting on the
+        # default port doesn't break the test run. libzmq's Windows socket
+        # handle is inheritable, which lets an ancestor process (e.g. the
+        # IDE that spawned ctest) accidentally keep a listener alive across
+        # test runs. Until that's fixed upstream, just dodge.
+        ENVIRONMENT "CLIO_PORT=10500"
 )
 if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM)
 set_tests_properties(

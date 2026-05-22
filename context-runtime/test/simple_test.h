@@ -259,26 +259,28 @@ inline int run_all_tests(const std::string& filter = "") {
 // static-destructor / atexit time with "WSASTARTUP not yet performed" — its
 // mailbox send() runs after some part of the Winsock state has gone away.
 // All tests have already passed by the time we get there, so on Windows we
-// TerminateProcess() to skip every cleanup path (no atexit, no static dtors,
-// no CRT cleanup). On POSIX we _exit() to match the historical behaviour
-// some test cases relied on for skipping worker-join hangs.
-#ifdef _WIN32
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include <windows.h>
-#  define SIMPLE_TEST_PROCESS_EXIT(code) \
-     (::TerminateProcess(::GetCurrentProcess(), (UINT)(code)))
-#else
-#  include <unistd.h>
-#  define SIMPLE_TEST_PROCESS_EXIT(code) (::_exit((code)))
-#endif
+// TerminateProcess() to skip every cleanup path; POSIX uses _exit() to
+// match the historical behaviour some test cases relied on for skipping
+// worker-join hangs. Both go through ctp::SystemInfo so this header stays
+// free of <windows.h> — pulling that in here leaks Yield/min/max/SendMessage
+// macros into every test TU.
+#include "clio_ctp/introspect/system_info.h"
+
+// SIMPLE_TEST_PROCESS_EXIT is a never-returning call. Test cases that
+// historically did `_exit(0)` to skip worker-join hangs should use this
+// instead so the Windows-specific TerminateProcess path runs there.
+#define SIMPLE_TEST_PROCESS_EXIT(code) (::ctp::SystemInfo::TerminateProcessNow((code)))
 
 // Main function for test executable.
 // On POSIX we return the result normally so leak sanitizers / coverage
 // instrumentation can run static destructors. On Windows we TerminateProcess
 // after running tests to dodge the libzmq teardown abort.
 #ifdef _WIN32
+// On Windows we skip g_test_finalize before TerminateProcess: the
+// runtime's ServerFinalize / ClientFinalize path is what triggers the
+// libzmq teardown abort (and, in at least one test, a stack-buffer
+// overrun in the same shutdown chain). TerminateProcess immediately
+// follows, so the OS handles socket / handle reclamation.
 #  define SIMPLE_TEST_MAIN() \
 int main(int argc, char* argv[]) { \
     std::string filter = ""; \
@@ -286,7 +288,6 @@ int main(int argc, char* argv[]) { \
         filter = argv[1]; \
     } \
     int result = SimpleTest::run_all_tests(filter); \
-    if (SimpleTest::g_test_finalize) SimpleTest::g_test_finalize(); \
     SIMPLE_TEST_PROCESS_EXIT(result); \
     return result; /* unreachable on Windows */ \
 }

@@ -110,8 +110,8 @@ class DramDefaultTieringFixture {
     Cleanup();
     CreateConfigFile();
 
-    setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
-    setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
+    ctp::SystemInfo::Setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
+    ctp::SystemInfo::Setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
 
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
     REQUIRE(success);
@@ -383,5 +383,6 @@ int main(int argc, char **argv) {
 
   delete g_fixture;
   g_fixture = nullptr;
-  return result;
+  SIMPLE_TEST_PROCESS_EXIT(result);
+  return result;  // unreachable on Windows
 }

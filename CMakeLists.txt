@@ -894,10 +894,6 @@ if(CLIO_CORE_ENABLE_TESTS)
          rm -rf \"${CMAKE_BINARY_DIR}\"/cee_test_data 2>/dev/null; \
          exit 0")
 
-    # POSIX-only: the cleanup script shells out to bash + fuser/rm and touches
-    # /tmp and /dev/shm, none of which exist on Windows. The fixture-dependent
-    # tests are also skipped on Windows (fork-based), so simply not registering
-    # this fixture there is the correct behavior.
     if(UNIX)
       add_test(
           NAME chimaera_pre_test_cleanup
@@ -911,6 +907,44 @@ if(CLIO_CORE_ENABLE_TESTS)
       add_test(
           NAME chimaera_post_test_cleanup
           COMMAND bash -c "${_chimaera_cleanup_cmd}"
+      )
+      set_tests_properties(chimaera_post_test_cleanup PROPERTIES
+          TIMEOUT 30
+          FIXTURES_CLEANUP chimaera_test_cleanup_fixture
+      )
+    elseif(WIN32)
+      # Windows equivalent: kill any lingering test binaries that might still
+      # hold our TCP ports (9413/9414/9416). On Windows TIME_WAIT can hold a
+      # listener-bound port for ~2 minutes after the process dies, so cleaning
+      # up between back-to-back tests prevents "Address in use" failures.
+      # We use PowerShell because cmd.exe lacks a one-liner equivalent.
+      #
+      # The kill is best-effort (-ErrorAction SilentlyContinue throughout) so a
+      # stale rule never fails the whole suite. Build artifacts under
+      # ${CMAKE_BINARY_DIR}/bin are scrubbed the same way the POSIX path scrubs
+      # ${CMAKE_BINARY_DIR}/cte_*.dat etc.
+      set(_chimaera_cleanup_cmd_win
+          "$ErrorActionPreference='Continue'; \
+           Get-Process | Where-Object { $_.Path -and $_.Path -like '${CMAKE_BINARY_DIR}/bin/*' } | Stop-Process -Force -ErrorAction SilentlyContinue; \
+           Get-ChildItem '${CMAKE_BINARY_DIR}' -Filter 'cte_*.dat*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; \
+           Get-ChildItem '${CMAKE_BINARY_DIR}' -Filter 'cte_*.yaml' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; \
+           Get-ChildItem '${CMAKE_BINARY_DIR}' -Filter '*stress*.bin*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; \
+           Get-ChildItem '${CMAKE_BINARY_DIR}' -Filter '*reorganize*.bin*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; \
+           if (Test-Path '${CMAKE_BINARY_DIR}/cee_test_data') { Remove-Item -Recurse -Force '${CMAKE_BINARY_DIR}/cee_test_data' -ErrorAction SilentlyContinue }; \
+           exit 0")
+
+      add_test(
+          NAME chimaera_pre_test_cleanup
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_chimaera_cleanup_cmd_win}"
+      )
+      set_tests_properties(chimaera_pre_test_cleanup PROPERTIES
+          TIMEOUT 30
+          FIXTURES_SETUP chimaera_test_cleanup_fixture
+      )
+
+      add_test(
+          NAME chimaera_post_test_cleanup
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_chimaera_cleanup_cmd_win}"
       )
       set_tests_properties(chimaera_post_test_cleanup PROPERTIES
           TIMEOUT 30

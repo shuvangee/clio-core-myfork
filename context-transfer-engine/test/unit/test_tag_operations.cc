@@ -79,7 +79,7 @@ class TagTestFixture {
     INFO("=== Initializing Tag Test Environment ===");
 
     // Initialize test storage path
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
     test_storage_path_ = chi_test_data_dir() + "/cte_tag_test.dat";
 

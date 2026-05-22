@@ -39,7 +39,7 @@
 namespace clio::cte::core {
 
 // Define global pointer variable for CTE client in source file
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio::cte::core::Client, g_cte_client);
+CLIO_CTE_DEFINE_GLOBAL_PTR_VAR_CC(clio::cte::core::Client, g_cte_client);
 
 bool CLIO_CTE_CLIENT_INIT(const std::string &config_path,
                          const chi::PoolQuery &pool_query) {

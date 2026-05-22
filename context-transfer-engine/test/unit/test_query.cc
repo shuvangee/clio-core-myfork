@@ -157,7 +157,7 @@ static std::string chi_test_data_dir() {
 
    CTEQueryTestFixture() {
      // Initialize test storage path in home directory
-     std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+     std::string home_dir = ctp::SystemInfo::GetHomeDir();
      if (home_dir.empty()) {
        throw std::runtime_error("HOME environment variable is not set");
      }

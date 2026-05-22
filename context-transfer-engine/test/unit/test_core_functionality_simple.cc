@@ -84,7 +84,7 @@ public:
     INFO("=== Initializing CTE Core Test Environment ===");
 
     // Initialize test storage path in home directory
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
 
     test_storage_path_ = home_dir + "/cte_test_storage.dat";

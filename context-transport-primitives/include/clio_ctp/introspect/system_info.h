@@ -231,8 +231,19 @@ class SystemInfo {
   /** Local hostname (best-effort, empty on failure). */
   CTP_DLL static std::string GetHostname();
 
+  /** User's home directory (HOME on POSIX, USERPROFILE on Windows).
+   *  Returns empty string if neither is set. */
+  CTP_DLL static std::string GetHomeDir();
+
   /** Set the calling thread's name (best-effort; truncated to OS limits). */
   CTP_DLL static void SetCurrentThreadName(const std::string &name);
+
+  /** Terminate the calling process immediately with the given exit code.
+   *  Skips C++ static destructors, atexit handlers, and CRT cleanup. On
+   *  Windows this is TerminateProcess; on POSIX it's `::_exit`. Used by
+   *  the test framework on Windows to dodge a libzmq teardown abort —
+   *  see GH issue tracking the long-term fix. */
+  [[noreturn]] CTP_DLL static void TerminateProcessNow(int exit_code);
 
   /** IPv4/IPv6 addresses bound to local interfaces (loopback included). */
   CTP_DLL static std::vector<std::string> GetLocalInterfaceIps();

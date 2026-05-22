@@ -76,8 +76,9 @@ public:
   chi::PoolId core_pool_id_;
   
   CTECoreTestFixture() {
-    // Setup test storage path in home directory
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    // Setup test storage path in home directory (HOME on POSIX,
+    // USERPROFILE on Windows — wrapper picks the right one).
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
     test_storage_path_ = home_dir + "/cte_unit_test.dat";
     
