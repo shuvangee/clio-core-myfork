@@ -100,19 +100,19 @@ class CoreClientConfigFixture {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+      success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
       REQUIRE(success);
 
       // Initialize global client
       auto *cte_client = CLIO_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
-      cte_client->Init(clio_cte::core::kCtePoolId);
+      cte_client->Init(clio::cte::core::kCtePoolId);
 
       // Create CTE core pool
-      clio_cte::core::CreateParams params;
+      clio::cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
-          chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
-          clio_cte::core::kCtePoolId, params);
+          chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
+          clio::cte::core::kCtePoolId, params);
       create_task.Wait();
       REQUIRE(create_task->GetReturnCode() == 0);
 
@@ -145,17 +145,17 @@ class CoreClientConfigFixture {
 
     // Create bdev pool
     chi::PoolId bdev_pool_id(900, 0);
-    clio_run::bdev::Client bdev_client(bdev_pool_id);
+    clio::run::bdev::Client bdev_client(bdev_pool_id);
     auto create_task =
         bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), test_storage_path_,
-                                bdev_pool_id, clio_run::bdev::BdevType::kFile);
+                                bdev_pool_id, clio::run::bdev::BdevType::kFile);
     create_task.Wait();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Register target
     auto reg_task = cte_client->AsyncRegisterTarget(
-        test_storage_path_, clio_run::bdev::BdevType::kFile, kTestTargetSize,
+        test_storage_path_, clio::run::bdev::BdevType::kFile, kTestTargetSize,
         chi::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     REQUIRE(reg_task->GetReturnCode() == 0);
@@ -193,7 +193,7 @@ class CoreClientConfigFixture {
 // ============================================================================
 
 TEST_CASE("Config - Default Construction", "[core][config]") {
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   // Default config should be valid
   REQUIRE(config.Validate());
   INFO("Default config constructed successfully");
@@ -208,7 +208,7 @@ neighborhood: 8
 poll_period_ms: 3000
 )");
 
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromFile(fixture.test_config_path_);
   REQUIRE(success);
   REQUIRE(config.Validate());
@@ -216,14 +216,14 @@ poll_period_ms: 3000
 }
 
 TEST_CASE("Config - Load from Invalid File Path", "[core][config]") {
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromFile("/nonexistent/path/config.yaml");
   REQUIRE(!success);
   INFO("Correctly rejected non-existent file");
 }
 
 TEST_CASE("Config - Load from Empty Path", "[core][config]") {
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromFile("");
   REQUIRE(!success);
   INFO("Correctly rejected empty path");
@@ -235,7 +235,7 @@ neighborhood: 6
 poll_period_ms: 4000
 )";
 
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromString(yaml_config);
   REQUIRE(success);
   REQUIRE(config.Validate());
@@ -243,7 +243,7 @@ poll_period_ms: 4000
 }
 
 TEST_CASE("Config - Load from Empty String", "[core][config]") {
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromString("");
   REQUIRE(!success);
   INFO("Correctly rejected empty string");
@@ -252,7 +252,7 @@ TEST_CASE("Config - Load from Empty String", "[core][config]") {
 TEST_CASE("Config - Load from Invalid YAML", "[core][config]") {
   std::string bad_yaml = "invalid: [unclosed";
 
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromString(bad_yaml);
   REQUIRE(!success);
   INFO("Correctly rejected invalid YAML");
@@ -262,7 +262,7 @@ TEST_CASE("Config - Load from Environment", "[core][config]") {
   // Test with unset environment variable (should succeed with defaults)
   unsetenv("CLIO_CTE_CONFIG");
 
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.LoadFromEnvironment();
   REQUIRE(success);  // Should succeed with defaults
   INFO("Loaded default config when env var not set");
@@ -271,7 +271,7 @@ TEST_CASE("Config - Load from Environment", "[core][config]") {
 TEST_CASE("Config - Save to File", "[core][config]") {
   CoreClientConfigFixture fixture;
 
-  clio_cte::core::Config config;
+  clio::cte::core::Config config;
   bool success = config.SaveToFile(fixture.test_config_path_);
   REQUIRE(success);
 
@@ -365,7 +365,7 @@ TEST_CASE("Client - AsyncDelTag by ID", "[core][client][tag]") {
   create_task.Wait();
   REQUIRE(create_task->GetReturnCode() == 0);
 
-  clio_cte::core::TagId tag_id = create_task->tag_id_;
+  clio::cte::core::TagId tag_id = create_task->tag_id_;
 
   // Delete by ID
   auto del_task = client->AsyncDelTag(tag_id);

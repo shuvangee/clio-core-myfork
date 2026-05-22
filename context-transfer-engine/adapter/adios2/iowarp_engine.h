@@ -127,12 +127,12 @@ class IowarpEngine : public adios2::plugin::PluginEngineInterface {
  private:
   /** Structure to hold deferred task and its buffer */
   struct DeferredTask {
-    chi::Future<clio_cte::core::PutBlobTask> task;
+    chi::Future<clio::cte::core::PutBlobTask> task;
     ctp::ipc::FullPtr<char> buffer;
   };
 
   /** CTE Tag for this ADIOS file/session */
-  std::unique_ptr<clio_cte::core::Tag> current_tag_;
+  std::unique_ptr<clio::cte::core::Tag> current_tag_;
 
   /** Current step counter */
   size_t current_step_;

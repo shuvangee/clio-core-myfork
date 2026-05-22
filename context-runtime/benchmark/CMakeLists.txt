@@ -1,11 +1,11 @@
 # Benchmark directory
 
 # BDev I/O throughput benchmark
-add_executable(clio_run_thrpt_benchmark
-  clio_run_thrpt_benchmark.cc
+add_executable(clio_run_thrpt_bench
+  clio_run_thrpt_bench.cc
 )
 
-target_link_libraries(clio_run_thrpt_benchmark
+target_link_libraries(clio_run_thrpt_bench
   cxx                             # Core CLIO Runtime
   chimaera::bdev_client           # BDev client for I/O operations
   chimaera::MOD_NAME_client       # MOD_NAME template module
@@ -14,7 +14,7 @@ target_link_libraries(clio_run_thrpt_benchmark
 )
 
 # Install benchmark executable
-install(TARGETS clio_run_thrpt_benchmark
+install(TARGETS clio_run_thrpt_bench
   DESTINATION bin
 )
 

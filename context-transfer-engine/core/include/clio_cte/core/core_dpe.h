@@ -41,7 +41,7 @@
 #include <memory>
 #include <random>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 /**
  * Data Placement Engine types
@@ -157,6 +157,6 @@ public:
   static std::unique_ptr<DataPlacementEngine> CreateDpe(const std::string& dpe_str);
 };
 
-} // namespace clio_cte::core
+} // namespace clio::cte::core
 
 #endif // WRPCTE_CORE_DPE_H_

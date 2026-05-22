@@ -1231,10 +1231,47 @@ install(
         lib/cmake/iowarp-core
 )
 
+# Install a `clio-core` alias package next to `iowarp-core` so downstream
+# code can pick the canonical clio_* name:
+#   find_package(clio-core CONFIG REQUIRED)   # canonical
+#   find_package(iowarp-core CONFIG REQUIRED) # legacy (still works)
+# clio-coreConfig.cmake is a thin shim that includes iowarp-coreConfig.cmake
+# next door, so both names resolve to the same target set with zero
+# duplication.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/clio-coreConfig.cmake"
+"# Auto-generated shim by /CMakeLists.txt.  clio-core is the canonical
+# name for the package historically called iowarp-core; this file simply
+# forwards to iowarp-coreConfig.cmake installed in the sibling
+# lib/cmake/iowarp-core/ directory.
+get_filename_component(_clio_core_self_dir
+    \"\${CMAKE_CURRENT_LIST_DIR}\" REALPATH)
+get_filename_component(_clio_core_iowarp_dir
+    \"\${_clio_core_self_dir}/../iowarp-core\" REALPATH)
+if(NOT EXISTS \"\${_clio_core_iowarp_dir}/iowarp-coreConfig.cmake\")
+    set(clio-core_FOUND FALSE)
+    set(clio-core_NOT_FOUND_MESSAGE
+        \"clio-coreConfig.cmake forwards to iowarp-coreConfig.cmake but it \"
+        \"was not found at \${_clio_core_iowarp_dir}/iowarp-coreConfig.cmake\")
+    return()
+endif()
+include(\"\${_clio_core_iowarp_dir}/iowarp-coreConfig.cmake\")
+")
+configure_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/iowarp-coreConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/clio-coreConfigVersion.cmake"
+    COPYONLY)
+install(
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/clio-coreConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/clio-coreConfigVersion.cmake"
+    DESTINATION
+        lib/cmake/clio-core
+)
+
 message(STATUS "")
 message(STATUS "IOWarp Core unified package configuration:")
-message(STATUS "  Package name: iowarp-core")
-message(STATUS "  Install destination: lib/cmake/iowarp-core")
+message(STATUS "  Package name: iowarp-core (canonical alias: clio-core)")
+message(STATUS "  Install destination: lib/cmake/iowarp-core, lib/cmake/clio-core")
 message(STATUS "  Components included:")
 message(STATUS "    - ClioCtp (context-transport-primitives)")
 message(STATUS "    - Chimaera (runtime)")
@@ -1292,7 +1329,7 @@ endif()
 if(TARGET clio_bdev_client)
   list(APPEND PIP_LIB_TARGETS clio_bdev_client clio_bdev_runtime)
 endif()
-# Template chimod (used by clio_run_thrpt_benchmark's "latency" test case via
+# Template chimod (used by clio_run_thrpt_bench's "latency" test case via
 # chimaera::MOD_NAME_client).  Without this the benchmark binary's NEEDED list
 # references libchimaera_MOD_NAME_client.so but the wheel doesn't contain it,
 # and the dynamic linker segfaults at load time on glibc/patchelf combinations
@@ -1365,7 +1402,7 @@ endif()
 if(CLIO_CORE_ENABLE_BENCHMARKS)
   set(PIP_BENCH_TARGETS
     clio_cte_bench
-    clio_run_thrpt_benchmark)
+    clio_run_thrpt_bench)
   foreach(_bench ${PIP_BENCH_TARGETS})
     if(TARGET ${_bench})
       install(TARGETS ${_bench}

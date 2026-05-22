@@ -81,17 +81,17 @@ TEST_CASE("TaskBatch Basic Functionality", "[submit_batch][admin]") {
   ChimaeraTestFixture fixture;
 
   SECTION("TaskBatch starts empty") {
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
     REQUIRE(batch.GetTaskCount() == 0);
     REQUIRE(batch.GetTaskInfos().empty());
     REQUIRE(batch.GetSerializedData().empty());
   }
 
   SECTION("TaskBatch Add increments task count") {
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
 
     // Add a FlushTask to the batch
-    batch.Add<clio_run::admin::FlushTask>(
+    batch.Add<clio::run::admin::FlushTask>(
         chi::CreateTaskId(),
         chi::kAdminPoolId,
         chi::PoolQuery::Local());
@@ -102,11 +102,11 @@ TEST_CASE("TaskBatch Basic Functionality", "[submit_batch][admin]") {
   }
 
   SECTION("TaskBatch can add multiple tasks") {
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
 
     // Add multiple FlushTasks to the batch
     for (int i = 0; i < 5; ++i) {
-      batch.Add<clio_run::admin::FlushTask>(
+      batch.Add<clio::run::admin::FlushTask>(
           chi::CreateTaskId(),
           chi::kAdminPoolId,
           chi::PoolQuery::Local());
@@ -122,10 +122,10 @@ TEST_CASE("SubmitBatch Empty Batch", "[submit_batch][admin]") {
 
   SECTION("SubmitBatch with empty batch returns success immediately") {
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     // Create empty batch
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
 
     // Submit empty batch
     auto submit_task = admin_client.AsyncSubmitBatch(
@@ -145,11 +145,11 @@ TEST_CASE("SubmitBatch Single Task", "[submit_batch][admin]") {
 
   SECTION("SubmitBatch with single FlushTask succeeds") {
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     // Create batch with one task
-    clio_run::admin::TaskBatch batch;
-    batch.Add<clio_run::admin::FlushTask>(
+    clio::run::admin::TaskBatch batch;
+    batch.Add<clio::run::admin::FlushTask>(
         chi::CreateTaskId(),
         chi::kAdminPoolId,
         chi::PoolQuery::Local());
@@ -174,14 +174,14 @@ TEST_CASE("SubmitBatch Multiple Tasks", "[submit_batch][admin]") {
 
   SECTION("SubmitBatch with multiple FlushTasks succeeds") {
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     // Create batch with multiple tasks
     const size_t num_tasks = 10;
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
 
     for (size_t i = 0; i < num_tasks; ++i) {
-      batch.Add<clio_run::admin::FlushTask>(
+      batch.Add<clio::run::admin::FlushTask>(
           chi::CreateTaskId(),
           chi::kAdminPoolId,
           chi::PoolQuery::Local());
@@ -208,14 +208,14 @@ TEST_CASE("SubmitBatch Large Batch", "[submit_batch][admin]") {
 
   SECTION("SubmitBatch with batch larger than parallel limit (32) succeeds") {
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     // Create batch with more tasks than parallel limit (32)
     const size_t num_tasks = 50;
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
 
     for (size_t i = 0; i < num_tasks; ++i) {
-      batch.Add<clio_run::admin::FlushTask>(
+      batch.Add<clio::run::admin::FlushTask>(
           chi::CreateTaskId(),
           chi::kAdminPoolId,
           chi::PoolQuery::Local());
@@ -242,14 +242,14 @@ TEST_CASE("SubmitBatch with MonitorTask", "[submit_batch][admin]") {
 
   SECTION("SubmitBatch with MonitorTasks succeeds") {
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     // Create batch with multiple MonitorTasks
     const size_t num_tasks = 5;
-    clio_run::admin::TaskBatch batch;
+    clio::run::admin::TaskBatch batch;
 
     for (size_t i = 0; i < num_tasks; ++i) {
-      batch.Add<clio_run::admin::MonitorTask>(
+      batch.Add<clio::run::admin::MonitorTask>(
           chi::CreateTaskId(),
           chi::kAdminPoolId,
           chi::PoolQuery::Local(),

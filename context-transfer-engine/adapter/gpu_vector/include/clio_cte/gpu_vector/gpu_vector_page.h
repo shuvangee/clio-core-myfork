@@ -13,7 +13,7 @@
 #include <clio_runtime/gpu/future.h>
 #include <clio_cte/core/core_tasks.h>
 
-namespace clio_cte::gpu_vector {
+namespace clio::cte::gpu_vector {
 
 /**
  * One entry in the per-block rescore ring buffer. Producers (user
@@ -84,8 +84,8 @@ struct Page {
   chi::u64 lru_clock;      /**< clock64() at last access (for LRU). */
   float score;             /**< Normalized priority, set by manager. */
   chi::u32 tier;           /**< 0 = HBM (kDeviceMem), 1 = DRAM (kPinnedHost). */
-  chi::gpu::Future<clio_cte::core::PutBlobTask> active_put;
-  chi::gpu::Future<clio_cte::core::GetBlobTask> active_get;
+  chi::gpu::Future<clio::cte::core::PutBlobTask> active_put;
+  chi::gpu::Future<clio::cte::core::GetBlobTask> active_get;
 };
 
 /**
@@ -124,6 +124,6 @@ inline constexpr chi::u32 kPageBusy = 1u << 1;
 /** A GetBlob is in flight for this page (FaultPage path). */
 inline constexpr chi::u32 kPageGetInFlight = 1u << 2;
 
-}  // namespace clio_cte::gpu_vector
+}  // namespace clio::cte::gpu_vector
 
 #endif  // CLIO_CTE_GPU_VECTOR_PAGE_H_

@@ -37,7 +37,7 @@
 #include "clio_ctp/util/singleton.h"
 #include <clio_runtime/clio_runtime.h>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 /**
  * Main Content Transfer Engine manager class
@@ -111,12 +111,12 @@ private:
   bool is_initialized_;   /**< True when fully initialized */
 };
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
 // Global pointer variable declaration for ContentTransferEngine singleton (outside namespace)
-CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_cte::core::ContentTransferEngine, g_cte_manager);
+CTP_DEFINE_GLOBAL_PTR_VAR_H(clio::cte::core::ContentTransferEngine, g_cte_manager);
 
 // Macro for accessing the ContentTransferEngine singleton using global pointer variable
-#define CTE_MANAGER (CTP_GET_GLOBAL_PTR_VAR(clio_cte::core::ContentTransferEngine, g_cte_manager))
+#define CTE_MANAGER (CTP_GET_GLOBAL_PTR_VAR(clio::cte::core::ContentTransferEngine, g_cte_manager))
 
 #endif  // CLIO_CTE_CORE_CONTENT_TRANSFER_ENGINE_H_

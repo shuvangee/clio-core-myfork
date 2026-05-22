@@ -240,12 +240,16 @@ if(NOT CLIO_CORE_ENABLE_SYCL)
 endif()
 
 # Backward-compat target aliases (one ALIAS per legacy name pointing at the
-# canonical `clio_run_cxx` target). The canonical / install-time form is
-# `chimaera::cxx` (kept stable for external find_package consumers), but new
-# in-tree code can equivalently use `clio_run::cxx` / `clio_run_cxx`.
+# canonical `clio_run_cxx` target). The install-time form is `chimaera::cxx`
+# (kept stable for external find_package consumers), but in-tree code should
+# link via the canonical `clio::run::cxx`.  The `clio::run::cxx` waypoint is
+# kept as a pre-`::`-rename alias.
 add_library(${CLIO_RUN_NAMESPACE}::cxx ALIAS ${CHIMAERA_LIB_NAME})  # chimaera::cxx
-if(NOT TARGET clio_run::cxx)
-  add_library(clio_run::cxx ALIAS ${CHIMAERA_LIB_NAME})
+if(NOT TARGET clio::run::cxx)
+  add_library(clio::run::cxx ALIAS ${CHIMAERA_LIB_NAME})
+endif()
+if(NOT TARGET clio::run::cxx)
+  add_library(clio::run::cxx ALIAS ${CHIMAERA_LIB_NAME})
 endif()
 if(NOT TARGET chimaera_cxx)
   add_library(chimaera_cxx ALIAS ${CHIMAERA_LIB_NAME})

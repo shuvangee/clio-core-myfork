@@ -108,7 +108,7 @@ IowarpEngine::IowarpEngine(adios2::core::IO &io, const std::string &name,
       static_cast<unsigned int>(::getpid());
   bool ok = false;
   for (int attempt = 0; attempt < max_attempts; ++attempt) {
-    if (clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+    if (clio::cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
       ok = true;
       break;
     }
@@ -181,7 +181,7 @@ void IowarpEngine::Init_() {
   // Use the engine name as the tag name
   try {
     HLOG(kDebug, "[IowarpEngine] About to create Tag with name={}", m_Name);
-    current_tag_ = std::make_unique<clio_cte::core::Tag>(m_Name);
+    current_tag_ = std::make_unique<clio::cte::core::Tag>(m_Name);
     HLOG(kDebug, "[IowarpEngine] Tag created successfully");
     open_ = true;
   } catch (const std::exception &e) {

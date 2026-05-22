@@ -131,7 +131,7 @@ High-performance shared memory library containing data structures and synchroniz
 
 **[Read more →](context-transport-primitives/README.md)**
 
-### 2. Chimaera Runtime
+### 2. Context Runtime
 **Location:** [`context-runtime/`](context-runtime/)
 
 High-performance modular runtime for scientific computing and storage systems with coroutine-based task execution.
@@ -194,18 +194,20 @@ the runtime works out of the box:
 
 ```bash
 # Foreground
-clio_run runtime start
+clio_run start
 
 # Background
-clio_run runtime start &
+clio_run start &
 ```
 
 To override the configuration, point `CLIO_X` at your YAML file:
 
 ```bash
 export CLIO_X=/path/to/my_config.yaml
-clio_run runtime start
+clio_run start
 ```
+
+(The legacy nested form `clio_run runtime start` still works for back-compat.)
 
 ### Context Exploration Engine Python Example
 
@@ -253,87 +255,89 @@ Here is an example of the context transfer engine's C++ API.
 
 ```cpp
 #include <clio_cte/core/core_client.h>
-#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/ipc_manager.h>
+#include <cstring>
 
 int main() {
-  // 1. Initialize Clio runtime
-  bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
-  if (!success) return 1;
+  // 1. Initialize the CTE client.  This auto-connects to the runtime
+  //    started by `clio_run start` and creates the CTE pool on the first
+  //    call (no separate CLIO_INIT / runtime-mode setup needed in the
+  //    consumer process).  Storage targets are configured declaratively
+  //    via the runtime's compose YAML — no RegisterTarget call needed
+  //    here either.
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) return 1;
+  auto *cte = CLIO_CTE_CLIENT;
 
-  // 2. Initialize CTE subsystem
-  clio_cte::core::CLIO_CTE_CLIENT_INIT();
+  // 2. Get-or-create a named container for blobs.  The async APIs
+  //    return a chi::Future immediately; Wait() blocks for completion.
+  auto tag_future = cte->AsyncGetOrCreateTag("my_tag");
+  tag_future.Wait();
+  auto tag_id = tag_future->tag_id_;
 
-  // 3. Create CTE client
-  clio_cte::core::Client cte_client;
-  clio_cte::core::CreateParams params;
-  cte_client.Create(chi::PoolQuery::Dynamic(),
-                    clio_cte::core::kCtePoolName,
-                    clio_cte::core::kCtePoolId, params);
+  // 3. Stage blob data into a CTE-managed shm buffer and submit the
+  //    PutBlob asynchronously.  Submit-then-Wait is the canonical
+  //    pattern; multiple AsyncPutBlob calls can be in flight before
+  //    the first Wait() to pipeline I/O.  The async signatures take a
+  //    type-erased `ShmPtr<>` so we wrap `put_buf.shm_` (a typed
+  //    `ShmPtr<char>`) in the void-typed view.
+  constexpr size_t kSize = 4096;
+  auto put_buf = CLIO_IPC->AllocateBuffer(kSize);
+  std::memset(put_buf.ptr_, 'A', kSize);
+  ctp::ipc::ShmPtr<> put_data(put_buf.shm_);
+  auto put_future = cte->AsyncPutBlob(tag_id, "my_blob",
+                                       /*offset=*/0, kSize,
+                                       put_data);
+  put_future.Wait();
+  CLIO_IPC->FreeBuffer(put_buf);
 
-  // 4. Register a storage target (100MB file-based)
-  cte_client.RegisterTarget("/tmp/cte_storage",
-                            chimaera::bdev::BdevType::kFile,
-                            100 * 1024 * 1024);
+  // 4. Pre-allocate the receive buffer in shm, fire an async GetBlob,
+  //    then Wait — the buffer holds the blob data on return.
+  auto get_buf = CLIO_IPC->AllocateBuffer(kSize);
+  ctp::ipc::ShmPtr<> get_data(get_buf.shm_);
+  auto get_future = cte->AsyncGetBlob(tag_id, "my_blob",
+                                       /*offset=*/0, kSize,
+                                       /*flags=*/0,
+                                       get_data);
+  get_future.Wait();
+  // get_buf.ptr_ now holds the retrieved bytes.
+  CLIO_IPC->FreeBuffer(get_buf);
 
-  // 5. Create a tag (container for blobs)
-  clio_cte::core::TagId tag_id = cte_client.GetOrCreateTag(
-      "my_tag", clio_cte::core::TagId::GetNull());
-
-  // 6. Store blob data
-  std::vector<char> data(4096, 'A');
-  ctp::ipc::FullPtr<char> shared_data = CHI_IPC->AllocateBuffer(data.size());
-  memcpy(shared_data.ptr_, data.data(), data.size());
-
-  cte_client.PutBlob(tag_id, "my_blob",
-                     0,                    // offset
-                     data.size(),          // size
-                     shared_data.shm_,     // shared memory pointer
-                     0.8f,                 // importance score
-                     0);                   // flags
-  CHI_IPC->FreeBuffer(shared_data);
-
-  // 7. Retrieve blob data
-  ctp::ipc::FullPtr<char> read_buf = CHI_IPC->AllocateBuffer(data.size());
-  cte_client.GetBlob(tag_id, "my_blob",
-                     0,                    // offset
-                     data.size(),          // size
-                     0,                    // flags
-                     read_buf.shm_);
-  // read_buf.ptr_ now contains the retrieved data
-  CHI_IPC->FreeBuffer(read_buf);
-
-  // 8. Cleanup
-  cte_client.DelTag(tag_id);
+  // 5. Clean up.
+  cte->AsyncDelTag(tag_id).Wait();
   return 0;
 }
 ```
 
 **Build and Link:**
 ```cmake
-# Unified package includes everything - ClioCtp, Chimaera, and all ChiMods
-find_package(iowarp-core REQUIRED)
+# Unified package includes everything - ClioCtp, CLIO Runtime, and all ChiMods.
+# `clio-core` is the canonical package name; the legacy `iowarp-core` spelling
+# still works for backward-compat.
+find_package(clio-core REQUIRED)
 
 target_link_libraries(my_app
-  clio_cte::core_client    # CTE client (for the example above)
-  chimaera::admin_client  # Admin Module (always available)
-  chimaera::bdev_client   # Block device Module (always available)
+  clio::cte::core_client    # CTE client (for the example above)
+  clio::run::admin_client   # Admin module (always available)
+  clio::run::bdev_client    # Block-device module (always available)
 )
 ```
 
-**What `find_package(iowarp-core)` provides:**
+**What `find_package(clio-core)` provides:**
 
 *Core Components:*
 - All `ctp::*` modular targets (cxx, configure, serialize, interceptor, lightbeam, thread_all, mpi, compress, encrypt)
-- `chimaera::cxx` (core runtime library)
+- `clio::run::cxx` (core runtime library)
 - Module build utilities
 
 *Core ChiMods (Always Available):*
-- `chimaera::admin_client`, `chimaera::admin_runtime`
-- `chimaera::bdev_client`, `chimaera::bdev_runtime`
+- `clio::run::admin_client`, `clio::run::admin_runtime`
+- `clio::run::bdev_client`, `clio::run::bdev_runtime`
 
 *Optional ChiMods (if enabled at build time):*
-- `clio_cte::core_client`, `clio_cte::core_runtime` (Context Transfer Engine)
-- `clio_cae::core_client`, `clio_cae::core_runtime` (Context Assimilation Engine)
+- `clio::cte::core_client`, `clio::cte::core_runtime` (Context Transfer Engine)
+- `clio::cae::core_client`, `clio::cae::core_runtime` (Context Assimilation Engine)
+
+The pre-`::` waypoint spellings (`clio_run::*`, `clio_cte::*`, `clio_cae::*`) and the historical install-time names (`chimaera::*`, `wrp_cte::*`, `wrp_cae::*`) remain available as backward-compat ALIAS targets.
 
 ## Testing
 
@@ -355,12 +359,12 @@ ctest -R omni               # Context assimilation engine tests
 
 CLIO Core includes performance benchmarks for measuring runtime and I/O throughput.
 
-### Runtime Throughput Benchmark (clio_run_thrpt_benchmark)
+### Runtime Throughput Benchmark (clio_run_thrpt_bench)
 
 Measures task throughput and latency for the Clio runtime.
 
 ```bash
-clio_run_thrpt_benchmark [options]
+clio_run_thrpt_bench [options]
 ```
 
 **Parameters:**
@@ -386,13 +390,13 @@ clio_run_thrpt_benchmark [options]
 
 ```bash
 # Full I/O benchmark with 8 threads for 30 seconds
-clio_run_thrpt_benchmark --test-case bdev_io --threads 8 --duration 30
+clio_run_thrpt_bench --test-case bdev_io --threads 8 --duration 30
 
 # Latency benchmark with verbose output
-clio_run_thrpt_benchmark --test-case latency --threads 4 --verbose
+clio_run_thrpt_bench --test-case latency --threads 4 --verbose
 
 # Large I/O with 1MB blocks
-clio_run_thrpt_benchmark --test-case bdev_io --io-size 1m --threads 16
+clio_run_thrpt_bench --test-case bdev_io --io-size 1m --threads 16
 ```
 
 ### CTE Benchmark (clio_cte_bench)
@@ -446,7 +450,7 @@ Comprehensive documentation is available for each component:
 
 - **[AGENTS.md](AGENTS.md)**: Unified development guide and coding standards
 - **[Context Transport Primitives](context-transport-primitives/README.md)**: Shared memory data structures
-- **[Chimaera Runtime](context-runtime/README.md)**: Modular runtime system and Module development
+- **[Context Runtime](context-runtime/README.md)**: Modular runtime system and Module development
   - [MODULE_DEVELOPMENT_GUIDE.md](context-transport-primitives/docs/MODULE_DEVELOPMENT_GUIDE.md): Complete Module development guide
 - **[Context Transfer Engine](context-transfer-engine/README.md)**: I/O buffering and acceleration
   - [CTE API Documentation](context-transfer-engine/docs/cte/cte.md): Complete API reference
@@ -477,7 +481,7 @@ Comprehensive documentation is available for each component:
 
 CLIO Core is designed for high-performance computing scenarios:
 
-- **Task Latency**: < 10 microseconds for local task execution (Chimaera Runtime)
+- **Task Latency**: < 10 microseconds for local task execution (Context Runtime)
 - **Memory Bandwidth**: Up to 50 GB/s with RAM-based storage backends
 - **Scalability**: Single node to multi-node cluster deployments
 - **Concurrency**: Thousands of concurrent coroutine-based tasks

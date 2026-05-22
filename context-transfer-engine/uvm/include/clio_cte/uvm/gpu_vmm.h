@@ -49,7 +49,7 @@
 #include <clio_cte/core/core_client.h>
 #endif
 
-namespace clio_cte::uvm {
+namespace clio::cte::uvm {
 
 /** Configuration for the GPU Virtual Memory Manager */
 struct GpuVmmConfig {
@@ -187,7 +187,7 @@ class GpuVirtualMemoryManager {
   // CTE backing store (optional, compile-time gated)
 #ifdef CLIO_CTE_AVAILABLE
   bool use_cte_ = false;
-  std::unique_ptr<clio_cte::core::Tag> cte_tag_;
+  std::unique_ptr<clio::cte::core::Tag> cte_tag_;
 #endif
 
   /** Allocate physical memory, map into VA, set access (no fill) */
@@ -197,6 +197,6 @@ class GpuVirtualMemoryManager {
   void freeHostBackingStore_();
 };
 
-}  // namespace clio_cte::uvm
+}  // namespace clio::cte::uvm
 
 #endif  // CLIO_CTE_UVM_GPU_VMM_H_

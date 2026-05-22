@@ -24,7 +24,7 @@
 
 class ExternalCaeTest {
 private:
-    std::unique_ptr<clio_cae::core::Client> cae_client_;
+    std::unique_ptr<clio::cae::core::Client> cae_client_;
     bool initialized_;
 
 public:
@@ -49,16 +49,16 @@ public:
 
             // Step 2: Create CAE client instance
             HLOG(kInfo, "2. Creating CAE client instance...");
-            cae_client_ = std::make_unique<clio_cae::core::Client>();
+            cae_client_ = std::make_unique<clio::cae::core::Client>();
 
             // Step 3: Create CAE container
             HLOG(kInfo, "3. Creating CAE container...");
-            clio_cae::core::CreateParams create_params;
+            clio::cae::core::CreateParams create_params;
 
             try {
                 cae_client_->Create(ctp::ipc::MemContext(), chi::PoolQuery::Dynamic(),
                                    "cae_test_pool",
-                                   clio_cae::core::kCaePoolId, create_params);
+                                   clio::cae::core::kCaePoolId, create_params);
                 HLOG(kSuccess, "CAE container created successfully");
             } catch (const std::exception& e) {
                 HLOG(kError, "Failed to create CAE container: {}", e.what());

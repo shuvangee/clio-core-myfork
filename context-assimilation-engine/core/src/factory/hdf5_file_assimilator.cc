@@ -51,10 +51,10 @@
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_tasks.h>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 Hdf5FileAssimilator::Hdf5FileAssimilator(
-    std::shared_ptr<clio_cte::core::Client> cte_client)
+    std::shared_ptr<clio::cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
 chi::TaskResume Hdf5FileAssimilator::Schedule(const AssimilationCtx& ctx,
@@ -211,7 +211,7 @@ chi::TaskResume Hdf5FileAssimilator::Schedule(const AssimilationCtx& ctx,
     // Create a local CAE client with the correct pool_id for distributed tasks
     // Do NOT use CLIO_CAE_CLIENT global singleton as it may not be properly initialized
     // with the correct pool_id from the runtime's compose configuration
-    clio_cae::core::Client cae_client(kCaePoolId);
+    clio::cae::core::Client cae_client(kCaePoolId);
     HLOG(kInfo, "Hdf5FileAssimilator: Created CAE client with pool_id {} for distributed tasks",
           kCaePoolId);
 
@@ -485,7 +485,7 @@ chi::TaskResume Hdf5FileAssimilator::ProcessDataset(
   HLOG(kDebug, "ProcessDataset: Calling GetOrCreateTag for '{}'...", tag_name);
   auto tag_task = cte_client_->AsyncGetOrCreateTag(tag_name);
   CLIO_CO_AWAIT(tag_task);
-  clio_cte::core::TagId tag_id = tag_task->tag_id_;
+  clio::cte::core::TagId tag_id = tag_task->tag_id_;
   if (tag_id.IsNull()) {
     HLOG(kError, "Hdf5FileAssimilator: Failed to get or create tag '{}'",
          tag_name);
@@ -510,7 +510,7 @@ chi::TaskResume Hdf5FileAssimilator::ProcessDataset(
   auto desc_task =
       cte_client_->AsyncPutBlob(tag_id, "description", 0, desc_size,
                                 desc_buffer.shm_.template Cast<void>(), 1.0f,
-                                clio_cte::core::Context(), 0);
+                                clio::cte::core::Context(), 0);
   HLOG(kDebug, "ProcessDataset: Waiting for description blob task...");
   CLIO_CO_AWAIT(desc_task);
 
@@ -580,7 +580,7 @@ chi::TaskResume Hdf5FileAssimilator::ProcessDataset(
   // Process data in chunks and send to CTE
   size_t chunk_idx = 0;
   size_t bytes_processed = 0;
-  std::vector<chi::Future<clio_cte::core::PutBlobTask>> active_tasks;
+  std::vector<chi::Future<clio::cte::core::PutBlobTask>> active_tasks;
 
   HLOG(kDebug, "ProcessDataset: Starting chunk transfer loop...");
   while (bytes_processed < total_bytes) {
@@ -611,7 +611,7 @@ chi::TaskResume Hdf5FileAssimilator::ProcessDataset(
       auto task =
           cte_client_->AsyncPutBlob(tag_id, blob_name, 0, current_chunk_size,
                                     chunk_buffer.shm_.template Cast<void>(),
-                                    1.0f, clio_cte::core::Context(), 0);
+                                    1.0f, clio::cte::core::Context(), 0);
 
       active_tasks.push_back(task);
 
@@ -780,4 +780,4 @@ bool Hdf5FileAssimilator::MatchesFilter(
   return false;
 }
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core

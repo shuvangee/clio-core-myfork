@@ -58,7 +58,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace clio_run::admin {
+namespace clio::run::admin {
 
 // ============================================================================
 // Network-path instrumentation
@@ -350,7 +350,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
 }
 
 chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
-  using namespace clio_run::admin;
+  using namespace clio::run::admin;
   switch (task->method_) {
     case Method::kGetOrCreatePool: {
       auto typed = task.template Cast<GetOrCreatePoolTask<CreateParams>>();
@@ -369,7 +369,7 @@ chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
 
 chi::TaskResume Runtime::GetOrCreatePool(
     ctp::ipc::FullPtr<
-        clio_run::admin::GetOrCreatePoolTask<clio_run::admin::CreateParams>>
+        clio::run::admin::GetOrCreatePoolTask<clio::run::admin::CreateParams>>
         task,
     chi::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
@@ -3179,7 +3179,7 @@ chi::TaskResume Runtime::RegisterGpuContainer(
 
 // Task Serialization Method Implementations now in autogen/admin_lib_exec.cc
 
-}  // namespace clio_run::admin
+}  // namespace clio::run::admin
 
 // Define ChiMod entry points using CLIO_TASK_CC macro
-CLIO_TASK_CC(clio_run::admin::Runtime)
+CLIO_TASK_CC(clio::run::admin::Runtime)

@@ -61,7 +61,7 @@
 
 using namespace std::chrono_literals;
 
-namespace cte = clio_cte::core;
+namespace cte = clio::cte::core;
 using ChimaeraInit = chi::ChimaeraMode;
 
 namespace {
@@ -93,15 +93,15 @@ void EnsureInit() {
   // Register a kRam bdev target so PutBlob has somewhere to land.
   const chi::u64 kRamCapacity = 64ULL << 20;  // 64 MiB
   chi::PoolId bdev_pool_id(960, 0);
-  clio_run::bdev::Client bdev_client(bdev_pool_id);
+  clio::run::bdev::Client bdev_client(bdev_pool_id);
   auto bdev_create = bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(), std::string("cte_devmem_ram"),
-      bdev_pool_id, clio_run::bdev::BdevType::kRam, kRamCapacity);
+      bdev_pool_id, clio::run::bdev::BdevType::kRam, kRamCapacity);
   bdev_create.Wait();
   REQUIRE(bdev_create->GetReturnCode() == 0);
   std::this_thread::sleep_for(50ms);
   auto reg_task = cte_client->AsyncRegisterTarget(
-      "cte_devmem_ram", clio_run::bdev::BdevType::kRam, kRamCapacity,
+      "cte_devmem_ram", clio::run::bdev::BdevType::kRam, kRamCapacity,
       chi::PoolQuery::Local(), bdev_pool_id);
   reg_task.Wait();
   REQUIRE(reg_task->GetReturnCode() == 0);

@@ -52,7 +52,7 @@
 #include <mutex>
 #include <cmath>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * @brief Linear regression coefficients for a single model
@@ -422,6 +422,6 @@ class LinRegTablePredictor : public CompressionPredictor {
   std::map<int, std::pair<std::string, std::string>> id_to_lib_config_; /**< ID decoder */
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_MODELS_LINREG_TABLE_PREDICTOR_H_

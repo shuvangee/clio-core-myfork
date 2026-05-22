@@ -99,7 +99,7 @@ bool GenerateTestFile(const std::string& file_path, size_t size_bytes) {
 /**
  * Test a specific range
  */
-bool TestRange(clio_cae::core::Client& cae_client,
+bool TestRange(clio::cae::core::Client& cae_client,
                const std::string& test_name,
                size_t range_off,
                size_t range_size) {
@@ -110,7 +110,7 @@ bool TestRange(clio_cae::core::Client& cae_client,
   std::string tag_name = kTestTagPrefix + test_name;
 
   // Create AssimilationCtx
-  clio_cae::core::AssimilationCtx ctx;
+  clio::cae::core::AssimilationCtx ctx;
   ctx.src = "file::" + kTestFileName;
   ctx.dst = "iowarp::" + tag_name;
   ctx.format = "binary";
@@ -119,7 +119,7 @@ bool TestRange(clio_cae::core::Client& cae_client,
   ctx.range_size = range_size;
 
   // Call ParseOmni with vector containing single context
-  std::vector<clio_cae::core::AssimilationCtx> contexts = {ctx};
+  std::vector<clio::cae::core::AssimilationCtx> contexts = {ctx};
   auto parse_task = cae_client.AsyncParseOmni(contexts);
   parse_task.Wait();
   chi::u32 result_code = parse_task->GetReturnCode();
@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
 
     // Connect to CTE
     HLOG(kInfo, "[SETUP] Connecting to CTE...");
-    clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    clio::cte::core::CLIO_CTE_CLIENT_INIT();
 
     // Initialize CAE client
     HLOG(kInfo, "[SETUP] Initializing CAE client...");
@@ -189,13 +189,13 @@ int main(int argc, char* argv[]) {
 
     // Create CAE pool
     HLOG(kInfo, "[SETUP] Creating CAE pool...");
-    clio_cae::core::Client cae_client;
-    clio_cae::core::CreateParams params;
+    clio::cae::core::Client cae_client;
+    clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
         chi::PoolQuery::Local(),
         "test_cae_range_pool",
-        clio_cae::core::kCaePoolId,
+        clio::cae::core::kCaePoolId,
         params);
     create_task.Wait();
 

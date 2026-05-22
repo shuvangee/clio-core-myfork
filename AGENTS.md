@@ -297,7 +297,7 @@ This project follows the CLIO Runtime MODULE_DEVELOPMENT_GUIDE.md patterns for p
 **Required Packages for Module Development:**
 ```cmake
 # Core Clio framework (includes ChimaeraCommon.cmake functions)
-find_package(chimaera REQUIRED)              # Core library (chimaera::cxx)
+find_package(chimaera REQUIRED)              # Core library (clio::run::cxx)
 find_package(clio_admin REQUIRED)        # Admin Module (required for most Modules)
 ```
 
@@ -320,10 +320,10 @@ add_clio_module_client(
 ```
 
 **Target Naming:**
-- **Actual Targets**: `${NAMESPACE}_${MODULE_NAME}_runtime`, `${NAMESPACE}_${MODULE_NAME}_client` (or `${LIB_NAME}_runtime`/`_client` if `LIB_NAME` is passed to override — used e.g. by the bdev module which installs as `clio_bdev_*`)
-- **CMake Aliases**: `${NAMESPACE}::${MODULE_NAME}_runtime`, `${NAMESPACE}::${MODULE_NAME}_client` (recommended)
-- **Legacy Aliases**: For chimaera-renamed modules (admin / bdev / MOD_NAME, now under `clio_run::`), the install layout still exposes `chimaera::<module>_<x>` aliases so external consumers (e.g. coeus-adapter) keep working.
-- **Package Names**: `${NAMESPACE}_${MODULE_NAME}` for clio_cte/clio_cae; pinned to `chimaera_${MODULE_NAME}` for clio_run-namespace modules to keep `find_package(chimaera_admin/_bdev/_MOD_NAME)` backward compat.
+- **Actual Targets**: `${PACKAGE_NAME}_${MODULE_NAME}_runtime`, `${PACKAGE_NAME}_${MODULE_NAME}_client` (or `${LIB_NAME}_runtime`/`_client` if `LIB_NAME` is passed to override — used e.g. by the bdev module which installs as `clio_bdev_*`).  `PACKAGE_NAME` is the filesystem-safe form of `NAMESPACE` (e.g. `clio::run` -> `clio_run`).
+- **CMake Aliases**: `${NAMESPACE}::${MODULE_NAME}_runtime`, `${NAMESPACE}::${MODULE_NAME}_client` (recommended — e.g. `clio::run::admin_client`, `clio::cte::core_client`)
+- **Legacy Aliases**: For chimaera-renamed modules (admin / bdev / MOD_NAME, now under `clio::run::`), the install layout still exposes `chimaera::<module>_<x>` aliases so external consumers (e.g. coeus-adapter) keep working.  The pre-`::` waypoint spellings (`clio_run::`, `clio_cte::`, `clio_cae::`) also resolve as forwarders.
+- **Package Names**: `${PACKAGE_NAME}_${MODULE_NAME}` for clio::cte / clio::cae; pinned to `chimaera_${MODULE_NAME}` for clio::run-namespace modules to keep `find_package(chimaera_admin/_bdev/_MOD_NAME)` backward compat.
 
 ## Worker Method Return Types
 
@@ -489,13 +489,13 @@ Module libraries use consistent underscore-based naming:
 - Client: `${NAMESPACE}_${MODULE_NAME}_client` (e.g., `clio_admin_client`)
 
 **CMake Aliases:**
-- Runtime: `${NAMESPACE}::${MODULE_NAME}_runtime` (e.g., `chimaera::admin_runtime`)
-- Client: `${NAMESPACE}::${MODULE_NAME}_client` (e.g., `chimaera::admin_client`)
+- Runtime: `${NAMESPACE}::${MODULE_NAME}_runtime` (e.g., `clio::run::admin_runtime`)
+- Client: `${NAMESPACE}::${MODULE_NAME}_client` (e.g., `clio::run::admin_client`)
 
 **Package Names:**
 - Format: `${NAMESPACE}_${MODULE_NAME}` (e.g., `chimaera_admin`)
 - Used with `find_package(clio_admin REQUIRED)`
-- Core package: `chimaera` (provides `chimaera::cxx`)
+- Core package: `chimaera` (provides `clio::run::cxx`)
 
 ### Automatic Dependency Linking
 Module libraries automatically handle common dependencies:
@@ -507,20 +507,20 @@ Module libraries automatically handle common dependencies:
 
 **For External Applications:**
 
-Use the unified `find_package(iowarp-core)` which automatically includes all components and Modules:
+Use the unified `find_package(clio-core)` which automatically includes all components and Modules:
 
 ```cmake
 # Single find_package call includes everything
-find_package(iowarp-core REQUIRED)
+find_package(clio-core REQUIRED)
 # This automatically provides:
 #   Core Components:
 #     - All ctp::* modular targets (ctp::cxx, ctp::configure, ctp::serialize, etc.)
-#     - chimaera::cxx (core runtime library)
+#     - clio::run::cxx (core runtime library)
 #     - Module build utilities (add_clio_module_client, add_clio_module_runtime, etc.)
 #
 #   Core Modules (Always Available):
-#     - chimaera::admin_client, chimaera::admin_runtime
-#     - chimaera::bdev_client, chimaera::bdev_runtime
+#     - clio::run::admin_client, clio::run::admin_runtime
+#     - clio::run::bdev_client, clio::run::bdev_runtime
 #
 #   Optional Modules (if enabled at build time):
 #     - clio_cte::core_client, clio_cte::core_runtime (if CLIO_CORE_ENABLE_CTE=ON)
@@ -528,20 +528,20 @@ find_package(iowarp-core REQUIRED)
 
 # Then link to the Module libraries you need
 target_link_libraries(your_target
-  chimaera::admin_client     # Admin Module (always available)
-  chimaera::bdev_client      # Block device Module (always available)
+  clio::run::admin_client     # Admin Module (always available)
+  clio::run::bdev_client      # Block device Module (always available)
   clio_cte::core_client       # CTE Module (if enabled)
   clio_cae::core_client       # CAE Module (if enabled)
 )
 # Dependencies are automatically included by Module libraries
-# No need to manually link ctp::cxx or chimaera::cxx
+# No need to manually link ctp::cxx or clio::run::cxx
 ```
 
 **Alternative (Manual):**
 If you need finer control, you can still find packages individually:
 ```cmake
 find_package(ClioCtp REQUIRED)        # Provides ctp::* targets
-find_package(chimaera REQUIRED)         # Provides chimaera::cxx
+find_package(chimaera REQUIRED)         # Provides clio::run::cxx
 find_package(clio_admin REQUIRED)   # Provides admin Module
 find_package(chimaera_bdev REQUIRED)    # Provides bdev Module (library now: clio_bdev_*)
 find_package(clio_cte_core REQUIRED)     # Provides CTE Module (if enabled)

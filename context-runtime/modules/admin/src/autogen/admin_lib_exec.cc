@@ -12,7 +12,7 @@
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/task.h>  // For TaskResume coroutine return type
 
-namespace clio_run::admin {
+namespace clio::run::admin {
 
 //==============================================================================
 // Container Virtual API Implementations
@@ -1508,4 +1508,4 @@ void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {
   }
 }
 
-} // namespace clio_run::admin
+} // namespace clio::run::admin

@@ -43,7 +43,7 @@
 #include <chrono>
 #include <vector>
 
-using namespace clio_cte::compressor;
+using namespace clio::cte::compressor;
 
 TEST_CASE("QTablePredictor - Train and Predict", "[compression][qtable][basic]") {
   HLOG(kInfo, "");

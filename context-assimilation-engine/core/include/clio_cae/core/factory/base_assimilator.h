@@ -37,7 +37,7 @@
 #include <clio_cae/core/factory/assimilation_ctx.h>
 #include <clio_runtime/task.h>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 /**
  * BaseAssimilator - Abstract interface for data assimilators
@@ -60,6 +60,6 @@ class BaseAssimilator {
   virtual chi::TaskResume Schedule(const AssimilationCtx& ctx, int& error_code) = 0;
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_BASE_ASSIMILATOR_H_

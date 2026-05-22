@@ -83,9 +83,9 @@
 #include "synthetic_data_generator.h"
 
 // Use the pattern types from the header
-using PatternType = clio_cte::PatternType;
-using PatternSpec = clio_cte::PatternSpec;
-using DataGenerator = clio_cte::SyntheticDataGenerator;
+using PatternType = clio::cte::PatternType;
+using PatternSpec = clio::cte::PatternSpec;
+using DataGenerator = clio::cte::SyntheticDataGenerator;
 
 // Configuration structure
 struct WorkloadConfig {
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
   }
 
   // Initialize CTE client (assumes CLIO Runtime runtime is already running)
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
     if (rank == 0) {
       HLOG(kError, "Failed to initialize CTE client. Make sure chimaera runtime is started.");
     }
@@ -272,13 +272,13 @@ int main(int argc, char** argv) {
   }
 
   // Get the global CTE client
-  (void)clio_cte::core::g_cte_client;  // Client is accessed via Tag class
+  (void)clio::cte::core::g_cte_client;  // Client is accessed via Tag class
 
   // Create compressor client if compression is enabled
-  std::unique_ptr<clio_cte::compressor::Client> compressor_client;
+  std::unique_ptr<clio::cte::compressor::Client> compressor_client;
 
   if (config.compress_option != "none") {
-    compressor_client = std::make_unique<clio_cte::compressor::Client>();
+    compressor_client = std::make_unique<clio::cte::compressor::Client>();
     auto create_task = compressor_client->AsyncCreate(
         chi::PoolQuery::Local(),
         "clio_cte_compressor",
@@ -299,7 +299,7 @@ int main(int argc, char** argv) {
 
   // Create tag for this workload
   std::string tag_name = "synthetic_workload_" + std::to_string(rank);
-  clio_cte::core::Tag tag(tag_name);
+  clio::cte::core::Tag tag(tag_name);
 
   // Timing statistics
   std::vector<double> compute_times;
@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
   bool use_dynamic = (compress_lib == -1);
 
   // Pending async operations from previous iteration
-  std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_futures;
+  std::vector<chi::Future<clio::cte::core::PutBlobTask>> pending_futures;
   std::vector<ctp::ipc::FullPtr<char>> pending_buffers;  // Keep SHM buffers alive
 
   // Start end-to-end wall clock timer
@@ -350,7 +350,7 @@ int main(int argc, char** argv) {
     auto io_start = std::chrono::steady_clock::now();
 
     // Create context for compression
-    clio_cte::core::Context context;
+    clio::cte::core::Context context;
     context.dynamic_compress_ = use_dynamic ? 2 : (compress_lib > 0 ? 1 : 0);
     context.compress_lib_ = use_dynamic ? 0 : compress_lib;
     context.compress_preset_ = 2;  // Balanced

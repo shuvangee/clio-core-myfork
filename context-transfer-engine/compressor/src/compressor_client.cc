@@ -34,9 +34,9 @@
 // Copyright 2024 IOWarp contributors
 #include "clio_cte/compressor/compressor_client.h"
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 // Client implementation is header-only (inline methods)
 // This file exists to satisfy CMake build requirements
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor

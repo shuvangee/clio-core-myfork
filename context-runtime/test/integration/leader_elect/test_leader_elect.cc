@@ -114,7 +114,7 @@ TEST_CASE("Leader shutdown and failover to new host",
     // Step 1: Create a MOD_NAME pool and verify a task completes locally
     // ------------------------------------------------------------------
     INFO("Step 1: Creating MOD_NAME pool and running pre-shutdown task");
-    clio_run::MOD_NAME::Client mod_name_client(kLeaderElectPoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kLeaderElectPoolId);
     {
       auto create_task = mod_name_client.AsyncCreate(
           chi::PoolQuery::Dynamic(), "leader_elect_test_pool",
@@ -139,7 +139,7 @@ TEST_CASE("Leader shutdown and failover to new host",
     // ------------------------------------------------------------------
     INFO("Step 2: Sending AsyncStopRuntime to local runtime");
     {
-      clio_run::admin::Client admin_client(chi::kAdminPoolId);
+      clio::run::admin::Client admin_client(chi::kAdminPoolId);
       admin_client.AsyncStopRuntime(
           chi::PoolQuery::Local(), 0, 1000);
     }
@@ -153,7 +153,7 @@ TEST_CASE("Leader shutdown and failover to new host",
     // ------------------------------------------------------------------
     INFO("Step 3: Creating pool on new host after reconnection");
     {
-      clio_run::MOD_NAME::Client new_client(kLeaderElectPoolId);
+      clio::run::MOD_NAME::Client new_client(kLeaderElectPoolId);
       auto create_task = new_client.AsyncCreate(
           chi::PoolQuery::Dynamic(), "leader_elect_post_failover_pool",
           kLeaderElectPoolId);
@@ -196,7 +196,7 @@ TEST_CASE("System healthy after leader restart",
     // Create a pool and run a task on the restarted leader
     // ------------------------------------------------------------------
     INFO("Creating MOD_NAME pool on restarted leader");
-    clio_run::MOD_NAME::Client mod_name_client(kLeaderElectPoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kLeaderElectPoolId);
     {
       auto create_task = mod_name_client.AsyncCreate(
           chi::PoolQuery::Dynamic(), "leader_elect_post_restart_pool",

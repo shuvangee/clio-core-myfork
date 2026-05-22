@@ -38,7 +38,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 // Aggregate timing for Tag::PutBlob(const char*) — broken down into the
 // four steps that path performs per call (alloc shm, memcpy, sync RPC,
@@ -265,4 +265,4 @@ void Tag::ReorganizeBlob(const std::string &blob_name, float new_score) {
   }
 }
 
-} // namespace clio_cte::core
+} // namespace clio::cte::core

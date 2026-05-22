@@ -115,7 +115,7 @@ static std::vector<char> ReadFileFromDisk(const fs::path &path) {
  * Write a buffer into CTE as page-indexed blobs under the given tag.
  * Mirrors the I/O path that cte_fuse_write() would take.
  */
-static bool WriteFileToCte(const clio_cte::core::TagId &tag_id,
+static bool WriteFileToCte(const clio::cte::core::TagId &tag_id,
                            const char *data, size_t size) {
   size_t offset = 0;
   while (offset < size) {
@@ -134,7 +134,7 @@ static bool WriteFileToCte(const clio_cte::core::TagId &tag_id,
  * Read a file back from CTE page-by-page.
  * Mirrors the I/O path that cte_fuse_read() would take.
  */
-static std::vector<char> ReadFileFromCte(const clio_cte::core::TagId &tag_id,
+static std::vector<char> ReadFileFromCte(const clio::cte::core::TagId &tag_id,
                                          size_t size) {
   std::vector<char> buf(size);
   size_t offset = 0;
@@ -200,17 +200,17 @@ class CopyWorkspaceFixture {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+      success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
       REQUIRE(success);
 
       auto *cte_client = CLIO_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
-      cte_client->Init(clio_cte::core::kCtePoolId);
+      cte_client->Init(clio::cte::core::kCtePoolId);
 
-      clio_cte::core::CreateParams params;
+      clio::cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
-          chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
-          clio_cte::core::kCtePoolId, params);
+          chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
+          clio::cte::core::kCtePoolId, params);
       create_task.Wait();
       REQUIRE(create_task->GetReturnCode() == 0);
 
@@ -227,7 +227,7 @@ class CopyWorkspaceFixture {
 struct IngestedFile {
   fs::path disk_path;
   std::string tag_name;
-  clio_cte::core::TagId tag_id;
+  clio::cte::core::TagId tag_id;
   size_t size;
 };
 

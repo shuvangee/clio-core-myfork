@@ -77,11 +77,11 @@ inline void py_chimaera_finalize() {
  * the result map and frees the underlying C++ task.
  */
 class PyMonitorTask {
-  chi::Future<clio_run::admin::MonitorTask> future_;
+  chi::Future<clio::run::admin::MonitorTask> future_;
 
  public:
   /** @param f Moved-from future returned by AsyncMonitor */
-  explicit PyMonitorTask(chi::Future<clio_run::admin::MonitorTask>&& f)
+  explicit PyMonitorTask(chi::Future<clio::run::admin::MonitorTask>&& f)
       : future_(std::move(f)) {}
 
   PyMonitorTask(const PyMonitorTask&) = delete;

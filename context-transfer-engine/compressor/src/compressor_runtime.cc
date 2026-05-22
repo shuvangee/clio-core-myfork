@@ -54,7 +54,7 @@
 #include "clio_ctp/compress/data_stats.h"
 #include "clio_ctp/util/logging.h"
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 // Bring chi namespace items into scope for CLIO_CUR_WORKER macro
 using chi::chi_cur_worker_key_;
@@ -95,7 +95,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
 
   // Initialize the core client using next_pool_id from compose
   if (!config_.next_pool_id_.IsNull()) {
-    core_client_ = std::make_unique<clio_cte::core::Client>(config_.next_pool_id_);
+    core_client_ = std::make_unique<clio::cte::core::Client>(config_.next_pool_id_);
   }
 
   // Initialize atomic counters
@@ -231,7 +231,7 @@ chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
     // No consumer info — hash on tag_id so all blobs of the same tag
     // converge on the same container regardless of which node submits.
     chi::u32 hash = static_cast<chi::u32>(
-        std::hash<clio_cte::core::TagId>{}(compress_task->tag_id_));
+        std::hash<clio::cte::core::TagId>{}(compress_task->tag_id_));
     return chi::PoolQuery::DirectHash(hash);
   }
   // Other Dynamic methods (Decompress, periodic ticks) resolve Local.
@@ -665,7 +665,7 @@ chi::TaskResume Runtime::Compress(ctp::ipc::FullPtr<CompressTask> task,
       chi::PoolId core_id = !config_.next_pool_id_.IsNull()
           ? config_.next_pool_id_ : task->core_pool_id_;
       if (!core_id.IsNull()) {
-        core_client_ = std::make_unique<clio_cte::core::Client>(core_id);
+        core_client_ = std::make_unique<clio::cte::core::Client>(core_id);
       }
     }
 
@@ -850,7 +850,7 @@ chi::TaskResume Runtime::Decompress(ctp::ipc::FullPtr<DecompressTask> task,
       chi::PoolId core_id = !config_.next_pool_id_.IsNull()
           ? config_.next_pool_id_ : task->core_pool_id_;
       if (!core_id.IsNull()) {
-        core_client_ = std::make_unique<clio_cte::core::Client>(core_id);
+        core_client_ = std::make_unique<clio::cte::core::Client>(core_id);
       }
     }
 
@@ -1011,7 +1011,7 @@ chi::u64 Runtime::GetWorkRemaining() const {
 // Consumer Tracking
 // ==============================================================================
 
-void Runtime::RegisterConsumer(const clio_cte::core::TagId &tag_id,
+void Runtime::RegisterConsumer(const clio::cte::core::TagId &tag_id,
                                chi::u32 node_id) {
   // Tracking knob: when off, no per-tag bookkeeping happens and
   // ScheduleTask falls through to DirectHash on the tag_id. Use this to
@@ -1058,7 +1058,7 @@ void Runtime::RegisterConsumer(const clio_cte::core::TagId &tag_id,
        node_id, slots.size(), kMaxConsumersPerTag);
 }
 
-bool Runtime::PickConsumerForTag(const clio_cte::core::TagId &tag_id,
+bool Runtime::PickConsumerForTag(const clio::cte::core::TagId &tag_id,
                                  chi::u32 &node_id_out) {
   if (!config_.tracking_enabled_) {
     return false;
@@ -1177,7 +1177,7 @@ chi::TaskResume Runtime::PollConsumers(ctp::ipc::FullPtr<PollConsumersTask> task
   CLIO_CO_RETURN;
 }
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 // Define ChiMod entry points using CLIO_TASK_CC macro
-CLIO_TASK_CC(clio_cte::compressor::Runtime)
+CLIO_TASK_CC(clio::cte::compressor::Runtime)

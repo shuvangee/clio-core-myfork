@@ -43,10 +43,10 @@
 
 #include <memory>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 AssimilatorFactory::AssimilatorFactory(
-    std::shared_ptr<clio_cte::core::Client> cte_client)
+    std::shared_ptr<clio::cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
 std::unique_ptr<BaseAssimilator> AssimilatorFactory::Get(
@@ -131,4 +131,4 @@ std::string AssimilatorFactory::GetUrlProtocol(const std::string& url) {
   return "";
 }
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core

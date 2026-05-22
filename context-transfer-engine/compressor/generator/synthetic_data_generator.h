@@ -42,7 +42,7 @@
 #include <map>
 #include <sstream>
 
-namespace clio_cte {
+namespace clio::cte {
 
 /**
  * Data pattern types for synthetic workload generation

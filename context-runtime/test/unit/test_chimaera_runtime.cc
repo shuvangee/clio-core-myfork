@@ -142,13 +142,13 @@ public:
       chi::DomainQuery pool_query; // Default domain query
 
       // Create MOD_NAME pool parameters
-      clio_run::MOD_NAME::CreateParams params;
+      clio::run::MOD_NAME::CreateParams params;
       params.config_data_ = "test_config";
       params.worker_count_ = 2;
 
       // Create the MOD_NAME pool
       auto task =
-          admin_client.AsyncGetOrCreatePool<clio_run::MOD_NAME::CreateParams>(pool_query, kTestModNamePoolId, params);
+          admin_client.AsyncGetOrCreatePool<clio::run::MOD_NAME::CreateParams>(pool_query, kTestModNamePoolId, params);
 
       if (waitForTaskCompletion(task)) {
         INFO("MOD_NAME pool created successfully with ID: "
@@ -203,7 +203,7 @@ TEST_CASE("MOD_NAME Custom Task Execution", "[task][mod_name][custom]") {
     REQUIRE(fixture.createModNamePool());
 
     // Step 3: Initialize MOD_NAME client
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
 
     // Step 4: Create the MOD_NAME container
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
@@ -246,7 +246,7 @@ TEST_CASE("MOD_NAME Async Task Execution", "[task][mod_name][async]") {
     REQUIRE(fixture.createModNamePool());
 
     // Initialize MOD_NAME client
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
 
     // Create the MOD_NAME container
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
@@ -290,7 +290,7 @@ TEST_CASE("Error Handling Tests", "[error][edge_cases]") {
   SECTION("Task submission without runtime should fail gracefully") {
     (void)g_initialized; // Mark as used
     // Try to create a client without initializing runtime
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
 
     // This should not crash, but may fail
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
@@ -310,7 +310,7 @@ TEST_CASE("Error Handling Tests", "[error][edge_cases]") {
 
     // Try to use an invalid pool ID
     constexpr chi::PoolId kInvalidPoolId = chi::PoolId(9999, 0);
-    clio_run::MOD_NAME::Client invalid_client(kInvalidPoolId);
+    clio::run::MOD_NAME::Client invalid_client(kInvalidPoolId);
 
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_invalid_pool";
@@ -328,7 +328,7 @@ TEST_CASE("Error Handling Tests", "[error][edge_cases]") {
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool());
 
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_mod_name_pool";
     auto create_task = mod_name_client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
@@ -363,7 +363,7 @@ TEST_CASE("Concurrent Task Execution", "[concurrent][stress]") {
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool());
 
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_mod_name_pool";
     auto create_task = mod_name_client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
@@ -375,7 +375,7 @@ TEST_CASE("Concurrent Task Execution", "[concurrent][stress]") {
 
     // Submit multiple concurrent tasks
     constexpr int kNumTasks = 5;
-    std::vector<ctp::ipc::FullPtr<clio_run::MOD_NAME::CustomTask>> tasks;
+    std::vector<ctp::ipc::FullPtr<clio::run::MOD_NAME::CustomTask>> tasks;
 
     for (int i = 0; i < kNumTasks; ++i) {
       std::string input_data = "concurrent_test_" + std::to_string(i);
@@ -412,7 +412,7 @@ TEST_CASE("Memory Management", "[memory][cleanup]") {
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool());
 
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_mod_name_pool";
     auto create_task = mod_name_client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
@@ -450,7 +450,7 @@ TEST_CASE("Performance Tests", "[performance][timing]") {
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool());
 
-    clio_run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kTestModNamePoolId);
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_mod_name_pool";
     auto create_task = mod_name_client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);

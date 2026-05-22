@@ -47,7 +47,7 @@ done
 # binaries inserts a malformed extra RW PT_LOAD segment.  The ELF loader
 # then crashes inside dl_main with SEGV_ACCERR before main() runs (see
 # iowarp/clio-core#429).  The bug is reproducible against
-# clio_run_thrpt_benchmark but not against the smaller binaries — likely a
+# clio_run_thrpt_bench but not against the smaller binaries — likely a
 # corner of patchelf 0.15 triggered by binaries with more NEEDED entries.
 #
 # Patching executables is also unnecessary for our use case: every binary

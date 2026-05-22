@@ -40,7 +40,7 @@
  * Provides the client-side implementation for block device operations
  */
 
-namespace clio_run::bdev {
+namespace clio::run::bdev {
 
 // Define static constexpr member for proper linkage when address is taken
 constexpr const char* CreateParams::chimod_lib_name;
@@ -48,4 +48,4 @@ constexpr const char* CreateParams::chimod_lib_name;
 // Client implementation is header-only in this case
 // All methods are implemented in bdev_client.h
 
-} // namespace clio_run::bdev
+} // namespace clio::run::bdev

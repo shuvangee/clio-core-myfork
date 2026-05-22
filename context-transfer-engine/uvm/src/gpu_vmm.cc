@@ -40,7 +40,7 @@
 #include <cstring>
 #include <string>
 
-namespace clio_cte::uvm {
+namespace clio::cte::uvm {
 
 GpuVirtualMemoryManager::GpuVirtualMemoryManager() = default;
 
@@ -114,7 +114,7 @@ CUresult GpuVirtualMemoryManager::init(const GpuVmmConfig &config) {
 #ifdef CLIO_CTE_AVAILABLE
   use_cte_ = config.use_cte;
   if (use_cte_) {
-    cte_tag_ = std::make_unique<clio_cte::core::Tag>(config.cte_tag_name);
+    cte_tag_ = std::make_unique<clio::cte::core::Tag>(config.cte_tag_name);
     fprintf(stdout, "GpuVmm: CTE backing store enabled (tag: %s)\n",
             config.cte_tag_name.c_str());
   }
@@ -578,4 +578,4 @@ void GpuVirtualMemoryManager::freeHostBackingStore_() {
   host_backing_store_.clear();
 }
 
-}  // namespace clio_cte::uvm
+}  // namespace clio::cte::uvm

@@ -129,7 +129,7 @@ bool GenerateTestFile(const std::string& file_path, size_t size_bytes) {
  *       range_off: <offset> (optional, default: 0)
  *       range_size: <size> (optional, default: 0 for full file)
  */
-std::vector<clio_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path) {
+std::vector<clio::cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path) {
   HLOG(kInfo, "Loading OMNI file: {}", omni_path);
 
   YAML::Node config;
@@ -149,7 +149,7 @@ std::vector<clio_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_pa
     throw std::runtime_error("OMNI 'transfers' must be a sequence/array");
   }
 
-  std::vector<clio_cae::core::AssimilationCtx> contexts;
+  std::vector<clio::cae::core::AssimilationCtx> contexts;
   contexts.reserve(transfers.size());
 
   // Parse each transfer entry
@@ -167,7 +167,7 @@ std::vector<clio_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_pa
       throw std::runtime_error("Transfer " + std::to_string(i + 1) + " missing required 'format' field");
     }
 
-    clio_cae::core::AssimilationCtx ctx;
+    clio::cae::core::AssimilationCtx ctx;
     ctx.src = transfer["src"].as<std::string>();
     ctx.dst = transfer["dst"].as<std::string>();
     ctx.format = transfer["format"].as<std::string>();
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
 
     // Step 2: Connect to CTE
     HLOG(kInfo, "[STEP 2] Connecting to CTE...");
-    clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    clio::cte::core::CLIO_CTE_CLIENT_INIT();
     HLOG(kSuccess, "CTE client initialized");
 
     // Step 2.5: Initialize CAE client
@@ -258,13 +258,13 @@ int main(int argc, char* argv[]) {
 
     // Step 3: Create CAE pool
     HLOG(kInfo, "[STEP 3] Creating CAE pool...");
-    clio_cae::core::Client cae_client;
-    clio_cae::core::CreateParams params;
+    clio::cae::core::Client cae_client;
+    clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
         chi::PoolQuery::Local(),
         "test_cae_pool",
-        clio_cae::core::kCaePoolId,
+        clio::cae::core::kCaePoolId,
         params);
     create_task.Wait();
 
@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
     const std::string source_path = __FILE__;  // Get current source file path
     const std::string omni_file = source_path.substr(0, source_path.find_last_of('/')) + "/binary_assim_omni.yaml";
 
-    std::vector<clio_cae::core::AssimilationCtx> contexts;
+    std::vector<clio::cae::core::AssimilationCtx> contexts;
     try {
       contexts = LoadOmni(omni_file);
     } catch (const std::exception& e) {
@@ -316,7 +316,7 @@ int main(int argc, char* argv[]) {
     // Check if tag exists
     auto tag_task = cte_client->AsyncGetOrCreateTag(kTestTagName);
     tag_task.Wait();
-    clio_cte::core::TagId tag_id = tag_task->tag_id_;
+    clio::cte::core::TagId tag_id = tag_task->tag_id_;
     if (tag_id.IsNull()) {
       HLOG(kError, "Tag not found in CTE: {}", kTestTagName);
       exit_code = 1;

@@ -33,7 +33,7 @@ visualizer = [
 [project.scripts]
 chimaera = "iowarp_core._cli:main"
 clio_cte_bench = "iowarp_core._cli:cte_bench_main"
-clio_run_thrpt_benchmark = "iowarp_core._cli:run_thrpt_main"
+clio_run_thrpt_bench = "iowarp_core._cli:run_thrpt_main"
 context-visualizer = "context_visualizer.__main__:main"
 
 [project.urls]

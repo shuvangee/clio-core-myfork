@@ -43,7 +43,7 @@
 #include <cstring>
 #include <filesystem>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 namespace fs = std::filesystem;
 
@@ -674,4 +674,4 @@ void XGBoostPredictor::ClearExperiences() {
   experience_count_ = 0;
 }
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor

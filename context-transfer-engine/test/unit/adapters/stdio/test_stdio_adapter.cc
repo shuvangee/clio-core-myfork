@@ -37,14 +37,14 @@ bool initializeRuntime() {
     initialized = true;
     return true;
   }
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
     INFO("CTE init failed; tests proceed without CTE tracking");
     initialized = true;
     return true;
   }
   auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->RegisterTarget(ctp::ipc::MemContext(), kBackend,
-                             clio_run::bdev::BdevType::kFile,
+                             clio::run::bdev::BdevType::kFile,
                              kSmall * 10);
   initialized = true;
   return true;

@@ -16,7 +16,7 @@
 
 #if CTP_IS_GPU_COMPILER
 
-namespace clio_cte::gpu_vector {
+namespace clio::cte::gpu_vector {
 
 namespace detail {
 
@@ -166,7 +166,7 @@ CTP_GPU_FUN void FlushPageBase(::chi::gpu::IpcManager *ipc,
       (page->tier == 0) ? v.pages_alloc_id : v.host_pages_alloc_id;
   task->blob_data_ = detail::MakeBlobShmPtr(page->device_ptr, alloc);
 
-  ctp::ipc::FullPtr<clio_cte::core::PutBlobTask> fp;
+  ctp::ipc::FullPtr<clio::cte::core::PutBlobTask> fp;
   fp.shm_.alloc_id_ = v.put_pool_alloc_id;
   fp.shm_.off_ = reinterpret_cast<chi::u64>(task);
   fp.ptr_ = task;
@@ -216,7 +216,7 @@ CTP_GPU_FUN void FlushPage(::chi::gpu::IpcManager *ipc,
   task->blob_data_ = detail::MakeBlobShmPtr(
       reinterpret_cast<char *>(page->device_ptr) + mn_b, alloc);
 
-  ctp::ipc::FullPtr<clio_cte::core::PutBlobTask> fp;
+  ctp::ipc::FullPtr<clio::cte::core::PutBlobTask> fp;
   fp.shm_.alloc_id_ = v.base.put_pool_alloc_id;
   fp.shm_.off_ = reinterpret_cast<chi::u64>(task);
   fp.ptr_ = task;
@@ -241,7 +241,7 @@ CTP_GPU_FUN void FaultPage(::chi::gpu::IpcManager *ipc,
   ctp::ipc::AllocatorId alloc =
       (page->tier == 0) ? v.base.pages_alloc_id : v.base.host_pages_alloc_id;
   task->blob_data_ = detail::MakeBlobShmPtr(page->device_ptr, alloc);
-  ctp::ipc::FullPtr<clio_cte::core::GetBlobTask> fp;
+  ctp::ipc::FullPtr<clio::cte::core::GetBlobTask> fp;
   fp.shm_.alloc_id_ = v.base.get_pool_alloc_id;
   fp.shm_.off_ = reinterpret_cast<chi::u64>(task);
   fp.ptr_ = task;
@@ -252,7 +252,7 @@ CTP_GPU_FUN void FaultPage(::chi::gpu::IpcManager *ipc,
 CTP_GPU_FUN void DrainPut(Page *page) {
   if (!page->active_put.IsNull()) {
     page->active_put.Wait();
-    page->active_put = chi::gpu::Future<clio_cte::core::PutBlobTask>();
+    page->active_put = chi::gpu::Future<clio::cte::core::PutBlobTask>();
     detail::AtomicClearBitsU32(&page->flags, kPagePutInFlight);
   }
 }
@@ -261,7 +261,7 @@ CTP_GPU_FUN void DrainPut(Page *page) {
 CTP_GPU_FUN void DrainGet(Page *page) {
   if (!page->active_get.IsNull()) {
     page->active_get.Wait();
-    page->active_get = chi::gpu::Future<clio_cte::core::GetBlobTask>();
+    page->active_get = chi::gpu::Future<clio::cte::core::GetBlobTask>();
     detail::AtomicClearBitsU32(&page->flags, kPageGetInFlight);
   }
 }
@@ -608,7 +608,7 @@ CTP_GPU_FUN T *Resolve(::chi::gpu::IpcManager *ipc, DeviceView<T> v,
   return reinterpret_cast<T *>(hit->device_ptr) + off_t;
 }
 
-}  // namespace clio_cte::gpu_vector
+}  // namespace clio::cte::gpu_vector
 
 namespace cte::gpu::dev {
 
@@ -623,7 +623,7 @@ class vector;
  *
  * Usage:
  *   __global__ void K(chi::IpcManagerGpuInfo info,
- *                     clio_cte::gpu_vector::DeviceView<int> view) {
+ *                     clio::cte::gpu_vector::DeviceView<int> view) {
  *     CHIMAERA_GPU_INIT(info, nullptr);
  *     cte::gpu::dev::vector<int> v(view, g_ipc_manager_ptr);
  *     v.write_range(lo, hi, [] (chi::u64 i) { return T_for(i); });
@@ -639,7 +639,7 @@ class vector;
 template <typename T>
 class vector {
  public:
-  using DeviceView = ::clio_cte::gpu_vector::DeviceView<T>;
+  using DeviceView = ::clio::cte::gpu_vector::DeviceView<T>;
 
   /**
    * @param view DeviceView<T> from `Vector<T>::Device()` (POD, captured
@@ -650,7 +650,7 @@ class vector {
   CTP_GPU_FUN vector(const DeviceView &view,
                       ::chi::gpu::IpcManager *ipc) noexcept
       : view_(view), ipc_(ipc) {
-    __shared__ ::clio_cte::gpu_vector::Page *last_page_storage[32];
+    __shared__ ::clio::cte::gpu_vector::Page *last_page_storage[32];
     last_page_array_ = last_page_storage;
     if (threadIdx.x < 32) last_page_array_[threadIdx.x] = nullptr;
     __syncthreads();
@@ -672,22 +672,22 @@ class vector {
       int32_t target_page = static_cast<int32_t>(lo / cap);
       // 1. Cache lookup (lane 0, broadcast). Acquire kPageBusy if hit.
       if (lane == 0) {
-        ::clio_cte::gpu_vector::Page *hit = nullptr;
-        ::clio_cte::gpu_vector::Page *&last =
-            ::clio_cte::gpu_vector::detail::LaneLastPage(last_page_array_);
+        ::clio::cte::gpu_vector::Page *hit = nullptr;
+        ::clio::cte::gpu_vector::Page *&last =
+            ::clio::cte::gpu_vector::detail::LaneLastPage(last_page_array_);
         const chi::u32 busy_mask =
-            ::clio_cte::gpu_vector::kPageBusy |
-            ::clio_cte::gpu_vector::kPageGetInFlight;
+            ::clio::cte::gpu_vector::kPageBusy |
+            ::clio::cte::gpu_vector::kPageGetInFlight;
         if (last && last->page_idx == target_page &&
             !(last->flags & busy_mask)) {
           hit = last;
         } else {
-          ::clio_cte::gpu_vector::Block *bx =
-              ::clio_cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
+          ::clio::cte::gpu_vector::Block *bx =
+              ::clio::cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
           chi::u32 total =
-              ::clio_cte::gpu_vector::TotalPagesPerBlock(view_.base);
+              ::clio::cte::gpu_vector::TotalPagesPerBlock(view_.base);
           for (chi::u32 s = 0; s < total; ++s) {
-            ::clio_cte::gpu_vector::Page *p = &bx->pages[s];
+            ::clio::cte::gpu_vector::Page *p = &bx->pages[s];
             if (p->page_idx != target_page) continue;
             if (p->flags & busy_mask) continue;
             hit = p;
@@ -696,7 +696,7 @@ class vector {
           }
         }
         if (hit) {
-          while (!::clio_cte::gpu_vector::detail::TryAcquireBusy(hit)) {}
+          while (!::clio::cte::gpu_vector::detail::TryAcquireBusy(hit)) {}
           if (view_.base.stats) {
             atomicAdd_system(&view_.base.stats->resolve_hits, 1ULL);
           }
@@ -709,13 +709,13 @@ class vector {
         last_page_array_[0] = hit;
       }
       __syncwarp();
-      ::clio_cte::gpu_vector::Page *p = last_page_array_[0];
+      ::clio::cte::gpu_vector::Page *p = last_page_array_[0];
       // 2. Cold miss → warp-coop evict HBM→DRAM, bind target_page in HBM.
       if (p == nullptr) {
-        p = ::clio_cte::gpu_vector::WarpCoopEvictHbmToDram(
+        p = ::clio::cte::gpu_vector::WarpCoopEvictHbmToDram(
             ipc_, view_, blockIdx.x, target_page, lane);
         if (lane == 0) {
-          ::clio_cte::gpu_vector::detail::LaneLastPage(last_page_array_) = p;
+          ::clio::cte::gpu_vector::detail::LaneLastPage(last_page_array_) = p;
           last_page_array_[0] = p;
         }
         __syncwarp();
@@ -731,8 +731,8 @@ class vector {
         int32_t hi_off = static_cast<int32_t>(stop - 1 - page_start_i);
         if (p->modify_min < 0) {
           p->modify_min = static_cast<int32_t>(page_off_lo);
-          ::clio_cte::gpu_vector::detail::AtomicIncU32(
-              &::clio_cte::gpu_vector::GetBlock(view_.base, blockIdx.x)
+          ::clio::cte::gpu_vector::detail::AtomicIncU32(
+              &::clio::cte::gpu_vector::GetBlock(view_.base, blockIdx.x)
                    ->num_modified);
         } else if (static_cast<int32_t>(page_off_lo) < p->modify_min) {
           p->modify_min = static_cast<int32_t>(page_off_lo);
@@ -746,7 +746,7 @@ class vector {
       }
       __syncwarp();
       if (lane == 0) {
-        ::clio_cte::gpu_vector::detail::ReleaseBusy(p);
+        ::clio::cte::gpu_vector::detail::ReleaseBusy(p);
       }
       __syncwarp();
       lo = stop;
@@ -774,28 +774,28 @@ class vector {
     while (lo < hi) {
       if (lane == 0) {
         chi::u32 cur_page = static_cast<chi::u32>(lo / cap);
-        ::clio_cte::gpu_vector::Block *bx =
-            ::clio_cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
+        ::clio::cte::gpu_vector::Block *bx =
+            ::clio::cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
         for (int la = 1; la <= kLookahead; ++la) {
           chi::u32 hint = cur_page + static_cast<chi::u32>(la);
           if (hint > last_page) break;
-          (void)::clio_cte::gpu_vector::detail::RescorePush(
+          (void)::clio::cte::gpu_vector::detail::RescorePush(
               &bx->rescore_q, hint,
               1.0f - static_cast<float>(la) / (kLookahead + 1));
         }
         for (int lb = 1; lb <= kLookbehind; ++lb) {
           if (cur_page < first_page + static_cast<chi::u32>(lb)) break;
           chi::u32 hint = cur_page - static_cast<chi::u32>(lb);
-          (void)::clio_cte::gpu_vector::detail::RescorePush(
+          (void)::clio::cte::gpu_vector::detail::RescorePush(
               &bx->rescore_q, hint, 0.1f);
         }
-        (void)::clio_cte::gpu_vector::Resolve(
+        (void)::clio::cte::gpu_vector::Resolve(
             ipc_, view_, last_page_array_, lo, /*is_write=*/false);
-        ::clio_cte::gpu_vector::Page *p = last_page_array_[0];
-        while (!::clio_cte::gpu_vector::detail::TryAcquireBusy(p)) {}
+        ::clio::cte::gpu_vector::Page *p = last_page_array_[0];
+        while (!::clio::cte::gpu_vector::detail::TryAcquireBusy(p)) {}
       }
       __syncwarp();
-      ::clio_cte::gpu_vector::Page *p = last_page_array_[0];
+      ::clio::cte::gpu_vector::Page *p = last_page_array_[0];
       T *page_base = static_cast<T *>(p->device_ptr);
       chi::u64 page_start_i =
           static_cast<chi::u64>(p->page_idx) * cap;
@@ -808,7 +808,7 @@ class vector {
       }
       __syncwarp();
       if (lane == 0) {
-        ::clio_cte::gpu_vector::detail::ReleaseBusy(p);
+        ::clio::cte::gpu_vector::detail::ReleaseBusy(p);
       }
       __syncwarp();
       lo = stop;
@@ -837,24 +837,24 @@ class vector {
     // reconverges naturally at the function epilogue (no __syncwarp
     // here — that would deadlock against the early-returned lanes).
     if (lane != 0) return;
-    ::clio_cte::gpu_vector::Block *b =
-        ::clio_cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
+    ::clio::cte::gpu_vector::Block *b =
+        ::clio::cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
     chi::u64 cap = view_.page_capacity_t;
-    ::clio_cte::gpu_vector::Page *held = nullptr;
+    ::clio::cte::gpu_vector::Page *held = nullptr;
     int32_t held_page = -1;
     for (chi::u64 k = 0; k < n; ++k) {
       chi::u64 idx = next_i(k);
       int32_t pg = static_cast<int32_t>(idx / cap);
       if (pg != held_page) {
-        if (held) ::clio_cte::gpu_vector::detail::ReleaseBusy(held);
+        if (held) ::clio::cte::gpu_vector::detail::ReleaseBusy(held);
         chi::u32 cap_left =
-            ::clio_cte::gpu_vector::detail::RescoreRemaining(&b->rescore_q);
+            ::clio::cte::gpu_vector::detail::RescoreRemaining(&b->rescore_q);
         chi::u32 clipped_la = (lookahead < cap_left) ? lookahead : cap_left;
         rescore(k, clipped_la, lookbehind, b->rescore_q);
-        (void)::clio_cte::gpu_vector::Resolve(
+        (void)::clio::cte::gpu_vector::Resolve(
             ipc_, view_, last_page_array_, idx, /*is_write=*/true);
         held = last_page_array_[0];
-        while (!::clio_cte::gpu_vector::detail::TryAcquireBusy(held)) {}
+        while (!::clio::cte::gpu_vector::detail::TryAcquireBusy(held)) {}
         held_page = pg;
       }
       chi::u64 off_t = idx - static_cast<chi::u64>(pg) * cap;
@@ -866,7 +866,7 @@ class vector {
       }
       if (off_i > held->modify_max) held->modify_max = off_i;
     }
-    if (held) ::clio_cte::gpu_vector::detail::ReleaseBusy(held);
+    if (held) ::clio::cte::gpu_vector::detail::ReleaseBusy(held);
   }
 
   /** Iterator + rescore read form (lane-0 only). */
@@ -877,31 +877,31 @@ class vector {
     if (n == 0) return;
     chi::u32 lane = threadIdx.x & 31;
     if (lane != 0) return;
-    ::clio_cte::gpu_vector::Block *b =
-        ::clio_cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
+    ::clio::cte::gpu_vector::Block *b =
+        ::clio::cte::gpu_vector::GetBlock(view_.base, blockIdx.x);
     chi::u64 cap = view_.page_capacity_t;
-    ::clio_cte::gpu_vector::Page *held = nullptr;
+    ::clio::cte::gpu_vector::Page *held = nullptr;
     int32_t held_page = -1;
     for (chi::u64 k = 0; k < n; ++k) {
       chi::u64 idx = next_i(k);
       int32_t pg = static_cast<int32_t>(idx / cap);
       if (pg != held_page) {
-        if (held) ::clio_cte::gpu_vector::detail::ReleaseBusy(held);
+        if (held) ::clio::cte::gpu_vector::detail::ReleaseBusy(held);
         chi::u32 cap_left =
-            ::clio_cte::gpu_vector::detail::RescoreRemaining(&b->rescore_q);
+            ::clio::cte::gpu_vector::detail::RescoreRemaining(&b->rescore_q);
         chi::u32 clipped_la = (lookahead < cap_left) ? lookahead : cap_left;
         rescore(k, clipped_la, lookbehind, b->rescore_q);
-        (void)::clio_cte::gpu_vector::Resolve(
+        (void)::clio::cte::gpu_vector::Resolve(
             ipc_, view_, last_page_array_, idx, /*is_write=*/false);
         held = last_page_array_[0];
-        while (!::clio_cte::gpu_vector::detail::TryAcquireBusy(held)) {}
+        while (!::clio::cte::gpu_vector::detail::TryAcquireBusy(held)) {}
         held_page = pg;
       }
       chi::u64 off_t = idx - static_cast<chi::u64>(pg) * cap;
       T *page_base = static_cast<T *>(held->device_ptr);
       consume(idx, page_base[off_t]);
     }
-    if (held) ::clio_cte::gpu_vector::detail::ReleaseBusy(held);
+    if (held) ::clio::cte::gpu_vector::detail::ReleaseBusy(held);
   }
 
   /** Flush every dirty page in the calling block. Lane-0 only: the
@@ -909,7 +909,7 @@ class vector {
   CTP_GPU_FUN void FlushAll() {
     if ((threadIdx.x & 31) != 0) return;
     if (threadIdx.x != 0) return;
-    ::clio_cte::gpu_vector::FlushAllInBlock(ipc_, view_, blockIdx.x);
+    ::clio::cte::gpu_vector::FlushAllInBlock(ipc_, view_, blockIdx.x);
   }
 
   CTP_GPU_FUN const DeviceView &view() const { return view_; }
@@ -917,7 +917,7 @@ class vector {
  private:
   DeviceView view_;
   ::chi::gpu::IpcManager *ipc_;
-  ::clio_cte::gpu_vector::Page **last_page_array_;
+  ::clio::cte::gpu_vector::Page **last_page_array_;
 };
 
 }  // namespace cte::gpu::dev

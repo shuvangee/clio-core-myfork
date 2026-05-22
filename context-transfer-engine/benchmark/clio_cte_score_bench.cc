@@ -307,13 +307,13 @@ class CTEScoreBenchmark {
 
     for (int step = 0; step < num_steps_; ++step) {
       // Step 1: Start async reorganization of blobs from PREVIOUS step
-      std::vector<chi::Future<clio_cte::core::ReorganizeBlobTask>> reorg_tasks;
+      std::vector<chi::Future<clio::cte::core::ReorganizeBlobTask>> reorg_tasks;
 
       if (step > 0 && demotion_pct > 0) {
         int prev_step = step - 1;
         std::string prev_tag_name = GetTagName(rank_, prev_step);
-        clio_cte::core::Tag prev_tag(prev_tag_name);
-        clio_cte::core::TagId prev_tag_id = prev_tag.GetTagId();
+        clio::cte::core::Tag prev_tag(prev_tag_name);
+        clio::cte::core::TagId prev_tag_id = prev_tag.GetTagId();
 
         int blobs_to_demote =
             (blobs_per_step_ * demotion_pct + 99) / 100;  // Round up
@@ -348,9 +348,9 @@ class CTEScoreBenchmark {
       auto put_start = high_resolution_clock::now();
 
       std::string tag_name = GetTagName(rank_, step);
-      clio_cte::core::Tag tag(tag_name);
+      clio::cte::core::Tag tag(tag_name);
 
-      std::vector<chi::Future<clio_cte::core::PutBlobTask>> put_tasks;
+      std::vector<chi::Future<clio::cte::core::PutBlobTask>> put_tasks;
       put_tasks.reserve(blobs_per_step_);
 
       for (chi::u64 b = 0; b < blobs_per_step_; ++b) {
@@ -412,11 +412,11 @@ class CTEScoreBenchmark {
       std::string tag_name = GetTagName(rank_, step);
 
       // Create tag object to get tag ID
-      clio_cte::core::Tag tag(tag_name);
-      clio_cte::core::TagId tag_id = tag.GetTagId();
+      clio::cte::core::Tag tag(tag_name);
+      clio::cte::core::TagId tag_id = tag.GetTagId();
 
       // Delete each blob in this tag
-      std::vector<chi::Future<clio_cte::core::DelBlobTask>> del_blob_tasks;
+      std::vector<chi::Future<clio::cte::core::DelBlobTask>> del_blob_tasks;
       del_blob_tasks.reserve(blobs_per_step_);
 
       for (chi::u64 b = 0; b < blobs_per_step_; ++b) {
@@ -515,7 +515,7 @@ int main(int argc, char **argv) {
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
   // Initialize CTE client
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
     if (rank == 0) {
       HLOG(kError, "Failed to initialize CTE client");
     }

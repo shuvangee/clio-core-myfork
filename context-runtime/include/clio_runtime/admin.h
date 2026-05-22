@@ -45,15 +45,15 @@
 #include "clio_runtime/types.h"
 
 // Forward declaration to avoid circular dependency
-namespace clio_run::admin {
+namespace clio::run::admin {
 class Client;
 }
 
 // Global pointer variable declaration for Admin singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_run::admin::Client, g_admin);
+CTP_DEFINE_GLOBAL_PTR_VAR_H(clio::run::admin::Client, g_admin);
 
 // Macro for accessing the Admin singleton using global pointer variable
-#define CLIO_ADMIN CTP_GET_GLOBAL_PTR_VAR(::clio_run::admin::Client, g_admin)
+#define CLIO_ADMIN CTP_GET_GLOBAL_PTR_VAR(::clio::run::admin::Client, g_admin)
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
 #define CHI_ADMIN  CLIO_ADMIN

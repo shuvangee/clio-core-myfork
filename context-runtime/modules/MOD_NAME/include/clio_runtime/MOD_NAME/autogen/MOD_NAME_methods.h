@@ -9,7 +9,7 @@
  * Auto-generated method definitions for MOD_NAME
  */
 
-namespace clio_run::MOD_NAME {
+namespace clio::run::MOD_NAME {
 
 namespace Method {
 // Inherited methods
@@ -47,6 +47,6 @@ inline const std::vector<std::string>& GetMethodNames() {
 }
 }  // namespace Method
 
-}  // namespace clio_run::MOD_NAME
+}  // namespace clio::run::MOD_NAME
 
 #endif  // MOD_NAME_AUTOGEN_METHODS_H_

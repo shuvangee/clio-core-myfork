@@ -43,7 +43,7 @@
 #include <random>
 #include <cmath>
 
-using namespace clio_cte::compressor;
+using namespace clio::cte::compressor;
 
 /**
  * Generate data from specific distributions for testing

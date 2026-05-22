@@ -36,10 +36,10 @@
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_config.h>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 // Define global pointer variable for CTE client in source file
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cte::core::Client, g_cte_client);
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio::cte::core::Client, g_cte_client);
 
 bool CLIO_CTE_CLIENT_INIT(const std::string &config_path,
                          const chi::PoolQuery &pool_query) {
@@ -51,7 +51,7 @@ bool CLIO_CTE_CLIENT_INIT(const std::string &config_path,
 
   // Allocate the global client object if not already allocated
   if (g_cte_client == nullptr) {
-    g_cte_client = new clio_cte::core::Client();
+    g_cte_client = new clio::cte::core::Client();
   }
 
   // config_path is no longer used - configuration now provided via chimaera compose
@@ -67,4 +67,4 @@ bool CLIO_CTE_CLIENT_INIT(const std::string &config_path,
   return result;
 }
 
-} // namespace clio_cte::core
+} // namespace clio::cte::core

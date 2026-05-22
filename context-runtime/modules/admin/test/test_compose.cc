@@ -179,12 +179,12 @@ TEST_CASE("Admin client Compose method", "[compose]") {
 
   // Verify pool was created by checking if we can access it
   chi::PoolId bdev_pool_id(200, 0);
-  clio_run::bdev::Client bdev_client(bdev_pool_id);
+  clio::run::bdev::Client bdev_client(bdev_pool_id);
 
   // Try to allocate blocks to verify the pool exists and is functional
   auto alloc_task = bdev_client.AsyncAllocateBlocks(chi::PoolQuery::Local(), 1024);
   alloc_task.Wait();
-  std::vector<clio_run::bdev::Block> blocks;
+  std::vector<clio::run::bdev::Block> blocks;
   for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
     blocks.push_back(alloc_task->blocks_[i]);
   }

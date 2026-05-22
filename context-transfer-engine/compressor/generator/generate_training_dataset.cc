@@ -72,7 +72,7 @@
 #endif
 #endif
 
-using namespace clio_cte::compressor;
+using namespace clio::cte::compressor;
 
 // Bin fill mode: how to generate values within each bin
 enum class BinFillMode {

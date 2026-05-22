@@ -179,11 +179,11 @@ void TestServerRestart(const std::string &mode) {
   // 3. Baseline task: submit + complete a bdev Create
   {
     chi::PoolId pool_id1(8000, 0);
-    clio_run::bdev::Client client1(pool_id1);
+    clio::run::bdev::Client client1(pool_id1);
     std::string pool_name1 = "retry_baseline_" + mode;
     auto task = client1.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name1, pool_id1,
-        clio_run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
     task.Wait();
     REQUIRE(task->return_code_ == 0);
     INFO("Baseline task completed for mode " + mode);
@@ -208,11 +208,11 @@ void TestServerRestart(const std::string &mode) {
   // 8. Submit a second task with different pool name/ID
   {
     chi::PoolId pool_id2(8001, 0);
-    clio_run::bdev::Client client2(pool_id2);
+    clio::run::bdev::Client client2(pool_id2);
     std::string pool_name2 = "retry_after_restart_" + mode;
     auto task = client2.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name2, pool_id2,
-        clio_run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
     task.Wait();
     REQUIRE(task->return_code_ == 0);
     INFO("Post-restart task completed for mode " + mode);
@@ -248,11 +248,11 @@ void TestClientDeath(const std::string &mode) {
 
     // Submit a task (no Wait) — response goes to dead process
     chi::PoolId pool_id(8100, 0);
-    clio_run::bdev::Client client(pool_id);
+    clio::run::bdev::Client client(pool_id);
     std::string pool_name = "client_death_child_" + mode;
     client.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name, pool_id,
-        clio_run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
 
     // Exit immediately — response will arrive at dead process
     _exit(0);
@@ -281,11 +281,11 @@ void TestClientDeath(const std::string &mode) {
   // 5. Submit + complete parent's own task
   {
     chi::PoolId pool_id(8101, 0);
-    clio_run::bdev::Client client(pool_id);
+    clio::run::bdev::Client client(pool_id);
     std::string pool_name = "client_death_parent_" + mode;
     auto task = client.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name, pool_id,
-        clio_run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
     task.Wait();
     REQUIRE(task->return_code_ == 0);
     INFO("Parent task completed — server survived client death for mode " +

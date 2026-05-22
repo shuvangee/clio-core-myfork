@@ -99,7 +99,7 @@ export CLIO_X=/workspace/docker/clio_cte_bench/cte_config.yaml
 clio_run runtime start &
 
 # After a moment, run a quick benchmark
-clio_run_thrpt_benchmark --test-case latency --threads 4 --duration 5
+clio_run_thrpt_bench --test-case latency --threads 4 --duration 5
 ```
 
 ### Container Architecture

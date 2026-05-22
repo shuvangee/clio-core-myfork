@@ -67,7 +67,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 namespace gpu_cache {
 
@@ -516,6 +516,6 @@ CTP_CROSS_FUN inline const gpu_cache::GpuTagEntry *GpuCacheFindTag(
   return nullptr;
 }
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
 #endif  // WRPCTE_CORE_GPU_METADATA_CACHE_H_

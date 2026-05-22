@@ -70,12 +70,12 @@ int PutBlobs() {
   }
 
   // Create CTE client bound to pool 512.0
-  clio_cte::core::Client cte_client(chi::PoolId(512, 0));
+  clio::cte::core::Client cte_client(chi::PoolId(512, 0));
 
   // Create or get tag
   auto tag_task = cte_client.AsyncGetOrCreateTag(kTagName);
   tag_task.Wait();
-  clio_cte::core::TagId tag_id = tag_task->tag_id_;
+  clio::cte::core::TagId tag_id = tag_task->tag_id_;
   HLOG(kInfo, "Phase 1: Created tag '{}'", kTagName);
 
   // Put kNumBlobs blobs with distinct data patterns
@@ -137,7 +137,7 @@ int VerifyBlobs() {
 
   // Call RestartContainers via admin client
   HLOG(kInfo, "Phase 2: Calling RestartContainers...");
-  clio_run::admin::Client admin_client(chi::kAdminPoolId);
+  clio::run::admin::Client admin_client(chi::kAdminPoolId);
   auto restart_task = admin_client.AsyncRestartContainers(chi::PoolQuery::Local());
   restart_task.Wait();
 
@@ -158,7 +158,7 @@ int VerifyBlobs() {
   }
 
   // Verify pool was recreated by connecting a CTE client
-  clio_cte::core::Client cte_client(chi::PoolId(512, 0));
+  clio::cte::core::Client cte_client(chi::PoolId(512, 0));
 
   // Verify we can create/get a tag on the restarted pool
   auto tag_task = cte_client.AsyncGetOrCreateTag(kTagName);
@@ -168,7 +168,7 @@ int VerifyBlobs() {
          tag_task->GetReturnCode());
     return 1;
   }
-  clio_cte::core::TagId tag_id = tag_task->tag_id_;
+  clio::cte::core::TagId tag_id = tag_task->tag_id_;
   HLOG(kInfo, "Phase 2: Tag '{}' accessible on restarted pool", kTagName);
 
   // Verify targets were re-registered by listing them

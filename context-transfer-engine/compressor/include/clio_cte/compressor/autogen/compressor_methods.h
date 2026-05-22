@@ -9,7 +9,7 @@
  * Auto-generated method definitions for compressor
  */
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 namespace Method {
 // Inherited methods
@@ -43,6 +43,6 @@ inline const std::vector<std::string>& GetMethodNames() {
 }
 }  // namespace Method
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // COMPRESSOR_AUTOGEN_METHODS_H_

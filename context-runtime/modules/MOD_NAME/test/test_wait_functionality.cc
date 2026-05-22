@@ -112,7 +112,7 @@ namespace {
      * Create MOD_NAME container for testing
      */
     bool createContainer(chi::PoolId pool_id) {
-      clio_run::MOD_NAME::Client client(pool_id);
+      clio::run::MOD_NAME::Client client(pool_id);
 
 
       try {
@@ -199,7 +199,7 @@ TEST_CASE("wait_test_basic_functionality", "[wait_test][basic]") {
   }
   
   SECTION("Basic WaitTest with depth 1") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();
@@ -223,7 +223,7 @@ TEST_CASE("wait_test_basic_functionality", "[wait_test][basic]") {
   }
   
   SECTION("Basic WaitTest with depth 3") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();
@@ -259,7 +259,7 @@ TEST_CASE("wait_test_recursive_functionality", "[wait_test][recursive]") {
   }
   
   SECTION("Recursive WaitTest with depth 5") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();
@@ -283,7 +283,7 @@ TEST_CASE("wait_test_recursive_functionality", "[wait_test][recursive]") {
   }
   
   SECTION("Deep recursive WaitTest with depth 10") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();
@@ -319,7 +319,7 @@ TEST_CASE("wait_test_async_functionality", "[wait_test][async]") {
   }
   
   SECTION("Async WaitTest with manual Wait() call") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();
@@ -347,12 +347,12 @@ TEST_CASE("wait_test_async_functionality", "[wait_test][async]") {
   }
   
   SECTION("Multiple concurrent async WaitTest tasks") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     const int num_tasks = 3;
     std::vector<chi::u32> depths = {2, 3, 4};
-    std::vector<chi::Future<clio_run::MOD_NAME::WaitTestTask>> tasks;
+    std::vector<chi::Future<clio::run::MOD_NAME::WaitTestTask>> tasks;
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -395,7 +395,7 @@ TEST_CASE("wait_test_edge_cases", "[wait_test][edge_cases]") {
   }
   
   SECTION("WaitTest with depth 0") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();
@@ -413,7 +413,7 @@ TEST_CASE("wait_test_edge_cases", "[wait_test][edge_cases]") {
   }
   
   SECTION("WaitTest with same test_id multiple times") {
-    clio_run::MOD_NAME::Client client(kWaitTestPoolId);
+    clio::run::MOD_NAME::Client client(kWaitTestPoolId);
 
 
     chi::u32 test_id = fixture.generateTestId();

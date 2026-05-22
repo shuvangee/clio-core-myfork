@@ -103,7 +103,7 @@ class MigrateTestFixture {
   bool createModNamePool() {
     try {
       chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-      clio_run::MOD_NAME::Client mod_name_client(test_pool_id_);
+      clio::run::MOD_NAME::Client mod_name_client(test_pool_id_);
       std::string pool_name = "test_migrate_pool";
       auto create_task =
           mod_name_client.AsyncCreate(pool_query, pool_name, test_pool_id_);
@@ -132,7 +132,7 @@ TEST_CASE("Migrate container and verify task re-routing",
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool());
 
-    clio_run::MOD_NAME::Client mod_name_client(fixture.getTestPoolId());
+    clio::run::MOD_NAME::Client mod_name_client(fixture.getTestPoolId());
     chi::PoolQuery create_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_migrate_pool";
     auto create_task = mod_name_client.AsyncCreate(
@@ -192,7 +192,7 @@ TEST_CASE("Migrate container during broadcast event",
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool());
 
-    clio_run::MOD_NAME::Client mod_name_client(fixture.getTestPoolId());
+    clio::run::MOD_NAME::Client mod_name_client(fixture.getTestPoolId());
     chi::PoolQuery create_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_migrate_broadcast_pool";
     auto create_task = mod_name_client.AsyncCreate(

@@ -40,7 +40,7 @@
 #include "clio_runtime/MOD_NAME/MOD_NAME_client.h"
 #include "clio_runtime/MOD_NAME/MOD_NAME_tasks.h"
 
-namespace clio_run::MOD_NAME {
+namespace clio::run::MOD_NAME {
 
 // Define static constexpr member for proper linkage when address is taken
 constexpr const char* CreateParams::chimod_lib_name;
@@ -48,4 +48,4 @@ constexpr const char* CreateParams::chimod_lib_name;
 // Client implementation is mostly header-only
 // This file exists for any global client-side state or initialization
 
-} // namespace clio_run::MOD_NAME
+} // namespace clio::run::MOD_NAME

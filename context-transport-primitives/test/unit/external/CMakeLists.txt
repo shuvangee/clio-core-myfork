@@ -3,10 +3,11 @@ project(clio_ctp_external_test)
 # ------------------------------------------------------------------------------
 # External libraries
 # ------------------------------------------------------------------------------
-# Use unified IOWarp Core package which includes ClioCtp
-find_package(iowarp-core CONFIG REQUIRED)
-message(STATUS "found IowarpCore at ${IowarpCore_DIR}")
-message(STATUS "  ClioCtp (context-transport-primitives) included in IowarpCore")
+# Use unified IOWarp Core package which includes ClioCtp.
+# `clio-core` is the canonical name; `iowarp-core` still works as a legacy alias.
+find_package(clio-core CONFIG REQUIRED)
+message(STATUS "found clio-core at ${clio-core_DIR}")
+message(STATUS "  ClioCtp (context-transport-primitives) included in clio-core")
 
 # ------------------------------------------------------------------------------
 # Build

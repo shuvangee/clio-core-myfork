@@ -120,7 +120,7 @@ class WeightManager {
   size_t PageSize() const;
 
   /** GpuVmm instance (direct access for the ggml backend). */
-  clio_cte::uvm::GpuVirtualMemoryManager& Vmm();
+  clio::cte::uvm::GpuVirtualMemoryManager& Vmm();
 
  private:
   struct LayerRange {
@@ -130,7 +130,7 @@ class WeightManager {
   };
 
   Config cfg_;
-  clio_cte::uvm::GpuVirtualMemoryManager vmm_;
+  clio::cte::uvm::GpuVirtualMemoryManager vmm_;
   std::vector<LayerRange> layer_ranges_;
   bool ready_ = false;
 };

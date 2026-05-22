@@ -86,7 +86,7 @@ public:
     REQUIRE(CLIO_IPC->IsInitialized());
 
     // Initialize CTE client using singleton
-    if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+    if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
       FAIL("Failed to initialize CTE client");
     }
 

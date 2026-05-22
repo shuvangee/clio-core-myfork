@@ -187,7 +187,7 @@ public:
       chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
 
       // Create MOD_NAME client and container directly with dynamic pool ID
-      clio_run::MOD_NAME::Client mod_name_client(test_pool_id_);
+      clio::run::MOD_NAME::Client mod_name_client(test_pool_id_);
       std::string mod_pool_name = "test_streaming_pool";
       auto create_task =
           mod_name_client.AsyncCreate(pool_query, mod_pool_name, test_pool_id_);
@@ -228,7 +228,7 @@ TEST_CASE("MOD_NAME Small Output Test", "[streaming][small]") {
   REQUIRE(fixture.createModNamePool());
 
   // Create client
-  clio_run::MOD_NAME::Client client(fixture.test_pool_id_);
+  clio::run::MOD_NAME::Client client(fixture.test_pool_id_);
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
 
   // Create a custom task with 2KB of data (fits in default copy space)
@@ -275,7 +275,7 @@ TEST_CASE("MOD_NAME Large Output Streaming Test", "[streaming][large]") {
   REQUIRE(fixture.createModNamePool());
 
   // Create client
-  clio_run::MOD_NAME::Client client(fixture.test_pool_id_);
+  clio::run::MOD_NAME::Client client(fixture.test_pool_id_);
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
 
   // Create a TestLargeOutput task (returns 1MB of data)
@@ -331,12 +331,12 @@ TEST_CASE("MOD_NAME Concurrent Streaming Test", "[streaming][concurrent]") {
   REQUIRE(fixture.createModNamePool());
 
   // Create client
-  clio_run::MOD_NAME::Client client(fixture.test_pool_id_);
+  clio::run::MOD_NAME::Client client(fixture.test_pool_id_);
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
 
   // Create 5 concurrent tasks with large outputs
   constexpr size_t kNumTasks = 5;
-  std::vector<chi::Future<clio_run::MOD_NAME::TestLargeOutputTask>> tasks;
+  std::vector<chi::Future<clio::run::MOD_NAME::TestLargeOutputTask>> tasks;
 
   INFO("Creating " << kNumTasks << " concurrent TestLargeOutput tasks...");
   auto start_time = std::chrono::high_resolution_clock::now();

@@ -111,7 +111,7 @@ TEST_CASE("Failover to new host after server shutdown",
     // Step 1: Create a MOD_NAME pool and verify a task completes locally
     // ------------------------------------------------------------------
     INFO("Step 1: Creating MOD_NAME pool and running pre-shutdown task");
-    clio_run::MOD_NAME::Client mod_name_client(kReconnectPoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kReconnectPoolId);
     {
       auto create_task = mod_name_client.AsyncCreate(
           chi::PoolQuery::Dynamic(), "reconnect_test_pool", kReconnectPoolId);
@@ -135,7 +135,7 @@ TEST_CASE("Failover to new host after server shutdown",
     // ------------------------------------------------------------------
     INFO("Step 2: Sending AsyncStopRuntime to local runtime");
     {
-      clio_run::admin::Client admin_client(chi::kAdminPoolId);
+      clio::run::admin::Client admin_client(chi::kAdminPoolId);
       // Fire-and-forget: send stop with short grace period.
       // Do NOT call Wait() — the server may die before responding.
       admin_client.AsyncStopRuntime(
@@ -162,7 +162,7 @@ TEST_CASE("Failover to new host after server shutdown",
     // ------------------------------------------------------------------
     INFO("Step 3: Creating pool on new host after reconnection");
     {
-      clio_run::MOD_NAME::Client new_client(kReconnectPoolId);
+      clio::run::MOD_NAME::Client new_client(kReconnectPoolId);
       auto create_task = new_client.AsyncCreate(
           chi::PoolQuery::Dynamic(), "reconnect_post_failover_pool",
           kReconnectPoolId);

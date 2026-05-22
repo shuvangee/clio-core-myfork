@@ -49,9 +49,9 @@
  * Defines tasks for block device operations with libaio and data allocation
  */
 
-namespace clio_run::bdev {
+namespace clio::run::bdev {
 
-using MonitorTask = clio_run::admin::MonitorTask;
+using MonitorTask = clio::run::admin::MonitorTask;
 
 /**
  * Default RAM-tier sizing policy.
@@ -316,7 +316,7 @@ struct CreateParams {
  * method) Non-admin modules should use GetOrCreatePoolTask instead of
  * BaseCreateTask
  */
-using CreateTask = clio_run::admin::GetOrCreatePoolTask<CreateParams>;
+using CreateTask = clio::run::admin::GetOrCreatePoolTask<CreateParams>;
 
 /**
  * AllocateBlocksTask - Allocate multiple blocks with specified total size
@@ -738,8 +738,8 @@ struct UpdateTask : public chi::Task {
  * Standard DestroyTask for bdev
  * All ChiMods should use the same DestroyTask structure from admin
  */
-using DestroyTask = clio_run::admin::DestroyTask;
+using DestroyTask = clio::run::admin::DestroyTask;
 
-}  // namespace clio_run::bdev
+}  // namespace clio::run::bdev
 
 #endif  // BDEV_TASKS_H_

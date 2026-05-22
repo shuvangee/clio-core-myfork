@@ -37,7 +37,7 @@ class ClioBenchmark(Application):
     - io_size: Size of each I/O operation (bdev_io only)
     - lane_policy: Task lane mapping strategy
 
-    Assumes clio_run_thrpt_benchmark is installed and available in PATH.
+    Assumes clio_run_thrpt_bench is installed and available in PATH.
     Requires clio_runtime to be running.
     """
 
@@ -122,13 +122,13 @@ class ClioBenchmark(Application):
     def start(self):
         """Run the benchmark"""
         # Verify benchmark executable is available
-        Which('clio_run_thrpt_benchmark', LocalExecInfo(env=self.mod_env)).run()
+        Which('clio_run_thrpt_bench', LocalExecInfo(env=self.mod_env)).run()
 
         self.log(f"Starting {self.config['test_case']} throughput benchmark")
 
         # Build benchmark command
         cmd_parts = [
-            'clio_run_thrpt_benchmark',
+            'clio_run_thrpt_bench',
             f'--test-case {self.config["test_case"]}',
             f'--threads {self.config["threads"]}',
             f'--duration {self.config["duration"]}',

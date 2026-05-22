@@ -54,7 +54,7 @@
 /**
  * Load OMNI configuration file and produce vector of AssimilationCtx
  */
-std::vector<clio_cae::core::AssimilationCtx> LoadOmni(
+std::vector<clio::cae::core::AssimilationCtx> LoadOmni(
     const std::string& omni_path) {
   HLOG(kInfo, "Loading OMNI file: {}", omni_path);
 
@@ -76,7 +76,7 @@ std::vector<clio_cae::core::AssimilationCtx> LoadOmni(
     throw std::runtime_error("OMNI 'transfers' must be a sequence/array");
   }
 
-  std::vector<clio_cae::core::AssimilationCtx> contexts;
+  std::vector<clio::cae::core::AssimilationCtx> contexts;
   contexts.reserve(transfers.size());
 
   // Parse each transfer entry
@@ -97,7 +97,7 @@ std::vector<clio_cae::core::AssimilationCtx> LoadOmni(
                                " missing required 'format' field");
     }
 
-    clio_cae::core::AssimilationCtx ctx;
+    clio::cae::core::AssimilationCtx ctx;
     ctx.src = transfer["src"].as<std::string>();
     ctx.dst = transfer["dst"].as<std::string>();
     ctx.format = transfer["format"].as<std::string>();
@@ -207,11 +207,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Load OMNI file and parse transfers
-    std::vector<clio_cae::core::AssimilationCtx> contexts =
+    std::vector<clio::cae::core::AssimilationCtx> contexts =
         LoadOmni(omni_file_path);
 
     // Connect to CAE core container using the standard pool ID
-    clio_cae::core::Client client(clio_cae::core::kCaePoolId);
+    clio::cae::core::Client client(clio::cae::core::kCaePoolId);
 
     HLOG(kInfo, "Calling ParseOmni...");
 

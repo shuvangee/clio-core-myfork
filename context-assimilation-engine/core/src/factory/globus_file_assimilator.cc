@@ -52,10 +52,10 @@
 // namespace collision
 #include <clio_cte/core/core_client.h>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 GlobusFileAssimilator::GlobusFileAssimilator(
-    std::shared_ptr<clio_cte::core::Client> cte_client)
+    std::shared_ptr<clio::cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
 chi::TaskResume GlobusFileAssimilator::Schedule(const AssimilationCtx& ctx,
@@ -839,4 +839,4 @@ int GlobusFileAssimilator::DownloadFile(const std::string& endpoint_id,
 }
 #endif  // CAE_ENABLE_GLOBUS
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core

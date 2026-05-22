@@ -51,7 +51,7 @@
 #include <numeric>
 #include "data_stats.h"  // For DataType enum
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * Distribution type enumeration
@@ -490,6 +490,6 @@ class DistributionClassifierFactory {
   }
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_MODELS_DISTRIBUTION_CLASSIFIER_H_

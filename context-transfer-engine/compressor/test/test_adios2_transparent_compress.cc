@@ -35,7 +35,7 @@ using namespace std::chrono_literals;
 namespace fs = std::filesystem;
 
 static bool g_initialized = false;
-static clio_cte::core::TagId g_tag_id;
+static clio::cte::core::TagId g_tag_id;
 
 static void EnsureInit() {
   if (g_initialized) return;
@@ -55,7 +55,7 @@ static void EnsureInit() {
 
   // Point the CTE client at the entrypoint pool (512.0 = compressor)
   auto *cte_client = CLIO_CTE_CLIENT;
-  cte_client->Init(clio_cte::core::kCtePoolId);
+  cte_client->Init(clio::cte::core::kCtePoolId);
 
   // Create a tag for the tests
   auto tag_task = cte_client->AsyncGetOrCreateTag("adios2_compress_test");
@@ -83,7 +83,7 @@ TEST_CASE("ADIOS2 transparent compress - PutBlob float array",
 
   ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
 
-  clio_cte::core::Context ctx;
+  clio::cte::core::Context ctx;
 #if CTP_ENABLE_COMPRESS
   ctx.dynamic_compress_ = 1;  // Static compression
   ctx.compress_lib_ = 4;      // LZ4
@@ -156,7 +156,7 @@ TEST_CASE("ADIOS2 transparent compress - multi-step workflow",
     ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
     std::string blob_name = "pressure/step" + std::to_string(step);
 
-    clio_cte::core::Context ctx;
+    clio::cte::core::Context ctx;
 #if CTP_ENABLE_COMPRESS
     ctx.dynamic_compress_ = 1;
     ctx.compress_lib_ = 10;   // ZSTD

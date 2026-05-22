@@ -110,8 +110,8 @@ static std::string chi_test_data_dir() {
    static constexpr size_t kTestBlobSize = 4096; // 4KB test blobs
 
    // CTE Core pool configuration - use constants from core_tasks.h
-   static inline const chi::PoolId& kCTECorePoolId = clio_cte::core::kCtePoolId;
-   static inline const char* kCTECorePoolName = clio_cte::core::kCtePoolName;
+   static inline const chi::PoolId& kCTECorePoolId = clio::cte::core::kCtePoolId;
+   static inline const char* kCTECorePoolName = clio::cte::core::kCtePoolName;
 
    std::string test_storage_path_;
 
@@ -125,7 +125,7 @@ static std::string chi_test_data_dir() {
    /**
     * Helper: Async TagQuery
     */
-   static std::vector<std::string> TagQueryAsync(clio_cte::core::Client* client,
+   static std::vector<std::string> TagQueryAsync(clio::cte::core::Client* client,
                                                   const std::string& tag_pattern,
                                                   chi::u32 flags,
                                                   const chi::PoolQuery& pool_query) {
@@ -138,7 +138,7 @@ static std::string chi_test_data_dir() {
     * Helper: Async BlobQuery
     */
    static std::vector<std::pair<std::string, std::string>> BlobQueryAsync(
-       clio_cte::core::Client* client,
+       clio::cte::core::Client* client,
        const std::string& tag_pattern,
        const std::string& blob_pattern,
        chi::u32 flags,
@@ -179,7 +179,7 @@ static std::string chi_test_data_dir() {
        // Wait for runtime to be fully ready
        std::this_thread::sleep_for(500ms);
 
-       success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+       success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
        if (!success) {
          throw std::runtime_error("Failed to initialize CTE client");
        }
@@ -210,9 +210,9 @@ static std::string chi_test_data_dir() {
 
      // Create test storage target using bdev client
      chi::PoolId bdev_pool_id(200, 0);  // Custom pool ID for bdev
-     clio_run::bdev::Client bdev_client(bdev_pool_id);
+     clio::run::bdev::Client bdev_client(bdev_pool_id);
      auto create_task = bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), test_storage_path_,
-                                                 bdev_pool_id, clio_run::bdev::BdevType::kFile);
+                                                 bdev_pool_id, clio::run::bdev::BdevType::kFile);
      create_task.Wait();
 
      // Wait for storage target creation
@@ -220,7 +220,7 @@ static std::string chi_test_data_dir() {
 
      // Register the storage target with CTE
      auto reg_task = cte_client->AsyncRegisterTarget(test_storage_path_,
-                                                      clio_run::bdev::BdevType::kFile,
+                                                      clio::run::bdev::BdevType::kFile,
                                                       kTestTargetSize, chi::PoolQuery::Local(), bdev_pool_id);
      reg_task.Wait();
      std::this_thread::sleep_for(100ms);
@@ -253,7 +253,7 @@ static std::string chi_test_data_dir() {
      test_tags_.push_back(tag_name);
 
      // Use Tag wrapper class for easier blob creation
-     clio_cte::core::Tag tag(tag_name);
+     clio::cte::core::Tag tag(tag_name);
 
      // Create test data buffer
      std::vector<char> test_data(kTestBlobSize, 'X');

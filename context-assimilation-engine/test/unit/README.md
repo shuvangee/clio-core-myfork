@@ -234,7 +234,7 @@ To add a new test:
    target_link_libraries(test_my_feature
      PRIVATE
        clio_cae_core_client
-       chimaera::cxx
+       clio::run::cxx
    )
    install(TARGETS test_my_feature DESTINATION bin)
    ```

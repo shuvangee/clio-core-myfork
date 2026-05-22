@@ -32,7 +32,7 @@ int RuntimeStop(int argc, char* argv[]) {
     } finalize_guard;
 
     HLOG(kDebug, "Creating admin client connection...");
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager || !ipc_manager->IsInitialized()) {
@@ -77,7 +77,7 @@ int RuntimeStop(int argc, char* argv[]) {
 
     auto start_time = std::chrono::steady_clock::now();
 
-    chi::Future<clio_run::admin::StopRuntimeTask> stop_task;
+    chi::Future<clio::run::admin::StopRuntimeTask> stop_task;
     try {
       stop_task = admin_client.AsyncStopRuntime(pool_query, shutdown_flags, grace_period_ms);
       if (stop_task.IsNull()) {

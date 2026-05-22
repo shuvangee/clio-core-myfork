@@ -78,7 +78,7 @@ TEST_CASE("Task Streaming - Small Output", "[streaming][small]") {
   REQUIRE(g_initialized);
 
   // Initialize MOD_NAME client
-  clio_run::MOD_NAME::Client client(kTestModNamePoolId);
+  clio::run::MOD_NAME::Client client(kTestModNamePoolId);
 
   // Create the MOD_NAME container
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
@@ -104,7 +104,7 @@ TEST_CASE("Task Streaming - Large Output (1MB)", "[streaming][large]") {
   REQUIRE(g_initialized);
 
   // Initialize MOD_NAME client
-  clio_run::MOD_NAME::Client client(kTestModNamePoolId);
+  clio::run::MOD_NAME::Client client(kTestModNamePoolId);
 
   // Create the MOD_NAME container
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
@@ -155,7 +155,7 @@ TEST_CASE("FutureShm Bitfield Operations", "[streaming][bitfield]") {
   REQUIRE(g_initialized);
 
   // Initialize MOD_NAME client
-  clio_run::MOD_NAME::Client client(kTestModNamePoolId);
+  clio::run::MOD_NAME::Client client(kTestModNamePoolId);
 
   // Create the MOD_NAME container
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();

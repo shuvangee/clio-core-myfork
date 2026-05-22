@@ -41,7 +41,7 @@
 #include <string>
 #include <vector>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 /**
  * Performance configuration for CTE Core operations
@@ -325,6 +325,6 @@ class Config {
   std::string FormatSizeBytes(chi::u64 size_bytes) const;
 };
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
 #endif  // WRPCTE_CORE_CONFIG_H_

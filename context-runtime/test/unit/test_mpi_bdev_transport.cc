@@ -71,9 +71,9 @@ using namespace chi;
 
 // --- Helpers ---
 
-inline chi::priv::vector<clio_run::bdev::Block> WrapBlock(
-    const clio_run::bdev::Block& block) {
-  chi::priv::vector<clio_run::bdev::Block> blocks(CTP_MALLOC);
+inline chi::priv::vector<clio::run::bdev::Block> WrapBlock(
+    const clio::run::bdev::Block& block) {
+  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
   blocks.push_back(block);
   return blocks;
 }
@@ -114,13 +114,13 @@ bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
 
   // Rank-specific pool to avoid conflicts
   chi::PoolId pool_id(9000 + rank, 0);
-  clio_run::bdev::Client client(pool_id);
+  clio::run::bdev::Client client(pool_id);
   std::string pool_name = "mpi_bdev_" + mode_name + "_rank" + std::to_string(rank);
 
   // Create pool
   auto create_task = client.AsyncCreate(
       chi::PoolQuery::Dynamic(), pool_name, pool_id,
-      clio_run::bdev::BdevType::kRam, kRamSize);
+      clio::run::bdev::BdevType::kRam, kRamSize);
   create_task.Wait();
   if (create_task->return_code_ != 0) {
     HLOG(kError, "[Rank {}] Create pool failed: {}", rank, create_task->return_code_);
@@ -136,7 +136,7 @@ bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
     HLOG(kError, "[Rank {}] AllocateBlocks failed", rank);
     return false;
   }
-  clio_run::bdev::Block block = alloc_task->blocks_[0];
+  clio::run::bdev::Block block = alloc_task->blocks_[0];
 
   // Generate rank-specific test data
   std::vector<ctp::u8> write_data(io_size);

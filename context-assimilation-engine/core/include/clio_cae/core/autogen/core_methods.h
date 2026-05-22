@@ -9,7 +9,7 @@
  * Auto-generated method definitions for core
  */
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 namespace Method {
 // Inherited methods
@@ -39,6 +39,6 @@ inline const std::vector<std::string>& GetMethodNames() {
 }
 }  // namespace Method
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CORE_AUTOGEN_METHODS_H_

@@ -59,7 +59,7 @@ inline constexpr chi::u32 kNumTasks = 64;
 
 /** Stride between adjacent (TaskT + FutureShm) pairs in the backend. */
 inline constexpr size_t kSlotBytes =
-    sizeof(clio_run::MOD_NAME::GpuSubmitTask) + sizeof(chi::gpu::FutureShm);
+    sizeof(clio::run::MOD_NAME::GpuSubmitTask) + sizeof(chi::gpu::FutureShm);
 
 /** Total backend size: kNumTasks slots + a few extra bytes of slack. */
 inline constexpr size_t kBackendBytes =
@@ -89,9 +89,9 @@ inline void EnsureInit() {
     std::abort();
   }
 
-  static clio_run::MOD_NAME::Client client(GetTestPoolId());
-  using CreateTask = clio_run::MOD_NAME::CreateTask;
-  using CreateParams = clio_run::MOD_NAME::CreateParams;
+  static clio::run::MOD_NAME::Client client(GetTestPoolId());
+  using CreateTask = clio::run::MOD_NAME::CreateTask;
+  using CreateParams = clio::run::MOD_NAME::CreateParams;
   auto task = ipc->NewTask<CreateTask>(
       chi::CreateTaskId(), chi::kAdminPoolId,
       chi::PoolQuery::Dynamic(),
@@ -115,9 +115,9 @@ inline void EnsureInit() {
  *                formula and used by the chimod).
  * @return        Vector of task FullPtrs (each carries {alloc_id, off}).
  */
-inline std::vector<ctp::ipc::FullPtr<clio_run::MOD_NAME::GpuSubmitTask>>
+inline std::vector<ctp::ipc::FullPtr<clio::run::MOD_NAME::GpuSubmitTask>>
 PlaceTaskSlots(char *base, ctp::ipc::AllocatorId alloc_id, chi::u32 gpu_id) {
-  using TaskT = clio_run::MOD_NAME::GpuSubmitTask;
+  using TaskT = clio::run::MOD_NAME::GpuSubmitTask;
   std::vector<ctp::ipc::FullPtr<TaskT>> handles;
   handles.reserve(kNumTasks);
   for (chi::u32 i = 0; i < kNumTasks; ++i) {
@@ -145,7 +145,7 @@ PlaceTaskSlots(char *base, ctp::ipc::AllocatorId alloc_id, chi::u32 gpu_id) {
  * Returns the index of the first mismatch, or kNumTasks on success.
  */
 inline chi::u32 VerifyResults(
-    const std::vector<ctp::ipc::FullPtr<clio_run::MOD_NAME::GpuSubmitTask>>
+    const std::vector<ctp::ipc::FullPtr<clio::run::MOD_NAME::GpuSubmitTask>>
         &handles,
     chi::u32 gpu_id) {
   for (chi::u32 i = 0; i < handles.size(); ++i) {

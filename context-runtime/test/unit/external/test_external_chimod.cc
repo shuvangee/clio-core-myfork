@@ -21,7 +21,7 @@ int main() {
     HIPRINT("Chimaera client initialized successfully");
 
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
     HIPRINT("Admin client created successfully");
 
     // Test that we can call basic methods (without actually creating containers)

@@ -1,6 +1,6 @@
 # CTE Core ChiMod Configuration
 module_name: core
-namespace: clio_cte
+namespace: clio::cte
 version: 1.0.0
 
 # Inherited Methods (fixed IDs)

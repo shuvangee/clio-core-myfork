@@ -19,7 +19,7 @@ namespace iowarp {
 class ContextInterface {
 public:
   // Bundle a group of related objects together and assimilate them
-  int ContextBundle(const std::vector<clio_cae::core::AssimilationCtx> &bundle);
+  int ContextBundle(const std::vector<clio::cae::core::AssimilationCtx> &bundle);
 
   // Retrieve the identities of objects matching tag and blob patterns
   std::vector<std::string> ContextQuery(const std::string &tag_re,
@@ -48,7 +48,7 @@ public:
 
 Wraps the CAE `ParseOmni` functionality to bundle and assimilate a group of related objects.
 
-**Underlying API**: `clio_cae::core::Client::ParseOmni()`
+**Underlying API**: `clio::cae::core::Client::ParseOmni()`
 
 **Parameters**:
 - `bundle`: Vector of `AssimilationCtx` objects defining source, destination, format, and other metadata
@@ -61,8 +61,8 @@ Wraps the CAE `ParseOmni` functionality to bundle and assimilate a group of rela
 ```cpp
 iowarp::ContextInterface ctx;
 
-std::vector<clio_cae::core::AssimilationCtx> bundle;
-clio_cae::core::AssimilationCtx ctx1;
+std::vector<clio::cae::core::AssimilationCtx> bundle;
+clio::cae::core::AssimilationCtx ctx1;
 ctx1.src = "file::/path/to/data.bin";
 ctx1.dst = "iowarp::my_tag";
 ctx1.format = "binary";
@@ -80,7 +80,7 @@ if (result == 0) {
 
 Queries the CTE system for blobs matching specified regex patterns.
 
-**Underlying API**: `clio_cte::core::Client::BlobQuery()`
+**Underlying API**: `clio::cte::core::Client::BlobQuery()`
 
 **Parameters**:
 - `tag_re`: Tag regex pattern to match
@@ -107,7 +107,7 @@ for (const auto& blob_name : results) {
 
 Destroys contexts by deleting their corresponding tags from the CTE system.
 
-**Underlying API**: `clio_cte::core::Client::DelTag()` (called for each context name)
+**Underlying API**: `clio::cte::core::Client::DelTag()` (called for each context name)
 
 **Parameters**:
 - `context_names`: Vector of context names to destroy
@@ -147,7 +147,7 @@ Placeholder for future implementation. Currently returns error code `1`.
 ## AssimilationCtx Structure
 
 ```cpp
-namespace clio_cae::core {
+namespace clio::cae::core {
 struct AssimilationCtx {
   std::string src;         // Source URL (e.g., file::/path/to/file)
   std::string dst;         // Destination URL (e.g., iowarp::tag_name)
@@ -303,7 +303,7 @@ api/
 ## Dependencies
 
 **Required**:
-- Clio runtime (chimaera::cxx)
+- Clio runtime (clio::run::cxx)
 - Context Transfer Engine (clio_cte_core_client)
 - Context Assimilation Engine (clio_cae_core_client)
 

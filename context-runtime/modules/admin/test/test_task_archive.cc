@@ -87,9 +87,9 @@ std::unique_ptr<chi::Task> CreateTestTask() {
 }
 
 // Helper to create test admin task with sample data
-std::unique_ptr<clio_run::admin::CreateTask> CreateTestAdminTask() {
+std::unique_ptr<clio::run::admin::CreateTask> CreateTestAdminTask() {
   auto alloc = GetTestAllocator();
-  auto task = std::make_unique<clio_run::admin::CreateTask>(
+  auto task = std::make_unique<clio::run::admin::CreateTask>(
       chi::TaskId(2, 2, 2, 0, 2), chi::PoolId(200, 0), chi::PoolQuery(),
       "test_chimod", "test_pool", chi::PoolId(300, 0),
       nullptr);  // No client for test task
@@ -401,7 +401,7 @@ TEST_CASE("Admin Task Serialization", "[task_archive][admin_tasks]") {
 
   SECTION("DestroyPoolTask serialization") {
     auto alloc = GetTestAllocator();
-    clio_run::admin::DestroyPoolTask original_task(
+    clio::run::admin::DestroyPoolTask original_task(
         chi::TaskId(3, 3, 3, 0, 3), chi::PoolId(400, 0),
         chi::PoolQuery(), chi::PoolId(500, 0), 0x123);
     original_task.return_code_ = 99;
@@ -413,7 +413,7 @@ TEST_CASE("Admin Task Serialization", "[task_archive][admin_tasks]") {
 
     chi::LoadTaskArchive in_archive_in(out_archive_in.GetData());
     in_archive_in.msg_type_ = chi::MsgType::kSerializeIn;
-    clio_run::admin::DestroyPoolTask new_task_in;
+    clio::run::admin::DestroyPoolTask new_task_in;
     in_archive_in >> new_task_in;
 
     REQUIRE(new_task_in.target_pool_id_ == original_task.target_pool_id_);
@@ -425,7 +425,7 @@ TEST_CASE("Admin Task Serialization", "[task_archive][admin_tasks]") {
 
     chi::LoadTaskArchive in_archive_out(out_archive_out.GetData());
     in_archive_out.msg_type_ = chi::MsgType::kSerializeOut;
-    clio_run::admin::DestroyPoolTask new_task_out;
+    clio::run::admin::DestroyPoolTask new_task_out;
     in_archive_out >> new_task_out;
 
     REQUIRE(new_task_out.return_code_ == original_task.return_code_);
@@ -435,7 +435,7 @@ TEST_CASE("Admin Task Serialization", "[task_archive][admin_tasks]") {
 
   SECTION("StopRuntimeTask serialization") {
     auto alloc = GetTestAllocator();
-    clio_run::admin::StopRuntimeTask original_task(
+    clio::run::admin::StopRuntimeTask original_task(
         chi::TaskId(4, 4, 4, 0, 4), chi::PoolId(600, 0),
         chi::PoolQuery(), 0x456, 10000);
     original_task.return_code_ = 777;
@@ -447,7 +447,7 @@ TEST_CASE("Admin Task Serialization", "[task_archive][admin_tasks]") {
 
     chi::LoadTaskArchive in_archive_in(out_archive_in.GetData());
     in_archive_in.msg_type_ = chi::MsgType::kSerializeIn;
-    clio_run::admin::StopRuntimeTask new_task_in;
+    clio::run::admin::StopRuntimeTask new_task_in;
     in_archive_in >> new_task_in;
 
     REQUIRE(new_task_in.shutdown_flags_ == original_task.shutdown_flags_);
@@ -459,7 +459,7 @@ TEST_CASE("Admin Task Serialization", "[task_archive][admin_tasks]") {
 
     chi::LoadTaskArchive in_archive_out(out_archive_out.GetData());
     in_archive_out.msg_type_ = chi::MsgType::kSerializeOut;
-    clio_run::admin::StopRuntimeTask new_task_out;
+    clio::run::admin::StopRuntimeTask new_task_out;
     in_archive_out >> new_task_out;
 
     REQUIRE(new_task_out.return_code_ == original_task.return_code_);

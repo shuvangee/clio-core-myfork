@@ -38,7 +38,7 @@
 #include <vector>
 #include "clio_ctp/data_structures/serialization/global_serialize.h"
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 /**
  * AssimilationCtx - Context for data assimilation operations
@@ -88,6 +88,6 @@ struct AssimilationCtx {
   }
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_ASSIMILATION_CTX_H_

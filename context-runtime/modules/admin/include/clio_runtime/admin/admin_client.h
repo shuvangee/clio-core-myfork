@@ -48,7 +48,7 @@
  * runtime.
  */
 
-namespace clio_run::admin {
+namespace clio::run::admin {
 
 class Client : public chi::ContainerClient {
  public:
@@ -199,7 +199,7 @@ class Client : public chi::ContainerClient {
 
     // Create ComposeTask with PoolConfig passed directly to constructor
     auto task_ptr =
-        ipc_manager->NewTask<clio_run::admin::ComposeTask<chi::PoolConfig>>(
+        ipc_manager->NewTask<clio::run::admin::ComposeTask<chi::PoolConfig>>(
             chi::CreateTaskId(), chi::kAdminPoolId, pool_config.pool_query_,
             pool_config);
 
@@ -528,6 +528,6 @@ class Client : public chi::ContainerClient {
   }
 };
 
-}  // namespace clio_run::admin
+}  // namespace clio::run::admin
 
 #endif  // ADMIN_CLIENT_H_

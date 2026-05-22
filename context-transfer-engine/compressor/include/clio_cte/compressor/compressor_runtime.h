@@ -55,7 +55,7 @@
 #include <clio_cte/compressor/models/dense_nn_predictor.h>
 #endif
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * Compression statistics predicted by AI models
@@ -93,7 +93,7 @@ private:
   Client client_;
 
   // Core client for target monitoring
-  std::unique_ptr<clio_cte::core::Client> core_client_;
+  std::unique_ptr<clio::cte::core::Client> core_client_;
 
   /**
    * Create the container (Method::kCreate)
@@ -216,7 +216,7 @@ private:
   // Skipped entirely when CompressorConfig::tracking_enabled_ is false —
   // ScheduleTask then routes Compress via DirectHash(tag_id) and the
   // periodic PollConsumers becomes a no-op.
-  std::unordered_map<clio_cte::core::TagId, std::vector<chi::u32>>
+  std::unordered_map<clio::cte::core::TagId, std::vector<chi::u32>>
       tag_consumers_;
   chi::CoRwLock tag_consumers_lock_;
 
@@ -232,7 +232,7 @@ private:
    * @param tag_id Tag that the inbound Decompress is reading.
    * @param node_id Originating node ID of the Decompress request.
    */
-  void RegisterConsumer(const clio_cte::core::TagId &tag_id, chi::u32 node_id);
+  void RegisterConsumer(const clio::cte::core::TagId &tag_id, chi::u32 node_id);
 
   /**
    * Pick the best consumer node for placing future Compress traffic for
@@ -246,7 +246,7 @@ private:
    * @param node_id_out Out param: receives the chosen node ID on success.
    * @return true if a consumer was found, false otherwise.
    */
-  bool PickConsumerForTag(const clio_cte::core::TagId &tag_id,
+  bool PickConsumerForTag(const clio::cte::core::TagId &tag_id,
                           chi::u32 &node_id_out);
 
   /**
@@ -317,6 +317,6 @@ private:
   void LogCompressionTelemetry(const CompressionTelemetry& telemetry);
 };
 
-} // namespace clio_cte::compressor
+} // namespace clio::cte::compressor
 
 #endif // CLIO_CTE_COMPRESSOR_COMPRESSOR_RUNTIME_H_

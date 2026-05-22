@@ -38,10 +38,10 @@
 #include <string>
 
 // Define global pointer variable in source file (outside namespace)
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cte::core::ContentTransferEngine,
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio::cte::core::ContentTransferEngine,
                               g_cte_manager);
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
   // Check for race conditions - if already initialized or initializing
@@ -73,8 +73,8 @@ bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
 
   // Create CTE Core container using constants from core_tasks.h and specified pool_query
   auto create_task = cte_client->AsyncCreate(pool_query,
-                                              clio_cte::core::kCtePoolName,
-                                              clio_cte::core::kCtePoolId,
+                                              clio::cte::core::kCtePoolName,
+                                              clio::cte::core::kCtePoolId,
                                               params);
   create_task.Wait();
 
@@ -82,7 +82,7 @@ bool ContentTransferEngine::ClientInit(const chi::PoolQuery &pool_query) {
   chi::u32 return_code = create_task->GetReturnCode();
   if (return_code != 0) {
     HLOG(kError, "CTE ClientInit: Failed to create CTE pool '{}' with return code: {}",
-          clio_cte::core::kCtePoolName, return_code);
+          clio::cte::core::kCtePoolName, return_code);
     is_initializing_ = false;
     return false;
   }
@@ -128,4 +128,4 @@ std::vector<std::pair<std::string, std::string>> ContentTransferEngine::BlobQuer
   return results;
 }
 
-} // namespace clio_cte::core
+} // namespace clio::cte::core

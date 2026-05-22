@@ -164,7 +164,7 @@ void AllocationWorkerThread(size_t thread_id, const BenchmarkConfig &config,
                             std::atomic<size_t> &completed_ops,
                             std::chrono::nanoseconds &elapsed_time) {
   // Create BDev client for this thread
-  clio_run::bdev::Client bdev_client(pool_id);
+  clio::run::bdev::Client bdev_client(pool_id);
 
   // Use io_size for allocation-only benchmark
   size_t alloc_size = config.io_size;
@@ -186,7 +186,7 @@ void AllocationWorkerThread(size_t thread_id, const BenchmarkConfig &config,
       stop_flag.store(true, std::memory_order_relaxed);
       return;
     }
-    std::vector<clio_run::bdev::Block> blocks;
+    std::vector<clio::run::bdev::Block> blocks;
     for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
       blocks.push_back(alloc_task->blocks_[i]);
     }
@@ -234,7 +234,7 @@ void TaskAllocationWorkerThread(size_t thread_id, const BenchmarkConfig &config,
   size_t alloc_size = config.io_size;
 
   // Create dummy blocks vector for FreeBlocksTask
-  std::vector<clio_run::bdev::Block> dummy_blocks(2);
+  std::vector<clio::run::bdev::Block> dummy_blocks(2);
   dummy_blocks[0].offset_ = 0;
   dummy_blocks[0].size_ = 1024;
   dummy_blocks[0].block_type_ = 0;
@@ -249,12 +249,12 @@ void TaskAllocationWorkerThread(size_t thread_id, const BenchmarkConfig &config,
   // Continuously perform task allocation/deletion until stop signal
   while (!stop_flag.load(std::memory_order_relaxed)) {
     // Create and delete AllocateBlocksTask
-    auto alloc_task = ipc_manager->NewTask<clio_run::bdev::AllocateBlocksTask>(
+    auto alloc_task = ipc_manager->NewTask<clio::run::bdev::AllocateBlocksTask>(
         chi::CreateTaskId(), pool_id, chi::PoolQuery::Local(), alloc_size);
     ipc_manager->DelTask(alloc_task);
 
     // Create and delete FreeBlocksTask
-    auto free_task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>(
+    auto free_task = ipc_manager->NewTask<clio::run::bdev::FreeBlocksTask>(
         chi::CreateTaskId(), pool_id, chi::PoolQuery::Local(), dummy_blocks);
     ipc_manager->DelTask(free_task);
 
@@ -291,7 +291,7 @@ void IOWorkerThread(size_t thread_id, const BenchmarkConfig &config,
                     std::atomic<size_t> &total_bytes,
                     std::chrono::nanoseconds &elapsed_time) {
   // Create BDev client for this thread
-  clio_run::bdev::Client bdev_client(pool_id);
+  clio::run::bdev::Client bdev_client(pool_id);
 
   // Allocate data buffer in shared memory for writes (full io_size)
   auto write_buffer = CLIO_IPC->AllocateBuffer(config.io_size);
@@ -316,7 +316,7 @@ void IOWorkerThread(size_t thread_id, const BenchmarkConfig &config,
       CLIO_IPC->FreeBuffer(write_buffer);
       return;
     }
-    std::vector<clio_run::bdev::Block> blocks;
+    std::vector<clio::run::bdev::Block> blocks;
     for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
       blocks.push_back(alloc_task->blocks_[i]);
     }
@@ -331,7 +331,7 @@ void IOWorkerThread(size_t thread_id, const BenchmarkConfig &config,
       size_t bytes_to_write = std::min(bytes_remaining, block_capacity);
 
       // Create chi::priv::vector with single block for Write operation
-      chi::priv::vector<clio_run::bdev::Block> single_block(CTP_MALLOC);
+      chi::priv::vector<clio::run::bdev::Block> single_block(CTP_MALLOC);
       single_block.push_back(blocks[block_idx]);
 
       auto write_task = bdev_client.AsyncWrite(chi::PoolQuery::Local(),
@@ -388,7 +388,7 @@ void LatencyWorkerThread(size_t thread_id, const BenchmarkConfig &config,
                          std::atomic<size_t> &completed_ops,
                          std::chrono::nanoseconds &elapsed_time) {
   // Create MOD_NAME client for this thread
-  clio_run::MOD_NAME::Client mod_client(pool_id);
+  clio::run::MOD_NAME::Client mod_client(pool_id);
 
   size_t local_ops = 0;
   const size_t WARMUP_OPS = 5; // Ignore first 5 operations
@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
   if (config.test_case == TestCase::kLatency) {
     // Create MOD_NAME container for latency test
     test_pool_id = chi::PoolId(8000, 0);
-    clio_run::MOD_NAME::Client mod_client(test_pool_id);
+    clio::run::MOD_NAME::Client mod_client(test_pool_id);
     auto create_task = mod_client.AsyncCreate(chi::PoolQuery::Broadcast(),
                       "latency_test_pool", test_pool_id);
     create_task.Wait();
@@ -494,10 +494,10 @@ int main(int argc, char **argv) {
   } else {
     // Create BDev container for I/O and allocation tests
     test_pool_id = chi::PoolId(7000, 0);
-    clio_run::bdev::Client bdev_client(test_pool_id);
+    clio::run::bdev::Client bdev_client(test_pool_id);
 
     // Determine BDev type and pool name based on output directory
-    clio_run::bdev::BdevType bdev_type;
+    clio::run::bdev::BdevType bdev_type;
     std::string pool_name;
 
     // Check if output_dir begins with "ram" (case-insensitive)
@@ -513,12 +513,12 @@ int main(int argc, char **argv) {
 
     if (is_ram_bdev) {
       // Use RAM-based BDev
-      bdev_type = clio_run::bdev::BdevType::kRam;
+      bdev_type = clio::run::bdev::BdevType::kRam;
       pool_name = "benchmark_ram_bdev";
       HIPRINT("Using RAM-based BDev");
     } else {
       // Use file-based BDev
-      bdev_type = clio_run::bdev::BdevType::kFile;
+      bdev_type = clio::run::bdev::BdevType::kFile;
       std::filesystem::create_directories(config.output_dir);
       pool_name = config.output_dir + "/benchmark_bdev.dat";
       HIPRINT("Using file-based BDev: {}", pool_name);

@@ -245,7 +245,7 @@ static herr_t H5FD__hermes_term(void) {
  */
 static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr) {
-  clio_cte::core::CLIO_CTE_CLIENT_INIT();
+  clio::cte::core::CLIO_CTE_CLIENT_INIT();
   H5FD_hermes_t *file = NULL; /* clio VFD info          */
   int fd = -1;
   int o_flags = 0;
@@ -539,7 +539,7 @@ const void *H5PLget_plugin_info(void) { return &H5FD_hermes_g; }
 /** Initialize Clio */
 /*static __attribute__((constructor(101))) void init_hermes_in_vfd(void) {
   std::cout << "IN VFD" << std::endl;
-  clio_cte::core::CLIO_CTE_CLIENT_INIT();
+  clio::cte::core::CLIO_CTE_CLIENT_INIT();
 }*/
 
 } // extern C

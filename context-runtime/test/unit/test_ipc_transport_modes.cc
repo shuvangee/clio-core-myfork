@@ -60,9 +60,9 @@
 
 using namespace chi;
 
-inline chi::priv::vector<clio_run::bdev::Block> WrapBlock(
-    const clio_run::bdev::Block& block) {
-  chi::priv::vector<clio_run::bdev::Block> blocks(CTP_MALLOC);
+inline chi::priv::vector<clio::run::bdev::Block> WrapBlock(
+    const clio::run::bdev::Block& block) {
+  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
   blocks.push_back(block);
   return blocks;
 }
@@ -74,11 +74,11 @@ void SubmitTasksForMode(const std::string &mode_name) {
 
   // --- Category 1: Create bdev pool (inputs > outputs) ---
   chi::PoolId pool_id(9000, 0);
-  clio_run::bdev::Client client(pool_id);
+  clio::run::bdev::Client client(pool_id);
   std::string pool_name = "ipc_test_ram_" + mode_name;
   auto create_task = client.AsyncCreate(
       chi::PoolQuery::Dynamic(), pool_name, pool_id,
-      clio_run::bdev::BdevType::kRam, kRamSize);
+      clio::run::bdev::BdevType::kRam, kRamSize);
   create_task.Wait();
   REQUIRE(create_task->return_code_ == 0);
   client.pool_id_ = create_task->new_pool_id_;
@@ -89,7 +89,7 @@ void SubmitTasksForMode(const std::string &mode_name) {
   alloc_task.Wait();
   REQUIRE(alloc_task->return_code_ == 0);
   REQUIRE(alloc_task->blocks_.size() > 0);
-  clio_run::bdev::Block block = alloc_task->blocks_[0];
+  clio::run::bdev::Block block = alloc_task->blocks_[0];
   REQUIRE(block.size_ >= kBlockSize);
 
   // --- Category 3: Write + Read I/O round-trip (1MB transfer) ---

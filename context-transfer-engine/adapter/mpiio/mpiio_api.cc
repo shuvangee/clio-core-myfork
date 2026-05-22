@@ -65,7 +65,7 @@ extern "C" {
  */
 int CLIO_CTE_DECL(MPI_Init)(int *argc, char ***argv) {
   HLOG(kDebug, "MPI Init intercepted.");
-  clio_cte::core::CLIO_CTE_CLIENT_INIT();
+  clio::cte::core::CLIO_CTE_CLIENT_INIT();
   auto real_api = CLIO_CTE_MPIIO_API;
   return real_api->MPI_Init(argc, argv);
 }

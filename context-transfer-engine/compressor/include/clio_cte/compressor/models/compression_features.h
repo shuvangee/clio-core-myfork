@@ -46,7 +46,7 @@
 #include <string>
 #include <cstdint>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * @brief Input features for compression prediction models
@@ -444,6 +444,6 @@ class CompressionPredictor {
   }
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_MODELS_COMPRESSION_FEATURES_H_

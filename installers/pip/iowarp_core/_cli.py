@@ -66,8 +66,8 @@ def cte_bench_main():
 
 
 def run_thrpt_main():
-    """Entry point for the ``clio_run_thrpt_benchmark`` console script."""
-    _exec_iowarp_bin("clio_run_thrpt_benchmark")
+    """Entry point for the ``clio_run_thrpt_bench`` console script."""
+    _exec_iowarp_bin("clio_run_thrpt_bench")
 
 
 if __name__ == "__main__":

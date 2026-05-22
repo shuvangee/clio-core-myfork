@@ -68,7 +68,7 @@ public:
    * @param bundle Vector of AssimilationCtx objects to assimilate
    * @return 0 on success, non-zero error code on failure
    */
-  int ContextBundle(const std::vector<clio_cae::core::AssimilationCtx> &bundle);
+  int ContextBundle(const std::vector<clio::cae::core::AssimilationCtx> &bundle);
 
   /**
    * Retrieve the identities of objects matching tag and blob patterns

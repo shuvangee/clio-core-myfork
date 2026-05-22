@@ -49,7 +49,7 @@
 #include <type_traits>
 #include <random>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * Data type enumeration for statistics calculations
@@ -937,6 +937,6 @@ class BlockSamplerFactory {
   }
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_MODELS_DATA_STATS_H_

@@ -106,7 +106,7 @@ class RecoveryTestFixture {
   bool createModNamePool(const std::string &pool_name) {
     try {
       chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-      clio_run::MOD_NAME::Client mod_name_client(kRecoveryPoolId);
+      clio::run::MOD_NAME::Client mod_name_client(kRecoveryPoolId);
       auto create_task =
           mod_name_client.AsyncCreate(pool_query, pool_name, kRecoveryPoolId);
       create_task.Wait();
@@ -131,7 +131,7 @@ TEST_CASE("Pre-failure: verify tasks work on all nodes",
     REQUIRE(g_initialized);
     REQUIRE(fixture.createModNamePool("test_recovery_pool"));
 
-    clio_run::MOD_NAME::Client mod_name_client(kRecoveryPoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kRecoveryPoolId);
     chi::PoolQuery create_query = chi::PoolQuery::Dynamic();
     std::string pool_name = "test_recovery_pool";
     auto create_task = mod_name_client.AsyncCreate(
@@ -174,7 +174,7 @@ TEST_CASE("Post-failure: verify recovery re-routes tasks",
     // because Dynamic() would try to reach the dead node and hang.
     // The recovery system should have re-created container 3 on a
     // surviving node after SWIM detected node 4's death.
-    clio_run::MOD_NAME::Client mod_name_client(kRecoveryPoolId);
+    clio::run::MOD_NAME::Client mod_name_client(kRecoveryPoolId);
     mod_name_client.pool_id_ = kRecoveryPoolId;
     INFO("Reusing pool from Phase 1: " << kRecoveryPoolId.ToU64());
 

@@ -42,7 +42,7 @@
 #include <chrono>
 #include <clio_ctp/serialize/msgpack_wrapper.h>
 
-namespace clio_run::MOD_NAME {
+namespace clio::run::MOD_NAME {
 
 // Method implementations for Runtime class
 
@@ -306,7 +306,7 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
 chi::CoMutex Runtime::test_comutex_;
 chi::CoRwLock Runtime::test_corwlock_;
 
-} // namespace clio_run::MOD_NAME
+} // namespace clio::run::MOD_NAME
 
 // Define ChiMod entry points using CLIO_TASK_CC macro
-CLIO_TASK_CC(clio_run::MOD_NAME::Runtime)
+CLIO_TASK_CC(clio::run::MOD_NAME::Runtime)

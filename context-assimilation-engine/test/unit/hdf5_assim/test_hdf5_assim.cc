@@ -188,7 +188,7 @@ bool GenerateTestHDF5File(const std::string& file_path) {
 bool VerifyDatasetData(const std::string& file_path,
                        const std::string& dataset_path,
                        const std::string& tag_name,
-                       clio_cte::core::Client* cte_client) {
+                       clio::cte::core::Client* cte_client) {
   HLOG(kInfo, "Verifying data for dataset: {}", dataset_path);
 
   // Open HDF5 file and dataset
@@ -242,7 +242,7 @@ bool VerifyDatasetData(const std::string& file_path,
   // Get CTE tag
   auto tag_task = cte_client->AsyncGetOrCreateTag(tag_name);
   tag_task.Wait();
-  clio_cte::core::TagId tag_id = tag_task->tag_id_;
+  clio::cte::core::TagId tag_id = tag_task->tag_id_;
   if (tag_id.IsNull()) {
     HLOG(kError, "Tag not found in CTE: {}", tag_name);
     H5Tclose(datatype_id);
@@ -501,7 +501,7 @@ int main(int argc, char* argv[]) {
 
     // Step 2: Connect to CTE
     HLOG(kInfo, "[STEP 2] Connecting to CTE...");
-    clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    clio::cte::core::CLIO_CTE_CLIENT_INIT();
     HLOG(kSuccess, "CTE client initialized");
 
     // Step 2.5: Initialize CAE client
@@ -511,13 +511,13 @@ int main(int argc, char* argv[]) {
 
     // Step 3: Create CAE pool
     HLOG(kInfo, "[STEP 3] Creating CAE pool...");
-    clio_cae::core::Client cae_client;
-    clio_cae::core::CreateParams params;
+    clio::cae::core::Client cae_client;
+    clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
         chi::PoolQuery::Local(),
         "test_cae_pool",
-        clio_cae::core::kCaePoolId,
+        clio::cae::core::kCaePoolId,
         params);
     create_task.Wait();
 
@@ -525,7 +525,7 @@ int main(int argc, char* argv[]) {
 
     // Step 4: Create AssimilationCtx for HDF5
     HLOG(kInfo, "[STEP 4] Creating AssimilationCtx for HDF5...");
-    clio_cae::core::AssimilationCtx ctx;
+    clio::cae::core::AssimilationCtx ctx;
     ctx.src = "hdf5::" + kTestFileName;
     ctx.dst = "iowarp::" + kTestTagBase;
     ctx.format = "hdf5";
@@ -540,7 +540,7 @@ int main(int argc, char* argv[]) {
 
     // Step 5: Call ParseOmni with vector containing single context
     HLOG(kInfo, "[STEP 5] Calling ParseOmni...");
-    std::vector<clio_cae::core::AssimilationCtx> contexts = {ctx};
+    std::vector<clio::cae::core::AssimilationCtx> contexts = {ctx};
     auto parse_task = cae_client.AsyncParseOmni(contexts);
     parse_task.Wait();
     chi::u32 result_code = parse_task->GetReturnCode();
@@ -590,7 +590,7 @@ int main(int argc, char* argv[]) {
       // Check if tag exists
       auto tag_task = cte_client->AsyncGetOrCreateTag(full_tag_name);
       tag_task.Wait();
-      clio_cte::core::TagId tag_id = tag_task->tag_id_;
+      clio::cte::core::TagId tag_id = tag_task->tag_id_;
       if (tag_id.IsNull()) {
         HLOG(kWarning, "Tag not found in CTE: {}", full_tag_name);
         continue;

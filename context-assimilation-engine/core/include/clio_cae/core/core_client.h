@@ -37,7 +37,7 @@
 #include <clio_runtime/clio_runtime.h>
 #include <clio_cae/core/core_tasks.h>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 class Client : public chi::ContainerClient {
  public:
@@ -159,10 +159,10 @@ class Client : public chi::ContainerClient {
 
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 // Global pointer-based singleton for CAE client with lazy initialization
-CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_cae::core::Client, g_cae_client);
+CTP_DEFINE_GLOBAL_PTR_VAR_H(clio::cae::core::Client, g_cae_client);
 
 /**
  * Initialize CAE client singleton
@@ -181,13 +181,19 @@ bool CLIO_CAE_CLIENT_INIT(const std::string &config_path = "",
  * Returns pointer to the global CAE client instance
  */
 #define CLIO_CAE_CLIENT                                                         \
-  (&(*CTP_GET_GLOBAL_PTR_VAR(clio_cae::core::Client,                         \
+  (&(*CTP_GET_GLOBAL_PTR_VAR(clio::cae::core::Client,                         \
                               g_cae_client)))
 
 // Backward-compat aliases for the WRP_ -> CLIO_ rename. External code that
-// still uses wrp_cae::core::* resolves transparently to clio_cae::core::*.
+// still uses wrp_cae::core::* resolves transparently to clio::cae::core::*.
 // Paired with the wrp_cae/ forwarder shim header tree. See rebranding.md.
-namespace wrp_cae = clio_cae;
+// Pre-`clio::cae`-rename intermediate spelling.  In-tree code now uses
+// `clio::cae::core::*`; downstream code that already migrated off
+// `wrp_cae::*` to the `clio_cae::*` waypoint keeps compiling via this
+// alias.  Safe to use the simple `namespace X = Y;` form because no
+// external chimod opens `namespace clio_cae::xxx {}`.
+namespace clio_cae = clio::cae;
+namespace wrp_cae = clio::cae;
 #define WRP_CAE_CLIENT CLIO_CAE_CLIENT
 #define WRP_CAE_CLIENT_INIT CLIO_CAE_CLIENT_INIT
 

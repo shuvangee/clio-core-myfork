@@ -49,9 +49,9 @@
 #include <clio_cte/core/core_tasks.h>
 
 // Define ChiMod entry points using CLIO_TASK_CC macro
-CLIO_TASK_CC(clio_cae::core::Runtime)
+CLIO_TASK_CC(clio::cae::core::Runtime)
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
@@ -74,7 +74,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunCont
 
   // Initialize CTE client using the CTE pool ID
   cte_client_ =
-      std::make_shared<clio_cte::core::Client>(clio_cte::core::kCtePoolId);
+      std::make_shared<clio::cte::core::Client>(clio::cte::core::kCtePoolId);
 
   // Additional container-specific initialization logic here
   HLOG(kInfo, "Core container created and initialized for pool: {} (ID: {})",
@@ -198,7 +198,7 @@ chi::TaskResume Runtime::ProcessHdf5Dataset(
   }
 
   // Create assimilator and process the dataset
-  clio_cae::core::Hdf5FileAssimilator assimilator(cte_client_);
+  clio::cae::core::Hdf5FileAssimilator assimilator(cte_client_);
   int result = 0;
   CLIO_CO_AWAIT(assimilator.ProcessDataset(file_id, task->dataset_path_.str(),
                                       task->tag_prefix_.str(), result));
@@ -369,4 +369,4 @@ chi::TaskResume Runtime::ExportData(ctp::ipc::FullPtr<ExportDataTask> task,
   CLIO_TASK_BODY_END
 }
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core

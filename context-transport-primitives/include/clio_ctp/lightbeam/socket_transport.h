@@ -186,7 +186,17 @@ class SocketTransport : public Transport {
 
   void ClearRecvHandles(LbmMeta<>& meta) {
     for (auto& bulk : meta.recv) {
-      if (bulk.data.ptr_) {
+      // Only std::free buffers RecvBulks allocated itself (tagged with
+      // the (UINT32_MAX-1, UINT32_MAX-1) sentinel). LoadTaskArchive::bulk
+      // may have swapped in a CTP MallocAllocator FullPtr (whose user
+      // pointer is offset 16 bytes inside the real malloc region) for the
+      // BULK_EXPOSE / ZMQ-copy paths — passing that to std::free triggers
+      // glibc "free(): invalid pointer" (ASan: bad-free). Those CTP
+      // buffers are reclaimed by the task destructor via
+      // daemon_allocated_bulk_count_ / TASK_DATA_OWNER instead.
+      if (bulk.data.ptr_ &&
+          bulk.data.shm_.alloc_id_ ==
+              ctp::ipc::AllocatorId(UINT32_MAX - 1, UINT32_MAX - 1)) {
         std::free(bulk.data.ptr_);
         bulk.data.ptr_ = nullptr;
       }
@@ -239,6 +249,14 @@ class SocketTransport : public Transport {
         em.AddEvent(fd, kDefaultReadEvent, &fired_action_);
       }
     }
+  }
+
+  void UnregisterEventManager() {
+    // Detach without RemoveEvent — caller (e.g. RecvZmqClientThread) is
+    // about to destroy the EventManager itself; touching em_ here would
+    // be UAF. ~SocketTransport will see em_ == nullptr and skip the
+    // (now-stale) RemoveEvent calls.
+    em_ = nullptr;
   }
 
   template <typename MetaT>
@@ -443,7 +461,14 @@ class SocketTransport : public Transport {
 
       if (allocated) {
         meta.recv[i].data.ptr_ = buf;
-        meta.recv[i].data.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
+        // Use a distinct sentinel (UINT32_MAX-1, UINT32_MAX-1) — not
+        // AllocatorId::GetNull() (UINT32_MAX, UINT32_MAX) — so
+        // LoadTaskArchive::bulk and ClearRecvHandles can distinguish a
+        // SocketTransport-owned raw std::malloc'd buffer from a CTP
+        // MallocAllocator buffer (whose backend id is also Null but whose
+        // ptr_ is offset 16 bytes inside the real malloc region).
+        meta.recv[i].data.shm_.alloc_id_ =
+            ctp::ipc::AllocatorId(UINT32_MAX - 1, UINT32_MAX - 1);
         meta.recv[i].data.shm_.off_ = reinterpret_cast<size_t>(buf);
       }
     }

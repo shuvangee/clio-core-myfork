@@ -9,7 +9,7 @@ add_executable(test_distribution_classifier_exec
   test_distribution_classifier.cc
 )
 target_link_libraries(test_distribution_classifier_exec
-  clio_cte::compressor_runtime
+  clio::cte::compressor_runtime
   ctp::compress
   Catch2::Catch2WithMain
 )
@@ -20,7 +20,7 @@ add_executable(test_linreg_table_predictor_exec
   test_linreg_table_predictor.cc
 )
 target_link_libraries(test_linreg_table_predictor_exec
-  clio_cte::compressor_runtime
+  clio::cte::compressor_runtime
   ctp::compress
   Catch2::Catch2WithMain
 )
@@ -31,7 +31,7 @@ add_executable(test_qtable_predictor_exec
   test_qtable_predictor.cc
 )
 target_link_libraries(test_qtable_predictor_exec
-  clio_cte::compressor_runtime
+  clio::cte::compressor_runtime
   ctp::compress
   Catch2::Catch2WithMain
 )
@@ -52,10 +52,10 @@ add_executable(test_compressor_functional
 
 # Link against compressor runtime and dependencies
 target_link_libraries(test_compressor_functional
-  clio_cte::compressor_runtime
-  clio_cte::compressor_client
-  clio_cte::core_runtime         # For Context type
-  clio_cte::core_client          # For core client if needed
+  clio::cte::compressor_runtime
+  clio::cte::compressor_client
+  clio::cte::core_runtime         # For Context type
+  clio::cte::core_client          # For core client if needed
   chimaera::admin_runtime       # For CLIO Runtime
   chimaera::admin_client        # For admin client
   chimaera::bdev_runtime        # For bdev runtime
@@ -117,10 +117,10 @@ add_executable(test_transparent_compress
 )
 
 target_link_libraries(test_transparent_compress
-  clio_cte::compressor_runtime
-  clio_cte::compressor_client
-  clio_cte::core_runtime
-  clio_cte::core_client
+  clio::cte::compressor_runtime
+  clio::cte::compressor_client
+  clio::cte::core_runtime
+  clio::cte::core_client
   chimaera::admin_runtime
   chimaera::admin_client
   chimaera::bdev_runtime
@@ -163,10 +163,10 @@ add_executable(test_adios2_transparent_compress
 )
 
 target_link_libraries(test_adios2_transparent_compress
-  clio_cte::compressor_runtime
-  clio_cte::compressor_client
-  clio_cte::core_runtime
-  clio_cte::core_client
+  clio::cte::compressor_runtime
+  clio::cte::compressor_client
+  clio::cte::core_runtime
+  clio::cte::core_client
   chimaera::admin_runtime
   chimaera::admin_client
   chimaera::bdev_runtime
@@ -211,8 +211,8 @@ target_compile_definitions(clio_cte_compress_bench PRIVATE CLIO_CORE_ENABLE_COMP
 
 # Link required libraries
 target_link_libraries(clio_cte_compress_bench
-    clio_cte::core_client          # CTE core client library
-    clio_cte::core_runtime         # CTE core runtime (for compression context)
+    clio::cte::core_client          # CTE core client library
+    clio::cte::core_runtime         # CTE core runtime (for compression context)
     chimaera::cxx                 # Core CLIO Runtime library
     ctp::compress                # Compression library
     ${CMAKE_THREAD_LIBS_INIT}     # Threading support (for pthread_setaffinity_np)
@@ -262,7 +262,7 @@ target_include_directories(test_compression_benchmark_exec PRIVATE
     ${CMAKE_SOURCE_DIR}/context-transport-primitives/test/unit  # For basic_test.h
 )
 target_link_libraries(test_compression_benchmark_exec
-    clio_cte::compressor_runtime
+    clio::cte::compressor_runtime
     ctp::compress
     ctp::cxx
     Catch2::Catch2WithMain
@@ -308,9 +308,9 @@ if(MPI_FOUND)
     )
 
     target_link_libraries(synthetic_workload_exec
-        clio_cte::compressor_client
-        clio_cte::core_client
-        clio_cte::core_runtime
+        clio::cte::compressor_client
+        clio::cte::core_client
+        clio::cte::core_runtime
         chimaera::cxx
         ctp::compress
         ctp::cxx

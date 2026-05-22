@@ -59,7 +59,7 @@
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_tasks.h>
 
-using namespace clio_cte::compressor;
+using namespace clio::cte::compressor;
 
 namespace {
 
@@ -140,9 +140,9 @@ void CleanupChimaera() {
  */
 chi::PoolId CreateCorePool() {
   chi::PoolId core_pool_id = chi::PoolId(1, 1);
-  clio_cte::core::Client core_client;
+  clio::cte::core::Client core_client;
 
-  clio_cte::core::CreateParams core_params;
+  clio::cte::core::CreateParams core_params;
   auto create_task = core_client.AsyncCreate(
       chi::PoolQuery::Local(),
       "test_core_pool",
@@ -175,9 +175,9 @@ chi::PoolId CreateCompressorPool() {
 struct CTETestFixture {
   chi::PoolId core_pool_id_;
   chi::PoolId compressor_pool_id_;
-  clio_cte::core::Client core_client_;
+  clio::cte::core::Client core_client_;
   Client compressor_client_;
-  clio_cte::core::TagId tag_id_;
+  clio::cte::core::TagId tag_id_;
 
   CTETestFixture() {
     InitializeChimaera();

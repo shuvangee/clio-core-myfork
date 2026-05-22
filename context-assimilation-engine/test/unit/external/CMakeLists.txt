@@ -13,21 +13,22 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# Unified IOWarp Core package - includes everything
-find_package(iowarp-core CONFIG REQUIRED)
+# Unified IOWarp Core package — `clio-core` is the canonical name; the
+# legacy `iowarp-core` spelling still resolves to the same Config.
+find_package(clio-core CONFIG REQUIRED)
 # This automatically provides:
 #   Core Components:
 #     - All ctp::* modular targets (ctp::cxx, ctp::configure, ctp::serialize, etc.)
-#     - chimaera::cxx (core runtime library)
+#     - clio::run::cxx (core runtime library)
 #     - ChiMod build utilities (add_clio_module_client, add_clio_module_runtime, etc.)
 #
 #   Core ChiMods (Always Available):
-#     - chimaera::admin_client, chimaera::admin_runtime
-#     - chimaera::bdev_client, chimaera::bdev_runtime
+#     - clio::run::admin_client, clio::run::admin_runtime
+#     - clio::run::bdev_client, clio::run::bdev_runtime
 #
 #   Optional ChiMods (if enabled at build time):
-#     - clio_cte::core_client, clio_cte::core_runtime (CTE - included if CLIO_CORE_ENABLE_CTE=ON)
-#     - clio_cae::core_client, clio_cae::core_runtime (CAE - included if CLIO_CORE_ENABLE_CAE=ON)
+#     - clio::cte::core_client, clio::cte::core_runtime (CTE - included if CLIO_CORE_ENABLE_CTE=ON)
+#     - clio::cae::core_client, clio::cae::core_runtime (CAE - included if CLIO_CORE_ENABLE_CAE=ON)
 
 # Find additional system dependencies
 find_package(PkgConfig REQUIRED)
@@ -41,14 +42,14 @@ add_executable(cae_external_test
 # Link against CAE Core libraries using modern CMake target naming
 # These targets are created by the add_chimod_both() function in the core ChiMod
 target_link_libraries(cae_external_test
-    # CAE Core ChiMod libraries (from find_package(clio_cae_core))
-    clio_cae::core_client                 # CAE Core client library
+    # CAE Core ChiMod libraries
+    clio::cae::core_client                 # CAE Core client library
 
     # Core CLIO Runtime framework (automatically included by ChiMod libraries)
-    # chimaera::cxx                      # NOT needed - automatically included
+    # clio::run::cxx                     # NOT needed - automatically included
 
     # Admin ChiMod (if needed for advanced functionality)
-    # chimaera::admin_client             # Optional - uncomment if needed
+    # clio::run::admin_client            # Optional - uncomment if needed
 )
 
 # Set compile flags - use standard flags for external projects
@@ -68,19 +69,19 @@ add_custom_target(run_external_test
 message(STATUS "CAE External Integration Test Configuration:")
 message(STATUS "  CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
-message(STATUS "  IOWarp Core Found: ${iowarp-core_FOUND}")
+message(STATUS "  Clio Core Found: ${clio-core_FOUND}")
 
 # Instructions for external developers
 message(STATUS "")
 message(STATUS "External Developer Notes:")
 message(STATUS "  This test demonstrates proper external linking to IOWarp libraries.")
-message(STATUS "  Required package: iowarp-core (single unified package)")
-message(STATUS "  iowarp-core automatically provides:")
+message(STATUS "  Required package: clio-core (canonical; iowarp-core is a legacy alias)")
+message(STATUS "  clio-core automatically provides:")
 message(STATUS "    - ClioCtp: All ctp::* modular targets")
-message(STATUS "    - Chimaera: chimaera::cxx and build utilities")
+message(STATUS "    - CLIO Runtime: clio::run::cxx and build utilities")
 message(STATUS "    - Core ChiMods: admin, bdev (always available)")
 message(STATUS "    - Optional ChiMods: CTE, CAE (if enabled at build time)")
 message(STATUS "  Main targets used in this test:")
-message(STATUS "    - clio_cae::core_client (CAE ChiMod client)")
-message(STATUS "    - clio_cae::core_runtime (CAE ChiMod runtime)")
+message(STATUS "    - clio::cae::core_client (CAE ChiMod client)")
+message(STATUS "    - clio::cae::core_runtime (CAE ChiMod runtime)")
 message(STATUS "")

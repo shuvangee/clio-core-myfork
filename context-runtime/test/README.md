@@ -151,7 +151,7 @@ TEST_CASE("Custom Task Test", "[task][custom]") {
     REQUIRE(fixture.createModNamePool());
     
     // Create client
-    chimaera::MOD_NAME::Client client(kTestModNamePoolId);
+    clio::run::MOD_NAME::Client client(kTestModNamePoolId);
     chi::DomainQuery pool_query;
     client.Create(pool_query);
     

@@ -41,11 +41,11 @@
 #include <clio_cte/core/core_tasks.h>
 #include <clio_cte/compressor/autogen/compressor_methods.h>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /** Import Context from core for compression operations */
-using Context = clio_cte::core::Context;
-using CteOp = clio_cte::core::CteOp;
+using Context = clio::cte::core::Context;
+using CteOp = clio::cte::core::CteOp;
 using Timestamp = std::chrono::steady_clock::time_point;
 
 /**
@@ -124,7 +124,7 @@ struct CompressorConfig {
 /**
  * CreateTask - Use GetOrCreatePoolTask for standard pool creation
  */
-using CreateTask = clio_run::admin::GetOrCreatePoolTask<CompressorConfig>;
+using CreateTask = clio::run::admin::GetOrCreatePoolTask<CompressorConfig>;
 
 /**
  * DestroyTask - Cleanup the compressor container
@@ -165,7 +165,7 @@ struct TargetState {
         bytes_written_(written), last_updated_(std::chrono::steady_clock::now()) {}
 };
 
-using MonitorTask = clio_run::admin::MonitorTask;
+using MonitorTask = clio::run::admin::MonitorTask;
 
 /**
  * Compression telemetry data structure for performance monitoring
@@ -223,7 +223,7 @@ struct CompressionTelemetry {
  */
 struct DynamicScheduleTask : public chi::Task {
   // Same inputs as PutBlobTask
-  IN clio_cte::core::TagId tag_id_;        // Tag ID for blob grouping
+  IN clio::cte::core::TagId tag_id_;        // Tag ID for blob grouping
   INOUT chi::priv::string blob_name_;     // Blob name (required)
   IN chi::u64 offset_;                    // Offset within blob
   IN chi::u64 size_;                      // Size of blob data
@@ -238,7 +238,7 @@ struct DynamicScheduleTask : public chi::Task {
 
   // SHM constructor
   DynamicScheduleTask()
-      : chi::Task(), tag_id_(clio_cte::core::TagId::GetNull()),
+      : chi::Task(), tag_id_(clio::cte::core::TagId::GetNull()),
         blob_name_(CTP_MALLOC), offset_(0), size_(0),
         blob_data_(ctp::ipc::ShmPtr<>::GetNull()), score_(0.5f),
         context_(), flags_(0), core_pool_id_(chi::PoolId::GetNull()),
@@ -248,7 +248,7 @@ struct DynamicScheduleTask : public chi::Task {
   explicit DynamicScheduleTask(const chi::TaskId &task_id,
                                const chi::PoolId &pool_id,
                                const chi::PoolQuery &pool_query,
-                               const clio_cte::core::TagId &tag_id,
+                               const clio::cte::core::TagId &tag_id,
                                const std::string &blob_name,
                                chi::u64 offset, chi::u64 size,
                                ctp::ipc::ShmPtr<> blob_data,
@@ -296,7 +296,7 @@ struct DynamicScheduleTask : public chi::Task {
  */
 struct CompressTask : public chi::Task {
   // Same inputs as PutBlobTask
-  IN clio_cte::core::TagId tag_id_;        // Tag ID for blob grouping
+  IN clio::cte::core::TagId tag_id_;        // Tag ID for blob grouping
   INOUT chi::priv::string blob_name_;     // Blob name (required)
   IN chi::u64 offset_;                    // Offset within blob
   IN chi::u64 size_;                      // Size of blob data
@@ -311,7 +311,7 @@ struct CompressTask : public chi::Task {
 
   // SHM constructor
   CompressTask()
-      : chi::Task(), tag_id_(clio_cte::core::TagId::GetNull()),
+      : chi::Task(), tag_id_(clio::cte::core::TagId::GetNull()),
         blob_name_(CTP_MALLOC), offset_(0), size_(0),
         blob_data_(ctp::ipc::ShmPtr<>::GetNull()), score_(0.5f),
         context_(), flags_(0), core_pool_id_(chi::PoolId::GetNull()),
@@ -321,7 +321,7 @@ struct CompressTask : public chi::Task {
   explicit CompressTask(const chi::TaskId &task_id,
                         const chi::PoolId &pool_id,
                         const chi::PoolQuery &pool_query,
-                        const clio_cte::core::TagId &tag_id,
+                        const clio::cte::core::TagId &tag_id,
                         const std::string &blob_name,
                         chi::u64 offset, chi::u64 size,
                         ctp::ipc::ShmPtr<> blob_data,
@@ -369,7 +369,7 @@ struct CompressTask : public chi::Task {
  */
 struct DecompressTask : public chi::Task {
   // Same inputs as GetBlobTask
-  IN clio_cte::core::TagId tag_id_;        // Tag ID for blob lookup
+  IN clio::cte::core::TagId tag_id_;        // Tag ID for blob lookup
   IN chi::priv::string blob_name_;        // Blob name (required)
   IN chi::u64 offset_;                    // Offset within blob
   IN chi::u64 size_;                      // Size of data to retrieve (decompressed size)
@@ -383,7 +383,7 @@ struct DecompressTask : public chi::Task {
 
   // SHM constructor
   DecompressTask()
-      : chi::Task(), tag_id_(clio_cte::core::TagId::GetNull()),
+      : chi::Task(), tag_id_(clio::cte::core::TagId::GetNull()),
         blob_name_(CTP_MALLOC), offset_(0), size_(0), flags_(0),
         blob_data_(ctp::ipc::ShmPtr<>::GetNull()),
         core_pool_id_(chi::PoolId::GetNull()),
@@ -393,7 +393,7 @@ struct DecompressTask : public chi::Task {
   explicit DecompressTask(const chi::TaskId &task_id,
                           const chi::PoolId &pool_id,
                           const chi::PoolQuery &pool_query,
-                          const clio_cte::core::TagId &tag_id,
+                          const clio::cte::core::TagId &tag_id,
                           const std::string &blob_name,
                           chi::u64 offset, chi::u64 size,
                           chi::u32 flags, ctp::ipc::ShmPtr<> blob_data,
@@ -516,6 +516,6 @@ struct PollConsumersTask : public chi::Task {
   void SerializeEnd(Ar &ar) {}
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_COMPRESSOR_TASKS_H_

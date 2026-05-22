@@ -38,18 +38,18 @@
 #include <string>
 #include <clio_cae/core/factory/base_assimilator.h>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 // Forward declarations
 class BinaryFileAssimilator;
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 class Client;
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 /**
  * AssimilatorFactory - Factory for creating appropriate assimilator instances
@@ -61,7 +61,7 @@ class AssimilatorFactory {
    * Constructor with CTE client
    * @param cte_client Shared pointer to initialized CTE client
    */
-  explicit AssimilatorFactory(std::shared_ptr<clio_cte::core::Client> cte_client);
+  explicit AssimilatorFactory(std::shared_ptr<clio::cte::core::Client> cte_client);
 
   /**
    * Get an assimilator instance for the given source URL
@@ -78,9 +78,9 @@ class AssimilatorFactory {
    */
   std::string GetUrlProtocol(const std::string& url);
 
-  std::shared_ptr<clio_cte::core::Client> cte_client_;
+  std::shared_ptr<clio::cte::core::Client> cte_client_;
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_ASSIMILATOR_FACTORY_H_

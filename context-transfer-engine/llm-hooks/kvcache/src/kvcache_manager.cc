@@ -45,7 +45,7 @@ struct KVCacheManager::Impl {
   bool ready = false;
 
   // High-level CTE tag handle.  Null until Init() succeeds.
-  std::unique_ptr<clio_cte::core::Tag> tag;
+  std::unique_ptr<clio::cte::core::Tag> tag;
 
   // In-process index: hash → entry.
   // Protected by a mutex because llama.cpp may call us from worker threads.
@@ -126,13 +126,13 @@ bool KVCacheManager::Init() {
   // Initialize the global CTE client if not already done.
   // CLIO_CTE_CLIENT_INIT is idempotent — safe to call multiple times.
   try {
-    if (!clio_cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
+    if (!clio::cte::core::CLIO_CTE_CLIENT_INIT("", chi::PoolQuery::Local())) {
       fprintf(stderr, "kvcache_manager: CLIO_CTE_CLIENT_INIT() failed — "
                       "is the IOWarp runtime running?\n");
       return false;
     }
     // Open or create the KV cache tag (GetOrCreateTag is synchronous here).
-    impl_->tag = std::make_unique<clio_cte::core::Tag>(cfg_.tag_name);
+    impl_->tag = std::make_unique<clio::cte::core::Tag>(cfg_.tag_name);
   } catch (const std::exception& e) {
     fprintf(stderr, "kvcache_manager: Init failed: %s\n", e.what());
     impl_->tag.reset();

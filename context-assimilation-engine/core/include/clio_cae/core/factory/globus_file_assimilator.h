@@ -39,11 +39,11 @@
 #include <memory>
 
 // Forward declaration
-namespace clio_cte::core {
+namespace clio::cte::core {
 class Client;
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 /**
  * GlobusFileAssimilator - Handles assimilation of files via Globus transfer
@@ -59,7 +59,7 @@ class GlobusFileAssimilator : public BaseAssimilator {
    * Constructor with CTE client
    * @param cte_client Shared pointer to initialized CTE client
    */
-  explicit GlobusFileAssimilator(std::shared_ptr<clio_cte::core::Client> cte_client);
+  explicit GlobusFileAssimilator(std::shared_ptr<clio::cte::core::Client> cte_client);
 
   /**
    * Schedule assimilation tasks for a Globus file transfer
@@ -202,9 +202,9 @@ class GlobusFileAssimilator : public BaseAssimilator {
                    const std::string& https_token);
 #endif
 
-  std::shared_ptr<clio_cte::core::Client> cte_client_;
+  std::shared_ptr<clio::cte::core::Client> cte_client_;
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_GLOBUS_FILE_ASSIMILATOR_H_

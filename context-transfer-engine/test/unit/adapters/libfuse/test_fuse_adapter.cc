@@ -86,17 +86,17 @@ class FuseAdapterTestFixture {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+      success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
       REQUIRE(success);
 
       auto *cte_client = CLIO_CTE_CLIENT;
       REQUIRE(cte_client != nullptr);
-      cte_client->Init(clio_cte::core::kCtePoolId);
+      cte_client->Init(clio::cte::core::kCtePoolId);
 
-      clio_cte::core::CreateParams params;
+      clio::cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
-          chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
-          clio_cte::core::kCtePoolId, params);
+          chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
+          clio::cte::core::kCtePoolId, params);
       create_task.Wait();
       REQUIRE(create_task->GetReturnCode() == 0);
 
@@ -119,16 +119,16 @@ class FuseAdapterTestFixture {
     auto *cte_client = CLIO_CTE_CLIENT;
 
     chi::PoolId bdev_pool_id(950, 0);
-    clio_run::bdev::Client bdev_client(bdev_pool_id);
+    clio::run::bdev::Client bdev_client(bdev_pool_id);
     auto create_task =
         bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), test_storage_path_,
-                                bdev_pool_id, clio_run::bdev::BdevType::kFile);
+                                bdev_pool_id, clio::run::bdev::BdevType::kFile);
     create_task.Wait();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     auto reg_task = cte_client->AsyncRegisterTarget(
-        test_storage_path_, clio_run::bdev::BdevType::kFile, kTestTargetSize,
+        test_storage_path_, clio::run::bdev::BdevType::kFile, kTestTargetSize,
         chi::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     REQUIRE(reg_task->GetReturnCode() == 0);

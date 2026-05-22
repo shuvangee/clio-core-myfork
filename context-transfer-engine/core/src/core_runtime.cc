@@ -60,7 +60,7 @@
 #include "clio_ctp/util/logging.h"
 #include "clio_ctp/util/timer.h"
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 // Bring chi namespace items into scope for CLIO_CUR_WORKER macro
 using chi::chi_cur_worker_key_;
@@ -240,15 +240,15 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
          ++device_idx) {
       const auto &device = storage_devices_[device_idx];
       chi::u64 capacity_bytes = device.capacity_limit_;
-      clio_run::bdev::BdevType bdev_type = clio_run::bdev::BdevType::kFile;
+      clio::run::bdev::BdevType bdev_type = clio::run::bdev::BdevType::kFile;
       if (device.bdev_type_ == "ram") {
-        bdev_type = clio_run::bdev::BdevType::kRam;
+        bdev_type = clio::run::bdev::BdevType::kRam;
       } else if (device.bdev_type_ == "hbm") {
-        bdev_type = clio_run::bdev::BdevType::kHbm;
+        bdev_type = clio::run::bdev::BdevType::kHbm;
       } else if (device.bdev_type_ == "pinned") {
-        bdev_type = clio_run::bdev::BdevType::kPinned;
+        bdev_type = clio::run::bdev::BdevType::kPinned;
       } else if (device.bdev_type_ == "noop") {
-        bdev_type = clio_run::bdev::BdevType::kNoop;
+        bdev_type = clio::run::bdev::BdevType::kNoop;
       }
 
       for (chi::u32 i = 0; i < actual_neighborhood; ++i) {
@@ -419,7 +419,7 @@ chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
 }
 
 chi::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<chi::Task> &task) {
-  using namespace clio_cte::core;
+  using namespace clio::cte::core;
   switch (task->method_) {
     // Methods that route locally
     case Method::kRegisterTarget:
@@ -498,7 +498,7 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
   CLIO_TASK_BODY_BEGIN
   try {
     std::string target_name = task->target_name_.str();
-    clio_run::bdev::BdevType bdev_type = task->bdev_type_;
+    clio::run::bdev::BdevType bdev_type = task->bdev_type_;
     chi::u64 total_size = task->total_size_;
     chi::PoolId bdev_pool_id = task->bdev_id_;
     HLOG(kDebug, "Registering target ({}): {} ({} bytes) with bdev_id=({},{})",
@@ -506,7 +506,7 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
          bdev_pool_id.minor_);
 
     // Create bdev client and container first to get the TargetId (pool_id)
-    clio_run::bdev::Client bdev_client;
+    clio::run::bdev::Client bdev_client;
     std::string bdev_pool_name =
         target_name;  // Use target_name as the bdev pool name
 
@@ -557,7 +557,7 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
     chi::u64 remaining_size;
     auto stats_task = bdev_client.AsyncGetStats();
     CLIO_CO_AWAIT(stats_task);
-    clio_run::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
+    clio::run::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
     remaining_size = stats_task->remaining_size_;
 
     // Create target info with bdev client and performance stats
@@ -744,7 +744,7 @@ chi::TaskResume Runtime::StatTargets(ctp::ipc::FullPtr<StatTargetsTask> task,
     // Cannot hold lock across co_await, so acquire/release per-target
     for (const auto &target_id : target_ids) {
       // Copy bdev_client under read lock for the async call
-      clio_run::bdev::Client bdev_client_copy;
+      clio::run::bdev::Client bdev_client_copy;
       bool found = false;
       {
         chi::ScopedCoRwReadLock read_lock(target_lock_);
@@ -760,7 +760,7 @@ chi::TaskResume Runtime::StatTargets(ctp::ipc::FullPtr<StatTargetsTask> task,
       chi::u64 remaining_size;
       auto stats_task = bdev_client_copy.AsyncGetStats();
       CLIO_CO_AWAIT(stats_task);
-      clio_run::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
+      clio::run::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
       remaining_size = stats_task->remaining_size_;
 
       // Re-acquire write lock to update target info. Mutate the map and the
@@ -1664,7 +1664,7 @@ float Runtime::GetManualScoreForTarget(const std::string &target_name) {
   return -1.0f;  // No manual score configured for this target
 }
 
-clio_run::bdev::PersistenceLevel Runtime::GetPersistenceLevelForTarget(
+clio::run::bdev::PersistenceLevel Runtime::GetPersistenceLevelForTarget(
     const std::string &target_name) {
   for (size_t i = 0; i < storage_devices_.size(); ++i) {
     const auto &device = storage_devices_[i];
@@ -1675,14 +1675,14 @@ clio_run::bdev::PersistenceLevel Runtime::GetPersistenceLevelForTarget(
           target_name[device.path_.size()] == '_'))) {
       // Convert string persistence level to enum
       if (device.persistence_level_ == "temporary") {
-        return clio_run::bdev::PersistenceLevel::kTemporaryNonVolatile;
+        return clio::run::bdev::PersistenceLevel::kTemporaryNonVolatile;
       } else if (device.persistence_level_ == "long_term") {
-        return clio_run::bdev::PersistenceLevel::kLongTerm;
+        return clio::run::bdev::PersistenceLevel::kLongTerm;
       }
-      return clio_run::bdev::PersistenceLevel::kVolatile;
+      return clio::run::bdev::PersistenceLevel::kVolatile;
     }
   }
-  return clio_run::bdev::PersistenceLevel::kVolatile;
+  return clio::run::bdev::PersistenceLevel::kVolatile;
 }
 
 TagId Runtime::GetOrAssignTagId(const std::string &tag_name,
@@ -1975,7 +1975,7 @@ chi::TaskResume Runtime::FlushData(ctp::ipc::FullPtr<FlushDataTask> task,
     chi::priv::vector<BlobBlock> nonvolatile_blocks(CLIO_PRIV_ALLOC);
     std::unordered_map<
         chi::PoolId,
-        std::pair<chi::PoolQuery, std::vector<clio_run::bdev::Block>>>
+        std::pair<chi::PoolQuery, std::vector<clio::run::bdev::Block>>>
         volatile_blocks_by_pool;
 
     {
@@ -1986,14 +1986,14 @@ chi::TaskResume Runtime::FlushData(ctp::ipc::FullPtr<FlushDataTask> task,
         if (tinfo &&
             static_cast<int>(tinfo->persistence_level_) < target_level) {
           // Volatile block - collect for freeing
-          clio_run::bdev::Block bdev_block;
+          clio::run::bdev::Block bdev_block;
           bdev_block.offset_ = block.target_offset_;
           bdev_block.size_ = block.size_;
           bdev_block.block_type_ = 0;
           if (volatile_blocks_by_pool.find(pool_id) ==
               volatile_blocks_by_pool.end()) {
             volatile_blocks_by_pool[pool_id] = std::make_pair(
-                block.target_query_, std::vector<clio_run::bdev::Block>());
+                block.target_query_, std::vector<clio::run::bdev::Block>());
           }
           volatile_blocks_by_pool[pool_id].second.push_back(bdev_block);
         } else {
@@ -2007,7 +2007,7 @@ chi::TaskResume Runtime::FlushData(ctp::ipc::FullPtr<FlushDataTask> task,
     for (const auto &pool_entry : volatile_blocks_by_pool) {
       const chi::PoolId &pool_id = pool_entry.first;
       const chi::PoolQuery &target_query = pool_entry.second.first;
-      const std::vector<clio_run::bdev::Block> &blocks =
+      const std::vector<clio::run::bdev::Block> &blocks =
           pool_entry.second.second;
 
       chi::u64 bytes_freed = 0;
@@ -2015,7 +2015,7 @@ chi::TaskResume Runtime::FlushData(ctp::ipc::FullPtr<FlushDataTask> task,
         bytes_freed += block.size_;
       }
 
-      clio_run::bdev::Client bdev_client(pool_id);
+      clio::run::bdev::Client bdev_client(pool_id);
       auto free_task = bdev_client.AsyncFreeBlocks(target_query, blocks);
       CLIO_CO_AWAIT(free_task);
       if (free_task->GetReturnCode() == 0) {
@@ -2166,7 +2166,7 @@ void Runtime::RestoreMetadataFromLog() {
           chi::ScopedCoRwReadLock read_lock(target_lock_);
           TargetInfo *tinfo = registered_targets_.find(bdev_pool_id);
           if (tinfo && tinfo->persistence_level_ ==
-                           clio_run::bdev::PersistenceLevel::kVolatile) {
+                           clio::run::bdev::PersistenceLevel::kVolatile) {
             is_volatile = true;
           }
         }
@@ -2175,7 +2175,7 @@ void Runtime::RestoreMetadataFromLog() {
         }
 
         // Reconstruct block
-        clio_run::bdev::Client bdev_client(bdev_pool_id);
+        clio::run::bdev::Client bdev_client(bdev_pool_id);
         BlobBlock block(bdev_client, target_query, offset, size);
         blob_info.blocks_.push_back(block);
       }
@@ -2295,14 +2295,14 @@ void Runtime::ReplayTransactionLogs() {
               chi::ScopedCoRwReadLock read_lock(target_lock_);
               TargetInfo *tinfo = registered_targets_.find(bdev_pool_id);
               if (tinfo && tinfo->persistence_level_ ==
-                               clio_run::bdev::PersistenceLevel::kVolatile) {
+                               clio::run::bdev::PersistenceLevel::kVolatile) {
                 is_volatile = true;
               }
             }
             if (is_volatile) {
               continue;
             }
-            clio_run::bdev::Client bdev_client(bdev_pool_id);
+            clio::run::bdev::Client bdev_client(bdev_pool_id);
             BlobBlock block(bdev_client, tb.target_query_, tb.target_offset_,
                             tb.size_);
             blob_info_ptr->blocks_.push_back(block);
@@ -2655,7 +2655,7 @@ chi::TaskResume Runtime::ModifyExistingData(
   size_t remaining_size = data_size;
 
   // Vector to store async write tasks for later waiting
-  std::vector<chi::Future<clio_run::bdev::WriteTask>> write_tasks;
+  std::vector<chi::Future<clio::run::bdev::WriteTask>> write_tasks;
   std::vector<size_t> expected_write_sizes;
 
   // Step 2: Store the offset of the block in the blob. The first block is
@@ -2692,7 +2692,7 @@ chi::TaskResume Runtime::ModifyExistingData(
       size_t write_start_in_block = write_start_in_blob - block_offset_in_blob;
       size_t data_buffer_offset = write_start_in_blob - data_offset_in_blob;
 
-      clio_run::bdev::Block bdev_block(
+      clio::run::bdev::Block bdev_block(
           block.target_offset_ + write_start_in_block, write_size, 0);
       ctp::ipc::ShmPtr<> data_ptr = data + data_buffer_offset;
       timer.Pause();
@@ -2701,7 +2701,7 @@ chi::TaskResume Runtime::ModifyExistingData(
 
       // Wrap single block in chi::priv::vector for AsyncWrite
       timer.Resume();
-      chi::priv::vector<clio_run::bdev::Block> blocks(CTP_MALLOC);
+      chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
       blocks.push_back(bdev_block);
       timer.Pause();
       t_vec_alloc_ms += timer.GetMsec();
@@ -2709,7 +2709,7 @@ chi::TaskResume Runtime::ModifyExistingData(
 
       // Create and send the async write task
       timer.Resume();
-      clio_run::bdev::Client cte_clientcopy = block.bdev_client_;
+      clio::run::bdev::Client cte_clientcopy = block.bdev_client_;
       auto write_task = cte_clientcopy.AsyncWrite(block.target_query_, blocks,
                                                   data_ptr, write_size);
       write_tasks.push_back(std::move(write_task));
@@ -2769,7 +2769,7 @@ chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
   size_t remaining_size = data_size;
 
   // Vector to store async read tasks for later waiting
-  std::vector<chi::Future<clio_run::bdev::ReadTask>> read_tasks;
+  std::vector<chi::Future<clio::run::bdev::ReadTask>> read_tasks;
   std::vector<size_t> expected_read_sizes;
 
   // Step 2: Store the offset of the block in the blob. The first block is
@@ -2815,15 +2815,15 @@ chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
            block_idx, read_size, read_start_in_block, data_buffer_offset);
 
       // Step 5: Perform async read on the range
-      clio_run::bdev::Block bdev_block(
+      clio::run::bdev::Block bdev_block(
           block.target_offset_ + read_start_in_block, read_size, 0);
       ctp::ipc::ShmPtr<> data_ptr = data + data_buffer_offset;
 
       // Wrap single block in chi::priv::vector for AsyncRead
-      chi::priv::vector<clio_run::bdev::Block> blocks(CTP_MALLOC);
+      chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
       blocks.push_back(bdev_block);
 
-      clio_run::bdev::Client cte_clientcopy = block.bdev_client_;
+      clio::run::bdev::Client cte_clientcopy = block.bdev_client_;
       auto read_task = cte_clientcopy.AsyncRead(block.target_query_, blocks,
                                                 data_ptr, read_size);
 
@@ -2922,7 +2922,7 @@ chi::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
          "alloc_task->blocks_.size()={}, return_code={}",
          alloc_task->blocks_.size(), alloc_task->return_code_.load());
 
-    std::vector<clio_run::bdev::Block> allocated_blocks;
+    std::vector<clio::run::bdev::Block> allocated_blocks;
     for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
       allocated_blocks.push_back(alloc_task->blocks_[i]);
     }
@@ -2935,7 +2935,7 @@ chi::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
     }
 
     // Use the first block (for single allocation case)
-    clio_run::bdev::Block allocated_block = allocated_blocks[0];
+    clio::run::bdev::Block allocated_block = allocated_blocks[0];
     allocated_offset = allocated_block.offset_;
 
     // Update remaining space
@@ -2990,13 +2990,13 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
 #endif
   // Map: PoolId -> (target_query, vector<Block>)
   std::unordered_map<chi::PoolId, std::pair<chi::PoolQuery,
-                                            std::vector<clio_run::bdev::Block>>>
+                                            std::vector<clio::run::bdev::Block>>>
       blocks_by_pool;
 
   // Group blocks by PoolId
   for (const auto &blob_block : blob_info.blocks_) {
     chi::PoolId pool_id = blob_block.bdev_client_.pool_id_;
-    clio_run::bdev::Block block;
+    clio::run::bdev::Block block;
     block.offset_ = blob_block.target_offset_;
     block.size_ = blob_block.size_;
     // BlobBlock does not track the allocator's size class; bdev
@@ -3007,7 +3007,7 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
     // Store target_query with blocks for this pool
     if (blocks_by_pool.find(pool_id) == blocks_by_pool.end()) {
       blocks_by_pool[pool_id] = std::make_pair(
-          blob_block.target_query_, std::vector<clio_run::bdev::Block>());
+          blob_block.target_query_, std::vector<clio::run::bdev::Block>());
     }
     blocks_by_pool[pool_id].second.push_back(block);
   }
@@ -3016,7 +3016,7 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
   for (const auto &pool_entry : blocks_by_pool) {
     const chi::PoolId &pool_id = pool_entry.first;
     const chi::PoolQuery &target_query = pool_entry.second.first;
-    const std::vector<clio_run::bdev::Block> &blocks = pool_entry.second.second;
+    const std::vector<clio::run::bdev::Block> &blocks = pool_entry.second.second;
 
     // Calculate total bytes to be freed for this pool
     chi::u64 bytes_freed = 0;
@@ -3025,7 +3025,7 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
     }
 
     // Get bdev client for this pool from first blob block
-    clio_run::bdev::Client bdev_client(pool_id);
+    clio::run::bdev::Client bdev_client(pool_id);
     auto free_task = bdev_client.AsyncFreeBlocks(target_query, blocks);
     CLIO_CO_AWAIT(free_task);
     chi::u32 free_result = free_task->GetReturnCode();
@@ -3633,11 +3633,11 @@ std::string Runtime::GetBdevTypeForBlob(const BlobInfo &blob_info) {
       registered_targets_.find(first_block.bdev_client_.pool_id_);
   if (!target_info) return std::string();
   switch (target_info->bdev_type_) {
-    case clio_run::bdev::BdevType::kRam:    return std::string("ram");
-    case clio_run::bdev::BdevType::kHbm:    return std::string("hbm");
-    case clio_run::bdev::BdevType::kPinned: return std::string("pinned");
-    case clio_run::bdev::BdevType::kFile:   return std::string("file");
-    case clio_run::bdev::BdevType::kNoop:   return std::string("noop");
+    case clio::run::bdev::BdevType::kRam:    return std::string("ram");
+    case clio::run::bdev::BdevType::kHbm:    return std::string("hbm");
+    case clio::run::bdev::BdevType::kPinned: return std::string("pinned");
+    case clio::run::bdev::BdevType::kFile:   return std::string("file");
+    case clio::run::bdev::BdevType::kNoop:   return std::string("noop");
     default:                                return std::string();
   }
 }
@@ -3661,7 +3661,7 @@ void Runtime::GpuCacheOnDelTag(const TagId &tag_id) {
   GpuCacheRemoveTag(gpu_cache_, tag_id.major_, tag_id.minor_);
 }
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
 // Define ChiMod entry points using CLIO_TASK_CC macro
-CLIO_TASK_CC(clio_cte::core::Runtime)
+CLIO_TASK_CC(clio::cte::core::Runtime)

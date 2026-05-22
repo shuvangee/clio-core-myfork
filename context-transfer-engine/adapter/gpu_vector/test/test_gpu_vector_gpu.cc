@@ -10,7 +10,7 @@
  * GPU vector unit test (CUDA / ROCm).
  *
  * 1. Bring up the CLIO Runtime server + CTE core pool.
- * 2. Create a clio_cte::gpu_vector::Vector<uint32_t> with 4 blocks,
+ * 2. Create a clio::cte::gpu_vector::Vector<uint32_t> with 4 blocks,
  *    4 pages per block, 4 KiB pages.
  * 3. Launch a write kernel that does v[i] = i*2 over a striped pattern
  *    that crosses page boundaries.
@@ -37,7 +37,7 @@
 #include <thread>
 
 using namespace std::chrono_literals;
-using TaskT = clio_run::admin::CreateTask;
+using TaskT = clio::run::admin::CreateTask;
 
 namespace {
 
@@ -51,14 +51,14 @@ void EnsureInit() {
   if (g_initialized) return;
   std::fprintf(stderr, "[INIT] Starting Chimaera server (gpu_vector test)\n");
   REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer));
-  REQUIRE(clio_cte::core::CLIO_CTE_CLIENT_INIT());
+  REQUIRE(clio::cte::core::CLIO_CTE_CLIENT_INIT());
   auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
-  cte_client->Init(clio_cte::core::kCtePoolId);
-  clio_cte::core::CreateParams params;
+  cte_client->Init(clio::cte::core::kCtePoolId);
+  clio::cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(
-      chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
-      clio_cte::core::kCtePoolId, params);
+      chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
+      clio::cte::core::kCtePoolId, params);
   create_task.Wait();
   REQUIRE(create_task->GetReturnCode() == 0);
   std::this_thread::sleep_for(50ms);
@@ -68,15 +68,15 @@ void EnsureInit() {
   // through the bdev runtime.
   const chi::u64 kRamCapacity = 4ULL << 30;  // 4 GiB
   chi::PoolId bdev_pool_id(950, 0);
-  clio_run::bdev::Client bdev_client(bdev_pool_id);
+  clio::run::bdev::Client bdev_client(bdev_pool_id);
   auto bdev_create = bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(), std::string("gpu_vector_ram"),
-      bdev_pool_id, clio_run::bdev::BdevType::kRam, kRamCapacity);
+      bdev_pool_id, clio::run::bdev::BdevType::kRam, kRamCapacity);
   bdev_create.Wait();
   REQUIRE(bdev_create->GetReturnCode() == 0);
   std::this_thread::sleep_for(50ms);
   auto reg_task = cte_client->AsyncRegisterTarget(
-      "gpu_vector_ram", clio_run::bdev::BdevType::kRam, kRamCapacity,
+      "gpu_vector_ram", clio::run::bdev::BdevType::kRam, kRamCapacity,
       chi::PoolQuery::Local(), bdev_pool_id);
   reg_task.Wait();
   REQUIRE(reg_task->GetReturnCode() == 0);
@@ -88,7 +88,7 @@ void EnsureInit() {
 
 }  // namespace
 
-namespace gv = clio_cte::gpu_vector;
+namespace gv = clio::cte::gpu_vector;
 namespace dev = cte::gpu::dev;
 
 /** Write v[i] = i*2 for the first total elements. */

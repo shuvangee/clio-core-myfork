@@ -43,7 +43,7 @@
 #include <utility>
 #include <vector>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 /** Transaction types for the WAL */
 enum class TxnType : uint8_t {
@@ -394,6 +394,6 @@ class TransactionLog {
   }
 };
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
 #endif  // WRPCTE_CORE_TRANSACTION_LOG_H_

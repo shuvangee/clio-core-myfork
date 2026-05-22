@@ -42,9 +42,9 @@
 #include "clio_ctp/data_structures/serialization/global_serialize.h"
 #include <vector>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
-using MonitorTask = clio_run::admin::MonitorTask;
+using MonitorTask = clio::run::admin::MonitorTask;
 
 /**
  * CreateParams for core chimod
@@ -71,7 +71,7 @@ struct CreateParams {
  * CreateTask - Initialize the core container
  * Type alias for GetOrCreatePoolTask with CreateParams
  */
-using CreateTask = clio_run::admin::GetOrCreatePoolTask<CreateParams>;
+using CreateTask = clio::run::admin::GetOrCreatePoolTask<CreateParams>;
 
 /**
  * DestroyTask - Destroy the core container
@@ -103,7 +103,7 @@ struct ParseOmniTask : public chi::Task {
   CTP_CROSS_FUN explicit ParseOmniTask(
       const chi::TaskId &task_node, const chi::PoolId &pool_id,
       const chi::PoolQuery &pool_query,
-      const std::vector<clio_cae::core::AssimilationCtx> &contexts)
+      const std::vector<clio::cae::core::AssimilationCtx> &contexts)
       : chi::Task(task_node, pool_id, pool_query, Method::kParseOmni),
         serialized_ctx_(CTP_MALLOC),
         num_tasks_scheduled_(0),
@@ -315,6 +315,6 @@ struct ExportDataTask : public chi::Task {
   }
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_TASKS_H_

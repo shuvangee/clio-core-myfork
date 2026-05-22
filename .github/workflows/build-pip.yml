@@ -206,11 +206,11 @@ jobs:
             # See issue #429 for the regression this guards against.
             #
             # clio_cte_bench prints --help via its logging framework at
-            # ERROR level. clio_run_thrpt_benchmark prints to stdout and
+            # ERROR level. clio_run_thrpt_bench prints to stdout and
             # exits 1. The point of this block is to fail the job on
             # SIGSEGV / exit >= 128, not on the benchmarks own --help
             # exit codes.
-            for bench in clio_cte_bench clio_run_thrpt_benchmark; do
+            for bench in clio_cte_bench clio_run_thrpt_bench; do
               echo "--- $bench --help ---"
               "$bench" --help || rc=$?
               rc=${rc:-0}

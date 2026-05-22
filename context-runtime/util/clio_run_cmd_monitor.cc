@@ -72,7 +72,7 @@ bool ParseMonitorArgs(int argc, char* argv[], MonitorOptions& opts) {
  * Returns empty vector on decode failure.
  */
 std::vector<chi::WorkerStats> DecodeWorkerStats(
-    const clio_run::admin::MonitorTask& task) {
+    const clio::run::admin::MonitorTask& task) {
   std::vector<chi::WorkerStats> result;
 
   // Merge all container results (admin typically has one container)

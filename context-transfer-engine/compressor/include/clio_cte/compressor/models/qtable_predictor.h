@@ -51,7 +51,7 @@
 #include <mutex>
 #include <array>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * @brief State representation for Q-table lookup
@@ -285,6 +285,6 @@ class QTablePredictor : public CompressionPredictor {
   mutable std::mutex mutex_;               /**< Mutex for thread safety */
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_MODELS_QTABLE_PREDICTOR_H_

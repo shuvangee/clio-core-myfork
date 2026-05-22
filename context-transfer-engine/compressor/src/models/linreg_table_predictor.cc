@@ -117,7 +117,7 @@ size_t FindJsonKey(const std::string& s, const std::string& key, size_t start = 
 
 }  // anonymous namespace
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 LinRegTablePredictor::LinRegTablePredictor()
     : config_(), ready_(false) {
@@ -651,4 +651,4 @@ std::vector<std::string> LinRegTablePredictor::GetDistributions() const {
   return std::vector<std::string>(dists.begin(), dists.end());
 }
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor

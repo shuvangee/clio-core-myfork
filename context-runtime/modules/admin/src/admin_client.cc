@@ -40,9 +40,9 @@
 
 #include "clio_runtime/admin/admin_client.h"
 
-namespace clio_run::admin {
+namespace clio::run::admin {
 
 // Client implementation is mostly header-only
 // This file exists for any global client-side state or initialization
 
-} // namespace clio_run::admin
+} // namespace clio::run::admin

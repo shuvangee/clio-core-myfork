@@ -54,7 +54,7 @@
 #include <mutex>
 #include <random>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 /**
  * @brief Standard scaler for feature normalization
@@ -347,6 +347,6 @@ class DenseNNPredictor : public CompressionPredictor {
   size_t experience_count_;                           /**< Total experiences recorded */
 };
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor
 
 #endif  // CLIO_CTE_COMPRESSOR_MODELS_DENSE_NN_PREDICTOR_H_

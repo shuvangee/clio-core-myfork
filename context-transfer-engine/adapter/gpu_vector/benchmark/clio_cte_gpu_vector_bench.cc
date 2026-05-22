@@ -63,7 +63,7 @@
 
 using namespace std::chrono_literals;
 
-namespace gv = clio_cte::gpu_vector;
+namespace gv = clio::cte::gpu_vector;
 namespace dev = cte::gpu::dev;
 
 namespace {
@@ -174,16 +174,16 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
     std::fprintf(stderr, "[INIT] CHIMAERA_INIT failed\n");
     std::exit(2);
   }
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
     std::fprintf(stderr, "[INIT] CLIO_CTE_CLIENT_INIT failed\n");
     std::exit(2);
   }
   auto *cte_client = CLIO_CTE_CLIENT;
-  cte_client->Init(clio_cte::core::kCtePoolId);
-  clio_cte::core::CreateParams params;
+  cte_client->Init(clio::cte::core::kCtePoolId);
+  clio::cte::core::CreateParams params;
   auto create_task = cte_client->AsyncCreate(
-      chi::PoolQuery::Dynamic(), clio_cte::core::kCtePoolName,
-      clio_cte::core::kCtePoolId, params);
+      chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
+      clio::cte::core::kCtePoolId, params);
   create_task.Wait();
   if (create_task->GetReturnCode() != 0) {
     std::fprintf(stderr, "[INIT] CTE pool create failed rc=%u\n",
@@ -193,10 +193,10 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
   std::this_thread::sleep_for(50ms);
 
   chi::PoolId bdev_pool_id(951, 0);
-  clio_run::bdev::Client bdev_client(bdev_pool_id);
+  clio::run::bdev::Client bdev_client(bdev_pool_id);
   auto bdev_create = bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(), std::string("gpu_vector_bench_ram"),
-      bdev_pool_id, clio_run::bdev::BdevType::kRam, bdev_capacity_bytes);
+      bdev_pool_id, clio::run::bdev::BdevType::kRam, bdev_capacity_bytes);
   bdev_create.Wait();
   if (bdev_create->GetReturnCode() != 0) {
     std::fprintf(stderr, "[INIT] bdev create failed rc=%u\n",
@@ -205,7 +205,7 @@ void EnsureInit(const BenchOpts &opts, chi::u64 bdev_capacity_bytes) {
   }
   std::this_thread::sleep_for(50ms);
   auto reg_task = cte_client->AsyncRegisterTarget(
-      "gpu_vector_bench_ram", clio_run::bdev::BdevType::kRam,
+      "gpu_vector_bench_ram", clio::run::bdev::BdevType::kRam,
       bdev_capacity_bytes, chi::PoolQuery::Local(), bdev_pool_id);
   reg_task.Wait();
   if (reg_task->GetReturnCode() != 0) {

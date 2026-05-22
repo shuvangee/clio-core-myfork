@@ -137,10 +137,10 @@ class CTECoreFunctionalTestFixture {
   // CTE Core pool configuration - use constants from core_tasks.h
   // These are kept for backward compatibility but delegate to the canonical
   // constants
-  static inline const chi::PoolId &kCTECorePoolId = clio_cte::core::kCtePoolId;
-  static inline const char *kCTECorePoolName = clio_cte::core::kCtePoolName;
+  static inline const chi::PoolId &kCTECorePoolId = clio::cte::core::kCtePoolId;
+  static inline const char *kCTECorePoolName = clio::cte::core::kCtePoolName;
 
-  std::unique_ptr<clio_cte::core::Client> core_client_;
+  std::unique_ptr<clio::cte::core::Client> core_client_;
   std::string test_storage_path_;
   chi::PoolId core_pool_id_;
 
@@ -178,7 +178,7 @@ class CTECoreFunctionalTestFixture {
     INFO("Generated pool ID: " << core_pool_id_.ToU64());
 
     // Create and initialize core client with the generated pool ID
-    core_client_ = std::make_unique<clio_cte::core::Client>(core_pool_id_);
+    core_client_ = std::make_unique<clio::cte::core::Client>(core_pool_id_);
     INFO("CTE Core client created successfully");
 
     INFO("=== CTE Core Functional Test Environment Ready ===");
@@ -345,7 +345,7 @@ class CTECoreFunctionalTestFixture {
    * Async helper: Create CTE core pool
    */
   void CreateAsync(chi::PoolQuery pool_query, const std::string& pool_name,
-                   chi::PoolId pool_id, clio_cte::core::CreateParams& params) {
+                   chi::PoolId pool_id, clio::cte::core::CreateParams& params) {
     auto task = core_client_->AsyncCreate(pool_query, pool_name, pool_id, params);
     task.Wait();
   }
@@ -354,7 +354,7 @@ class CTECoreFunctionalTestFixture {
    * Async helper: Register target
    */
   chi::u32 RegisterTargetAsync(const std::string& target_name,
-                                clio_run::bdev::BdevType bdev_type,
+                                clio::run::bdev::BdevType bdev_type,
                                 chi::u64 capacity, chi::PoolQuery query,
                                 chi::PoolId bdev_id) {
     auto task = core_client_->AsyncRegisterTarget(target_name, bdev_type, capacity, query, bdev_id);
@@ -366,17 +366,17 @@ class CTECoreFunctionalTestFixture {
   /**
    * Async helper: Get or create tag
    */
-  clio_cte::core::TagId GetOrCreateTagAsync(const std::string& tag_name) {
+  clio::cte::core::TagId GetOrCreateTagAsync(const std::string& tag_name) {
     auto task = core_client_->AsyncGetOrCreateTag(tag_name);
     task.Wait();
-    clio_cte::core::TagId tag_id = task->tag_id_;
+    clio::cte::core::TagId tag_id = task->tag_id_;
     return tag_id;
   }
 
   /**
    * Async helper: Get blob score
    */
-  float GetBlobScoreAsync(clio_cte::core::TagId tag_id, const std::string& blob_name) {
+  float GetBlobScoreAsync(clio::cte::core::TagId tag_id, const std::string& blob_name) {
     auto task = core_client_->AsyncGetBlobScore(tag_id, blob_name);
     task.Wait();
     float score = task->score_;
@@ -386,7 +386,7 @@ class CTECoreFunctionalTestFixture {
   /**
    * Async helper: Get blob
    */
-  bool GetBlobAsync(clio_cte::core::TagId tag_id, const std::string& blob_name,
+  bool GetBlobAsync(clio::cte::core::TagId tag_id, const std::string& blob_name,
                     chi::u64 off, chi::u64 size, chi::u64 flags,
                     ctp::ipc::ShmPtr<> data_ptr) {
     auto task = core_client_->AsyncGetBlob(tag_id, blob_name, off, size, flags, data_ptr);
@@ -436,7 +436,7 @@ TEST_CASE("FUNCTIONAL - Create CTE Core Pool", "[cte][core][pool][creation]") {
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
 
     // Create parameters with test configuration
-    clio_cte::core::CreateParams params;
+    clio::cte::core::CreateParams params;
 
     // ACTUAL FUNCTIONAL TEST - call the real Create API (using async helper)
     REQUIRE_NOTHROW(fixture->CreateAsync(
@@ -452,7 +452,7 @@ TEST_CASE("FUNCTIONAL - Create CTE Core Pool", "[cte][core][pool][creation]") {
     INFO("=== Testing REAL fixture->core_client_->AsyncCreate() call ===");
 
     chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-    clio_cte::core::CreateParams params;
+    clio::cte::core::CreateParams params;
 
     // ACTUAL FUNCTIONAL TEST - call the real AsyncCreate API
     auto create_task = fixture->core_client_->AsyncCreate(
@@ -491,7 +491,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
   auto *fixture = ctp::Singleton<CTECoreFunctionalTestFixture>::
       GetInstance();  // First create the core pool using REAL API calls
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   INFO("Creating core pool before target registration...");
   REQUIRE_NOTHROW(fixture->CreateAsync(
@@ -513,7 +513,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
 
     // ACTUAL FUNCTIONAL TEST - call the real RegisterTarget API
     chi::u32 result = fixture->RegisterTargetAsync(
-        target_name, clio_run::bdev::BdevType::kFile,
+        target_name, clio::run::bdev::BdevType::kFile,
         CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
         chi::PoolId(600, 0));
 
@@ -553,7 +553,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
   //     chi::u32 result = fixture->RegisterTargetAsync(
   //         fixture->mctx_,
   //         "", // Empty name should cause failure
-  //         clio_run::bdev::BdevType::kFile,
+  //         clio::run::bdev::BdevType::kFile,
   //         CTECoreFunctionalTestFixture::kTestTargetSize);
 
   //     // FUNCTIONAL TEST - verify real error handling
@@ -575,7 +575,7 @@ TEST_CASE("FUNCTIONAL - Register Target", "[cte][core][target][registration]") {
 
     // ACTUAL FUNCTIONAL TEST - call the real AsyncRegisterTarget API
     auto register_task = fixture->core_client_->AsyncRegisterTarget(
-        target_name, clio_run::bdev::BdevType::kFile,
+        target_name, clio::run::bdev::BdevType::kFile,
         CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
         chi::PoolId(601, 0));
 
@@ -614,7 +614,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
   auto *fixture = ctp::Singleton<CTECoreFunctionalTestFixture>::
       GetInstance();  // Setup: Create core pool and register target
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   REQUIRE_NOTHROW(fixture->CreateAsync(
       pool_query, CTECoreFunctionalTestFixture::kCTECorePoolName,
@@ -624,14 +624,14 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
   // matters for bdev creation
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, clio_run::bdev::BdevType::kFile,
+      target_name, clio::run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(602, 0));
   REQUIRE(reg_result == 0);
 
   // Create a test tag for blob grouping
   const std::string tag_name = "putblob_test_tag";
-  clio_cte::core::TagId tag_id = fixture->GetOrCreateTagAsync(tag_name);
+  clio::cte::core::TagId tag_id = fixture->GetOrCreateTagAsync(tag_name);
   REQUIRE(!tag_id.IsNull());
 
   SECTION("FUNCTIONAL - Basic blob storage with data integrity") {
@@ -670,7 +670,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
         fixture->core_client_->AsyncPutBlob(tag_id, blob_name,
                                             0,  // offset
                                             blob_size, blob_data_ptr, score,
-                                            clio_cte::core::Context(),  // context
+                                            clio::cte::core::Context(),  // context
                                             0  // flags
         );
 
@@ -717,7 +717,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
 
       // Store the blob using AsyncPutBlob
       auto put_task = fixture->core_client_->AsyncPutBlob(
-          tag_id, blob_name, 0, blob_size, blob_data_ptr, score, clio_cte::core::Context(), 0);
+          tag_id, blob_name, 0, blob_size, blob_data_ptr, score, clio::cte::core::Context(), 0);
 
       if (!put_task.IsNull() &&
           fixture->WaitForTaskCompletion(put_task, 10000) &&
@@ -759,7 +759,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
 
       // Store chunk at specific offset using AsyncPutBlob
       auto chunk_task = fixture->core_client_->AsyncPutBlob(
-          tag_id, blob_name, offset, chunk_size, chunk_ptr, 0.8f, clio_cte::core::Context(), 0);
+          tag_id, blob_name, offset, chunk_size, chunk_ptr, 0.8f, clio::cte::core::Context(), 0);
 
       if (!chunk_task.IsNull() &&
           fixture->WaitForTaskCompletion(chunk_task, 10000) &&
@@ -795,7 +795,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
     // ACTUAL FUNCTIONAL TEST - call the real AsyncPutBlob API
     INFO("Calling fixture->core_client_->AsyncPutBlob()...");
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, blob_size, blob_data_ptr, 0.7f, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, blob_size, blob_data_ptr, 0.7f, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     INFO("AsyncPutBlob returned valid task, waiting for completion...");
@@ -828,7 +828,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
     if (!data_fullptr.IsNull() &&
         fixture->CopyToSharedMemory(data_fullptr, test_data)) {
       auto error_task = fixture->core_client_->AsyncPutBlob(tag_id, "", 0, 512,
-                                                            data_ptr, 0.5f, clio_cte::core::Context(), 0);
+                                                            data_ptr, 0.5f, clio::cte::core::Context(), 0);
       if (!error_task.IsNull()) {
         bool completed = fixture->WaitForTaskCompletion(error_task, 5000);
         bool success = completed && (error_task->return_code_ == 0);
@@ -842,7 +842,7 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
     INFO("Testing valid blob name...");
     if (!data_fullptr.IsNull()) {
       auto valid_task = fixture->core_client_->AsyncPutBlob(
-          tag_id, "valid_name", 0, 512, data_ptr, 0.5f, clio_cte::core::Context(), 0);
+          tag_id, "valid_name", 0, 512, data_ptr, 0.5f, clio::cte::core::Context(), 0);
       if (!valid_task.IsNull()) {
         bool completed = fixture->WaitForTaskCompletion(valid_task, 5000);
         bool success = completed && (valid_task->return_code_ == 0);
@@ -855,8 +855,8 @@ TEST_CASE("FUNCTIONAL - PutBlob Operations",
     INFO("Testing invalid tag ID error case...");
     if (!data_fullptr.IsNull()) {
       auto invalid_tag_task = fixture->core_client_->AsyncPutBlob(
-          clio_cte::core::TagId{99999, 0}, "valid_name", 0, 512, data_ptr, 0.5f,
-          clio_cte::core::Context(), 0);
+          clio::cte::core::TagId{99999, 0}, "valid_name", 0, 512, data_ptr, 0.5f,
+          clio::cte::core::Context(), 0);
       if (!invalid_tag_task.IsNull()) {
         bool completed = fixture->WaitForTaskCompletion(invalid_tag_task, 5000);
         bool success = completed && (invalid_tag_task->return_code_ == 0);
@@ -887,7 +887,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
   auto *fixture = ctp::Singleton<CTECoreFunctionalTestFixture>::
       GetInstance();  // Setup: Create core pool, register target, create tag
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   REQUIRE_NOTHROW(fixture->CreateAsync(
       pool_query, CTECoreFunctionalTestFixture::kCTECorePoolName,
@@ -897,12 +897,12 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
   // matters for bdev creation
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, clio_run::bdev::BdevType::kFile,
+      target_name, clio::run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(603, 0));
   REQUIRE(reg_result == 0);
 
-  clio_cte::core::TagId tag_id =
+  clio::cte::core::TagId tag_id =
       fixture->GetOrCreateTagAsync("getblob_test_tag");
 
   SECTION("FUNCTIONAL - Basic store and retrieve with data integrity") {
@@ -935,7 +935,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
 
     INFO("Storing blob for retrieval test...");
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, blob_size, put_data_ptr, 0.8f, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, blob_size, put_data_ptr, 0.8f, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -1009,7 +1009,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
       REQUIRE(fixture->CopyToSharedMemory(put_fullptr, blob_data));
 
       auto put_task = fixture->core_client_->AsyncPutBlob(
-          tag_id, blob_name, 0, blob_size, put_ptr, 0.5f, clio_cte::core::Context(), 0);
+          tag_id, blob_name, 0, blob_size, put_ptr, 0.5f, clio::cte::core::Context(), 0);
 
       if (!put_task.IsNull() &&
           fixture->WaitForTaskCompletion(put_task, 10000) &&
@@ -1085,7 +1085,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
 
     INFO("Storing full blob (" << total_size << " bytes)...");
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, total_size, put_ptr, 0.9f, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, total_size, put_ptr, 0.9f, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -1157,7 +1157,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
 
     INFO("Storing blob for async retrieval...");
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, blob_size, put_ptr, 0.7f, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, blob_size, put_ptr, 0.7f, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -1240,7 +1240,7 @@ TEST_CASE("FUNCTIONAL - GetBlob Operations",
     // Test invalid tag ID
     INFO("Testing invalid tag ID error case...");
     bool get_success3 = fixture->GetBlobAsync(
-        clio_cte::core::TagId{88888, 0}, "some_blob", 0, 1024, 0,
+        clio::cte::core::TagId{88888, 0}, "some_blob", 0, 1024, 0,
         error_buffer_ptr);
     INFO("Invalid tag result: " << (get_success3 ? "true" : "false")
                                 << " (false indicates proper error handling)");
@@ -1276,7 +1276,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
   auto *fixture = ctp::Singleton<CTECoreFunctionalTestFixture>::
       GetInstance();  // Setup: Create core pool and register target
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   REQUIRE_NOTHROW(fixture->CreateAsync(
       pool_query, CTECoreFunctionalTestFixture::kCTECorePoolName,
@@ -1284,13 +1284,13 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
 
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, clio_run::bdev::BdevType::kFile,
+      target_name, clio::run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(604, 0));
   REQUIRE(reg_result == 0);
 
   // Create test tag for integration testing
-  clio_cte::core::TagId tag_id =
+  clio::cte::core::TagId tag_id =
       fixture->GetOrCreateTagAsync("integration_test_tag");
 
   SECTION("FUNCTIONAL - Basic Put-Get cycle with data integrity") {
@@ -1319,7 +1319,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
     // STEP 1: Store the blob
     INFO("Step 1: Storing blob with AsyncPutBlob...");
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, blob_size, put_ptr, score, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, blob_size, put_ptr, score, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -1410,7 +1410,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
       REQUIRE(fixture->CopyToSharedMemory(put_fullptr, blob_data));
 
       auto put_task = fixture->core_client_->AsyncPutBlob(
-          tag_id, blob_name, 0, blob_size, put_ptr, score, clio_cte::core::Context(), 0);
+          tag_id, blob_name, 0, blob_size, put_ptr, score, clio::cte::core::Context(), 0);
 
       if (!put_task.IsNull() &&
           fixture->WaitForTaskCompletion(put_task, 10000) &&
@@ -1475,9 +1475,9 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
     INFO("=== Testing REAL cross-tag isolation ===\n");
 
     // Create two separate tags
-    clio_cte::core::TagId tag1_id =
+    clio::cte::core::TagId tag1_id =
         fixture->GetOrCreateTagAsync("isolation_tag_1");
-    clio_cte::core::TagId tag2_id =
+    clio::cte::core::TagId tag2_id =
         fixture->GetOrCreateTagAsync("isolation_tag_2");
 
     const std::string blob_name = "isolation_test_blob";
@@ -1500,7 +1500,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
     if (!put1_fullptr.IsNull() &&
         fixture->CopyToSharedMemory(put1_fullptr, tag1_data)) {
       auto put1_task = fixture->core_client_->AsyncPutBlob(
-          tag1_id, blob_name, 0, blob_size, put1_ptr, 0.5f, clio_cte::core::Context(), 0);
+          tag1_id, blob_name, 0, blob_size, put1_ptr, 0.5f, clio::cte::core::Context(), 0);
       if (!put1_task.IsNull() &&
           fixture->WaitForTaskCompletion(put1_task, 10000) &&
           put1_task->return_code_ == 0) {
@@ -1519,7 +1519,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
     if (!put2_fullptr.IsNull() &&
         fixture->CopyToSharedMemory(put2_fullptr, tag2_data)) {
       auto put2_task = fixture->core_client_->AsyncPutBlob(
-          tag2_id, blob_name, 0, blob_size, put2_ptr, 0.5f, clio_cte::core::Context(), 0);
+          tag2_id, blob_name, 0, blob_size, put2_ptr, 0.5f, clio::cte::core::Context(), 0);
       if (!put2_task.IsNull() &&
           fixture->WaitForTaskCompletion(put2_task, 10000) &&
           put2_task->return_code_ == 0) {
@@ -1602,7 +1602,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
     // STEP 1: Async Put
     INFO("Step 1: Async PutBlob...");
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, blob_size, put_ptr, 0.7f, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, blob_size, put_ptr, 0.7f, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     INFO("Waiting for async put completion...");
@@ -1684,7 +1684,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Integration Cycles",
       ctp::ipc::ShmPtr<> chunk_ptr = chunk_fullptr.shm_.template Cast<void>();
 
       auto chunk_task = fixture->core_client_->AsyncPutBlob(
-          tag_id, blob_name, offset, chunk_size, chunk_ptr, 0.6f, clio_cte::core::Context(), 0);
+          tag_id, blob_name, offset, chunk_size, chunk_ptr, 0.6f, clio::cte::core::Context(), 0);
 
       if (!chunk_task.IsNull() &&
           fixture->WaitForTaskCompletion(chunk_task, 10000) &&
@@ -1792,7 +1792,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Comprehensive Integration",
 
   // Setup: Create core pool, register target, create tag
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   INFO("Step 1: Creating core pool...");
   REQUIRE_NOTHROW(fixture->CreateAsync(
@@ -1803,14 +1803,14 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Comprehensive Integration",
   INFO("Step 2: Registering target...");
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, clio_run::bdev::BdevType::kFile,
+      target_name, clio::run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(605, 0));
   REQUIRE(reg_result == 0);
   INFO("✓ Target registered successfully");
 
   INFO("Step 3: Creating test tag...");
-  clio_cte::core::TagId tag_id =
+  clio::cte::core::TagId tag_id =
       fixture->GetOrCreateTagAsync("comprehensive_test_tag");
   REQUIRE((tag_id.major_ != 0 || tag_id.minor_ != 0));
   INFO("✓ Test tag created with ID: " << tag_id);
@@ -1849,7 +1849,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Comprehensive Integration",
 
   // Create PutBlob task
   auto put_task = fixture->core_client_->AsyncPutBlob(
-      tag_id, blob_name, 0, test_data_size, put_data_ptr, blob_score, clio_cte::core::Context(), 0);
+      tag_id, blob_name, 0, test_data_size, put_data_ptr, blob_score, clio::cte::core::Context(), 0);
 
   REQUIRE(!put_task.IsNull());
   INFO("✓ PutBlob task created with:");
@@ -1952,7 +1952,7 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 
   // Setup: Create core pool, register target, create tag
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   INFO("Step 1: Setting up CTE environment...");
   REQUIRE_NOTHROW(fixture->CreateAsync(
@@ -1961,12 +1961,12 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, clio_run::bdev::BdevType::kFile,
+      target_name, clio::run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(606, 0));
   REQUIRE(reg_result == 0);
 
-  clio_cte::core::TagId tag_id =
+  clio::cte::core::TagId tag_id =
       fixture->GetOrCreateTagAsync("reorganize_test_tag");
   REQUIRE((tag_id.major_ != 0 || tag_id.minor_ != 0));
   INFO("✓ Environment setup completed");
@@ -2002,7 +2002,7 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 
       auto put_task = fixture->core_client_->AsyncPutBlob(
           tag_id, blob_name, 0, blob_size,
-          put_buffer.shm_.template Cast<void>(), initial_score, clio_cte::core::Context(), 0);
+          put_buffer.shm_.template Cast<void>(), initial_score, clio::cte::core::Context(), 0);
 
       REQUIRE(!put_task.IsNull());
       REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -2093,7 +2093,7 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 
       auto put_task = fixture->core_client_->AsyncPutBlob(
           tag_id, blob_name, 0, blob_size,
-          put_buffer.shm_.template Cast<void>(), initial_scores[i], clio_cte::core::Context(), 0);
+          put_buffer.shm_.template Cast<void>(), initial_scores[i], clio::cte::core::Context(), 0);
 
       REQUIRE(!put_task.IsNull());
       REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -2159,7 +2159,7 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 
       auto put_task = fixture->core_client_->AsyncPutBlob(
           tag_id, blob_name, 0, blob_size,
-          put_buffer.shm_.template Cast<void>(), initial_score, clio_cte::core::Context(), 0);
+          put_buffer.shm_.template Cast<void>(), initial_score, clio::cte::core::Context(), 0);
 
       REQUIRE(!put_task.IsNull());
       REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));
@@ -2224,7 +2224,7 @@ TEST_CASE("FUNCTIONAL - ReorganizeBlob Operations",
 TEST_CASE("End-to-End CTE Core Workflow", "[cte][core][integration]") {
   auto *fixture = ctp::Singleton<CTECoreFunctionalTestFixture>::GetInstance();
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   // Step 1: Initialize CTE core pool
   REQUIRE_NOTHROW(fixture->CreateAsync(
@@ -2241,7 +2241,7 @@ TEST_CASE("End-to-End CTE Core Workflow", "[cte][core][integration]") {
     std::string target_name =
         fixture->test_storage_path_ + "_" + target_suffixes[i];
     chi::u32 result = fixture->RegisterTargetAsync(
-        target_name, clio_run::bdev::BdevType::kFile,
+        target_name, clio::run::bdev::BdevType::kFile,
         CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
         chi::PoolId(607 + static_cast<chi::u32>(i), 0));
     REQUIRE(result == 0);
@@ -2250,10 +2250,10 @@ TEST_CASE("End-to-End CTE Core Workflow", "[cte][core][integration]") {
 
   // Step 3: Create tags for organization
   const std::vector<std::string> tag_names = {"documents", "images", "logs"};
-  std::vector<clio_cte::core::TagId> tag_ids;
+  std::vector<clio::cte::core::TagId> tag_ids;
 
   for (const auto &tag_name : tag_names) {
-    clio_cte::core::TagId tag_id =
+    clio::cte::core::TagId tag_id =
         fixture->GetOrCreateTagAsync(tag_name);
     REQUIRE(!tag_id.IsNull());
     tag_ids.push_back(tag_id);
@@ -2261,11 +2261,11 @@ TEST_CASE("End-to-End CTE Core Workflow", "[cte][core][integration]") {
   INFO("Step 3 completed: Tags created for organization");
 
   // Step 4: Blob operations simulation across different tags
-  std::vector<std::tuple<clio_cte::core::TagId, std::string, std::vector<char>>>
+  std::vector<std::tuple<clio::cte::core::TagId, std::string, std::vector<char>>>
       stored_blobs;
 
   for (size_t i = 0; i < tag_ids.size(); ++i) {
-    clio_cte::core::TagId tag_id = tag_ids[i];
+    clio::cte::core::TagId tag_id = tag_ids[i];
     std::string blob_name = "blob_" + std::to_string(i);
     chi::u64 blob_size = 1024 * (i + 1);  // Variable sizes
 
@@ -2341,7 +2341,7 @@ TEST_CASE("FUNCTIONAL - Distributed Execution Validation",
 
   // Setup: Create core pool and register target
   chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
-  clio_cte::core::CreateParams params;
+  clio::cte::core::CreateParams params;
 
   REQUIRE_NOTHROW(fixture->CreateAsync(
       pool_query, CTECoreFunctionalTestFixture::kCTECorePoolName,
@@ -2351,14 +2351,14 @@ TEST_CASE("FUNCTIONAL - Distributed Execution Validation",
   // Use the fixture->test_storage_path_ as target_name
   const std::string target_name = fixture->test_storage_path_;
   chi::u32 reg_result = fixture->RegisterTargetAsync(
-      target_name, clio_run::bdev::BdevType::kFile,
+      target_name, clio::run::bdev::BdevType::kFile,
       CTECoreFunctionalTestFixture::kTestTargetSize, chi::PoolQuery::Local(),
       chi::PoolId(608, 0));
   REQUIRE(reg_result == 0);
 
   // Create a test tag for blob grouping
   const std::string tag_name = "distributed_test_tag";
-  clio_cte::core::TagId tag_id = fixture->GetOrCreateTagAsync(tag_name);
+  clio::cte::core::TagId tag_id = fixture->GetOrCreateTagAsync(tag_name);
   REQUIRE(!tag_id.IsNull());
 
   // Test configuration
@@ -2391,7 +2391,7 @@ TEST_CASE("FUNCTIONAL - Distributed Execution Validation",
 
     // Execute PutBlob operation
     auto put_task = fixture->core_client_->AsyncPutBlob(
-        tag_id, blob_name, 0, blob_size, blob_data_ptr, score, clio_cte::core::Context(), 0);
+        tag_id, blob_name, 0, blob_size, blob_data_ptr, score, clio::cte::core::Context(), 0);
 
     REQUIRE(!put_task.IsNull());
     REQUIRE(fixture->WaitForTaskCompletion(put_task, 10000));

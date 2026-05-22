@@ -165,7 +165,7 @@ bool Chimaera::ClientInit() {
   if (g_admin == nullptr) {
     HLOG(kInfo, "ClientInit: Creating admin client with kAdminPoolId={}",
          chi::kAdminPoolId);
-    g_admin = new clio_run::admin::Client(chi::kAdminPoolId);
+    g_admin = new clio::run::admin::Client(chi::kAdminPoolId);
     HLOG(kInfo, "ClientInit: Admin client created, pool_id_={}",
          g_admin->pool_id_);
   } else {

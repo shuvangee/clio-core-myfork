@@ -43,7 +43,7 @@
 #include <cmath>
 #include <nlohmann/json.hpp>
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 namespace fs = std::filesystem;
 using json = nlohmann::ordered_json;
@@ -912,4 +912,4 @@ void DenseNNPredictor::ClearExperiences() {
   experience_count_ = 0;
 }
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor

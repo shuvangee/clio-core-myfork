@@ -75,7 +75,7 @@ int main() {
 
     // Step 2: Create admin client (required for pool management)
     HLOG(kInfo, "\n2. Creating admin client...");
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
     HLOG(kInfo, "Admin client created with pool ID: {}", chi::kAdminPoolId);
 
     // Step 3: Create simple_mod client (from external_test namespace)

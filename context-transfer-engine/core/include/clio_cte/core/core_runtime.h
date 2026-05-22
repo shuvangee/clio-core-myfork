@@ -49,11 +49,11 @@
 #include <clio_cte/core/transaction_log.h>
 
 // Forward declarations to avoid circular dependency
-namespace clio_cte::core {
+namespace clio::cte::core {
 class Config;
 }
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 
 /**
@@ -62,7 +62,7 @@ namespace clio_cte::core {
  */
 class Runtime : public chi::Container {
 public:
-  using CreateParams = clio_cte::core::CreateParams; // Required for CLIO_TASK_CC
+  using CreateParams = clio::cte::core::CreateParams; // Required for CLIO_TASK_CC
 
   Runtime() = default;
   ~Runtime() override = default;
@@ -362,7 +362,7 @@ private:
   /**
    * Get the persistence level for a target from its storage device config
    */
-  clio_run::bdev::PersistenceLevel GetPersistenceLevelForTarget(
+  clio::run::bdev::PersistenceLevel GetPersistenceLevelForTarget(
       const std::string &target_name);
 
   /**
@@ -598,6 +598,6 @@ private:
                                      const std::string &blob_name);
 };
 
-} // namespace clio_cte::core
+} // namespace clio::cte::core
 
 #endif // WRPCTE_CORE_RUNTIME_H_

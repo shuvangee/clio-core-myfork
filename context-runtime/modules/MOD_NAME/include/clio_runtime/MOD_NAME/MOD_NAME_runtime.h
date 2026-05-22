@@ -42,7 +42,7 @@
 #include "autogen/MOD_NAME_methods.h"
 #include "MOD_NAME_client.h"
 
-namespace clio_run::MOD_NAME {
+namespace clio::run::MOD_NAME {
 
 // Forward declarations (CustomTask only, CreateTask is a using alias in MOD_NAME_tasks.h)
 struct CustomTask;
@@ -59,7 +59,7 @@ struct SubtaskTestTask;
 class Runtime : public chi::Container {
 public:
   // CreateParams type used by CLIO_TASK_CC macro for lib_name access
-  using CreateParams = clio_run::MOD_NAME::CreateParams;
+  using CreateParams = clio::run::MOD_NAME::CreateParams;
 
 private:
   // Container-specific state
@@ -215,6 +215,6 @@ public:
 
 };
 
-} // namespace clio_run::MOD_NAME
+} // namespace clio::run::MOD_NAME
 
 #endif // MOD_NAME_RUNTIME_H_

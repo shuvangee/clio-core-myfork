@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 
-using namespace clio_cte::core;
+using namespace clio::cte::core;
 
 // Helper function to create a temporary file path
 std::string GetTempFile(const std::string& name) {

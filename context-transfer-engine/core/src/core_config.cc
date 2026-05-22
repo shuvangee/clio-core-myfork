@@ -41,7 +41,7 @@
 #include <cstdio>
 #include "clio_ctp/util/logging.h"
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 // Config class implementation
 bool Config::LoadFromFile(const std::string &config_file_path) {
@@ -502,19 +502,19 @@ bool Config::ParseStorageConfig(const YAML::Node &node) {
     if (device_config.capacity_limit_ == 0) {
       // Policy: a RAM device configured with capacity 0 ("0g") defaults
       // to 80% of total system DRAM — identical to the bdev module's
-      // own behavior (clio_run::bdev::DefaultRamCapacityBytes), so "0g"
+      // own behavior (clio::run::bdev::DefaultRamCapacityBytes), so "0g"
       // means the same whether a bdev is created directly or via CTE.
       // Other tiers (file/noop/...) have no DRAM-based default, so 0
       // remains an error for them.
       if (device_config.bdev_type_ == "ram") {
         device_config.capacity_limit_ =
-            clio_run::bdev::DefaultRamCapacityBytes();
+            clio::run::bdev::DefaultRamCapacityBytes();
         HLOG(kInfo,
              "Storage device {}: capacity_limit 0/'0g' for ram tier -> "
              "defaulting to {}% of system DRAM = {} bytes",
              device_config.path_,
              static_cast<int>(
-                 clio_run::bdev::kDefaultRamCapacityFraction * 100),
+                 clio::run::bdev::kDefaultRamCapacityFraction * 100),
              device_config.capacity_limit_);
       } else {
         HLOG(kError,
@@ -644,4 +644,4 @@ std::string Config::FormatSizeBytes(chi::u64 size_bytes) const {
   }
 }
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core

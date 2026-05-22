@@ -30,12 +30,12 @@ vcpkg install iowarp-core --overlay-ports=installers/vcpkg
 After installation, use in your CMakeLists.txt:
 
 ```cmake
-find_package(iowarp-core CONFIG REQUIRED)
+find_package(clio-core CONFIG REQUIRED)
 
 target_link_libraries(your_target PRIVATE
-    chimaera::admin_client
-    chimaera::bdev_client
-    clio_cte::core_client
+    clio::run::admin_client
+    clio::run::bdev_client
+    clio::cte::core_client
 )
 ```
 

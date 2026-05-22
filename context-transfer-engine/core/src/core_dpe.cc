@@ -37,7 +37,7 @@
 #include <chrono>
 #include "clio_ctp/util/logging.h"
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 // Static member definition for round-robin counter
 std::atomic<chi::u32> RoundRobinDpe::round_robin_counter_(0);
@@ -278,4 +278,4 @@ std::unique_ptr<DataPlacementEngine> DpeFactory::CreateDpe(const std::string& dp
   return CreateDpe(StringToDpeType(dpe_str));
 }
 
-} // namespace clio_cte::core
+} // namespace clio::cte::core

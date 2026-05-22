@@ -105,14 +105,14 @@ bool GenerateTestFile(const std::string& file_path, size_t size_bytes) {
 /**
  * Test error case - should fail with specific error code
  */
-bool TestErrorCase(clio_cae::core::Client& cae_client,
+bool TestErrorCase(clio::cae::core::Client& cae_client,
                    const std::string& test_name,
-                   const clio_cae::core::AssimilationCtx& ctx,
+                   const clio::cae::core::AssimilationCtx& ctx,
                    bool should_fail = true) {
   HLOG(kInfo, "--- Testing: {} ---", test_name);
 
   // Call ParseOmni with vector containing single context
-  std::vector<clio_cae::core::AssimilationCtx> contexts = {ctx};
+  std::vector<clio::cae::core::AssimilationCtx> contexts = {ctx};
   auto parse_task = cae_client.AsyncParseOmni(contexts);
   parse_task.Wait();
   // Use result_code_ (operation result) not GetReturnCode() (task completion status)
@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
 
     // Connect to CTE
     HLOG(kInfo, "[SETUP] Connecting to CTE...");
-    clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    clio::cte::core::CLIO_CTE_CLIENT_INIT();
 
     // Set up storage target for CTE
     HLOG(kInfo, "[SETUP] Registering storage target...");
@@ -201,16 +201,16 @@ int main(int argc, char* argv[]) {
 
     // Create bdev storage target
     chi::PoolId bdev_pool_id(200, 0);
-    clio_run::bdev::Client bdev_client(bdev_pool_id);
+    clio::run::bdev::Client bdev_client(bdev_pool_id);
     auto bdev_create_task = bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), kTestStoragePath,
-                                                     bdev_pool_id, clio_run::bdev::BdevType::kFile);
+                                                     bdev_pool_id, clio::run::bdev::BdevType::kFile);
     bdev_create_task.Wait();
     std::this_thread::sleep_for(100ms);
 
     // Register storage target with CTE
     auto *cte_client = CLIO_CTE_CLIENT;
     auto reg_task = cte_client->AsyncRegisterTarget(kTestStoragePath,
-                                                     clio_run::bdev::BdevType::kFile,
+                                                     clio::run::bdev::BdevType::kFile,
                                                      kTestTargetSize, chi::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     std::this_thread::sleep_for(100ms);
@@ -222,13 +222,13 @@ int main(int argc, char* argv[]) {
 
     // Create CAE pool
     HLOG(kInfo, "[SETUP] Creating CAE pool...");
-    clio_cae::core::Client cae_client;
-    clio_cae::core::CreateParams params;
+    clio::cae::core::Client cae_client;
+    clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
         chi::PoolQuery::Local(),
         "test_cae_error_pool",
-        clio_cae::core::kCaePoolId,
+        clio::cae::core::kCaePoolId,
         params);
     create_task.Wait();
 
@@ -236,7 +236,7 @@ int main(int argc, char* argv[]) {
 
     // Test 1: Non-existent source file
     tests_total++;
-    clio_cae::core::AssimilationCtx ctx1;
+    clio::cae::core::AssimilationCtx ctx1;
     ctx1.src = "file::" + kNonExistentFile;
     ctx1.dst = "iowarp::test_error_tag1";
     ctx1.format = "binary";
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
 
     // Test 2: Invalid source protocol
     tests_total++;
-    clio_cae::core::AssimilationCtx ctx2;
+    clio::cae::core::AssimilationCtx ctx2;
     ctx2.src = "invalid_protocol::/tmp/somefile.bin";
     ctx2.dst = "iowarp::test_error_tag2";
     ctx2.format = "binary";
@@ -260,7 +260,7 @@ int main(int argc, char* argv[]) {
 
     // Test 3: Invalid destination protocol
     tests_total++;
-    clio_cae::core::AssimilationCtx ctx3;
+    clio::cae::core::AssimilationCtx ctx3;
     ctx3.src = "file::" + kTestFileName;
     ctx3.dst = "invalid_protocol::test_tag";
     ctx3.format = "binary";
@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
 
     // Test 4: Out-of-range offset
     tests_total++;
-    clio_cae::core::AssimilationCtx ctx4;
+    clio::cae::core::AssimilationCtx ctx4;
     ctx4.src = "file::" + kTestFileName;
     ctx4.dst = "iowarp::test_error_tag4";
     ctx4.format = "binary";
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
 
     // Test 5: Range size exceeds file
     tests_total++;
-    clio_cae::core::AssimilationCtx ctx5;
+    clio::cae::core::AssimilationCtx ctx5;
     ctx5.src = "file::" + kTestFileName;
     ctx5.dst = "iowarp::test_error_tag5";
     ctx5.format = "binary";
@@ -300,7 +300,7 @@ int main(int argc, char* argv[]) {
 
     // Test 7: Valid case (control test - should succeed)
     tests_total++;
-    clio_cae::core::AssimilationCtx ctx7;
+    clio::cae::core::AssimilationCtx ctx7;
     ctx7.src = "file::" + kTestFileName;
     ctx7.dst = "iowarp::test_error_tag7";
     ctx7.format = "binary";

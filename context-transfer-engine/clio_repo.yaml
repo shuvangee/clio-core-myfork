@@ -1,5 +1,5 @@
 # Content Transfer Engine ChiMod Repository Configuration
-namespace: clio_cte
+namespace: clio::cte
 version: 1.0.0
 description: "Content Transfer Engine - A system for placing data in tiered storage"
 

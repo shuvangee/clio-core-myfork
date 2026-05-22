@@ -549,8 +549,8 @@ class CTECompressBenchmark {
   /**
    * Create compression context with current settings
    */
-  clio_cte::core::Context CreateCompressionContext() {
-    clio_cte::core::Context ctx;
+  clio::cte::core::Context CreateCompressionContext() {
+    clio::cte::core::Context ctx;
     ctx.dynamic_compress_ = dynamic_compress_;
     ctx.compress_lib_ = compress_lib_;
     ctx.max_performance_ = false;  // Optimize for ratio
@@ -585,10 +585,10 @@ class CTECompressBenchmark {
     ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
     // Create compression context
-    clio_cte::core::Context ctx = CreateCompressionContext();
+    clio::cte::core::Context ctx = CreateCompressionContext();
 
     // Track pending tasks for checkpointing
-    std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_tasks;
+    std::vector<chi::Future<clio::cte::core::PutBlobTask>> pending_tasks;
     int phases_since_checkpoint = 0;
 
     chi::u64 total_original_size = 0;
@@ -612,7 +612,7 @@ class CTECompressBenchmark {
       // Create tag and blob names
       std::string tag_name = "compress_tag_t" + std::to_string(thread_id) +
                              "_i" + std::to_string(i);
-      clio_cte::core::Tag tag(tag_name);
+      clio::cte::core::Tag tag(tag_name);
       std::string blob_name = "blob_0";
 
       // Submit async Put with compression
@@ -689,7 +689,7 @@ class CTECompressBenchmark {
     std::vector<char> get_data(transfer_size_);
 
     // Create compression context
-    clio_cte::core::Context ctx = CreateCompressionContext();
+    clio::cte::core::Context ctx = CreateCompressionContext();
 
     // First, populate data with Put operations
     HLOG(kInfo, "Thread {}: Populating data for Get benchmark...", thread_id);
@@ -699,7 +699,7 @@ class CTECompressBenchmark {
 
       std::string tag_name = "compress_get_tag_t" + std::to_string(thread_id) +
                              "_i" + std::to_string(i);
-      clio_cte::core::Tag tag(tag_name);
+      clio::cte::core::Tag tag(tag_name);
       std::string blob_name = "blob_0";
 
       tag.PutBlob(blob_name, put_data.data(), transfer_size_, 0, 0.8f, ctx);
@@ -718,7 +718,7 @@ class CTECompressBenchmark {
 
       std::string tag_name = "compress_get_tag_t" + std::to_string(thread_id) +
                              "_i" + std::to_string(i);
-      clio_cte::core::Tag tag(tag_name);
+      clio::cte::core::Tag tag(tag_name);
       std::string blob_name = "blob_0";
 
       tag.GetBlob(blob_name, get_data.data(), transfer_size_);
@@ -782,10 +782,10 @@ class CTECompressBenchmark {
     ctp::ipc::ShmPtr<> shm_ptr = shm_buffer.shm_.template Cast<void>();
 
     // Create compression context
-    clio_cte::core::Context ctx = CreateCompressionContext();
+    clio::cte::core::Context ctx = CreateCompressionContext();
 
     // Track pending tasks
-    std::vector<chi::Future<clio_cte::core::PutBlobTask>> pending_tasks;
+    std::vector<chi::Future<clio::cte::core::PutBlobTask>> pending_tasks;
     int phases_since_checkpoint = 0;
 
     auto start_time = high_resolution_clock::now();
@@ -805,7 +805,7 @@ class CTECompressBenchmark {
 
       std::string tag_name = "compress_putget_tag_t" + std::to_string(thread_id) +
                              "_i" + std::to_string(i);
-      clio_cte::core::Tag tag(tag_name);
+      clio::cte::core::Tag tag(tag_name);
       std::string blob_name = "blob_0";
 
       // Async Put
@@ -824,7 +824,7 @@ class CTECompressBenchmark {
           std::string read_tag_name = "compress_putget_tag_t" +
                                       std::to_string(thread_id) + "_i" +
                                       std::to_string(j);
-          clio_cte::core::Tag read_tag(read_tag_name);
+          clio::cte::core::Tag read_tag(read_tag_name);
           read_tag.GetBlob(blob_name, get_data.data(), transfer_size_);
         }
 
@@ -987,7 +987,7 @@ int main(int argc, char **argv) {
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
   // Initialize CTE client
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
     HLOG(kError, "Failed to initialize CTE client");
     return 1;
   }

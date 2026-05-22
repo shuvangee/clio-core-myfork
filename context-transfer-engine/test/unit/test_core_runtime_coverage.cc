@@ -47,7 +47,7 @@
 #include <clio_runtime/bdev/bdev_tasks.h>
 #include <clio_ctp/util/logging.h>
 
-using namespace clio_cte::core;
+using namespace clio::cte::core;
 
 static std::string chi_test_data_dir() {
   const char *d = chi::env::GetCompat("TEST_DATA_DIR");
@@ -79,21 +79,21 @@ public:
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
       // Step 2: Initialize CTE client subsystem (CRITICAL!)
-      success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+      success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
       if (!success) {
         throw std::runtime_error("CLIO_CTE_CLIENT_INIT failed");
       }
 
       // Step 3: Set pool ID on global client
       auto *cte_client = CLIO_CTE_CLIENT;
-      cte_client->Init(clio_cte::core::kCtePoolId);
+      cte_client->Init(clio::cte::core::kCtePoolId);
 
       // Step 4: Create CTE core pool
-      clio_cte::core::CreateParams params;
+      clio::cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
           chi::PoolQuery::Dynamic(),
-          clio_cte::core::kCtePoolName,
-          clio_cte::core::kCtePoolId,
+          clio::cte::core::kCtePoolName,
+          clio::cte::core::kCtePoolId,
           params);
       create_task.Wait();
 
@@ -118,19 +118,19 @@ public:
     // Create bdev pool for storage
     chi::PoolId bdev_pool_id(900, 0);
     size_t target_size = 10 * 1024 * 1024;  // 10 MB
-    clio_run::bdev::Client bdev_client(bdev_pool_id);
+    clio::run::bdev::Client bdev_client(bdev_pool_id);
     auto bdev_create = bdev_client.AsyncCreate(
         chi::PoolQuery::Dynamic(),
         test_storage_path_,
         bdev_pool_id,
-        clio_run::bdev::BdevType::kFile,
+        clio::run::bdev::BdevType::kFile,
         target_size);
     bdev_create.Wait();
 
     // Register target with CTE
     auto reg_task = cte_client->AsyncRegisterTarget(
         test_storage_path_,
-        clio_run::bdev::BdevType::kFile,
+        clio::run::bdev::BdevType::kFile,
         target_size,
         chi::PoolQuery::Local(),
         bdev_pool_id);
@@ -206,18 +206,18 @@ TEST_CASE("Runtime - UnregisterTarget Success", "[runtime][target]") {
   chi::PoolId temp_bdev_pool_id(901, 0);
   size_t temp_target_size = 5 * 1024 * 1024;
 
-  clio_run::bdev::Client temp_bdev_client(temp_bdev_pool_id);
+  clio::run::bdev::Client temp_bdev_client(temp_bdev_pool_id);
   auto bdev_create = temp_bdev_client.AsyncCreate(
       chi::PoolQuery::Dynamic(),
       temp_target,
       temp_bdev_pool_id,
-      clio_run::bdev::BdevType::kFile,
+      clio::run::bdev::BdevType::kFile,
       temp_target_size);
   bdev_create.Wait();
 
   auto reg_task = client->AsyncRegisterTarget(
       temp_target,
-      clio_run::bdev::BdevType::kFile,
+      clio::run::bdev::BdevType::kFile,
       temp_target_size,
       chi::PoolQuery::Local(),
       temp_bdev_pool_id);

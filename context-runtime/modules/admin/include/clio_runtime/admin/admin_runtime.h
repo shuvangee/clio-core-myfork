@@ -51,7 +51,7 @@
 #include <thread>
 #include <unordered_set>
 
-namespace clio_run::admin {
+namespace clio::run::admin {
 
 /** Return code set on tasks that fail due to network timeout */
 static constexpr int kNetworkTimeoutRC = -1000;
@@ -89,7 +89,7 @@ enum AdminQueueIndex {
 class Runtime : public chi::Container {
 public:
   // CreateParams type used by CLIO_TASK_CC macro for lib_name access
-  using CreateParams = clio_run::admin::CreateParams;
+  using CreateParams = clio::run::admin::CreateParams;
 
 private:
   // Container-specific state
@@ -187,7 +187,7 @@ public:
    */
   chi::TaskResume GetOrCreatePool(
       ctp::ipc::FullPtr<
-          clio_run::admin::GetOrCreatePoolTask<clio_run::admin::CreateParams>>
+          clio::run::admin::GetOrCreatePoolTask<clio::run::admin::CreateParams>>
           task,
       chi::RunContext &rctx);
 
@@ -537,6 +537,6 @@ private:
   std::unordered_set<chi::u64> recovery_initiated_;
 };
 
-} // namespace clio_run::admin
+} // namespace clio::run::admin
 
 #endif // ADMIN_RUNTIME_H_

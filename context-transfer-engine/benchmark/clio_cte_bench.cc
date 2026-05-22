@@ -140,7 +140,7 @@ class CTEBenchmark {
     std::string tag_name = "tag_n" + node_id_ + "_t" + std::to_string(tid);
     auto tag_task = cte->AsyncGetOrCreateTag(tag_name);
     tag_task.Wait();
-    clio_cte::core::TagId tag_id = tag_task->tag_id_;
+    clio::cte::core::TagId tag_id = tag_task->tag_id_;
     auto blob_name = [&](long k) {
       return "blob_t" + std::to_string(tid) + "_" + std::to_string(k);
     };
@@ -151,7 +151,7 @@ class CTEBenchmark {
       for (long k = 0; k < KeyspaceSize(); ++k) {
         auto t = cte->AsyncPutBlob(tag_id, blob_name(k), 0, a_.io_size,
                                    put_ptr, 0.8f,
-                                   clio_cte::core::Context(), 0, pq);
+                                   clio::cte::core::Context(), 0, pq);
         t.Wait();
         if (t->return_code_.load() != 0) {
           err.store(true, std::memory_order_relaxed);
@@ -173,13 +173,13 @@ class CTEBenchmark {
       long batch = timed ? a_.depth : std::min<long>(a_.depth, target - i);
 
       if (mode == Mode::kPut || mode == Mode::kPutGet) {
-        std::vector<chi::Future<clio_cte::core::PutBlobTask>> pts;
+        std::vector<chi::Future<clio::cte::core::PutBlobTask>> pts;
         pts.reserve(batch);
         for (long j = 0; j < batch; ++j) {
           pts.push_back(cte->AsyncPutBlob(
               tag_id, blob_name(KeyIndex(i + j, per_thread_blobs_)), 0,
               a_.io_size, put_ptr, 0.8f,
-              clio_cte::core::Context(), 0, pq));
+              clio::cte::core::Context(), 0, pq));
         }
         for (auto &t : pts) {
           t.Wait();
@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
     }
   } finalize_guard;
   std::this_thread::sleep_for(milliseconds(500));
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT()) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
     HLOG(kError, "Failed to initialize CTE client");
     return 1;
   }

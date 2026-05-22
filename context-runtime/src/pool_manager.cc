@@ -75,7 +75,7 @@ bool PoolManager::ServerInit() {
     return false;
   }
 
-  auto admin_task = ipc_manager->NewTask<clio_run::admin::CreateTask>(
+  auto admin_task = ipc_manager->NewTask<clio::run::admin::CreateTask>(
       CreateTaskId(),
       kAdminPoolId,  // Use admin pool for admin container creation
       PoolQuery::Local(), "clio_admin", "admin", kAdminPoolId,
@@ -436,7 +436,7 @@ TaskResume PoolManager::CreatePool(FullPtr<Task> task, RunContext* run_ctx) {
 
   // Cast generic Task to BaseCreateTask to access pool operation parameters
   auto* create_task = reinterpret_cast<
-      clio_run::admin::BaseCreateTask<clio_run::admin::CreateParams>*>(
+      clio::run::admin::BaseCreateTask<clio::run::admin::CreateParams>*>(
       task.ptr_);
 
   // Debug: Log do_compose_ value after cast

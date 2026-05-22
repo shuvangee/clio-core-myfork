@@ -77,7 +77,7 @@ static void *cte_fuse_init(struct fuse_conn_info *conn,
     fprintf(stderr, "ERROR: CHIMAERA_INIT failed\n");
     return nullptr;
   }
-  clio_cte::core::CLIO_CTE_CLIENT_INIT();
+  clio::cte::core::CLIO_CTE_CLIENT_INIT();
   return nullptr;
 }
 

@@ -237,11 +237,11 @@ import clio_cee
 
 ```cmake
 # In your CMakeLists.txt
-find_package(iowarp-core REQUIRED)
+find_package(clio-core REQUIRED)
 
 target_link_libraries(your_app
-    chimaera::admin_client
-    clio_cte::core_client
+    clio::run::admin_client
+    clio::cte::core_client
 )
 ```
 

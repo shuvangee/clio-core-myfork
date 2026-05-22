@@ -43,7 +43,8 @@
 
 namespace clio::run {
 
-bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime, bool is_restart) {
+bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
+                  bool is_restart) {
   // Static guard to prevent double initialization
   static bool s_initialized = false;
   if (s_initialized) {

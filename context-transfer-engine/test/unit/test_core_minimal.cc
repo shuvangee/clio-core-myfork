@@ -71,7 +71,7 @@ public:
   static constexpr chi::QueueId kCTETestQueueId = chi::QueueId(1);
   static constexpr chi::u64 kTestTargetSize = 10 * 1024 * 1024;  // 10MB
   
-  std::unique_ptr<clio_cte::core::Client> core_client_;
+  std::unique_ptr<clio::cte::core::Client> core_client_;
   std::string test_storage_path_;
   chi::PoolId core_pool_id_;
   
@@ -90,7 +90,7 @@ public:
     core_pool_id_ = chi::PoolId(42, 0);  // Using fixed ID for testing (major=42, minor=0)
     
     // Create CTE core client
-    core_client_ = std::make_unique<clio_cte::core::Client>(core_pool_id_);
+    core_client_ = std::make_unique<clio::cte::core::Client>(core_pool_id_);
   }
   
   ~CTECoreTestFixture() {
@@ -147,10 +147,10 @@ TEST_CASE("Create CTE Core Pool", "[cte][core][pool]") {
   
   SECTION("CreateParams validation") {
     // Test default CreateParams structure
-    clio_cte::core::CreateParams default_params;
-    REQUIRE(std::string(clio_cte::core::CreateParams::chimod_lib_name) == "clio_cte_core");
+    clio::cte::core::CreateParams default_params;
+    REQUIRE(std::string(clio::cte::core::CreateParams::chimod_lib_name) == "clio_cte_core");
 
-    INFO("ChiMod library name: " << clio_cte::core::CreateParams::chimod_lib_name);
+    INFO("ChiMod library name: " << clio::cte::core::CreateParams::chimod_lib_name);
   }
   
   SECTION("Pool query validation") {
@@ -176,13 +176,13 @@ TEST_CASE("Register Target", "[cte][core][target]") {
 
   auto *fixture = ctp::Singleton<CTECoreTestFixture>::GetInstance();  SECTION("File-based target configuration") {
     const std::string target_name = "cte_test_target";
-    const clio_run::bdev::BdevType bdev_type = clio_run::bdev::BdevType::kFile;
+    const clio::run::bdev::BdevType bdev_type = clio::run::bdev::BdevType::kFile;
     
     // Validate target configuration parameters
     REQUIRE(!target_name.empty());
     REQUIRE(!fixture->test_storage_path_.empty());
     REQUIRE(CTECoreTestFixture::kTestTargetSize > 0);
-    REQUIRE(bdev_type == clio_run::bdev::BdevType::kFile);
+    REQUIRE(bdev_type == clio::run::bdev::BdevType::kFile);
     
     INFO("Target configuration validated:");
     INFO("  Name: " << target_name);

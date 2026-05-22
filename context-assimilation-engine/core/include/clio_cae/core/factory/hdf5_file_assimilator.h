@@ -41,11 +41,11 @@
 #include <memory>
 
 // Forward declaration
-namespace clio_cte::core {
+namespace clio::cte::core {
 class Client;
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 /**
  * Hdf5FileAssimilator - Handles assimilation of HDF5 files
@@ -60,7 +60,7 @@ class Hdf5FileAssimilator : public BaseAssimilator {
    * Constructor with CTE client
    * @param cte_client Shared pointer to initialized CTE client
    */
-  explicit Hdf5FileAssimilator(std::shared_ptr<clio_cte::core::Client> cte_client);
+  explicit Hdf5FileAssimilator(std::shared_ptr<clio::cte::core::Client> cte_client);
 
   /**
    * Schedule assimilation tasks for an HDF5 file
@@ -169,9 +169,9 @@ class Hdf5FileAssimilator : public BaseAssimilator {
   static herr_t VisitCallback(hid_t loc_id, const char* name,
                               const H5L_info_t* info, void* operator_data);
 
-  std::shared_ptr<clio_cte::core::Client> cte_client_;
+  std::shared_ptr<clio::cte::core::Client> cte_client_;
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_HDF5_FILE_ASSIMILATOR_H_

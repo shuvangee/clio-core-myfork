@@ -48,7 +48,7 @@
 
 using json = nlohmann::json;
 
-namespace clio_cte::compressor {
+namespace clio::cte::compressor {
 
 // ============================================================================
 // QState implementation
@@ -542,4 +542,4 @@ QValue QTablePredictor::GetPrediction(const QState& state) {
   return global_average_;
 }
 
-}  // namespace clio_cte::compressor
+}  // namespace clio::cte::compressor

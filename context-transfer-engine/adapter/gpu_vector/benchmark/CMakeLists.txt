@@ -47,7 +47,7 @@ if(CLIO_CORE_ENABLE_CUDA)
             clio_bdev_client
             clio_cte_core_client
             clio_cte_core_runtime
-            clio_cte::gpu_vector
+            clio::cte::gpu_vector
             ctp::cuda_cxx
             ${CMAKE_THREAD_LIBS_INIT}
     )
@@ -143,7 +143,7 @@ if(CLIO_CORE_ENABLE_ROCM)
         clio_bdev_client
         clio_cte_core_client
         clio_cte_core_runtime
-        clio_cte::gpu_vector
+        clio::cte::gpu_vector
         ctp::rocm_cxx
         ${CMAKE_THREAD_LIBS_INIT}
     )

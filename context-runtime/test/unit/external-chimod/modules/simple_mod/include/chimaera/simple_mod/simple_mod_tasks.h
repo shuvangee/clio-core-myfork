@@ -72,13 +72,13 @@ struct CreateParams {
  * CreateTask - Simple mod container creation task
  * Uses the standard BaseCreateTask template from admin module
  */
-using CreateTask = clio_run::admin::GetOrCreatePoolTask<CreateParams>;
+using CreateTask = clio::run::admin::GetOrCreatePoolTask<CreateParams>;
 
 /**
  * Standard DestroyTask for simple_mod
  * Uses the reusable DestroyTask from admin module
  */
-using DestroyTask = clio_run::admin::DestroyTask;
+using DestroyTask = clio::run::admin::DestroyTask;
 
 /**
  * FlushTask - Simple flush task for simple_mod

@@ -43,7 +43,7 @@ NB_MODULE(clio_cee, m) {
   m.doc() = "IOWarp Context Exploration Engine API - Python Bindings";
 
   // Bind AssimilationCtx struct
-  nb::class_<clio_cae::core::AssimilationCtx>(m, "AssimilationCtx",
+  nb::class_<clio::cae::core::AssimilationCtx>(m, "AssimilationCtx",
       "Context for data assimilation operations")
     .def(nb::init<>(),
          "Default constructor")
@@ -53,23 +53,23 @@ NB_MODULE(clio_cee, m) {
          nb::arg("depends_on") = "", nb::arg("range_off") = 0, nb::arg("range_size") = 0,
          nb::arg("src_token") = "", nb::arg("dst_token") = "",
          "Full constructor")
-    .def_rw("src", &clio_cae::core::AssimilationCtx::src,
+    .def_rw("src", &clio::cae::core::AssimilationCtx::src,
             "Source URL (e.g., file::/path/to/file)")
-    .def_rw("dst", &clio_cae::core::AssimilationCtx::dst,
+    .def_rw("dst", &clio::cae::core::AssimilationCtx::dst,
             "Destination URL (e.g., iowarp::tag_name)")
-    .def_rw("format", &clio_cae::core::AssimilationCtx::format,
+    .def_rw("format", &clio::cae::core::AssimilationCtx::format,
             "Data format (e.g., binary, hdf5)")
-    .def_rw("depends_on", &clio_cae::core::AssimilationCtx::depends_on,
+    .def_rw("depends_on", &clio::cae::core::AssimilationCtx::depends_on,
             "Dependency identifier (empty if none)")
-    .def_rw("range_off", &clio_cae::core::AssimilationCtx::range_off,
+    .def_rw("range_off", &clio::cae::core::AssimilationCtx::range_off,
             "Byte offset in source file")
-    .def_rw("range_size", &clio_cae::core::AssimilationCtx::range_size,
+    .def_rw("range_size", &clio::cae::core::AssimilationCtx::range_size,
             "Number of bytes to read")
-    .def_rw("src_token", &clio_cae::core::AssimilationCtx::src_token,
+    .def_rw("src_token", &clio::cae::core::AssimilationCtx::src_token,
             "Authentication token for source")
-    .def_rw("dst_token", &clio_cae::core::AssimilationCtx::dst_token,
+    .def_rw("dst_token", &clio::cae::core::AssimilationCtx::dst_token,
             "Authentication token for destination")
-    .def("__repr__", [](const clio_cae::core::AssimilationCtx& ctx) {
+    .def("__repr__", [](const clio::cae::core::AssimilationCtx& ctx) {
       return "<AssimilationCtx src='" + ctx.src + "' dst='" + ctx.dst +
              "' format='" + ctx.format + "'>";
     });

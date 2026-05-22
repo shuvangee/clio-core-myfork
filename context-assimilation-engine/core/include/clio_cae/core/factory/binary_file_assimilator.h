@@ -39,11 +39,11 @@
 #include <memory>
 
 // Forward declaration
-namespace clio_cte::core {
+namespace clio::cte::core {
 class Client;
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 /**
  * BinaryFileAssimilator - Handles assimilation of binary files
@@ -55,7 +55,7 @@ class BinaryFileAssimilator : public BaseAssimilator {
    * Constructor with CTE client
    * @param cte_client Shared pointer to initialized CTE client
    */
-  explicit BinaryFileAssimilator(std::shared_ptr<clio_cte::core::Client> cte_client);
+  explicit BinaryFileAssimilator(std::shared_ptr<clio::cte::core::Client> cte_client);
 
   /**
    * Schedule assimilation tasks for a binary file
@@ -88,9 +88,9 @@ class BinaryFileAssimilator : public BaseAssimilator {
    */
   size_t GetFileSize(const std::string& file_path);
 
-  std::shared_ptr<clio_cte::core::Client> cte_client_;
+  std::shared_ptr<clio::cte::core::Client> cte_client_;
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_BINARY_FILE_ASSIMILATOR_H_

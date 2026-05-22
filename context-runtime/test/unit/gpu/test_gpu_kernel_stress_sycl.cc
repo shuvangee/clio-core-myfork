@@ -26,7 +26,7 @@
 #include <clio_ctp/util/gpu_api.h>
 #include <sycl/sycl.hpp>
 
-using TaskT = clio_run::MOD_NAME::GpuSubmitTask;
+using TaskT = clio::run::MOD_NAME::GpuSubmitTask;
 
 // SYCL kernel-name class. Namespace-scope (not anonymous) so DPC++'s
 // host-side kernel-info table can resolve the mangled name.

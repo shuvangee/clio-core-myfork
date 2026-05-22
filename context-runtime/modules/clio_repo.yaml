@@ -2,7 +2,7 @@
 # This repository contains the standard Chimaera modules
 
 name: modules
-namespace: clio_run
+namespace: clio::run
 version: 1.0.0
 description: Standard Chimaera modules repository
 

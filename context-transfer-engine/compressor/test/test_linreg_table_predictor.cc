@@ -43,7 +43,7 @@
 #include <fstream>
 #include <sstream>
 
-using namespace clio_cte::compressor;
+using namespace clio::cte::compressor;
 
 /**
  * @brief Create a temporary model file for testing

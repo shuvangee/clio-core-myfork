@@ -38,7 +38,7 @@
 #include <clio_cae/core/core_client.h>
 
 // Global CAE client singleton definition
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio_cae::core::Client, g_cae_client);
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio::cae::core::Client, g_cae_client);
 
 /**
  * Initialize CAE client singleton
@@ -58,22 +58,22 @@ bool CLIO_CAE_CLIENT_INIT(const std::string &config_path,
   (void)config_path;
 
   // First, ensure CTE client is initialized (CAE depends on CTE)
-  if (!clio_cte::core::CLIO_CTE_CLIENT_INIT(config_path, pool_query)) {
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT(config_path, pool_query)) {
     return false;
   }
 
   // Get or create the CAE client singleton
-  auto *cae_client = CTP_GET_GLOBAL_PTR_VAR(clio_cae::core::Client, g_cae_client);
+  auto *cae_client = CTP_GET_GLOBAL_PTR_VAR(clio::cae::core::Client, g_cae_client);
   if (!cae_client) {
     return false;
   }
 
   // Create the CAE pool
-  clio_cae::core::CreateParams params;
+  clio::cae::core::CreateParams params;
   auto create_task = cae_client->AsyncCreate(
       pool_query,
       "cae_client_pool",
-      clio_cae::core::kCaePoolId,
+      clio::cae::core::kCaePoolId,
       params);
   create_task.Wait();
 

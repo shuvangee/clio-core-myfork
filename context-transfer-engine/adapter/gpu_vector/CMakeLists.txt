@@ -22,7 +22,7 @@ target_link_libraries(clio_cte_gpu_vector INTERFACE
     clio_cte_core_client
 )
 
-add_library(clio_cte::gpu_vector ALIAS clio_cte_gpu_vector)
+add_library(clio::cte::gpu_vector ALIAS clio_cte_gpu_vector)
 
 #-----------------------------------------------------------------------------
 # Tests

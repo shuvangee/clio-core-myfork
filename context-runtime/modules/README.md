@@ -55,7 +55,7 @@ make
 #include <MOD_NAME/MOD_NAME_client.h>
 
 // Create a client
-chimaera::MOD_NAME::Client client(pool_id);
+clio::run::MOD_NAME::Client client(pool_id);
 
 // Initialize the container
 client.Create(chi::DomainQuery());

@@ -36,7 +36,7 @@
  *
  * Regression + stress coverage for the policy:
  *   a RAM bdev / CTE storage tier configured with capacity "0g" (or 0)
- *   defaults to 80% of total system DRAM (clio_run::bdev::
+ *   defaults to 80% of total system DRAM (clio::run::bdev::
  *   DefaultRamCapacityBytes()) instead of being rejected (old CTE
  *   behavior) or treated as unbounded (old bdev behavior).
  *
@@ -62,7 +62,7 @@
  */
 
 #include <clio_runtime/clio_runtime.h>
-#include <clio_runtime/bdev/bdev_tasks.h>  // clio_run::bdev::DefaultRamCapacityBytes
+#include <clio_runtime/bdev/bdev_tasks.h>  // clio::run::bdev::DefaultRamCapacityBytes
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_tasks.h>
 
@@ -117,7 +117,7 @@ class DramDefaultTieringFixture {
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
     REQUIRE(success);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
@@ -211,7 +211,7 @@ static DramDefaultTieringFixture *g_fixture = nullptr;
 TEST_CASE("DramDefault - 80% policy is sane and >= working set",
           "[tiered][dram-default][policy]") {
   chi::u64 total_dram = ctp::SystemInfo::GetRamCapacity();
-  chi::u64 defaulted = clio_run::bdev::DefaultRamCapacityBytes();
+  chi::u64 defaulted = clio::run::bdev::DefaultRamCapacityBytes();
 
   INFO("Total system DRAM: " << total_dram << " bytes");
   INFO("0g default (80%):  " << defaulted << " bytes");
@@ -243,7 +243,7 @@ TEST_CASE("DramDefault - Put 96MB into 0g RAM tier",
   auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
-  clio_cte::core::Tag tag("dram_default_tag");
+  clio::cte::core::Tag tag("dram_default_tag");
 
   auto shm_buffer = CLIO_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!shm_buffer.IsNull());
@@ -289,8 +289,8 @@ TEST_CASE("DramDefault - Reorganize down to file then up to 0g RAM",
   auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
-  clio_cte::core::Tag tag("dram_default_tag");
-  clio_cte::core::TagId tag_id = tag.GetTagId();
+  clio::cte::core::Tag tag("dram_default_tag");
+  clio::cte::core::TagId tag_id = tag.GetTagId();
 
   // Down to slow (bounded 64MB file) tier.
   int down_ok = 0;
@@ -325,7 +325,7 @@ TEST_CASE("DramDefault - Verify integrity after migration",
   REQUIRE(g_fixture != nullptr);
   REQUIRE(g_fixture->initialized_);
 
-  clio_cte::core::Tag tag("dram_default_tag");
+  clio::cte::core::Tag tag("dram_default_tag");
 
   auto read_buffer = CLIO_IPC->AllocateBuffer(kBlobSize);
   REQUIRE(!read_buffer.IsNull());
@@ -362,8 +362,8 @@ TEST_CASE("DramDefault - Cleanup", "[tiered][dram-default][cleanup]") {
   auto *cte_client = CLIO_CTE_CLIENT;
   REQUIRE(cte_client != nullptr);
 
-  clio_cte::core::Tag tag("dram_default_tag");
-  clio_cte::core::TagId tag_id = tag.GetTagId();
+  clio::cte::core::Tag tag("dram_default_tag");
+  clio::cte::core::TagId tag_id = tag.GetTagId();
 
   for (int i = 0; i < kNumBlobs; ++i) {
     std::string blob_name = "blob_" + std::to_string(i);

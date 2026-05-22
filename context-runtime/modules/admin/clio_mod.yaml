@@ -2,7 +2,7 @@
 # Critical module for pool management and runtime control
 
 module_name: admin
-namespace: clio_run
+namespace: clio::run
 version: 1.0.0
 critical: true  # This is a critical ChiMod - runtime must find it or fatal error
 

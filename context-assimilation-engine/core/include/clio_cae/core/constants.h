@@ -36,12 +36,12 @@
 
 #include <clio_runtime/clio_runtime.h>
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 // CAE Pool ID - used consistently across tests and utilities
 // This ID uniquely identifies the CAE core container pool
 constexpr chi::PoolId kCaePoolId(400, 0);
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_CONSTANTS_H_

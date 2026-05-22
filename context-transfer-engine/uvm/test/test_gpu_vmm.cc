@@ -41,7 +41,7 @@
 #include <cstring>
 #include <vector>
 
-using namespace clio_cte::uvm;
+using namespace clio::cte::uvm;
 
 /** Kernel to write a specific value to every int in a GPU memory region */
 __global__ void writeKernel(int *ptr, int value, size_t count) {

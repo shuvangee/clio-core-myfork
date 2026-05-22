@@ -87,7 +87,7 @@ services:
         DASH_PID=\$!;
 
         echo 'Node 1: Starting benchmark (200s, 16 threads)...' &&
-        /workspace/build/bin/clio_run_thrpt_benchmark --test-case bdev_io --duration 200 --threads 16 --output-dir ram >/dev/null 2>&1 &
+        /workspace/build/bin/clio_run_thrpt_bench --test-case bdev_io --duration 200 --threads 16 --output-dir ram >/dev/null 2>&1 &
         BENCH_PID=\$!;
 
         echo 'Node 1: Runtime PID='\$RUNTIME_PID' Dashboard PID='\$DASH_PID' Benchmark PID='\$BENCH_PID;

@@ -32,7 +32,7 @@
 
 #include <clio_ctp/util/gpu_api.h>
 
-using TaskT = clio_run::MOD_NAME::GpuSubmitTask;
+using TaskT = clio::run::MOD_NAME::GpuSubmitTask;
 
 namespace {
 

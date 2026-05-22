@@ -42,7 +42,7 @@ target_include_directories(iowarp_engine PUBLIC
 )
 
 target_link_libraries(iowarp_engine PUBLIC
-  clio_cte::core_client
+  clio::cte::core_client
   adios2::adios2
   curl
 )

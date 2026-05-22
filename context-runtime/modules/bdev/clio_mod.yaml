@@ -2,7 +2,7 @@
 # Block device module for async I/O with data allocation management
 
 module_name: bdev
-namespace: clio_run
+namespace: clio::run
 version: 1.0.0
 
 # Inherited Methods

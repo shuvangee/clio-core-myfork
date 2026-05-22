@@ -44,7 +44,7 @@
  * Provides simple interface for block device operations with async I/O
  */
 
-namespace clio_run::bdev {
+namespace clio::run::bdev {
 
 
 class Client : public chi::ContainerClient {
@@ -59,7 +59,7 @@ class Client : public chi::ContainerClient {
    * @param custom_pool_id Explicit pool ID for the pool being created
    * @param perf_metrics Optional user-defined performance characteristics (uses defaults if not provided)
    */
-  chi::Future<clio_run::bdev::CreateTask> AsyncCreate(
+  chi::Future<clio::run::bdev::CreateTask> AsyncCreate(
       const chi::PoolQuery& pool_query,
       const std::string& pool_name, const chi::PoolId& custom_pool_id,
       BdevType bdev_type, chi::u64 total_size = 0,
@@ -74,7 +74,7 @@ class Client : public chi::ContainerClient {
         (alignment == 0) ? 4096 : alignment;  // Ensure non-zero alignment
 
     // Pass 'this' as client pointer for PostWait callback
-    auto task = ipc_manager->NewTask<clio_run::bdev::CreateTask>(
+    auto task = ipc_manager->NewTask<clio::run::bdev::CreateTask>(
         chi::CreateTaskId(),
         chi::kAdminPoolId,  // Send to admin pool for GetOrCreatePool processing
         pool_query,
@@ -110,12 +110,12 @@ class Client : public chi::ContainerClient {
   /**
    * Free multiple blocks - asynchronous (host, std::vector)
    */
-  chi::Future<clio_run::bdev::FreeBlocksTask> AsyncFreeBlocks(
+  chi::Future<clio::run::bdev::FreeBlocksTask> AsyncFreeBlocks(
       const chi::PoolQuery& pool_query,
       const std::vector<Block>& blocks) {
     auto* ipc_manager = CLIO_CPU_IPC;
 
-    auto task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>(
+    auto task = ipc_manager->NewTask<clio::run::bdev::FreeBlocksTask>(
         chi::CreateTaskId(), pool_id_, pool_query, blocks);
 
     return ipc_manager->Send(task);
@@ -124,12 +124,12 @@ class Client : public chi::ContainerClient {
   /**
    * Free multiple blocks - asynchronous (priv::vector)
    */
-  chi::Future<clio_run::bdev::FreeBlocksTask> AsyncFreeBlocks(
+  chi::Future<clio::run::bdev::FreeBlocksTask> AsyncFreeBlocks(
       const chi::PoolQuery& pool_query,
       const chi::priv::vector<Block>& blocks) {
     auto* ipc_manager = CLIO_CPU_IPC;
 
-    auto task = ipc_manager->NewTask<clio_run::bdev::FreeBlocksTask>(
+    auto task = ipc_manager->NewTask<clio::run::bdev::FreeBlocksTask>(
         chi::CreateTaskId(), pool_id_, pool_query, blocks);
 
     return ipc_manager->Send(task);
@@ -143,12 +143,12 @@ class Client : public chi::ContainerClient {
    * @param length Size of data to write
    * @return Future for the write task
    */
-  chi::Future<clio_run::bdev::WriteTask> AsyncWrite(
+  chi::Future<clio::run::bdev::WriteTask> AsyncWrite(
       const chi::PoolQuery& pool_query,
       const chi::priv::vector<Block>& blocks, ctp::ipc::ShmPtr<> data, size_t length) {
     auto* ipc_manager = CLIO_CPU_IPC;
 
-    auto task = ipc_manager->NewTask<clio_run::bdev::WriteTask>(
+    auto task = ipc_manager->NewTask<clio::run::bdev::WriteTask>(
         chi::CreateTaskId(), pool_id_, pool_query, blocks, data, length);
 
     return ipc_manager->Send(task);
@@ -162,13 +162,13 @@ class Client : public chi::ContainerClient {
    * @param buffer_size Size of the output buffer
    * @return Future for the read task
    */
-  chi::Future<clio_run::bdev::ReadTask> AsyncRead(
+  chi::Future<clio::run::bdev::ReadTask> AsyncRead(
       const chi::PoolQuery& pool_query,
       const chi::priv::vector<Block>& blocks, ctp::ipc::ShmPtr<> data,
       size_t buffer_size) {
     auto* ipc_manager = CLIO_CPU_IPC;
 
-    auto task = ipc_manager->NewTask<clio_run::bdev::ReadTask>(
+    auto task = ipc_manager->NewTask<clio::run::bdev::ReadTask>(
         chi::CreateTaskId(), pool_id_, pool_query, blocks, data, buffer_size);
 
     return ipc_manager->Send(task);
@@ -204,10 +204,10 @@ class Client : public chi::ContainerClient {
   /**
    * Get performance statistics - asynchronous
    */
-  chi::Future<clio_run::bdev::GetStatsTask> AsyncGetStats() {
+  chi::Future<clio::run::bdev::GetStatsTask> AsyncGetStats() {
     auto* ipc_manager = CLIO_CPU_IPC;
 
-    auto task = ipc_manager->NewTask<clio_run::bdev::GetStatsTask>(
+    auto task = ipc_manager->NewTask<clio::run::bdev::GetStatsTask>(
         chi::CreateTaskId(), pool_id_, chi::PoolQuery());
 
     return ipc_manager->Send(task);
@@ -215,6 +215,6 @@ class Client : public chi::ContainerClient {
 
 };
 
-}  // namespace clio_run::bdev
+}  // namespace clio::run::bdev
 
 #endif  // BDEV_CLIENT_H_

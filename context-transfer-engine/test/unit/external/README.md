@@ -159,22 +159,22 @@ The `CMakeLists.txt` in this directory demonstrates the **proper MODULE_DEVELOPM
    ```cmake
    target_link_libraries(your_app
        # CTE Core Module libraries (recommended aliases)
-       clio_cte::core_client                     # CTE Core client
-       clio_cte::core_runtime                    # CTE Core runtime (optional)
+       clio::cte::core_client                     # CTE Core client
+       clio::cte::core_runtime                    # CTE Core runtime (optional)
        
        # Framework dependencies automatically included
-       # chimaera::cxx                          # NOT needed - auto-included
-       # chimaera::admin_client                 # Optional - if needed
+       # clio::run::cxx                          # NOT needed - auto-included
+       # clio::run::admin_client                 # Optional - if needed
    )
    ```
 
 3. **Target Naming System**:
    - **Package Names**: `clio_cte_core` (for `find_package()`)
-   - **Target Aliases**: `clio_cte::core_client`, `clio_cte::core_runtime` (recommended)
+   - **Target Aliases**: `clio::cte::core_client`, `clio::cte::core_runtime` (recommended)
    - **Actual Targets**: `clio_cte_core_client`, `clio_cte_core_runtime`
 
 4. **Automatic Dependencies**:
-   - Module targets automatically include `chimaera::cxx` framework
+   - Module targets automatically include `clio::run::cxx` framework
    - No need to manually link core framework libraries
    - `add_chimod_both()` handles all standard dependencies
 

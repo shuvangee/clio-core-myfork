@@ -793,8 +793,8 @@ BenchmarkResult BenchmarkCompressor(
   result.block_entropy_mean = block_stats.entropy_mean;
 
   // Classify distribution using mathematical approach
-  auto dist_result = clio_cte::compressor::DistributionClassifierFactory::Classify(
-      input_data.data(), num_elements, static_cast<clio_cte::compressor::DataType>(dtype));
+  auto dist_result = clio::cte::compressor::DistributionClassifierFactory::Classify(
+      input_data.data(), num_elements, static_cast<clio::cte::compressor::DataType>(dtype));
   result.classified_skewness = dist_result.skewness;
   result.classified_kurtosis = dist_result.kurtosis;
 

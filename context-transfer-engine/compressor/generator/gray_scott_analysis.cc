@@ -169,11 +169,11 @@ CompressionResult BenchmarkCompressor(
   if (num_elements == 0) return result;
 
   // Calculate data statistics using data_stats.h
-  result.shannon_entropy = clio_cte::compressor::DataStatistics<double>::CalculateShannonEntropy(
+  result.shannon_entropy = clio::cte::compressor::DataStatistics<double>::CalculateShannonEntropy(
       data.data(), num_elements);
-  result.mad = clio_cte::compressor::DataStatistics<double>::CalculateMAD(
+  result.mad = clio::cte::compressor::DataStatistics<double>::CalculateMAD(
       data.data(), num_elements);
-  result.second_derivative = clio_cte::compressor::DataStatistics<double>::CalculateSecondDerivative(
+  result.second_derivative = clio::cte::compressor::DataStatistics<double>::CalculateSecondDerivative(
       data.data(), num_elements);
 
   // Allocate buffers
@@ -228,7 +228,7 @@ CompressionResult BenchmarkCompressor(
   result.decompress_time_ms = (cpu_end - cpu_start) / 1e6;  // ns to ms
 
   // Calculate PSNR for quality assessment
-  result.psnr = clio_cte::compressor::DataStatistics<double>::CalculatePSNR(
+  result.psnr = clio::cte::compressor::DataStatistics<double>::CalculatePSNR(
       data.data(), decompressed_data.data(), num_elements);
 
   result.success = true;

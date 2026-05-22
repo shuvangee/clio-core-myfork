@@ -89,7 +89,7 @@ public:
 
     // Create admin pool
     admin_client_ =
-        std::make_unique<clio_run::admin::Client>(chi::kAdminPoolId);
+        std::make_unique<clio::run::admin::Client>(chi::kAdminPoolId);
     auto create_task = admin_client_->AsyncCreate(chi::PoolQuery::Local(), "admin",
                                                    chi::kAdminPoolId);
     create_task.Wait();
@@ -110,10 +110,10 @@ public:
     admin_client_.reset();
   }
 
-  clio_run::admin::Client *GetAdminClient() { return admin_client_.get(); }
+  clio::run::admin::Client *GetAdminClient() { return admin_client_.get(); }
 
 private:
-  std::unique_ptr<clio_run::admin::Client> admin_client_;
+  std::unique_ptr<clio::run::admin::Client> admin_client_;
 };
 } // namespace
 
@@ -130,7 +130,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
   REQUIRE(container != nullptr);
 
   // Step 1: Create original task with input parameters
-  auto orig_task = ipc_manager->NewTask<clio_run::admin::CreateTask>(
+  auto orig_task = ipc_manager->NewTask<clio::run::admin::CreateTask>(
       chi::TaskId(100, 200, 300, 0, 400), // Specific task ID
       chi::kAdminPoolId, chi::PoolQuery::Local(), "test_chimod_lib",
       "test_pool_name", chi::PoolId(5000, 0),
@@ -149,7 +149,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
   // Step 2: SaveIn - serialize IN/INOUT parameters
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
   ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kCreate, save_in_archive,
+  container->SaveTask(clio::run::admin::Method::kCreate, save_in_archive,
                       orig_task_ptr);
 
   // Step 3: LoadIn - deserialize IN/INOUT parameters into new task
@@ -160,7 +160,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
   load_in_archive.msg_type_ = chi::MsgType::kSerializeIn;  // Explicitly set msg_type
 
   // Create task manually (matching pattern from test_task_archive.cc)
-  auto loaded_in_task = ipc_manager->NewTask<clio_run::admin::CreateTask>();
+  auto loaded_in_task = ipc_manager->NewTask<clio::run::admin::CreateTask>();
   loaded_in_task->chimod_name_ = chi::priv::string(CTP_MALLOC, std::string(""));
   loaded_in_task->pool_name_ = chi::priv::string(CTP_MALLOC, std::string(""));
   loaded_in_task->chimod_params_ = chi::priv::string(CTP_MALLOC, std::string(""));
@@ -195,7 +195,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
   // Step 6: SaveOut - serialize OUT/INOUT parameters
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
   ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kCreate, save_out_archive,
+  container->SaveTask(clio::run::admin::Method::kCreate, save_out_archive,
                       loaded_in_task_ptr2);
 
   // Step 7: LoadOut - deserialize OUT/INOUT parameters
@@ -206,7 +206,7 @@ TEST_CASE("SaveTask and LoadTask - Admin CreateTask full flow",
   load_out_archive.msg_type_ = chi::MsgType::kSerializeOut;  // Explicitly set msg_type
 
   // Create task manually (matching pattern from test_task_archive.cc)
-  auto loaded_out_task = ipc_manager->NewTask<clio_run::admin::CreateTask>();
+  auto loaded_out_task = ipc_manager->NewTask<clio::run::admin::CreateTask>();
   loaded_out_task->chimod_name_ = chi::priv::string(CTP_MALLOC, std::string(""));
   loaded_out_task->pool_name_ = chi::priv::string(CTP_MALLOC, std::string(""));
   loaded_out_task->chimod_params_ = chi::priv::string(CTP_MALLOC, std::string(""));
@@ -249,7 +249,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
   REQUIRE(container != nullptr);
 
   // Step 1: Create original task
-  auto orig_task = ipc_manager->NewTask<clio_run::admin::FlushTask>(
+  auto orig_task = ipc_manager->NewTask<clio::run::admin::FlushTask>(
       chi::TaskId(111, 222, 333, 0, 444), chi::kAdminPoolId,
       chi::PoolQuery::Local());
 
@@ -263,7 +263,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
   // Step 2: SaveIn - FlushTask has no IN parameters beyond base Task
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
   ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kFlush, save_in_archive,
+  container->SaveTask(clio::run::admin::Method::kFlush, save_in_archive,
                       orig_task_ptr);
 
   // Step 3: LoadIn
@@ -272,7 +272,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
   load_in_archive.msg_type_ = chi::MsgType::kSerializeIn;  // Explicitly set msg_type
 
   // Create task manually
-  auto loaded_in_task = ipc_manager->NewTask<clio_run::admin::FlushTask>();
+  auto loaded_in_task = ipc_manager->NewTask<clio::run::admin::FlushTask>();
   load_in_archive >> *loaded_in_task;
 
   REQUIRE(!loaded_in_task.IsNull());
@@ -290,7 +290,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
   // Step 6: SaveOut
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
   ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kFlush, save_out_archive,
+  container->SaveTask(clio::run::admin::Method::kFlush, save_out_archive,
                       loaded_in_task_ptr2);
 
   // Step 7: LoadOut
@@ -299,7 +299,7 @@ TEST_CASE("SaveTask and LoadTask - Admin FlushTask full flow",
   load_out_archive.msg_type_ = chi::MsgType::kSerializeOut;  // Explicitly set msg_type
 
   // Create task manually
-  auto loaded_out_task = ipc_manager->NewTask<clio_run::admin::FlushTask>();
+  auto loaded_out_task = ipc_manager->NewTask<clio::run::admin::FlushTask>();
   load_out_archive >> *loaded_out_task;
 
   REQUIRE(!loaded_out_task.IsNull());
@@ -328,7 +328,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
   REQUIRE(container != nullptr);
 
   // Step 1: Create original SendTask (simplified - only transfer_flags parameter)
-  auto orig_task = ipc_manager->NewTask<clio_run::admin::SendTask>(
+  auto orig_task = ipc_manager->NewTask<clio::run::admin::SendTask>(
       chi::TaskId(555, 666, 777, 0, 888), chi::kAdminPoolId,
       chi::PoolQuery::Local(),
       123); // transfer_flags IN parameter
@@ -342,7 +342,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
   // Step 2: SaveIn
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
   ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kSend, save_in_archive,
+  container->SaveTask(clio::run::admin::Method::kSend, save_in_archive,
                       orig_task_ptr);
 
   // Step 3: LoadIn
@@ -351,7 +351,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
   load_in_archive.msg_type_ = chi::MsgType::kSerializeIn;  // Explicitly set msg_type
 
   // Create task manually (default constructor properly initializes error_message_)
-  auto loaded_in_task = ipc_manager->NewTask<clio_run::admin::SendTask>();
+  auto loaded_in_task = ipc_manager->NewTask<clio::run::admin::SendTask>();
   load_in_archive >> *loaded_in_task;
 
   REQUIRE(!loaded_in_task.IsNull());
@@ -369,7 +369,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
   // Step 6: SaveOut
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
   ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kSend, save_out_archive,
+  container->SaveTask(clio::run::admin::Method::kSend, save_out_archive,
                       loaded_in_task_ptr2);
 
   // Step 7: LoadOut
@@ -378,7 +378,7 @@ TEST_CASE("SaveTask and LoadTask - Admin SendTask full flow",
   load_out_archive.msg_type_ = chi::MsgType::kSerializeOut;  // Explicitly set msg_type
 
   // Create task manually (default constructor properly initializes error_message_)
-  auto loaded_out_task = ipc_manager->NewTask<clio_run::admin::SendTask>();
+  auto loaded_out_task = ipc_manager->NewTask<clio::run::admin::SendTask>();
   load_out_archive >> *loaded_out_task;
 
   REQUIRE(!loaded_out_task.IsNull());
@@ -409,7 +409,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
   REQUIRE(container != nullptr);
 
   // Step 1: Create original task with IN parameters
-  auto orig_task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>(
+  auto orig_task = ipc_manager->NewTask<clio::run::admin::DestroyPoolTask>(
       chi::TaskId(11, 22, 33, 0, 44), chi::kAdminPoolId,
       chi::PoolQuery::Local(),
       chi::PoolId(9000, 0), // target_pool_id IN parameter
@@ -425,7 +425,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
   // Step 2: SaveIn
   chi::SaveTaskArchive save_in_archive(chi::MsgType::kSerializeIn);
   ctp::ipc::FullPtr<chi::Task> orig_task_ptr = orig_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kDestroyPool, save_in_archive,
+  container->SaveTask(clio::run::admin::Method::kDestroyPool, save_in_archive,
                       orig_task_ptr);
 
   // Step 3: LoadIn
@@ -434,7 +434,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
   load_in_archive.msg_type_ = chi::MsgType::kSerializeIn;  // Explicitly set msg_type
 
   // Create task manually (default constructor properly initializes error_message_)
-  auto loaded_in_task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
+  auto loaded_in_task = ipc_manager->NewTask<clio::run::admin::DestroyPoolTask>();
   load_in_archive >> *loaded_in_task;
 
   REQUIRE(!loaded_in_task.IsNull());
@@ -452,7 +452,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
   // Step 6: SaveOut
   chi::SaveTaskArchive save_out_archive(chi::MsgType::kSerializeOut);
   ctp::ipc::FullPtr<chi::Task> loaded_in_task_ptr2 = loaded_in_task.template Cast<chi::Task>();
-  container->SaveTask(clio_run::admin::Method::kDestroyPool, save_out_archive,
+  container->SaveTask(clio::run::admin::Method::kDestroyPool, save_out_archive,
                       loaded_in_task_ptr2);
 
   // Step 7: LoadOut
@@ -461,7 +461,7 @@ TEST_CASE("SaveTask and LoadTask - Admin DestroyPoolTask full flow",
   load_out_archive.msg_type_ = chi::MsgType::kSerializeOut;  // Explicitly set msg_type
 
   // Create task manually (default constructor properly initializes error_message_)
-  auto loaded_out_task = ipc_manager->NewTask<clio_run::admin::DestroyPoolTask>();
+  auto loaded_out_task = ipc_manager->NewTask<clio::run::admin::DestroyPoolTask>();
   load_out_archive >> *loaded_out_task;
 
   REQUIRE(!loaded_out_task.IsNull());

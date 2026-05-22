@@ -40,16 +40,16 @@
 #include <memory>
 
 // Forward declaration for CTE client
-namespace clio_cte::core {
+namespace clio::cte::core {
   class Client;
 }
 
-namespace clio_cae::core {
+namespace clio::cae::core {
 
 class Runtime : public chi::Container {
  public:
   // CreateParams type used by CLIO_TASK_CC macro for lib_name access
-  using CreateParams = clio_cae::core::CreateParams;
+  using CreateParams = clio::cae::core::CreateParams;
 
   Runtime() = default;
   ~Runtime() override = default;
@@ -127,9 +127,9 @@ class Runtime : public chi::Container {
 
  private:
   Client client_;
-  std::shared_ptr<clio_cte::core::Client> cte_client_;
+  std::shared_ptr<clio::cte::core::Client> cte_client_;
 };
 
-}  // namespace clio_cae::core
+}  // namespace clio::cae::core
 
 #endif  // CLIO_CAE_CORE_RUNTIME_H_

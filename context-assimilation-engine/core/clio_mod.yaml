@@ -1,6 +1,6 @@
 # CAE Core ChiMod Configuration
 module_name: core
-namespace: clio_cae
+namespace: clio::cae
 version: 1.0.0
 
 # Inherited Methods (fixed IDs)

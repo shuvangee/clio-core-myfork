@@ -32,7 +32,7 @@
 
 #if CTP_IS_GPU_COMPILER
 
-namespace clio_cte::gpu_vector {
+namespace clio::cte::gpu_vector {
 
 /**
  * Cache management strategy. kLegacy reproduces the original
@@ -55,7 +55,7 @@ enum class CacheMode {
  *
  * Lifecycle:
  *   - Caller must have already initialized the CLIO Runtime runtime and
- *     the CTE core pool (see clio_cte::core::CLIO_CTE_CLIENT_INIT plus
+ *     the CTE core pool (see clio::cte::core::CLIO_CTE_CLIENT_INIT plus
  *     AsyncCreate(...)).
  *   - ctor: allocates the backends (HBM pages [kDeviceMem], optional
  *           DRAM pages [kPinnedHost], swap scratch [kDeviceMem], meta
@@ -119,13 +119,13 @@ class Vector {
   /** POD captured by user kernels — pass by value into a __global__. */
   DeviceView<T> Device() const { return view_; }
 
-  const clio_cte::core::TagId &TagId() const { return view_.base.tag_id; }
+  const clio::cte::core::TagId &TagId() const { return view_.base.tag_id; }
 
   /** Read a coherent snapshot of the pinned-host counters. Caller
    *  should cudaDeviceSync first so the device's atomicAdd writes
    *  are visible to the host through PCIe cache snooping. */
-  ::clio_cte::gpu_vector::VectorStats StatsSnapshot() const {
-    ::clio_cte::gpu_vector::VectorStats out{};
+  ::clio::cte::gpu_vector::VectorStats StatsSnapshot() const {
+    ::clio::cte::gpu_vector::VectorStats out{};
 #if !CTP_IS_DEVICE_PASS
     if (impl_ && impl_->stats) out = *impl_->stats;
 #endif
@@ -138,7 +138,7 @@ class Vector {
 #if !CTP_IS_DEVICE_PASS
     if (impl_ && impl_->stats) {
       std::memset(impl_->stats, 0,
-                  sizeof(::clio_cte::gpu_vector::VectorStats));
+                  sizeof(::clio::cte::gpu_vector::VectorStats));
     }
 #endif
   }
@@ -198,8 +198,8 @@ __global__ void InitMetaKernel(DeviceViewBase v, char *pages_base,
     p->flags = 0;
     p->lru_clock = 0;
     p->score = 0.0f;
-    new (&p->active_put) chi::gpu::Future<clio_cte::core::PutBlobTask>();
-    new (&p->active_get) chi::gpu::Future<clio_cte::core::GetBlobTask>();
+    new (&p->active_put) chi::gpu::Future<clio::cte::core::PutBlobTask>();
+    new (&p->active_get) chi::gpu::Future<clio::cte::core::GetBlobTask>();
   }
 }
 
@@ -796,7 +796,7 @@ struct Vector<T>::Impl {
   /** Pinned-host instrumentation counters. The user kernel and the
    *  manager kernel atomicAdd_system into these so the host can read
    *  a coherent snapshot via Vector::GetStatsSnapshot(). */
-  ::clio_cte::gpu_vector::VectorStats *stats = nullptr;
+  ::clio::cte::gpu_vector::VectorStats *stats = nullptr;
   /** Number of host-driven AsyncGetBlobs currently in flight. Cache
    *  thread bumps before dispatching, decrements after the .Wait()
    *  returns. Vector dtor waits for this to reach 0 before freeing
@@ -843,18 +843,18 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
   // Body gated for the host pass only.
   if (nblocks == 0 || gpu_pages_per_block == 0 || page_size_bytes == 0) {
     throw std::invalid_argument(
-        "clio_cte::gpu_vector::Vector: nblocks/gpu_pages_per_block/page_size "
+        "clio::cte::gpu_vector::Vector: nblocks/gpu_pages_per_block/page_size "
         "must all be > 0");
   }
   if (page_size_bytes % sizeof(T) != 0) {
     throw std::invalid_argument(
-        "clio_cte::gpu_vector::Vector: page_size_bytes must be a multiple "
+        "clio::cte::gpu_vector::Vector: page_size_bytes must be a multiple "
         "of sizeof(T)");
   }
   if (manager_threads_per_block == 0 ||
       (manager_threads_per_block % 32) != 0) {
     throw std::invalid_argument(
-        "clio_cte::gpu_vector::Vector: manager_threads_per_block must be a "
+        "clio::cte::gpu_vector::Vector: manager_threads_per_block must be a "
         "positive multiple of 32");
   }
   // Auto-promote mode when DRAM tier is requested.
@@ -926,9 +926,9 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
 
   // 3. Task pools cover the FULL tier slot count.
   chi::u32 put_stride =
-      detail::TaskSlotStride<clio_cte::core::PutBlobTask>();
+      detail::TaskSlotStride<clio::cte::core::PutBlobTask>();
   chi::u32 get_stride =
-      detail::TaskSlotStride<clio_cte::core::GetBlobTask>();
+      detail::TaskSlotStride<clio::cte::core::GetBlobTask>();
   chi::u64 task_count = static_cast<chi::u64>(nblocks) * total_ppb;
   impl_->put_alloc_id = cpu_ipc->AllocateAndRegisterGpuBackend(
       gpu_id, chi::gpu::IpcManager::MemKind::kPinnedHost,
@@ -980,7 +980,7 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
   }
 
   // 4. Create the CTE tag.
-  clio_cte::core::Client cte_client(clio_cte::core::kCtePoolId);
+  clio::cte::core::Client cte_client(clio::cte::core::kCtePoolId);
   auto tag_fut = cte_client.AsyncGetOrCreateTag(tag_name);
   tag_fut.Wait();
   if (tag_fut->GetReturnCode() != 0) {
@@ -989,7 +989,7 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
   }
   view_.base.tag_id = tag_fut->tag_id_;
   impl_->tag_name = tag_name;
-  impl_->cte_pool_id = clio_cte::core::kCtePoolId;
+  impl_->cte_pool_id = clio::cte::core::kCtePoolId;
 
   // 5. Populate DeviceView.
   view_.base.blocks = reinterpret_cast<Block *>(impl_->meta_base);
@@ -1015,12 +1015,12 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
   // same pointer works on both sides.
   {
     void *p = nullptr;
-    cudaHostAlloc(&p, sizeof(::clio_cte::gpu_vector::VectorStats),
+    cudaHostAlloc(&p, sizeof(::clio::cte::gpu_vector::VectorStats),
                   cudaHostAllocMapped | cudaHostAllocPortable);
-    impl_->stats = static_cast<::clio_cte::gpu_vector::VectorStats *>(p);
+    impl_->stats = static_cast<::clio::cte::gpu_vector::VectorStats *>(p);
     if (impl_->stats) {
       std::memset(impl_->stats, 0,
-                  sizeof(::clio_cte::gpu_vector::VectorStats));
+                  sizeof(::clio::cte::gpu_vector::VectorStats));
     }
   }
   view_.base.stats = impl_->stats;
@@ -1038,16 +1038,16 @@ inline Vector<T>::Vector(const std::string &tag_name, chi::u32 nblocks,
       char *put_addr = impl_->put_base + slot_idx * put_stride;
       char *get_addr = impl_->get_base + slot_idx * get_stride;
       std::string blob_name = tag_name + "_b" + std::to_string(b);
-      auto put_task = new (put_addr) clio_cte::core::PutBlobTask(
+      auto put_task = new (put_addr) clio::cte::core::PutBlobTask(
           chi::CreateTaskId(), impl_->cte_pool_id,
           chi::PoolQuery::ToLocalCpu(), view_.base.tag_id,
           blob_name.c_str(), /*offset=*/0, /*size=*/0,
           ctp::ipc::ShmPtr<>::GetNull(), /*score=*/-1.0f,
-          clio_cte::core::Context(), /*flags=*/0);
+          clio::cte::core::Context(), /*flags=*/0);
       put_task->pod_size_ = static_cast<chi::u32>(sizeof(*put_task));
       new (put_addr + sizeof(*put_task)) chi::gpu::FutureShm();
 
-      auto get_task = new (get_addr) clio_cte::core::GetBlobTask(
+      auto get_task = new (get_addr) clio::cte::core::GetBlobTask(
           chi::CreateTaskId(), impl_->cte_pool_id,
           chi::PoolQuery::ToLocalCpu(), view_.base.tag_id,
           blob_name.c_str(), /*offset=*/0, /*size=*/0,
@@ -1191,7 +1191,7 @@ inline void Vector<T>::DrainHostPrefetchQueue(void *cuda_stream) {
 #if !CTP_IS_DEVICE_PASS
   if (!impl_ || !impl_->host_meta_scratch) return;
   cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream);
-  clio_cte::core::Client cte_client(impl_->cte_pool_id);
+  clio::cte::core::Client cte_client(impl_->cte_pool_id);
   const char *dbg = std::getenv("GPU_VECTOR_DEBUG_CACHE");
   chi::u32 nb = impl_->nblocks_cached;
   chi::u32 gpu_ppb = impl_->gpu_ppb_cached;
@@ -1212,7 +1212,7 @@ inline void Vector<T>::DrainHostPrefetchQueue(void *cuda_stream) {
   //   Pass 2: Wait on each future (they run in parallel through the
   //           runtime). Bump/decrement async_inflight bookkeeping.
   //   Pass 3 (after the loop): one batched clear-flags kernel.
-  std::vector<chi::Future<clio_cte::core::GetBlobTask>> futs;
+  std::vector<chi::Future<clio::cte::core::GetBlobTask>> futs;
   futs.reserve(static_cast<size_t>(detail::kClearBatchCap));
   for (chi::u32 b = 0; b < nb; ++b) {
     Block *bp = reinterpret_cast<Block *>(impl_->host_meta_scratch +
@@ -1276,7 +1276,7 @@ inline void Vector<T>::FlushAllSync() {
 #endif
 }
 
-}  // namespace clio_cte::gpu_vector
+}  // namespace clio::cte::gpu_vector
 
 #endif  // CTP_IS_GPU_COMPILER
 

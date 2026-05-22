@@ -121,13 +121,13 @@ int main() {
   chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
 
   // Create admin client (always required)
-  chimaera::admin::Client admin_client(chi::PoolId(7000, 0));
+  clio::run::admin::Client admin_client(chi::PoolId(7000, 0));
   admin_client.Create(chi::PoolQuery::Local());
   
   // Create bdev client for high-speed RAM storage
-  chimaera::bdev::Client bdev_client(chi::PoolId(8000, 0));
+  clio::run::bdev::Client bdev_client(chi::PoolId(8000, 0));
   bdev_client.Create(chi::PoolQuery::Local(), 
-                    chimaera::bdev::BdevType::kRam, "", 1024*1024*1024); // 1GB RAM
+                    clio::run::bdev::BdevType::kRam, "", 1024*1024*1024); // 1GB RAM
   
   // Allocate and use a block
   auto block = bdev_client.Allocate(4096);  // 4KB block
@@ -161,9 +161,9 @@ add_executable(my_app src/main.cpp)
 
 # Link against Chimaera libraries
 target_link_libraries(my_app
-  chimaera::cxx              # Core Clio runtime
-  chimaera::admin_client     # Admin module (always required)
-  chimaera::bdev_client      # Block device operations
+  clio::run::cxx              # Core Clio runtime
+  clio::run::admin_client     # Admin module (always required)
+  clio::run::bdev_client      # Block device operations
   ${CMAKE_THREAD_LIBS_INIT}  # Threading support
 )
 ```

@@ -38,7 +38,7 @@
 #include <clio_ctp/util/singleton.h>
 #include <clio_cte/core/core_tasks.h>
 
-namespace clio_cte::core {
+namespace clio::cte::core {
 
 class Client : public chi::ContainerClient {
  public:
@@ -118,7 +118,7 @@ class Client : public chi::ContainerClient {
    * @param pool_query Pool query for task routing (default: Dynamic)
    */
   chi::Future<RegisterTargetTask> AsyncRegisterTarget(
-      const std::string &target_name, clio_run::bdev::BdevType bdev_type,
+      const std::string &target_name, clio::run::bdev::BdevType bdev_type,
       chi::u64 total_size,
       const chi::PoolQuery &target_query = chi::PoolQuery::Local(),
       const chi::PoolId &bdev_id = chi::PoolId::GetNull(),
@@ -571,7 +571,7 @@ class Client : public chi::ContainerClient {
 };
 
 // Global pointer-based singleton for CTE client with lazy initialization
-CTP_DEFINE_GLOBAL_PTR_VAR_H(clio_cte::core::Client, g_cte_client);
+CTP_DEFINE_GLOBAL_PTR_VAR_H(clio::cte::core::Client, g_cte_client);
 
 /**
  * Initialize CTE client and configuration subsystem
@@ -719,19 +719,25 @@ class Tag {
 // (e.g. "Write off=0 size=4G").
 void FlushPutBlobTiming(const char *label);
 
-}  // namespace clio_cte::core
+}  // namespace clio::cte::core
 
 // Global singleton macro for CTE client access (returns pointer, not reference)
 #define CLIO_CTE_CLIENT                               \
-  (&(*CTP_GET_GLOBAL_PTR_VAR(clio_cte::core::Client, \
-                              clio_cte::core::g_cte_client)))
+  (&(*CTP_GET_GLOBAL_PTR_VAR(clio::cte::core::Client, \
+                              clio::cte::core::g_cte_client)))
 
 // Backward-compat aliases for the WRP_ -> CLIO_ rename. External code that
 // still uses wrp_cte::core::* (e.g. wrp_cte::core::g_cte_client) resolves
-// transparently to clio_cte::core::*. Paired with the wrp_cte/ forwarder
+// transparently to clio::cte::core::*. Paired with the wrp_cte/ forwarder
 // shim header tree, this gives source-level compat for downstream projects
 // that haven't migrated their identifiers yet. See rebranding.md.
-namespace wrp_cte = clio_cte;
+// Pre-`clio::cte`-rename intermediate spelling.  In-tree code now uses
+// `clio::cte::core::*`; downstream that already migrated off `wrp_cte::*`
+// to the `clio_cte::*` waypoint keeps compiling via this alias.  Safe to
+// use the simple `namespace X = Y;` form because no external chimod opens
+// `namespace clio_cte::xxx {}`.
+namespace clio_cte = clio::cte;
+namespace wrp_cte = clio::cte;
 
 // Client singleton accessor macro: legacy name.
 #define WRP_CTE_CLIENT CLIO_CTE_CLIENT

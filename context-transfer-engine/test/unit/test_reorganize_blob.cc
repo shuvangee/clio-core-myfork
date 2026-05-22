@@ -110,7 +110,7 @@ class ReorganizeBlobTestFixture {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Initialize CTE client
-    success = clio_cte::core::CLIO_CTE_CLIENT_INIT();
+    success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
     REQUIRE(success);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -224,8 +224,8 @@ TEST_CASE("ReorganizeBlob - PutBlob to DRAM", "[reorganize][put][dram]") {
 
   // Create a tag for our test blobs
   std::string tag_name = "reorganize_test_tag";
-  clio_cte::core::Tag tag(tag_name);
-  clio_cte::core::TagId tag_id = tag.GetTagId();
+  clio::cte::core::Tag tag(tag_name);
+  clio::cte::core::TagId tag_id = tag.GetTagId();
 
   INFO("Putting blob with score=1.0 (should go to DRAM)");
 
@@ -284,8 +284,8 @@ TEST_CASE("ReorganizeBlob - Move to Disk", "[reorganize][move][disk]") {
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "reorganize_test_tag";
-  clio_cte::core::Tag tag(tag_name);
-  clio_cte::core::TagId tag_id = tag.GetTagId();
+  clio::cte::core::Tag tag(tag_name);
+  clio::cte::core::TagId tag_id = tag.GetTagId();
   std::string blob_name = "test_blob_dram";
 
   // Get blob score before reorganization
@@ -328,7 +328,7 @@ TEST_CASE("ReorganizeBlob - Verify Data Integrity", "[reorganize][integrity]") {
   REQUIRE(g_fixture->initialized_);
 
   std::string tag_name = "reorganize_test_tag";
-  clio_cte::core::Tag tag(tag_name);
+  clio::cte::core::Tag tag(tag_name);
   std::string blob_name = "test_blob_dram";
 
   INFO("Verifying data integrity after reorganization");
@@ -362,8 +362,8 @@ TEST_CASE("ReorganizeBlob - Promote to DRAM", "[reorganize][promote][dram]") {
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "reorganize_test_tag";
-  clio_cte::core::Tag tag(tag_name);
-  clio_cte::core::TagId tag_id = tag.GetTagId();
+  clio::cte::core::Tag tag(tag_name);
+  clio::cte::core::TagId tag_id = tag.GetTagId();
   std::string blob_name = "test_blob_dram";
 
   // Get blob score before promotion
@@ -421,8 +421,8 @@ TEST_CASE("ReorganizeBlob - Cleanup", "[reorganize][cleanup]") {
   REQUIRE(cte_client != nullptr);
 
   std::string tag_name = "reorganize_test_tag";
-  clio_cte::core::Tag tag(tag_name);
-  clio_cte::core::TagId tag_id = tag.GetTagId();
+  clio::cte::core::Tag tag(tag_name);
+  clio::cte::core::TagId tag_id = tag.GetTagId();
 
   INFO("Cleaning up test blobs and tags");
 

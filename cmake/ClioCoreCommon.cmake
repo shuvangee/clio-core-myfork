@@ -830,6 +830,17 @@ function(clio_run_read_module_config MODULE_DIR)
   endif()
   set(CLIO_RUN_NAMESPACE ${CLIO_RUN_NAMESPACE} PARENT_SCOPE)
 
+  # Derive a filesystem-safe form of the namespace. The CMake target prefix
+  # (e.g. `clio::run::admin_client`) uses `::` separators, but the same
+  # value gets reused for library output names, install destinations and
+  # export file names where `::` is illegal or filesystem-unfriendly. Replace
+  # `::` with `_` so `clio::run` -> `clio_run`, `clio::cte` -> `clio_cte`,
+  # legacy `chimaera` -> `chimaera`. Downstream code that needs the path
+  # form references CLIO_RUN_PACKAGE_NAME; code that needs the C++/target
+  # prefix references CLIO_RUN_NAMESPACE.
+  string(REPLACE "::" "_" CLIO_RUN_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}")
+  set(CLIO_RUN_PACKAGE_NAME ${CLIO_RUN_PACKAGE_NAME} PARENT_SCOPE)
+
   # Validate extracted values
   if(NOT CLIO_RUN_MODULE_NAME)
     message(FATAL_ERROR "module_name not found in ${CONFIG_FILE}. Content preview: ${CONFIG_CONTENT}")
@@ -873,13 +884,16 @@ function(add_clio_module_client)
   clio_run_read_module_config(${CMAKE_CURRENT_SOURCE_DIR})
 
   # Create target name. The optional LIB_NAME argument lets a module
-  # override the auto-derived `<namespace>_<module>` prefix (used e.g.
+  # override the auto-derived `<package>_<module>` prefix (used e.g.
   # by the bdev module to install as `clio_bdev_*` while the C++
-  # namespace stays `clio_run::bdev`).
+  # namespace stays `clio::run::bdev`).  PACKAGE_NAME (not NAMESPACE)
+  # is used here because the target identifier ends up as both a CMake
+  # target string AND the library output file name (libfoo.so), and
+  # `::` is illegal in filesystem names.
   if(ARG_LIB_NAME)
     set(TARGET_NAME "${ARG_LIB_NAME}_client")
   else()
-    set(TARGET_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}_client")
+    set(TARGET_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}_client")
   endif()
 
   # Create the library
@@ -969,11 +983,13 @@ function(add_clio_module_client)
   endif()
 
   # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
-  # so the .so file on disk matches the CMake target.
+  # so the .so file on disk matches the CMake target.  PACKAGE_NAME (not
+  # NAMESPACE) is used here for the same filesystem-safety reason as
+  # TARGET_NAME above.
   if(ARG_LIB_NAME)
     set(_chimod_output_name "${ARG_LIB_NAME}_client")
   else()
-    set(_chimod_output_name "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}_client")
+    set(_chimod_output_name "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}_client")
   endif()
   set_target_properties(${TARGET_NAME} PROPERTIES
     EXPORT_NAME "${CLIO_RUN_MODULE_NAME}_client"
@@ -982,14 +998,15 @@ function(add_clio_module_client)
 
   # Install the client library
   # MODULE_PACKAGE_NAME: install dir under lib/cmake/. For runtime modules
-  # whose namespace was renamed chimaera -> clio_run (admin, bdev, MOD_NAME)
+  # whose namespace was renamed chimaera -> clio::run (admin, bdev, MOD_NAME)
   # we pin to the legacy `chimaera_<module>` form so external find_package
   # consumers (e.g. coeus-adapter) keep working. For other namespaces
-  # (clio_cte, clio_cae, …) we use the standard `<namespace>_<module>` form.
-  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio_run")
+  # (clio::cte, clio::cae, …) we use the standard `<package>_<module>` form
+  # (always filesystem-safe).
+  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio::run")
     set(MODULE_PACKAGE_NAME "chimaera_${CLIO_RUN_MODULE_NAME}")
   else()
-    set(MODULE_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}")
+    set(MODULE_PACKAGE_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}")
   endif()
   set(MODULE_EXPORT_NAME "${MODULE_PACKAGE_NAME}")
 
@@ -1019,6 +1036,7 @@ function(add_clio_module_client)
   set(CLIO_RUN_MODULE_CLIENT_TARGET ${TARGET_NAME} PARENT_SCOPE)
   set(CLIO_RUN_MODULE_NAME ${CLIO_RUN_MODULE_NAME} PARENT_SCOPE)
   set(CLIO_RUN_NAMESPACE ${CLIO_RUN_NAMESPACE} PARENT_SCOPE)
+  set(CLIO_RUN_PACKAGE_NAME ${CLIO_RUN_PACKAGE_NAME} PARENT_SCOPE)
 endfunction()
 
 #------------------------------------------------------------------------------
@@ -1059,7 +1077,7 @@ function(add_clio_module_runtime)
   if(ARG_LIB_NAME)
     set(TARGET_NAME "${ARG_LIB_NAME}_runtime")
   else()
-    set(TARGET_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}_runtime")
+    set(TARGET_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}_runtime")
   endif()
 
   # The GPU companion library concept (separate _gpu.cc files compiled
@@ -1128,7 +1146,7 @@ function(add_clio_module_runtime)
   set(RUNTIME_LINK_LIBS ${CORE_LIB} ${CLIO_RUN_RUNTIME_LIBS} ${ARG_LINK_LIBRARIES})
 
   # Try to find client target by name (handles cases where client was defined first)
-  set(CLIENT_TARGET_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}_client")
+  set(CLIENT_TARGET_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}_client")
   if(TARGET ${CLIENT_TARGET_NAME})
     list(APPEND RUNTIME_LINK_LIBS ${CLIENT_TARGET_NAME})
     message(STATUS "Runtime ${TARGET_NAME} linking to client ${CLIENT_TARGET_NAME}")
@@ -1167,11 +1185,12 @@ function(add_clio_module_runtime)
   endif()
 
   # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
-  # so the .so file on disk matches the CMake target.
+  # so the .so file on disk matches the CMake target.  PACKAGE_NAME (not
+  # NAMESPACE) for filesystem-safety as in add_clio_module_client.
   if(ARG_LIB_NAME)
     set(_chimod_output_name "${ARG_LIB_NAME}_runtime")
   else()
-    set(_chimod_output_name "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}_runtime")
+    set(_chimod_output_name "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}_runtime")
   endif()
   set_target_properties(${TARGET_NAME} PROPERTIES
     EXPORT_NAME "${CLIO_RUN_MODULE_NAME}_runtime"
@@ -1185,14 +1204,15 @@ function(add_clio_module_runtime)
 
   # Install the runtime library (add to existing export set if client exists)
   # MODULE_PACKAGE_NAME: install dir under lib/cmake/. For runtime modules
-  # whose namespace was renamed chimaera -> clio_run (admin, bdev, MOD_NAME)
+  # whose namespace was renamed chimaera -> clio::run (admin, bdev, MOD_NAME)
   # we pin to the legacy `chimaera_<module>` form so external find_package
   # consumers (e.g. coeus-adapter) keep working. For other namespaces
-  # (clio_cte, clio_cae, …) we use the standard `<namespace>_<module>` form.
-  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio_run")
+  # (clio::cte, clio::cae, …) we use the standard `<package>_<module>` form
+  # (filesystem-safe).
+  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio::run")
     set(MODULE_PACKAGE_NAME "chimaera_${CLIO_RUN_MODULE_NAME}")
   else()
-    set(MODULE_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}_${CLIO_RUN_MODULE_NAME}")
+    set(MODULE_PACKAGE_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}")
   endif()
   set(MODULE_EXPORT_NAME "${MODULE_PACKAGE_NAME}")
 
@@ -1223,12 +1243,12 @@ function(add_clio_module_runtime)
   if(SHOULD_GENERATE_CONFIG)
     # Export targets file
     # NAMESPACE: for chimaera-renamed runtime modules (admin/bdev/MOD_NAME,
-    # now under clio_run::), pin to `chimaera::` so installed targets keep
+    # now under clio::run::), pin to `chimaera::` so installed targets keep
     # the legacy name external consumers (coeus-adapter etc.) expect. For
     # other modules use the canonical namespace. Either way the modern
     # alias namespace is emitted in Config.cmake below.
     set(_install_namespace "${CLIO_RUN_NAMESPACE}")
-    if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio_run")
+    if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio::run")
       set(_install_namespace "chimaera")
     endif()
     install(EXPORT ${MODULE_EXPORT_NAME}
@@ -1243,15 +1263,20 @@ function(add_clio_module_runtime)
     # ALIAS_NAMESPACES is the list of EXTRA namespaces (not equal to the
     # install namespace) that should also resolve to the same exported
     # targets. Always includes the current CLIO_RUN_NAMESPACE so new code
-    # can link via the canonical name. For clio_* namespaces we also emit
-    # the historical `wrp_*` alias from the WRP_->CLIO_ rename.
+    # can link via the canonical name (e.g. `clio::cte::core_client`).
+    # For clio::* namespaces we also emit the historical `clio_<suffix>::`
+    # (pre-`::` rename waypoint) and, when the suffix is one of the
+    # WRP_->CLIO_ rename targets, the further-back `wrp_<suffix>::` alias.
     set(ALIAS_NAMESPACES "${CLIO_RUN_NAMESPACE}")
-    # Only emit the historical wrp_* alias when the suffix is genuinely
-    # one of the WRP_->CLIO_ rename targets (cte, cae, ...). "wrp_run"
-    # was never a valid namespace and would just confuse downstream users.
-    if("${CLIO_RUN_NAMESPACE}" MATCHES "^clio_(.*)$"
-       AND NOT "${CMAKE_MATCH_1}" STREQUAL "run")
-      list(APPEND ALIAS_NAMESPACES "wrp_${CMAKE_MATCH_1}")
+    if("${CLIO_RUN_NAMESPACE}" MATCHES "^clio::(.*)$")
+      set(_suffix "${CMAKE_MATCH_1}")
+      # Pre-`::` waypoint, e.g. clio::cte -> clio_cte.
+      list(APPEND ALIAS_NAMESPACES "clio_${_suffix}")
+      # "wrp_run" was never valid; only emit wrp_ for cte/cae/etc.
+      if(NOT "${_suffix}" STREQUAL "run")
+        list(APPEND ALIAS_NAMESPACES "wrp_${_suffix}")
+      endif()
+      unset(_suffix)
     endif()
     # Don't double-emit the install namespace itself.
     list(REMOVE_ITEM ALIAS_NAMESPACES "${_install_namespace}")
@@ -1340,6 +1365,7 @@ check_required_components(${MODULE_PACKAGE_NAME})
   set(CLIO_RUN_MODULE_RUNTIME_TARGET ${TARGET_NAME} PARENT_SCOPE)
   set(CLIO_RUN_MODULE_NAME ${CLIO_RUN_MODULE_NAME} PARENT_SCOPE)
   set(CLIO_RUN_NAMESPACE ${CLIO_RUN_NAMESPACE} PARENT_SCOPE)
+  set(CLIO_RUN_PACKAGE_NAME ${CLIO_RUN_PACKAGE_NAME} PARENT_SCOPE)
 endfunction()
 
 message(STATUS "IowarpCoreCommon.cmake loaded successfully")

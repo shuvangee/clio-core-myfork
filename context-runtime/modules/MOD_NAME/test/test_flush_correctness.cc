@@ -75,7 +75,7 @@ TEST_CASE("FlushTask Basic Functionality", "[flush][admin]") {
 
   SECTION("Flush with no work remaining returns success immediately") {
     // Create admin client
-    clio_run::admin::Client admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client admin_client(chi::kAdminPoolId);
 
     // Create flush task
     auto pool_query = chi::PoolQuery();
@@ -97,7 +97,7 @@ TEST_CASE("FlushTask with MOD_NAME Container and Async Tasks",
   SECTION("Flush waits for MOD_NAME async Custom tasks to complete") {
     // Create MOD_NAME client and container - CreateTask will auto-create pool
     const chi::PoolId mod_name_pool_id = chi::PoolId(4000, 0);
-    clio_run::MOD_NAME::Client mod_name_client(mod_name_pool_id);
+    clio::run::MOD_NAME::Client mod_name_client(mod_name_pool_id);
 
     // Create the MOD_NAME container with local pool query - this will create
     // pool if needed
@@ -112,7 +112,7 @@ TEST_CASE("FlushTask with MOD_NAME Container and Async Tasks",
 
     // Send multiple async Custom tasks to the MOD_NAME runtime
     const int num_async_tasks = 5;
-    std::vector<chi::Future<clio_run::MOD_NAME::CustomTask>> async_tasks;
+    std::vector<chi::Future<clio::run::MOD_NAME::CustomTask>> async_tasks;
 
     for (int i = 0; i < num_async_tasks; i++) {
       std::string input_data = "test_data_" + std::to_string(i);
@@ -125,7 +125,7 @@ TEST_CASE("FlushTask with MOD_NAME Container and Async Tasks",
     }
 
     // Start flush operation in background thread
-    clio_run::admin::Client flush_admin_client(chi::kAdminPoolId);
+    clio::run::admin::Client flush_admin_client(chi::kAdminPoolId);
     std::atomic<bool> flush_completed{false};
     std::atomic<chi::u32> flush_result_code{999};
 

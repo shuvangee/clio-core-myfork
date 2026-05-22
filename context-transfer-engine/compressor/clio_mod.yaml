@@ -1,5 +1,5 @@
 module_name: compressor
-namespace: clio_cte
+namespace: clio::cte
 version: 1.0.0
 
 kCreate: 0
