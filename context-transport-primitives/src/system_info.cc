@@ -47,6 +47,7 @@
 #endif
 // LCOV_EXCL_STOP
 #include <cstdlib>
+#include <fstream>
 #include <string>
 
 #include "clio_ctp/constants/macros.h"
