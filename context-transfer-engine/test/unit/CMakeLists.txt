@@ -11,9 +11,13 @@ cmake_minimum_required(VERSION 3.10)
 # Find required test dependencies
 # Catch2 is already found by root CMakeLists.txt
 
-# Create the test executable
+# Create the test executable — one file per target to avoid TEST_CASE
+# line-number collisions that produce duplicate symbol link errors.
 add_executable(cte_core_unit_tests
     test_core_minimal.cc
+)
+
+add_executable(cte_core_functionality_simple_tests
     test_core_functionality_simple.cc
 )
 
@@ -82,6 +86,10 @@ target_include_directories(cte_core_unit_tests PRIVATE
 
 )
 
+target_include_directories(cte_core_functionality_simple_tests PRIVATE
+
+)
+
 target_include_directories(test_core_functionality PRIVATE
 
 )
@@ -134,6 +142,17 @@ target_link_libraries(cte_core_unit_tests
     chimaera::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+target_link_libraries(cte_core_functionality_simple_tests
+    clio_cte_core_runtime
+    clio_cte_core_client
+    chimaera::admin_runtime
+    chimaera::admin_client
+    chimaera::bdev_runtime
+    chimaera::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 # Link test_core_functionality - using simple_test.h framework (NOT Catch2)
@@ -278,31 +297,31 @@ add_test(NAME cte_core_integration
     COMMAND cte_core_unit_tests)
 
 add_test(NAME cte_core_client_creation
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_params
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_target_config
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_tag_info
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_blob_info
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_tasks
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_helpers
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_workflow
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_performance
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 # CTE Config and DPE tests (separate executable)
 add_test(NAME cte_config_tests
@@ -414,7 +433,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout for each test
         LABELS "unit;core;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -422,7 +441,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "functional;core;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -441,7 +460,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout for each test
         LABELS "query;core;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -457,19 +476,19 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout for each test
         LABELS "unit;tag;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(cte_client_config_all PROPERTIES
     TIMEOUT 600
     LABELS "unit;core;cte;client;config"
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(cte_runtime_coverage_all PROPERTIES
     TIMEOUT 600
     LABELS "unit;core;cte;runtime;coverage"
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Add tiered storage stress tests
@@ -484,7 +503,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "stress;tiered;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Stresses the "0g" -> 80% DRAM RAM-tier default through the CTE tiering
@@ -498,7 +517,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "stress;tiered;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Regression: blocks freed by DelBlob return to their bdev partition.
@@ -510,7 +529,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "regression;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Add reorganize blob tests
@@ -525,7 +544,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "unit;reorganize;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM)
@@ -547,7 +566,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 120
         LABELS "gpu;cte;coroutine;msan_skip"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -555,7 +574,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 120
         LABELS "gpu;cte;core;msan_skip"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -563,7 +582,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 120
         LABELS "gpu;cte;create;msan_skip"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
 )
 endif()  # CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM
 
@@ -625,7 +644,11 @@ set_tests_properties(
 endif()
 
 # Tests that start a full CLIO Runtime runtime share /tmp/chimaera_iowarp SHM
-# segments and TCP/IPC ports, so they must NOT run in parallel.
+# segments and TCP/IPC ports, so they must NOT run in parallel. They also
+# need the chimaera cleanup fixture so a previous runtime process holding
+# 0.0.0.0:9416 doesn't break the next test's `IpcManager::ServerInit` with
+# "Address in use" (especially on Windows, where TIME_WAIT can hang on for
+# minutes and SIMPLE_TEST_PROCESS_EXIT skips libzmq's own socket close).
 set_tests_properties(
     cte_query_tag_exact
     cte_query_tag_wildcard
@@ -655,7 +678,16 @@ set_tests_properties(
     cte_tiered_dram_default_all
     cte_block_reuse_all
     cte_reorganize_all
-    PROPERTIES RESOURCE_LOCK "chimaera_runtime"
+    PROPERTIES
+        RESOURCE_LOCK "chimaera_runtime"
+        FIXTURES_REQUIRED "chimaera_test_cleanup_fixture"
+        # Move the runtime off port 9413 (and its derivatives 9414/9416) onto
+        # a high range so that an IDE / random local server squatting on the
+        # default port doesn't break the test run. libzmq's Windows socket
+        # handle is inheritable, which lets an ancestor process (e.g. the
+        # IDE that spawned ctest) accidentally keep a listener alive across
+        # test runs. Until that's fixed upstream, just dodge.
+        ENVIRONMENT "CLIO_PORT=10500"
 )
 if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM)
 set_tests_properties(
@@ -681,7 +713,7 @@ set_tests_properties(
 # ------------------------------------------------------------------------------
 # Install Targets
 # ------------------------------------------------------------------------------
-set(_CTE_TEST_TARGETS cte_core_unit_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_blob_block_reuse test_reorganize_blob)
+set(_CTE_TEST_TARGETS cte_core_unit_tests cte_core_functionality_simple_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_blob_block_reuse test_reorganize_blob)
 # (Legacy test_cte_gpu_coroutine / test_gpu_core / test_gpu_create were
 # removed along with the GPU runtime — see deletions earlier in this
 # file. The new CUDA test target test_cuda_cte_kernel_putget is added
@@ -723,7 +755,7 @@ if(CLIO_CORE_ENABLE_CUDA)
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
   set_tests_properties(cte_devmem_putget_cuda PROPERTIES
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1"
     TIMEOUT 120
     LABELS "gpu;cuda;cte;devmem;putblob"
   )
@@ -762,7 +794,7 @@ if(CLIO_CORE_ENABLE_ROCM)
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
   set_tests_properties(cte_devmem_putget_rocm PROPERTIES
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1"
     TIMEOUT 120
     LABELS "gpu;rocm;cte;devmem;putblob"
   )

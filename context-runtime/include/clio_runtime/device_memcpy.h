@@ -39,6 +39,8 @@
 #include <cstddef>
 #include <cstring>
 
+#include "clio_runtime/api.h"
+
 namespace clio::run {
 
 /** Device-aware memcpy signature. Same shape as std::memcpy. */
@@ -55,7 +57,7 @@ using IsDevicePointerFn = bool (*)(const void *ptr);
  * Default value is nullptr; the inline DeviceAwareMemcpy() helper
  * falls back to std::memcpy when nullptr.
  */
-extern std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy;
+extern CLIO_RUN_API std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy;
 
 /**
  * Companion hook: identifies whether a pointer is device USM. Used by
@@ -64,7 +66,7 @@ extern std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy;
  * dereference it). When unset, IsDevicePointer() returns false —
  * matching the pre-GPU semantics.
  */
-extern std::atomic<IsDevicePointerFn> g_is_device_pointer;
+extern CLIO_RUN_API std::atomic<IsDevicePointerFn> g_is_device_pointer;
 
 /**
  * Memcpy that dispatches to the registered device-aware hook if any.

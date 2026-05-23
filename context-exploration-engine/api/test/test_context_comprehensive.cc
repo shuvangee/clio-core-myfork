@@ -54,6 +54,8 @@
 #include <clio_runtime/bdev/bdev_tasks.h>
 #include <clio_runtime/clio_runtime.h>
 #include <fstream>
+#include <filesystem>
+#include <system_error>
 #include <cstdlib>
 
 using namespace iowarp;
@@ -145,8 +147,12 @@ public:
   }
 
   void SetupTestData() {
-    // Create test data directory
-    (void)system(("mkdir -p " + test_data_dir_).c_str());
+    // std::filesystem::create_directories is portable; `system("mkdir -p")`
+    // breaks on Windows cmd (no -p flag) and bashes against quoting/space
+    // issues even on POSIX. The non-throwing overload is fine since the
+    // directory may already exist from a previous test in the same proc.
+    std::error_code _ec;
+    std::filesystem::create_directories(test_data_dir_, _ec);
 
     // Generate small binary test file
     GenerateBinaryFile(test_binary_file_, kSmallFileSize);

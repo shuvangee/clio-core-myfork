@@ -150,10 +150,14 @@ class CTECoreFunctionalTestFixture {
     // Initialize test storage path in /tmp (always writable)
     test_storage_path_ = chi_test_data_dir() + "/cte_functional_test.dat";
 
-    // Clean up any existing test file
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
-      INFO("Cleaned up existing test file: " << test_storage_path_);
+    // Clean up any existing test file (use error_code to avoid throwing on
+    // Windows where the file may be locked by bdev)
+    std::error_code ec;
+    if (fs::exists(test_storage_path_, ec)) {
+      fs::remove(test_storage_path_, ec);
+      if (!ec) {
+        INFO("Cleaned up existing test file: " << test_storage_path_);
+      }
     }
 
     // Initialize CLIO Runtime runtime and client for functional testing
@@ -190,10 +194,14 @@ class CTECoreFunctionalTestFixture {
     // Reset core client
     core_client_.reset();
 
-    // Cleanup test storage file
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
-      INFO("Cleaned up test file: " << test_storage_path_);
+    // Cleanup test storage file (use error_code to avoid throwing on Windows
+    // where the file may be locked by bdev)
+    std::error_code ec;
+    if (fs::exists(test_storage_path_, ec)) {
+      fs::remove(test_storage_path_, ec);
+      if (!ec) {
+        INFO("Cleaned up test file: " << test_storage_path_);
+      }
     }
 
     // Cleanup handled automatically by framework
@@ -1825,7 +1833,7 @@ TEST_CASE("FUNCTIONAL - PutBlob-GetBlob Comprehensive Integration",
 
   // Verify runtime initialization (test should FAIL if not properly
   // initialized)
-  REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+  REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
   REQUIRE(CLIO_IPC != nullptr);
   REQUIRE(CLIO_POOL_MANAGER != nullptr);
   REQUIRE(CLIO_MODULE_MANAGER != nullptr);

@@ -44,6 +44,7 @@
  */
 
 #include <clio_cee/api/context_interface.h>
+#include <clio_ctp/introspect/system_info.h>
 #include <clio_runtime/clio_runtime.h>
 #include <iostream>
 #include <cassert>
@@ -110,6 +111,7 @@ int main(int argc, char** argv) {
     if (!ipc_manager) {
       HLOG(kError, "Chimaera IPC not initialized. Is the runtime running?");
       HLOG(kInfo, "HINT: Set INIT_CHIMAERA=1 to initialize runtime or start runtime externally");
+      ctp::SystemInfo::TerminateProcessNow(1);
       return 1;
     }
     HLOG(kSuccess, "Chimaera IPC verified");
@@ -120,9 +122,11 @@ int main(int argc, char** argv) {
     test_specific_patterns();
 
     HLOG(kSuccess, "All tests PASSED!");
+    ctp::SystemInfo::TerminateProcessNow(0);
     return 0;
   } catch (const std::exception& e) {
     HLOG(kError, "Test FAILED with exception: {}", e.what());
+    ctp::SystemInfo::TerminateProcessNow(1);
     return 1;
   }
 }

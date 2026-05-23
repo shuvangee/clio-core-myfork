@@ -358,7 +358,7 @@ TEST_CASE("IpcErrors - Concurrent Init/Finalize", "[ipc][errors][multiproc]") {
           ipc->GetNumSchedQueues();
 
           // Finalize using CLIO Runtime API
-          CLIO_CHIMAERA_MANAGER->ServerFinalize();
+          CLIO_RUNTIME_MANAGER->ServerFinalize();
         }
         exit(0);
       } else {
@@ -387,9 +387,11 @@ TEST_CASE("IpcErrors - Concurrent Init/Finalize", "[ipc][errors][multiproc]") {
 // ============================================================================
 
 TEST_CASE("IpcErrors - ZZZ Final Cleanup", "[ipc][errors][cleanup]") {
-  // This test runs last (ZZZ prefix ensures it's last alphabetically)
-  // Force exit to avoid hanging on worker thread joins during finalization
-  _exit(0);
+  // This test runs last (ZZZ prefix ensures it's last alphabetically).
+  // Force exit to avoid hanging on worker thread joins during finalization.
+  // SIMPLE_TEST_PROCESS_EXIT is TerminateProcess on Windows (bypasses the
+  // libzmq teardown abort) and ::_exit elsewhere.
+  SIMPLE_TEST_PROCESS_EXIT(0);
 }
 
 SIMPLE_TEST_MAIN()

@@ -39,16 +39,51 @@
 
 namespace ctp::lbm::sock {
 
+namespace {
+
+/** Bring Winsock up at static-init time and never tear it back down.
+ *
+ *  ZMQ context destruction (e.g. when IpcManager::ServerFinalize fires at
+ *  end-of-test) sends a wakeup byte through its signaler socket. That send
+ *  hits a wsa_assert if Winsock has been WSACleanup'd before the signaler
+ *  has run, which is easy to trigger when ZMQ's own static destructors
+ *  race ours.
+ *
+ *  Starting Winsock at static-init keeps the WSAStartup refcount at >= 1
+ *  for the entire process lifetime — including every static destructor —
+ *  and lets the OS reclaim the WSADATA at process exit. The previous
+ *  "init on first transport ctor" path would have been correct if we also
+ *  matched it with a CleanupSocketLib in a destructor, but the dtor
+ *  ordering is unreliable here, so we forfeit the matching cleanup. */
+/** Bump the WSAStartup refcount enough times that any ZMQ static-destructor
+ *  WSACleanup calls during shutdown can't drive it to zero before our (or
+ *  ZMQ's) signaler sockets have finished closing. WSAStartup ref-counts on
+ *  Windows, so each call increments and matching WSACleanup calls decrement;
+ *  we never call WSACleanup, so this stays positive for the process
+ *  lifetime. */
+struct WinsockStartup {
+  WinsockStartup() {
+    WSADATA wsa_data;
+    (void)::WSAStartup(MAKEWORD(2, 2), &wsa_data);
+  }
+};
+WinsockStartup g_winsock_startup;
+
+}  // namespace
+
 void InitSocketLib() {
-  static bool initialized = false;
-  if (initialized) return;
-  initialized = true;
+  // Belt-and-suspenders alongside g_winsock_startup. Each call bumps the
+  // WSAStartup refcount; we never call WSACleanup. Called once per
+  // SocketTransport / ZmqTransport construction, so by the time ZMQ
+  // contexts start being torn down at static-destructor time the refcount
+  // is well above the number of WSACleanup calls libzmq will fire.
   WSADATA wsa_data;
-  WSAStartup(MAKEWORD(2, 2), &wsa_data);
+  (void)::WSAStartup(MAKEWORD(2, 2), &wsa_data);
 }
 
 void CleanupSocketLib() {
-  WSACleanup();
+  // No-op. See the WinsockStartup comment above for why we don't pair a
+  // WSACleanup with the WSAStartup.
 }
 
 void Close(socket_t fd) {
@@ -106,15 +141,15 @@ ssize_t SendV(socket_t fd, const IoBuffer* iov, int count) {
   // Convert IoBuffer to WSABUF
   WSABUF wsa_bufs[64];
   int local_count = count < 64 ? count : 64;
-  DWORD total_expected = 0;
+  ::DWORD total_expected = 0;
   for (int i = 0; i < local_count; ++i) {
     wsa_bufs[i].buf = static_cast<char*>(iov[i].base);
     wsa_bufs[i].len = static_cast<ULONG>(iov[i].len);
     total_expected += wsa_bufs[i].len;
   }
 
-  DWORD bytes_sent = 0;
-  DWORD total_sent = 0;
+  ::DWORD bytes_sent = 0;
+  ::DWORD total_sent = 0;
   int buf_idx = 0;
 
   while (total_sent < total_expected) {
@@ -135,9 +170,9 @@ ssize_t SendV(socket_t fd, const IoBuffer* iov, int count) {
       return -1;
     }
     total_sent += bytes_sent;
-    DWORD remaining = bytes_sent;
+    ::DWORD remaining = bytes_sent;
     while (buf_idx < local_count &&
-           remaining >= static_cast<DWORD>(wsa_bufs[buf_idx].len)) {
+           remaining >= static_cast<::DWORD>(wsa_bufs[buf_idx].len)) {
       remaining -= wsa_bufs[buf_idx].len;
       buf_idx++;
     }

@@ -33,8 +33,8 @@
 
 #pragma once
 #if CTP_ENABLE_ZMQ
-#ifndef _WIN32
 #include <clio_ctp/util/env_compat.h>
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 #include <zmq.h>
@@ -95,15 +95,30 @@ class ZeroMqTransport : public Transport {
       std::mutex mtx;
       ~CtxOwner() {
         if (ctx) {
+#ifdef _WIN32
+          // libzmq 4.3.x's signaler aborts inside both zmq_ctx_shutdown
+          // and zmq_ctx_destroy on Windows during static-destructor
+          // teardown (assertion "WSASTARTUP not yet performed" in
+          // signaler.cpp). The signaler's wakeup `send()` runs on a
+          // mailbox thread whose Winsock state is already torn down by
+          // the time the global ctx destructor runs, and there's no
+          // user-side knob to fix it (we tried pinning the WSAStartup
+          // refcount). The process is exiting anyway, so we leak the
+          // context: the OS reclaims its sockets at process exit. Tracked
+          // under a follow-up GH issue.
+          (void)ctx;
+#else
           // zmq_ctx_shutdown() causes all blocking ZMQ calls on open sockets
           // to return immediately with ETERM.  This unblocks any background
           // receive threads (e.g. RecvZmqClientThread) that are polling the
           // socket, allowing them to exit cleanly.  zmq_ctx_destroy() would
           // otherwise block forever if a socket is still open (because the
-          // CLIO Runtime singleton is heap-allocated and its destructor -- which
-          // calls ClientFinalize / closes the socket -- is never invoked).
+          // CLIO Runtime singleton is heap-allocated and its destructor --
+          // which calls ClientFinalize / closes the socket -- is never
+          // invoked).
           zmq_ctx_shutdown(ctx);
           zmq_ctx_destroy(ctx);
+#endif
           ctx = nullptr;
         }
       }
@@ -656,7 +671,8 @@ class ZeroMqTransport : public Transport {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 500000;
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
+               reinterpret_cast<const char*>(&tv), sizeof(tv));
     struct sockaddr_in sa;
     std::memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;

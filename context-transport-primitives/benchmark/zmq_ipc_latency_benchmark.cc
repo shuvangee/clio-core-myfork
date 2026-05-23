@@ -52,7 +52,9 @@
  */
 
 #include <zmq.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <chrono>

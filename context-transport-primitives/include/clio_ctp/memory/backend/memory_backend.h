@@ -157,8 +157,16 @@ struct MemoryBackendHeader {
 
 class UrlMemoryBackend {};
 
-/** Size of the backend header region (page-aligned) */
-static const size_t kBackendHeaderSize = 4096;
+/** Size of the backend header region.
+ *  Sized to 64 KiB so the data region's file offset (= kBackendHeaderSize)
+ *  satisfies Windows' MapViewOfFile alignment rule: the offset must be a
+ *  multiple of SYSTEM_INFO::dwAllocationGranularity, which is 64 KiB on
+ *  x64/ARM64 Windows (NOT the 4 KiB page size). The same constant is used
+ *  on POSIX, where the only constraint is page alignment, so the extra
+ *  60 KiB of overhead per backend is harmless (a typical segment is >=1 GiB).
+ *  TODO: revisit per GH issue — a single mmap split into header+data slices
+ *  would avoid the constant bump entirely. */
+static const size_t kBackendHeaderSize = 65536;
 
 class MemoryBackend : public MemoryBackendHeader {
  public:

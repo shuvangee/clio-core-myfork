@@ -42,6 +42,7 @@
 #ifndef CHIMAERA_INCLUDE_CHIMAERA_ADMIN_H_
 #define CHIMAERA_INCLUDE_CHIMAERA_ADMIN_H_
 
+#include "clio_runtime/api.h"
 #include "clio_runtime/types.h"
 
 // Forward declaration to avoid circular dependency
@@ -50,7 +51,7 @@ class Client;
 }
 
 // Global pointer variable declaration for Admin singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(clio::run::admin::Client, g_admin);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::admin::Client, g_admin);
 
 // Macro for accessing the Admin singleton using global pointer variable
 #define CLIO_ADMIN CTP_GET_GLOBAL_PTR_VAR(::clio::run::admin::Client, g_admin)

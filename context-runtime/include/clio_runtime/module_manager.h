@@ -217,7 +217,7 @@ class ModuleManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for Module manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::ModuleManager, g_module_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::ModuleManager, g_module_manager);
 
 // Macro for accessing the Module manager singleton using global pointer variable
 #define CLIO_MODULE_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ModuleManager, g_module_manager)

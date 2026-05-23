@@ -47,6 +47,9 @@
 #include <clio_ctp/memory/allocator/round_robin_allocator.h>
 #include <clio_ctp/memory/allocator/thread_allocator.h>
 #include <clio_ctp/util/env_compat.h>
+// CLIO_RUN_API + CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_{H,CC} macros (per-DLL
+// export decoration so data globals work across DLL boundaries on Windows).
+#include "clio_runtime/api.h"
 
 /**
  * Core type definitions for CLIO Runtime distributed task execution framework
@@ -104,7 +107,7 @@ class PoolManager;
 class IpcManager;
 class ConfigManager;
 class ModuleManager;
-class Chimaera;
+class RuntimeManager;
 
 /**
  * Host structure for hostfile management
@@ -357,7 +360,7 @@ struct LockOwnerId {
   }
 };
 
-// Host implementation lives in chimaera_manager.cc. Under any device pass
+// Host implementation lives in manager.cc. Under any device pass
 // (CUDA/ROCm/SYCL) return a default-constructed sentinel — chimods that
 // would call this from device code (corwlock helpers traced by DPC++) get
 // a parseable inline body instead of an unresolved external reference.
@@ -568,10 +571,10 @@ enum MemorySegment {
 #define TEMP
 
 // CTP Thread-local storage keys
-extern ctp::ThreadLocalKey chi_cur_worker_key_;
-extern bool chi_cur_worker_key_created_;
-extern ctp::ThreadLocalKey chi_task_counter_key_;
-extern ctp::ThreadLocalKey chi_is_client_thread_key_;
+extern CLIO_RUN_API ctp::ThreadLocalKey chi_cur_worker_key_;
+extern CLIO_RUN_API bool chi_cur_worker_key_created_;
+extern CLIO_RUN_API ctp::ThreadLocalKey chi_task_counter_key_;
+extern CLIO_RUN_API ctp::ThreadLocalKey chi_is_client_thread_key_;
 
 /**
  * Thread-local task counter for generating unique TaskId major and unique
@@ -594,7 +597,7 @@ struct TaskCounter {
  * populated
  */
 #if !CTP_IS_DEVICE_PASS
-TaskId CreateTaskId();  // Host implementation in chimaera_manager.cc
+TaskId CreateTaskId();  // Host implementation in manager.cc
 #else
 // Device-pass inline implementation — simplified version. Used under
 // CUDA/ROCm/SYCL device passes; CTP_IS_DEVICE_PASS makes the SYCL pass

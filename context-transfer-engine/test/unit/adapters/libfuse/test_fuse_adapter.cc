@@ -72,7 +72,7 @@ class FuseAdapterTestFixture {
   bool target_initialized_ = false;
 
   FuseAdapterTestFixture() {
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
     test_storage_path_ = home_dir + "/cte_fuse_test.dat";
 

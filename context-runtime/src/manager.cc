@@ -43,22 +43,22 @@
 #include "clio_runtime/singletons.h"
 
 // Global pointer variable definition for CLIO Runtime manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::Chimaera, g_chimaera_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::RuntimeManager, g_runtime_manager);
 
-static void ChimaeraCleanupAtExit() {
-  if (g_chimaera_manager) {
-    delete g_chimaera_manager;
-    g_chimaera_manager = nullptr;
+static void RuntimeManagerCleanupAtExit() {
+  if (g_runtime_manager) {
+    delete g_runtime_manager;
+    g_runtime_manager = nullptr;
   }
 }
 
 namespace clio::run {
 
 // CTP Thread-local storage key definitions
-ctp::ThreadLocalKey chi_cur_worker_key_;
-bool chi_cur_worker_key_created_ = false;
-ctp::ThreadLocalKey chi_task_counter_key_;
-ctp::ThreadLocalKey chi_is_client_thread_key_;
+CLIO_RUN_API ctp::ThreadLocalKey chi_cur_worker_key_;
+CLIO_RUN_API bool chi_cur_worker_key_created_ = false;
+CLIO_RUN_API ctp::ThreadLocalKey chi_task_counter_key_;
+CLIO_RUN_API ctp::ThreadLocalKey chi_is_client_thread_key_;
 
 /**
  * Create a new TaskId with current process/thread info and next major counter
@@ -78,8 +78,8 @@ TaskId CreateTaskId() {
   u64 node_id = ipc_manager ? ipc_manager->GetNodeId() : 0;
 
   // In runtime mode, check if we have a current worker
-  auto *chimaera_manager = CLIO_CHIMAERA_MANAGER;
-  if (chimaera_manager && chimaera_manager->IsRuntime()) {
+  auto *runtime_manager = CLIO_RUNTIME_MANAGER;
+  if (runtime_manager && runtime_manager->IsRuntime()) {
     Worker *current_worker = CLIO_CUR_WORKER;
     if (current_worker) {
       // Get current task from worker
@@ -110,7 +110,7 @@ TaskId CreateTaskId() {
       node_id);  // replica_id_ starts at 0, unique = major for root tasks
 }
 
-Chimaera::~Chimaera() {
+RuntimeManager::~RuntimeManager() {
   if (is_initialized_) {
     // Finalize server first (stops worker threads that may be processing tasks)
     if (is_runtime_mode_) {
@@ -124,8 +124,8 @@ Chimaera::~Chimaera() {
   }
 }
 
-bool Chimaera::ClientInit() {
-  HLOG(kInfo, "Chimaera::ClientInit");
+bool RuntimeManager::ClientInit() {
+  HLOG(kInfo, "RuntimeManager::ClientInit");
   if (is_client_initialized_ || client_is_initializing_ ||
       runtime_is_initializing_) {
     return true;
@@ -176,12 +176,12 @@ bool Chimaera::ClientInit() {
   is_client_initialized_ = true;
   is_initialized_ = true;
   client_is_initializing_ = false;
-  std::atexit(ChimaeraCleanupAtExit);
+  std::atexit(RuntimeManagerCleanupAtExit);
 
   return true;
 }
 
-bool Chimaera::ServerInit() {
+bool RuntimeManager::ServerInit() {
   if (is_runtime_initialized_ || runtime_is_initializing_ ||
       client_is_initializing_) {
     return true;
@@ -315,12 +315,12 @@ bool Chimaera::ServerInit() {
   is_runtime_initialized_ = true;
   is_initialized_ = true;
   runtime_is_initializing_ = false;
-  std::atexit(ChimaeraCleanupAtExit);
+  std::atexit(RuntimeManagerCleanupAtExit);
 
   return true;
 }
 
-void Chimaera::ClientFinalize() {
+void RuntimeManager::ClientFinalize() {
   if (!is_initialized_ || !is_client_mode_) {
     return;
   }
@@ -339,7 +339,7 @@ void Chimaera::ClientFinalize() {
   }
 }
 
-void Chimaera::ServerFinalize() {
+void RuntimeManager::ServerFinalize() {
   if (!is_initialized_ || !is_runtime_mode_) {
     return;
   }
@@ -372,23 +372,23 @@ void Chimaera::ServerFinalize() {
   }
 }
 
-bool Chimaera::IsInitialized() const { return is_initialized_; }
+bool RuntimeManager::IsInitialized() const { return is_initialized_; }
 
-bool Chimaera::IsClient() const { return is_client_mode_; }
+bool RuntimeManager::IsClient() const { return is_client_mode_; }
 
-bool Chimaera::IsRuntime() const { return is_runtime_mode_; }
+bool RuntimeManager::IsRuntime() const { return is_runtime_mode_; }
 
-const std::string &Chimaera::GetCurrentHostname() const {
+const std::string &RuntimeManager::GetCurrentHostname() const {
   auto *ipc_manager = CLIO_IPC;
   return ipc_manager->GetCurrentHostname();
 }
 
-u64 Chimaera::GetNodeId() const {
+u64 RuntimeManager::GetNodeId() const {
   auto *ipc_manager = CLIO_IPC;
   return ipc_manager->GetNodeId();
 }
 
-bool Chimaera::IsInitializing() const {
+bool RuntimeManager::IsInitializing() const {
   return client_is_initializing_ || runtime_is_initializing_;
 }
 

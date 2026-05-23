@@ -234,14 +234,14 @@ TEST_CASE("CLIO_IPC AllocateBuffer client vs runtime behavior",
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
 
-  auto* chimaera_manager = CLIO_CHIMAERA_MANAGER;
-  REQUIRE(chimaera_manager != nullptr);
+  auto* runtime_manager = CLIO_RUNTIME_MANAGER;
+  REQUIRE(runtime_manager != nullptr);
 
   SECTION("Colocated client mode allocation") {
     // In colocated mode (client with runtime), both client and runtime are available
     // AllocateBuffer should work correctly regardless of mode
-    REQUIRE(chimaera_manager->IsRuntime());  // Colocated mode has runtime
-    REQUIRE(chimaera_manager->IsClient());   // And client
+    REQUIRE(runtime_manager->IsRuntime());  // Colocated mode has runtime
+    REQUIRE(runtime_manager->IsClient());   // And client
 
     ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(100);
     REQUIRE_FALSE(buffer.IsNull());

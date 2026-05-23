@@ -37,19 +37,13 @@
 
 #include "clio_runtime/module_manager.h"
 
-#ifndef _WIN32
-#include <dlfcn.h>
-#include <libgen.h>
-#endif
-#include <limits.h>
-
 #include <cstring>
 #include <filesystem>
 
 #include "clio_runtime/container.h"
 
 // Global pointer variable definition for Module manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::ModuleManager, g_module_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::ModuleManager, g_module_manager);
 
 namespace clio::run {
 
@@ -284,23 +278,10 @@ std::vector<std::string> ModuleManager::GetScanDirectories() const {
 }
 
 std::string ModuleManager::GetModuleDirectory() const {
-  Dl_info dl_info;
-  // Use address of a function in this shared object to identify it
-  void *symbol_addr = GetSymbolForDlAddr();
-
-  if (dladdr(symbol_addr, &dl_info) == 0) {
-    return "";
-  }
-
-  char resolved_path[PATH_MAX];
-  if (realpath(dl_info.dli_fname, resolved_path) == nullptr) {
-    return "";
-  }
-
-  char path_copy[PATH_MAX];
-  strncpy(path_copy, resolved_path, PATH_MAX);
-  path_copy[PATH_MAX - 1] = '\0';  // Ensure null termination
-  return std::string(dirname(path_copy));
+  // Resolve the directory of *this* shared library (clio_run_cxx) by passing
+  // the address of a symbol defined in this module. Cross-platform impl lives
+  // in ctp::SystemInfo.
+  return ctp::SystemInfo::GetModuleDirectoryFor(GetSymbolForDlAddr());
 }
 
 bool ModuleManager::IsSharedLibrary(const std::string &file_path) const {
@@ -319,8 +300,15 @@ bool ModuleManager::IsSharedLibrary(const std::string &file_path) const {
 
 bool ModuleManager::HasModuleNamingConvention(
     const std::string &file_path) const {
-  // ChiMod libraries must end with "_runtime.so" (not "_runtime_gpu.so")
-  return file_path.find("_runtime.so") != std::string::npos;
+  // ChiMod libraries must end with "_runtime<sharedlibext>"
+  // (not "_runtime_gpu<sharedlibext>"). The extension is per-platform — on
+  // Linux .so, macOS .dylib, Windows .dll — and the canonical source comes
+  // from ctp::SystemInfo so we don't duplicate the table.
+  const std::string suffix =
+      std::string("_runtime") + ctp::SystemInfo::GetSharedLibExtension();
+  if (file_path.size() < suffix.size()) return false;
+  return file_path.compare(file_path.size() - suffix.size(), suffix.size(),
+                           suffix) == 0;
 }
 
 bool ModuleManager::ValidateChiMod(ctp::SharedLibrary &lib) const {

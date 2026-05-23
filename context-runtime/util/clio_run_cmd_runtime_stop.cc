@@ -24,7 +24,7 @@ int RuntimeStop(int argc, char* argv[]) {
     // ZMQ shared-context static destructor runs.
     struct ClientFinalizeGuard {
       ~ClientFinalizeGuard() {
-        auto* mgr = CLIO_CHIMAERA_MANAGER;
+        auto* mgr = CLIO_RUNTIME_MANAGER;
         if (mgr) {
           mgr->ClientFinalize();
         }

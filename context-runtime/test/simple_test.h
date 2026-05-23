@@ -244,18 +244,49 @@ inline int run_all_tests(const std::string& filter = "") {
 
 } // namespace SimpleTest
 
-// Helper macro to generate unique function names
-#define CONCAT_IMPL(x, y) x##y
-#define CONCAT(x, y) CONCAT_IMPL(x, y)
-#define UNIQUE_NAME(base) CONCAT(base, __LINE__)
+// Helper macro to generate unique function names.
+// Renamed from UNIQUE_NAME to SIMPLE_TEST_UNIQUE_NAME because the Windows
+// SDK's <nb30.h> (NetBIOS API, transitively pulled in by <windows.h>)
+// defines UNIQUE_NAME as a two-arg macro for NetBIOS-name structures;
+// any inclusion of windows.h before simple_test.h then poisons every
+// TEST_CASE expansion.
+#define SIMPLE_TEST_CONCAT_IMPL(x, y) x##y
+#define SIMPLE_TEST_CONCAT(x, y) SIMPLE_TEST_CONCAT_IMPL(x, y)
+#define SIMPLE_TEST_UNIQUE_NAME(base) SIMPLE_TEST_CONCAT(base, __LINE__)
 
 // Main TEST_CASE macro that works with string names
 #define TEST_CASE(test_name, tags) \
-    void UNIQUE_NAME(test_func_)(); \
-    static SimpleTest::TestRegistrar UNIQUE_NAME(test_reg_)(std::string(test_name) + " " + std::string(tags), UNIQUE_NAME(test_func_)); \
-    void UNIQUE_NAME(test_func_)()
+    void SIMPLE_TEST_UNIQUE_NAME(test_func_)(); \
+    static SimpleTest::TestRegistrar SIMPLE_TEST_UNIQUE_NAME(test_reg_)(std::string(test_name) + " " + std::string(tags), SIMPLE_TEST_UNIQUE_NAME(test_func_)); \
+    void SIMPLE_TEST_UNIQUE_NAME(test_func_)()
 
-// Main function for test executable
+// On Windows the libzmq 4.3.x signaler asserts inside zmq_close() at
+// static-destructor / atexit time with "WSASTARTUP not yet performed" — its
+// mailbox send() runs after some part of the Winsock state has gone away.
+// All tests have already passed by the time we get there, so on Windows we
+// TerminateProcess() to skip every cleanup path; POSIX uses _exit() to
+// match the historical behaviour some test cases relied on for skipping
+// worker-join hangs. Both go through ctp::SystemInfo so this header stays
+// free of <windows.h> — pulling that in here leaks Yield/min/max/SendMessage
+// macros into every test TU.
+#include "clio_ctp/introspect/system_info.h"
+
+// SIMPLE_TEST_PROCESS_EXIT routes through SystemInfo::TerminateProcessNow.
+// Windows: TerminateProcess(code) — skips ZMQ destructor chain that
+//          aborts at exit.
+// POSIX:   no-op (returns) — callers fall through and the test's normal
+//          finalize + return runs, keeping leak sanitizers / coverage
+//          happy.
+// Test code that needs to "exit immediately on Windows but stay on the
+// normal teardown path on Linux" should call this then `return result;`.
+#define SIMPLE_TEST_PROCESS_EXIT(code) (::ctp::SystemInfo::TerminateProcessNow((code)))
+
+// Main function for test executable. The flow is identical on every
+// platform; the platform difference is hidden inside SIMPLE_TEST_PROCESS_EXIT.
+// On Windows the TerminateProcess call returns control to the OS before
+// g_test_finalize / static dtors / atexit handlers run, sidestepping the
+// libzmq signaler abort. On POSIX it's a no-op and the rest of main()
+// executes normally.
 #define SIMPLE_TEST_MAIN() \
 int main(int argc, char* argv[]) { \
     std::string filter = ""; \
@@ -263,6 +294,7 @@ int main(int argc, char* argv[]) { \
         filter = argv[1]; \
     } \
     int result = SimpleTest::run_all_tests(filter); \
+    SIMPLE_TEST_PROCESS_EXIT(result); \
     if (SimpleTest::g_test_finalize) SimpleTest::g_test_finalize(); \
     return result; \
 }

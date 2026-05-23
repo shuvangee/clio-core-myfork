@@ -5,3 +5,4 @@
 // The original include path remains valid for now; the canonical header
 // lives at the new path.
 #include <clio_ctp/introspect/system_info.h>
+#include <clio_ctp/compat/hshm_aliases.h>

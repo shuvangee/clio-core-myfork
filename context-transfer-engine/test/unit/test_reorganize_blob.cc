@@ -87,7 +87,7 @@ class ReorganizeBlobTestFixture {
     INFO("=== Initializing ReorganizeBlob Test ===");
 
     // Setup paths
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
     config_path_ = chi_test_data_dir() + "/reorganize_blob_config.yaml";
     file_storage_path_ = chi_test_data_dir() + "/reorganize_blob_storage.bin";
@@ -100,8 +100,8 @@ class ReorganizeBlobTestFixture {
 
     // Set environment variable for runtime config
     // CHI_SERVER_CONF is checked first, so set it to override any existing value
-    setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
-    setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
+    ctp::SystemInfo::Setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
+    ctp::SystemInfo::Setenv("CLIO_SERVER_CONF", config_path_.c_str(), 1);
 
     // Initialize CLIO Runtime runtime
     bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
@@ -449,5 +449,6 @@ int main(int argc, char** argv) {
   delete g_fixture;
   g_fixture = nullptr;
 
-  return result;
+  SIMPLE_TEST_PROCESS_EXIT(result);
+  return result;  // unreachable on Windows
 }

@@ -42,7 +42,7 @@
 #include <filesystem>
 
 // Global pointer variable definition for Configuration manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::ConfigManager, g_config_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::ConfigManager, g_config_manager);
 
 namespace clio::run {
 

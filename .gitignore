@@ -142,3 +142,5 @@ models/
 
 # Submodules managed by .gitmodules
 #external/libzmq/
+
+claude-log.json

@@ -50,7 +50,7 @@ For building from source without a package manager:
 ```bash
 # Clone the repository
 git clone https://github.com/iowarp/clio-core.git
-cd core
+cd clio-core
 
 # Build with CMake
 cmake --preset=release

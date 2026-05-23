@@ -121,6 +121,18 @@ class StdThread : public ThreadModel {
   CTP_CROSS_FUN
   void Join(Thread &thread) { thread.std_thread_.join(); }
 
+  /** Best-effort join with a timeout; detach if the timeout elapses. Returns
+   *  true if the thread was joined cleanly, false if it had to be detached.
+   *  std::thread has no portable timed-join, so on this model the timeout is
+   *  ignored and a blocking join is performed. TODO: implement via native
+   *  handle if a deadline is required on Windows. */
+  CTP_CROSS_FUN
+  bool TimedJoinOrDetach(Thread &thread, uint64_t /*timeout_ms*/) {
+    if (!thread.std_thread_.joinable()) return true;
+    thread.std_thread_.join();
+    return true;
+  }
+
   /** Set CPU affinity for thread */
   CTP_CROSS_FUN
   void SetAffinity(Thread &thread, int cpu_id) {}

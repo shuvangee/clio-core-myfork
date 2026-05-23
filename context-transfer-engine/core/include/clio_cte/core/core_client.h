@@ -36,6 +36,7 @@
 
 #include <clio_runtime/clio_runtime.h>
 #include <clio_ctp/util/singleton.h>
+#include <clio_cte/api.h>
 #include <clio_cte/core/core_tasks.h>
 
 namespace clio::cte::core {
@@ -571,7 +572,7 @@ class Client : public chi::ContainerClient {
 };
 
 // Global pointer-based singleton for CTE client with lazy initialization
-CTP_DEFINE_GLOBAL_PTR_VAR_H(clio::cte::core::Client, g_cte_client);
+CLIO_CTE_DEFINE_GLOBAL_PTR_VAR_H(clio::cte::core::Client, g_cte_client);
 
 /**
  * Initialize CTE client and configuration subsystem

@@ -93,9 +93,11 @@ class ShmTransport
 
   /** Check if the server is still alive via PID probe. */
   bool IsServerAlive(const LbmContext& ctx = LbmContext()) const {
+#ifndef _WIN32
     if (ctx.server_pid_ > 0) {
-      if (kill(ctx.server_pid_, 0) == -1 && errno == ESRCH) return false;
+      if (!ctp::SystemInfo::IsProcessAlive(ctx.server_pid_)) return false;
     }
+#endif
     return true;
   }
 

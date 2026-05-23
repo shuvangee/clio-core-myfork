@@ -11,6 +11,10 @@ if(WIN32)
         system_info.cc
         malloc_allocator.cc
         socket_win.cc
+        # Windows-specific backends whose impl pulls in <windows.h>.
+        # Headers stay Win32-clean; impls live here.
+        iocp_io.cc
+        event_manager_win.cc
     )
 else()
     set(SRC_FILES
@@ -22,6 +26,9 @@ endif()
 
 # Create library with system_info.cc
 add_library(clio_ctp_host ${SRC_FILES})
+set_target_properties(clio_ctp_host PROPERTIES
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
 
 #------------------------------------------------------------------------------
 # Note: Compression Predictor Libraries (XGBoost, Dense NN, Q-Table, LinReg)

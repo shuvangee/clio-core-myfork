@@ -177,9 +177,9 @@ TEST_CASE("Chimaera Initialization", "[runtime][initialization]") {
     REQUIRE(g_initialized);
 
     // Verify runtime state
-    REQUIRE(CLIO_CHIMAERA_MANAGER->IsInitialized());
-    REQUIRE(CLIO_CHIMAERA_MANAGER->IsRuntime());
-    REQUIRE(CLIO_CHIMAERA_MANAGER->IsClient());
+    REQUIRE(CLIO_RUNTIME_MANAGER->IsInitialized());
+    REQUIRE(CLIO_RUNTIME_MANAGER->IsRuntime());
+    REQUIRE(CLIO_RUNTIME_MANAGER->IsClient());
   }
 
   SECTION("Multiple initializations should be safe") {

@@ -157,16 +157,18 @@ static std::string chi_test_data_dir() {
 
    CTEQueryTestFixture() {
      // Initialize test storage path in home directory
-     std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+     std::string home_dir = ctp::SystemInfo::GetHomeDir();
      if (home_dir.empty()) {
        throw std::runtime_error("HOME environment variable is not set");
      }
 
      test_storage_path_ = chi_test_data_dir() + "/cte_query_test.dat";
 
-     // Clean up any existing test file
-     if (fs::exists(test_storage_path_)) {
-       fs::remove(test_storage_path_);
+     // Clean up any existing test file (use error_code to avoid throwing on
+     // Windows where the file may be locked by bdev)
+     std::error_code ec;
+     if (fs::exists(test_storage_path_, ec)) {
+       fs::remove(test_storage_path_, ec);
      }
 
      // Initialize CLIO Runtime and CTE client once per test suite
@@ -195,9 +197,11 @@ static std::string chi_test_data_dir() {
    }
 
    ~CTEQueryTestFixture() {
-     // Clean up test storage
-     if (fs::exists(test_storage_path_)) {
-       fs::remove(test_storage_path_);
+     // Clean up test storage (use error_code to avoid throwing on Windows
+     // where the file may be locked by bdev)
+     std::error_code ec;
+     if (fs::exists(test_storage_path_, ec)) {
+       fs::remove(test_storage_path_, ec);
      }
    }
 

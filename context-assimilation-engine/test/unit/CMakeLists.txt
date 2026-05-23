@@ -79,7 +79,7 @@ function(add_cae_unit_test TEST_NAME TEST_SOURCE)
 
   # Set test environment variables
   set_tests_properties(${TEST_NAME} PROPERTIES
-    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     TIMEOUT 300  # 5 minute timeout
   )
 endfunction()
@@ -117,7 +117,7 @@ add_cae_unit_test(cae_range_assim
 
 # Set smaller file size for range test to speed up CI
 set_tests_properties(cae_range_assim PROPERTIES
-  ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;TEST_FILE_SIZE=10;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"  # 10MB instead of default
+  ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;TEST_FILE_SIZE=10;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"  # 10MB instead of default
 )
 
 #------------------------------------------------------------------------------
@@ -198,7 +198,7 @@ set_tests_properties(
   PROPERTIES
     TIMEOUT 120
     LABELS "coverage;comprehensive;msan_skip"
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
 )
 
 #------------------------------------------------------------------------------
@@ -296,7 +296,7 @@ set_tests_properties(
   PROPERTIES
     TIMEOUT 300
     LABELS "coverage;export;msan_skip"
-    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "CHI_WITH_RUNTIME=1;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/clio_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
 )
 
 #------------------------------------------------------------------------------

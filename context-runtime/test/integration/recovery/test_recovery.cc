@@ -90,7 +90,7 @@ class RecoveryTestFixture {
         g_initialized = true;
         SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
         std::this_thread::sleep_for(500ms);
-        REQUIRE(CLIO_CHIMAERA_MANAGER != nullptr);
+        REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
         REQUIRE(CLIO_IPC != nullptr);
         REQUIRE(CLIO_POOL_MANAGER != nullptr);
         REQUIRE(CLIO_IPC->IsInitialized());

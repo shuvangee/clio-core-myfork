@@ -31,9 +31,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CHIMAERA_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CHIMAERA_MANAGER_H_
+#ifndef CLIO_RUN_MANAGER_H_
+#define CLIO_RUN_MANAGER_H_
 
+#include "clio_runtime/api.h"
 #include "clio_runtime/types.h"
 #include <memory>
 #include <string>
@@ -42,17 +43,17 @@ namespace clio::run {
 
 /**
  * Main CLIO Runtime manager singleton class
- * 
+ *
  * Central coordinator for the distributed task execution framework.
  * Manages initialization and coordination between client and runtime modes.
- * Uses CTP global cross pointer variable singleton pattern.
+ * Uses CTP global pointer variable singleton pattern.
  */
-class Chimaera {
+class RuntimeManager {
  public:
   /**
    * Destructor - handles automatic finalization
    */
-  ~Chimaera();
+  ~RuntimeManager();
 
   /**
    * Initialize client components
@@ -131,12 +132,10 @@ class Chimaera {
 }  // namespace clio::run
 
 // Global pointer variable declaration for CLIO Runtime manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::Chimaera, g_chimaera_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::RuntimeManager, g_runtime_manager);
 
 // Macro for accessing the CLIO Runtime manager singleton using global pointer variable
-#define CLIO_CHIMAERA_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::Chimaera, g_chimaera_manager)
-// Backward-compat alias (clio_run rebrand). External code that still
-// uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_CHIMAERA_MANAGER  CLIO_CHIMAERA_MANAGER
+#define CLIO_RUNTIME_MANAGER \
+  CTP_GET_GLOBAL_PTR_VAR(::clio::run::RuntimeManager, g_runtime_manager)
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CHIMAERA_MANAGER_H_
+#endif  // CLIO_RUN_MANAGER_H_

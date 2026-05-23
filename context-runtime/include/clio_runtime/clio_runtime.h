@@ -130,26 +130,23 @@ void CHIMAERA_FINALIZE();
 //
 // All CLIO_* singleton / class-body / allocator macros are now defined at
 // their canonical site in the individual subsystem headers (admin.h,
-// chimaera_manager.h, config_manager.h, container.h, ipc_manager.h,
+// runtime_manager.h, config_manager.h, container.h, ipc_manager.h,
 // module_manager.h, pool_manager.h, task.h, types.h, work_orchestrator.h,
 // worker.h). Each of those headers also declares its `#define CHI_<X>
 // CLIO_<X>` backward-compat alias, so legacy code that still uses the
 // CHI_* spelling keeps working unchanged. See rebranding.md for the full
 // migration table.
 //
-// Only two things need to live in this umbrella:
-//   1. The finalize macro (its RHS is a function call defined here).
-//      CLIO_INIT / CHIMAERA_INIT are inline functions above (not
-//      macros), so no #define alias is needed for them.
-//   2. The CLIO_RUNTIME_MANAGER alias — the only macro whose CLIO_ form
-//      is a genuinely renamed alias rather than a flipped canonical.
+// Only one thing needs to live in this umbrella now:
+//   - The finalize macro (its RHS is a function call defined here).
+//     CLIO_INIT / CHIMAERA_INIT are inline functions above (not macros),
+//     so no #define alias is needed for them.
+// The CLIO_RUNTIME_MANAGER macro is canonical (defined in
+// clio_runtime/manager.h) — no alias needed.
 //==============================================================================
 
 // --- Finalize ---
 #define CLIO_RUNTIME_FINALIZE  ::chi::CHIMAERA_FINALIZE
-
-// --- Renamed alias for the (canonical) CLIO_CHIMAERA_MANAGER ---
-#define CLIO_RUNTIME_MANAGER   CLIO_CHIMAERA_MANAGER
 
 // --- Module namespace alias (chimaera:: -> clio::run::) ---
 // Pulled in last so the alias is visible to every TU that includes this

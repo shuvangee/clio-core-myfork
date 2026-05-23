@@ -59,6 +59,7 @@
 #include <cstring>
 
 // CLIO Runtime and CAE headers
+#include <clio_ctp/introspect/system_info.h>
 #include <clio_runtime/clio_runtime.h>
 #include <clio_cae/core/core_client.h>
 #include <clio_cae/core/constants.h>
@@ -272,8 +273,12 @@ int main(int argc, char* argv[]) {
 
     // Step 4: Load OMNI configuration file
     HLOG(kInfo, "[STEP 4] Loading OMNI configuration...");
-    const std::string source_path = __FILE__;  // Get current source file path
-    const std::string omni_file = source_path.substr(0, source_path.find_last_of('/')) + "/binary_assim_omni.yaml";
+    // __FILE__ uses backslashes on Windows; accept either separator so
+    // the omni-config sibling resolves on both platforms.
+    const std::string source_path = __FILE__;
+    const std::string omni_file =
+        source_path.substr(0, source_path.find_last_of("/\\")) +
+        "/binary_assim_omni.yaml";
 
     std::vector<clio::cae::core::AssimilationCtx> contexts;
     try {
@@ -360,5 +365,8 @@ int main(int argc, char* argv[]) {
   }
   HLOG(kInfo, "========================================");
 
+  // No-op on POSIX; on Windows skips static-destructor teardown so the
+  // libzmq signaler abort during ZMQ unwind doesn't flip our exit code.
+  ctp::SystemInfo::TerminateProcessNow(exit_code);
   return exit_code;
 }

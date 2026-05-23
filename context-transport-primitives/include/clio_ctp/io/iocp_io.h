@@ -1,34 +1,6 @@
 /*
  * Copyright (c) 2024, Gnosis Research Center, Illinois Institute of Technology
- * All rights reserved.
- *
- * This file is part of IOWarp Core.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from
- *    this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * All rights reserved. BSD 3-Clause license.
  */
 
 #ifndef CTP_SHM_INCLUDE_HSHM_SHM_IO_IOCP_IO_H_
@@ -38,63 +10,38 @@
 
 #include "async_io.h"
 
-// TODO: #include <windows.h>
-// TODO: Windows IOCP implementation
+#include <atomic>
+#include <cstdint>
+#include <memory>
+
+#include "clio_ctp/constants/macros.h"
 
 namespace ctp {
 
+/**
+ * Windows IOCP-based AsyncIO. Counterpart of LinuxAioAsyncIO.
+ *
+ * The implementation lives entirely in iocp_io.cc — this header is
+ * deliberately Win32-free so consumers don't drag <windows.h> macros
+ * (Yield, SendMessage, min, max, ...) into their translation units.
+ */
 class IocpAsyncIO : public AsyncIO {
  public:
-  IocpAsyncIO(uint32_t io_depth) {
-    (void)io_depth;
-  }
+  CTP_DLL explicit IocpAsyncIO(uint32_t io_depth);
+  CTP_DLL ~IocpAsyncIO() override;
 
-  ~IocpAsyncIO() override {
-    Close();
-  }
+  CTP_DLL bool Open(const std::string &path, int flags, mode_t mode) override;
+  CTP_DLL ssize_t GetFileSize() const override;
+  CTP_DLL bool Truncate(size_t size) override;
+  CTP_DLL IoToken Write(void *buffer, size_t size, off_t offset) override;
+  CTP_DLL IoToken Read(void *buffer, size_t size, off_t offset) override;
+  CTP_DLL bool IsComplete(IoToken token, IoResult &result) override;
+  CTP_DLL void Close() override;
+  CTP_DLL int GetEventFd() const override;
 
-  bool Open(const std::string &path, int flags, mode_t mode) override {
-    // TODO: CreateFileA with FILE_FLAG_OVERLAPPED
-    (void)path; (void)flags; (void)mode;
-    return false;
-  }
-
-  ssize_t GetFileSize() const override {
-    // TODO: GetFileSizeEx
-    return -1;
-  }
-
-  bool Truncate(size_t size) override {
-    // TODO: SetFilePointerEx + SetEndOfFile
-    (void)size;
-    return false;
-  }
-
-  IoToken Write(void *buffer, size_t size, off_t offset) override {
-    // TODO: WriteFile with OVERLAPPED + IOCP
-    (void)buffer; (void)size; (void)offset;
-    return kInvalidIoToken;
-  }
-
-  IoToken Read(void *buffer, size_t size, off_t offset) override {
-    // TODO: ReadFile with OVERLAPPED + IOCP
-    (void)buffer; (void)size; (void)offset;
-    return kInvalidIoToken;
-  }
-
-  bool IsComplete(IoToken token, IoResult &result) override {
-    // TODO: GetQueuedCompletionStatus (non-blocking)
-    (void)token; (void)result;
-    return false;
-  }
-
-  void Close() override {
-    // TODO: CloseHandle for file handles and IOCP
-  }
-
-  int GetEventFd() const override {
-    return -1;  // Not applicable on Windows
-  }
+ private:
+  struct Impl;                 // defined in iocp_io.cc
+  std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace ctp

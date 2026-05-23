@@ -189,6 +189,32 @@ class Pthread : public ThreadModel {
     pthread_join(thread.pthread_thread_, nullptr);
 #endif
   }
+
+  /** Best-effort join with a timeout; detach if the timeout elapses. Returns
+   *  true if the thread was joined cleanly, false if it had to be detached. */
+  CTP_CROSS_FUN
+  bool TimedJoinOrDetach(Thread &thread, uint64_t timeout_ms) {
+#if CTP_IS_HOST
+    if (thread.pthread_thread_ == 0) return true;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    uint64_t nsec = timeout_ms * 1000000ull;
+    ts.tv_sec  += nsec / 1000000000ull;
+    ts.tv_nsec += nsec % 1000000000ull;
+    if (ts.tv_nsec >= 1000000000LL) { ts.tv_sec++; ts.tv_nsec -= 1000000000LL; }
+    int r = pthread_timedjoin_np(thread.pthread_thread_, nullptr, &ts);
+    if (r == 0) {
+      thread.pthread_thread_ = 0;
+      return true;
+    }
+    pthread_detach(thread.pthread_thread_);
+    thread.pthread_thread_ = 0;
+    return false;
+#else
+    (void)thread; (void)timeout_ms;
+    return true;
+#endif
+  }
 };
 
 }  // namespace ctp::thread

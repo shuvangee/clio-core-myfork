@@ -51,8 +51,8 @@ bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
     return true;  // Already initialized, return success
   }
 
-  auto* chimaera_manager = CLIO_CHIMAERA_MANAGER;
-  chimaera_manager->is_restart_ = is_restart;
+  auto* runtime_manager = CLIO_RUNTIME_MANAGER;
+  runtime_manager->is_restart_ = is_restart;
 
   // Check environment variable CHI_WITH_RUNTIME
   bool with_runtime = default_with_runtime;
@@ -79,14 +79,14 @@ bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
 
   // Initialize runtime first if needed
   if (init_runtime) {
-    if (!chimaera_manager->ServerInit()) {
+    if (!runtime_manager->ServerInit()) {
       return false;
     }
   }
 
   // Initialize client components
   if (init_client) {
-    if (!chimaera_manager->ClientInit()) {
+    if (!runtime_manager->ClientInit()) {
       return false;
     }
   }
@@ -108,7 +108,7 @@ void CHIMAERA_FINALIZE() {
     return;
   }
   s_finalized = true;
-  auto *mgr = CLIO_CHIMAERA_MANAGER;
+  auto *mgr = CLIO_RUNTIME_MANAGER;
   if (mgr) {
     // Server first: stop worker threads that may still be sending IPC
     mgr->ServerFinalize();

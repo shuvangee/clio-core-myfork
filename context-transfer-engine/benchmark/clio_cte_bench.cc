@@ -47,8 +47,6 @@
 #include <clio_cte/core/core_client.h>
 #include <clio_ctp/util/logging.h>
 
-#include <unistd.h>
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -244,7 +242,7 @@ int main(int argc, char **argv) {
   }
   struct ClientFinalizeGuard {
     ~ClientFinalizeGuard() {
-      auto *mgr = CLIO_CHIMAERA_MANAGER;
+      auto *mgr = CLIO_RUNTIME_MANAGER;
       if (mgr) mgr->ClientFinalize();
     }
   } finalize_guard;

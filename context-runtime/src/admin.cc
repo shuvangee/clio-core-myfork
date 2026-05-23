@@ -39,4 +39,4 @@
 #include "clio_runtime/admin/admin_client.h"
 
 // Global pointer variable definition for Admin singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::admin::Client, g_admin);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::admin::Client, g_admin);

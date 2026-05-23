@@ -945,6 +945,9 @@ int main(int argc, char *argv[]) {
   // Run all tests
   int result = SimpleTest::run_all_tests();
 
-  // Runtime will be cleaned up automatically
-  return result;
+  // Runtime will be cleaned up automatically. SIMPLE_TEST_PROCESS_EXIT is
+  // TerminateProcess() on Windows (to dodge a libzmq static-destructor
+  // abort that fires after all tests pass) and a plain return elsewhere.
+  SIMPLE_TEST_PROCESS_EXIT(result);
+  return result;  // unreachable on Windows
 }

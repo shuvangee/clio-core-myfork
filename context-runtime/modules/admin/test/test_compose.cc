@@ -212,5 +212,10 @@ int main(int argc, char **argv) {
   if (argc > 1) {
     filter = argv[1];
   }
-  return SimpleTest::run_all_tests(filter);
+  int result = SimpleTest::run_all_tests(filter);
+  // SIMPLE_TEST_PROCESS_EXIT is TerminateProcess on Windows (dodges a libzmq
+  // static-destructor abort that fires after all tests pass) and a plain
+  // return elsewhere.
+  SIMPLE_TEST_PROCESS_EXIT(result);
+  return result;  // unreachable on Windows
 }

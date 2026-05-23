@@ -37,10 +37,12 @@
 #include <time.h>
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <vector>
 
 #include "clio_ctp/constants/macros.h"
+#include "clio_ctp/introspect/system_info.h"
 // #include "clio_ctp/data_structures/internal/shm_archive.h"
 #include "singleton.h"
 
@@ -155,20 +157,20 @@ typedef TimepointBase<std::chrono::high_resolution_clock> HighResCpuTimepoint;
 typedef TimepointBase<std::chrono::steady_clock> HighResMonotonicTimepoint;
 typedef HighResMonotonicTimepoint Timepoint;
 
-/** Timer that measures actual CPU time for the calling thread */
+/** Timer that measures actual CPU time for the calling thread. Reads
+ *  through ctp::SystemInfo::ThreadCpuTimeNs() so this header doesn't
+ *  need any platform-specific includes. */
 class CpuTimer {
  public:
   double time_ns_ = 0;
-  struct timespec start_{0, 0};
+  uint64_t start_ns_ = 0;
 
   CTP_INLINE_CROSS_FUN void Resume() {
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_);
+    start_ns_ = SystemInfo::ThreadCpuTimeNs();
   }
   CTP_INLINE_CROSS_FUN double Pause() {
-    struct timespec end;
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
-    time_ns_ += (end.tv_sec - start_.tv_sec) * 1e9
-              + (end.tv_nsec - start_.tv_nsec);
+    uint64_t now = SystemInfo::ThreadCpuTimeNs();
+    time_ns_ += static_cast<double>(now - start_ns_);
     return time_ns_;
   }
   CTP_INLINE_CROSS_FUN void Reset() { time_ns_ = 0; Resume(); }

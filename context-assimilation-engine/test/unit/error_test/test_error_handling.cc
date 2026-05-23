@@ -58,6 +58,7 @@
 #include <memory>
 
 // CLIO Runtime and CAE headers
+#include <clio_ctp/introspect/system_info.h>
 #include <clio_runtime/clio_runtime.h>
 #include <clio_cae/core/core_client.h>
 #include <clio_cae/core/constants.h>
@@ -335,5 +336,7 @@ int main(int argc, char* argv[]) {
   }
   HLOG(kInfo, "========================================");
 
+  // No-op on POSIX; on Windows skips the libzmq teardown abort.
+  ctp::SystemInfo::TerminateProcessNow(exit_code);
   return exit_code;
 }

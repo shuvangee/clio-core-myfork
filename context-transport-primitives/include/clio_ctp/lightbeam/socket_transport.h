@@ -225,7 +225,8 @@ class SocketTransport : public Transport {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 500000;
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
+               reinterpret_cast<const char*>(&tv), sizeof(tv));
     struct sockaddr_in sa;
     std::memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;

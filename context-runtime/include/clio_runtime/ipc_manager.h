@@ -48,7 +48,7 @@
 #include "clio_ctp/data_structures/priv/array_vector.h"
 #include "clio_ctp/memory/allocator/round_robin_allocator.h"
 #include "clio_ctp/util/gpu_intrinsics.h"
-#include "clio_runtime/chimaera_manager.h"
+#include "clio_runtime/manager.h"
 #include "clio_runtime/corwlock.h"
 #include "clio_runtime/scheduler/scheduler.h"
 #include "clio_runtime/task.h"
@@ -465,7 +465,7 @@ class IpcManager {
    */
   template <typename TaskT>
   Future<TaskT> MakeFuture(const ctp::ipc::FullPtr<TaskT> &task_ptr) {
-    bool is_runtime = CLIO_CHIMAERA_MANAGER->IsRuntime();
+    bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
     Worker *worker = CLIO_CUR_WORKER;
 
     // Runtime path requires BOTH IsRuntime AND worker to be non-null
@@ -499,7 +499,7 @@ class IpcManager {
   template <typename TaskT>
   Future<TaskT> Send(const ctp::ipc::FullPtr<TaskT> &task_ptr,
                      bool awake_event = true) {
-    bool is_runtime = CLIO_CHIMAERA_MANAGER->IsRuntime();
+    bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
     Worker *worker = CLIO_CUR_WORKER;
 
     // Client TCP/IPC path
@@ -592,7 +592,7 @@ class IpcManager {
    */
   template <typename TaskT>
   bool Recv(Future<TaskT> &future, float max_sec = 0) {
-    bool is_runtime = CLIO_CHIMAERA_MANAGER->IsRuntime();
+    bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
     if (is_runtime) return true;
 
     auto future_shm = future.GetFutureShm();
@@ -1508,7 +1508,7 @@ class IpcManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for IPC manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
 
 #define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 #define CLIO_CPU_IPC CLIO_IPC
@@ -1809,7 +1809,7 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
     // Complete -> fall through to normal wait path (cheap; flag is set).
   }
 
-  bool is_runtime = CLIO_CHIMAERA_MANAGER->IsRuntime();
+  bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
   // CPU→GPU POD path: sentinel allocator ID marks device pointers.
@@ -1873,7 +1873,7 @@ CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitCpu2Gpu(float max_sec,
 template <typename TaskT, typename AllocT>
 CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitCpu2Cpu(float max_sec,
                                                        bool reuse_task) {
-  bool is_runtime = CLIO_CHIMAERA_MANAGER->IsRuntime();
+  bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
   if (is_runtime) {
     // Runtime self-send: poll FUTURE_COMPLETE in SHM
     ctp::ipc::FullPtr<FutureShm> future_full =

@@ -77,18 +77,20 @@ class CoreClientConfigFixture {
     INFO("=== Initializing Core Client/Config Test Environment ===");
 
     // Initialize test paths
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
     test_storage_path_ = home_dir + "/cte_client_test.dat";
     test_config_path_ = home_dir + "/cte_test_config.yaml";
 
-    // Clean up existing files
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
-    }
-    if (fs::exists(test_config_path_)) {
-      fs::remove(test_config_path_);
-    }
+    // Clean up existing files. Non-throwing form: on Windows the previous
+    // test case's bdev runtime still holds the storage file open (same
+    // CHIMAERA singleton, persists across fixtures), so fs::remove throws
+    // a sharing-violation. Best-effort removal is what we want — if the
+    // file's open, leaving it in place is harmless because the runtime
+    // already truncates/reuses it on the next pool create.
+    std::error_code _setup_ec;
+    fs::remove(test_storage_path_, _setup_ec);
+    fs::remove(test_config_path_, _setup_ec);
 
     // Initialize CLIO Runtime and CTE once
     if (!g_initialized) {
@@ -125,12 +127,16 @@ class CoreClientConfigFixture {
 
   ~CoreClientConfigFixture() {
     INFO("=== Cleaning up Core Client/Config Test Environment ===");
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
-    }
-    if (fs::exists(test_config_path_)) {
-      fs::remove(test_config_path_);
-    }
+    // Use the non-throwing overload: on Windows the bdev runtime can still
+    // hold an open handle to test_storage_path_ when the destructor runs,
+    // causing fs::remove to throw filesystem_error. Destructors are
+    // implicitly noexcept, so a throw here calls std::terminate (which
+    // surfaces as 0xC0000409 / STATUS_STACK_BUFFER_OVERRUN). Best-effort
+    // cleanup is correct here — leftover files are scrubbed by the
+    // chimaera_test_cleanup_fixture between test binaries.
+    std::error_code ec;
+    fs::remove(test_storage_path_, ec);
+    fs::remove(test_config_path_, ec);
   }
 
   /**
@@ -260,7 +266,7 @@ TEST_CASE("Config - Load from Invalid YAML", "[core][config]") {
 
 TEST_CASE("Config - Load from Environment", "[core][config]") {
   // Test with unset environment variable (should succeed with defaults)
-  unsetenv("CLIO_CTE_CONFIG");
+  ctp::SystemInfo::Unsetenv("CLIO_CTE_CONFIG");
 
   clio::cte::core::Config config;
   bool success = config.LoadFromEnvironment();

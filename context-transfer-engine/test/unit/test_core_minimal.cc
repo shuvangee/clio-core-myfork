@@ -76,14 +76,17 @@ public:
   chi::PoolId core_pool_id_;
   
   CTECoreTestFixture() {
-    // Setup test storage path in home directory
-    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    // Setup test storage path in home directory (HOME on POSIX,
+    // USERPROFILE on Windows — wrapper picks the right one).
+    std::string home_dir = ctp::SystemInfo::GetHomeDir();
     REQUIRE(!home_dir.empty());
     test_storage_path_ = home_dir + "/cte_unit_test.dat";
     
-    // Clean up any existing test file
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
+    // Clean up any existing test file (use error_code to avoid throwing on
+    // Windows where the file may be locked by bdev)
+    std::error_code ec;
+    if (fs::exists(test_storage_path_, ec)) {
+      fs::remove(test_storage_path_, ec);
     }
     
     // Create unique pool ID for this test session
@@ -94,8 +97,9 @@ public:
   }
   
   ~CTECoreTestFixture() {
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
+    std::error_code ec;
+    if (fs::exists(test_storage_path_, ec)) {
+      fs::remove(test_storage_path_, ec);
     }
   }
   

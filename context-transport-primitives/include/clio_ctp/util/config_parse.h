@@ -247,7 +247,10 @@ class ConfigParse {
     return 0;
   }
 
-  /** Expands all environment variables in a path string */
+  /** Expands all environment variables in a path string.
+   *  Special case: ${HOME} on Windows falls back to USERPROFILE via
+   *  SystemInfo::GetHomeDir(), so YAML configs written against the POSIX
+   *  convention keep working without forcing every user to set HOME. */
   static std::string ExpandPath(std::string path) {
     size_t pos = 0;
     while ((pos = path.find("${", pos)) != std::string::npos) {
@@ -256,6 +259,9 @@ class ConfigParse {
       std::string env_name = path.substr(pos + 2, end - pos - 2);
       std::string env_val = ctp::SystemInfo::Getenv(
           env_name.c_str(), ctp::Unit<size_t>::Megabytes(1));
+      if (env_val.empty() && env_name == "HOME") {
+        env_val = ctp::SystemInfo::GetHomeDir();
+      }
       path.replace(pos, end - pos + 1, env_val);
       pos += env_val.size();
     }
