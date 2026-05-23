@@ -50,49 +50,22 @@
 
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/ipc_manager.h"
+#include "hermes_shm/introspect/system_info.h"
 
-#include <clio_runtime/bdev/bdev_client.h>
-#include <clio_runtime/bdev/bdev_tasks.h>
+#include <chimaera/bdev/bdev_client.h>
+#include <chimaera/bdev/bdev_tasks.h>
 
 using namespace chi;
 
 /**
  * Helper to start server in background process via SpawnProcess
  */
-void CleanupSharedMemory() {
-  const char *user = std::getenv("USER");
-  std::string memfd_path =
-      std::string("/tmp/chimaera_") + (user ? user : "unknown") +
-      "/chi_main_segment_" + (user ? user : "");
-  unlink(memfd_path.c_str());
-}
-
-/**
- * Helper to start server in background process via exec
- * Uses exec to avoid inheriting CHIMAERA_INIT static guard state.
- * The test binary itself is used with a special argument.
- * Returns server PID
- */
-pid_t StartServerProcess() {
-  pid_t server_pid = fork();
-  if (server_pid == 0) {
-    // Become process group leader so we can kill all children
-    setpgid(0, 0);
-
-    (void)freopen("/dev/null", "w", stdout);
-    (void)freopen("/tmp/chimaera_server_retry_test.log", "w", stderr);
-
-    // Use exec to get a clean process with no static guard state
-    setenv("CLIO_WITH_RUNTIME", "1", 1);
-    setenv("CHI_RETRY_TEST_SERVER_MODE", "1", 1);
-    execl("/proc/self/exe", "chimaera_client_retry_tests",
-          "--server-mode", nullptr);
-    // If exec fails, fall back to direct init
-    _exit(1);
-  }
-  // Parent also sets pgid to avoid race
-  setpgid(server_pid, server_pid);
-  return server_pid;
+hshm::ProcessHandle StartServerProcess() {
+  std::string exe = hshm::SystemInfo::GetSelfExePath();
+  return hshm::SystemInfo::SpawnProcess(
+      exe, {"--server-mode"},
+      {{"CHI_WITH_RUNTIME", "1"},
+       {"CHI_RETRY_TEST_SERVER_MODE", "1"}});
 }
 
 /**
@@ -163,7 +136,7 @@ struct ServerGuard {
 // ============================================================================
 
 void TestServerRestart(const std::string &mode) {
-  setenv("CLIO_CLIENT_RETRY_TIMEOUT", "30", 1);
+  hshm::SystemInfo::Setenv("CHI_CLIENT_RETRY_TIMEOUT", "30", 1);
 
   // 1. Start first server, wait for ready
   auto server1 = StartServerProcess();
@@ -171,21 +144,21 @@ void TestServerRestart(const std::string &mode) {
   REQUIRE(ready);
 
   // 2. Client connects
-  setenv("CLIO_IPC_MODE", mode.c_str(), 1);
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Setenv("CHI_IPC_MODE", mode, 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
-  REQUIRE(CLIO_IPC != nullptr);
-  REQUIRE(CLIO_IPC->IsInitialized());
+  REQUIRE(CHI_IPC != nullptr);
+  REQUIRE(CHI_IPC->IsInitialized());
 
   // 3. Baseline task
   {
     chi::PoolId pool_id1(8000, 0);
-    clio::run::bdev::Client client1(pool_id1);
+    chimaera::bdev::Client client1(pool_id1);
     std::string pool_name1 = "retry_baseline_" + mode;
     auto task = client1.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name1, pool_id1,
-        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        chimaera::bdev::BdevType::kRam, 4 * 1024 * 1024);
     task.Wait();
     REQUIRE(task->return_code_ == 0);
   }
@@ -198,19 +171,18 @@ void TestServerRestart(const std::string &mode) {
   ready = WaitForServer(100);
   REQUIRE(ready);
 
-  // 7. ReconnectToOriginalHost to re-attach to new server
-  bool reconnected = CLIO_IPC->ReconnectToOriginalHost();
+  // 7. ClientReconnect
+  bool reconnected = CHI_IPC->ClientReconnect();
   REQUIRE(reconnected);
-  INFO("ReconnectToOriginalHost succeeded for mode " + mode);
 
   // 8. Post-restart task
   {
     chi::PoolId pool_id2(8001, 0);
-    clio::run::bdev::Client client2(pool_id2);
+    chimaera::bdev::Client client2(pool_id2);
     std::string pool_name2 = "retry_after_restart_" + mode;
     auto task = client2.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name2, pool_id2,
-        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        chimaera::bdev::BdevType::kRam, 4 * 1024 * 1024);
     task.Wait();
     REQUIRE(task->return_code_ == 0);
   }
@@ -223,7 +195,7 @@ void TestServerRestart(const std::string &mode) {
 // ============================================================================
 
 void TestClientDeath(const std::string &mode) {
-  setenv("CLIO_CLIENT_RETRY_TIMEOUT", "30", 1);
+  hshm::SystemInfo::Setenv("CHI_CLIENT_RETRY_TIMEOUT", "30", 1);
 
   // 1. Start server
   auto server = StartServerProcess();
@@ -231,57 +203,36 @@ void TestClientDeath(const std::string &mode) {
   REQUIRE(ready);
   ServerGuard guard(server);
 
-  // 2. Fork a client child that submits a task then dies immediately
-  pid_t client_child = fork();
-  if (client_child == 0) {
-    // Child process: connect as client, submit task, exit immediately
-    setenv("CLIO_IPC_MODE", mode.c_str(), 1);
-    setenv("CLIO_WITH_RUNTIME", "0", 1);
-    bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
-    if (!success) {
-      _exit(1);
-    }
+  // 2. Spawn a client child that submits a task then exits
+  std::string exe = hshm::SystemInfo::GetSelfExePath();
+  auto client_child = hshm::SystemInfo::SpawnProcess(
+      exe, {"--client-death-mode", mode},
+      {{"CHI_IPC_MODE", mode},
+       {"CHI_WITH_RUNTIME", "0"}});
 
-    // Submit a task (no Wait) — response goes to dead process
-    chi::PoolId pool_id(8100, 0);
-    clio::run::bdev::Client client(pool_id);
-    std::string pool_name = "client_death_child_" + mode;
-    client.AsyncCreate(
-        chi::PoolQuery::Dynamic(), pool_name, pool_id,
-        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
-
-    // Exit immediately — response will arrive at dead process
-    _exit(0);
-  }
-
-  // 3. Parent waits for client child to exit
-  REQUIRE(client_child > 0);
-  int child_status;
-  waitpid(client_child, &child_status, 0);
-  REQUIRE(WIFEXITED(child_status));
-  REQUIRE(WEXITSTATUS(child_status) == 0);
-  INFO("Client child exited");
+  // 3. Wait for client child to exit
+  int exit_code = hshm::SystemInfo::WaitProcess(client_child);
+  REQUIRE(exit_code == 0);
 
   // Give server time to process the orphan task
   std::this_thread::sleep_for(std::chrono::seconds(2));
 
-  // 4. Parent connects as a new client (CHIMAERA_INIT static guard is clean
-  //    because the child called it in a forked process)
-  setenv("CLIO_IPC_MODE", mode.c_str(), 1);
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  // 4. Parent connects as a new client
+  hshm::SystemInfo::Setenv("CHI_IPC_MODE", mode, 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
-  REQUIRE(CLIO_IPC != nullptr);
-  REQUIRE(CLIO_IPC->IsInitialized());
+  REQUIRE(CHI_IPC != nullptr);
+  REQUIRE(CHI_IPC->IsInitialized());
 
   // 5. Submit + complete parent's own task
   {
     chi::PoolId pool_id(8101, 0);
-    clio::run::bdev::Client client(pool_id);
+    chimaera::bdev::Client client(pool_id);
     std::string pool_name = "client_death_parent_" + mode;
     auto task = client.AsyncCreate(
         chi::PoolQuery::Dynamic(), pool_name, pool_id,
-        clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+        chimaera::bdev::BdevType::kRam, 4 * 1024 * 1024);
     task.Wait();
     REQUIRE(task->return_code_ == 0);
   }
@@ -296,8 +247,6 @@ TEST_CASE("ClientRetry - Server Restart TCP", "[client_retry][tcp]") {
 }
 
 TEST_CASE("ClientRetry - Server Restart IPC", "[client_retry][ipc]") {
-  // IPC (Unix domain socket) transport does not auto-reconnect after server
-  // death. ReconnectToOriginalHost needs socket transport reconnection support.
   INFO("SKIPPED: IPC socket transport reconnection not yet implemented");
 }
 

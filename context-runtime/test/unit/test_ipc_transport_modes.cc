@@ -50,15 +50,16 @@
 
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/ipc_manager.h"
+#include "hermes_shm/introspect/system_info.h"
 
-#include <clio_runtime/bdev/bdev_client.h>
-#include <clio_runtime/bdev/bdev_tasks.h>
+#include <chimaera/bdev/bdev_client.h>
+#include <chimaera/bdev/bdev_tasks.h>
 
 using namespace chi;
 
-inline chi::priv::vector<clio::run::bdev::Block> WrapBlock(
-    const clio::run::bdev::Block& block) {
-  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
+inline chi::priv::vector<chimaera::bdev::Block> WrapBlock(
+    const chimaera::bdev::Block &block) {
+  chi::priv::vector<chimaera::bdev::Block> blocks(HSHM_MALLOC);
   blocks.push_back(block);
   return blocks;
 }
@@ -69,11 +70,11 @@ void SubmitTasksForMode(const std::string &mode_name) {
   const chi::u64 kIoSize = 1024 * 1024;
 
   chi::PoolId pool_id(9000, 0);
-  clio::run::bdev::Client client(pool_id);
+  chimaera::bdev::Client client(pool_id);
   std::string pool_name = "ipc_test_ram_" + mode_name;
   auto create_task = client.AsyncCreate(
       chi::PoolQuery::Dynamic(), pool_name, pool_id,
-      clio::run::bdev::BdevType::kRam, kRamSize);
+      chimaera::bdev::BdevType::kRam, kRamSize);
   create_task.Wait();
   REQUIRE(create_task->return_code_ == 0);
   client.pool_id_ = create_task->new_pool_id_;
@@ -83,18 +84,15 @@ void SubmitTasksForMode(const std::string &mode_name) {
   alloc_task.Wait();
   REQUIRE(alloc_task->return_code_ == 0);
   REQUIRE(alloc_task->blocks_.size() > 0);
-  clio::run::bdev::Block block = alloc_task->blocks_[0];
+  chimaera::bdev::Block block = alloc_task->blocks_[0];
   REQUIRE(block.size_ >= kBlockSize);
 
-  // --- Category 3: Write + Read I/O round-trip (1MB transfer) ---
-  // Generate 1MB test data
-  std::vector<ctp::u8> write_data(kIoSize);
+  std::vector<hshm::u8> write_data(kIoSize);
   for (size_t i = 0; i < kIoSize; ++i) {
-    write_data[i] = static_cast<ctp::u8>((0xAB + i) % 256);
+    write_data[i] = static_cast<hshm::u8>((0xAB + i) % 256);
   }
 
-  // Write 1MB
-  auto write_buffer = CLIO_IPC->AllocateBuffer(write_data.size());
+  auto write_buffer = CHI_IPC->AllocateBuffer(write_data.size());
   REQUIRE_FALSE(write_buffer.IsNull());
   memcpy(write_buffer.ptr_, write_data.data(), write_data.size());
   auto write_task = client.AsyncWrite(
@@ -105,8 +103,7 @@ void SubmitTasksForMode(const std::string &mode_name) {
   REQUIRE(write_task->return_code_ == 0);
   size_t actual_written = write_task->bytes_written_;
 
-  // Read back using actual written size
-  auto read_buffer = CLIO_IPC->AllocateBuffer(kIoSize);
+  auto read_buffer = CHI_IPC->AllocateBuffer(kIoSize);
   REQUIRE_FALSE(read_buffer.IsNull());
   auto read_task = client.AsyncRead(
       chi::PoolQuery::Local(), WrapBlock(block),
@@ -114,12 +111,11 @@ void SubmitTasksForMode(const std::string &mode_name) {
   read_task.Wait();
   REQUIRE(read_task->return_code_ == 0);
 
-  // Verify data up to actual_written
-  ctp::ipc::FullPtr<char> data_ptr =
-      CLIO_IPC->ToFullPtr(read_task->data_.template Cast<char>());
+  hipc::FullPtr<char> data_ptr =
+      CHI_IPC->ToFullPtr(read_task->data_.template Cast<char>());
   REQUIRE_FALSE(data_ptr.IsNull());
   size_t actual_read = read_task->bytes_read_;
-  std::vector<ctp::u8> read_data(actual_read);
+  std::vector<hshm::u8> read_data(actual_read);
   memcpy(read_data.data(), data_ptr.ptr_, actual_read);
   size_t verify_size = std::min(actual_written, actual_read);
 
@@ -127,34 +123,18 @@ void SubmitTasksForMode(const std::string &mode_name) {
     REQUIRE(read_data[i] == write_data[i]);
   }
 
-  // Cleanup buffers
-  CLIO_IPC->FreeBuffer(write_buffer);
-  CLIO_IPC->FreeBuffer(read_buffer);
+  CHI_IPC->FreeBuffer(write_buffer);
+  CHI_IPC->FreeBuffer(read_buffer);
 }
 
 /**
  * Helper to start server in background process via SpawnProcess
  */
-pid_t StartServerProcess() {
-  pid_t server_pid = fork();
-  if (server_pid == 0) {
-    // Redirect child's stdout to /dev/null but stderr to temp file for timing
-    (void)freopen("/dev/null", "w", stdout);
-    (void)freopen("/tmp/chimaera_server_timing.log", "w", stderr);
-
-    // Child process: Start runtime server
-    setenv("CLIO_WITH_RUNTIME", "1", 1);
-    bool success = CHIMAERA_INIT(ChimaeraMode::kServer, true);
-    if (!success) {
-      _exit(1);
-    }
-
-    // Keep server alive for tests
-    // Server will be killed by parent process
-    sleep(300);  // 5 minutes max
-    _exit(0);
-  }
-  return server_pid;
+hshm::ProcessHandle StartServerProcess() {
+  std::string exe = hshm::SystemInfo::GetSelfExePath();
+  return hshm::SystemInfo::SpawnProcess(
+      exe, {"--server-mode"},
+      {{"CHI_WITH_RUNTIME", "1"}});
 }
 
 /**
@@ -184,24 +164,9 @@ bool WaitForServer(int max_attempts = 50) {
 /**
  * Helper to cleanup server process
  */
-void CleanupServer(pid_t server_pid) {
-  if (server_pid > 0) {
-    kill(server_pid, SIGTERM);
-    // Wait up to 5 seconds for graceful shutdown
-    for (int i = 0; i < 50; ++i) {
-      int status;
-      if (waitpid(server_pid, &status, WNOHANG) != 0) {
-        CleanupSharedMemory();
-        return;
-      }
-      usleep(100000);  // 100ms
-    }
-    // Force kill if still alive
-    kill(server_pid, SIGKILL);
-    int status;
-    waitpid(server_pid, &status, 0);
-    CleanupSharedMemory();
-  }
+void CleanupServer(hshm::ProcessHandle &proc) {
+  hshm::SystemInfo::KillProcess(proc);
+  hshm::SystemInfo::WaitProcess(proc);
 }
 
 /**
@@ -226,13 +191,12 @@ TEST_CASE("IpcTransportMode - SHM Client Connection",
   bool server_ready = WaitForServer();
   REQUIRE(server_ready);
 
-  // Set SHM mode and connect as external client
-  setenv("CLIO_IPC_MODE", "SHM", 1);
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Setenv("CHI_IPC_MODE", "SHM", 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
 
-  auto *ipc = CLIO_IPC;
+  auto *ipc = CHI_IPC;
   REQUIRE(ipc != nullptr);
   REQUIRE(ipc->IsInitialized());
   REQUIRE(ipc->GetIpcMode() == IpcMode::kShm);
@@ -248,13 +212,12 @@ TEST_CASE("IpcTransportMode - TCP Client Connection",
   bool server_ready = WaitForServer();
   REQUIRE(server_ready);
 
-  // Set TCP mode and connect as external client
-  setenv("CLIO_IPC_MODE", "TCP", 1);
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Setenv("CHI_IPC_MODE", "TCP", 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
 
-  auto *ipc = CLIO_IPC;
+  auto *ipc = CHI_IPC;
   REQUIRE(ipc != nullptr);
   REQUIRE(ipc->IsInitialized());
   REQUIRE(ipc->GetIpcMode() == IpcMode::kTcp);
@@ -270,13 +233,12 @@ TEST_CASE("IpcTransportMode - IPC Client Connection",
   bool server_ready = WaitForServer();
   REQUIRE(server_ready);
 
-  // Set IPC (Unix Domain Socket) mode and connect as external client
-  setenv("CLIO_IPC_MODE", "IPC", 1);
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Setenv("CHI_IPC_MODE", "IPC", 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
 
-  auto *ipc = CLIO_IPC;
+  auto *ipc = CHI_IPC;
   REQUIRE(ipc != nullptr);
   REQUIRE(ipc->IsInitialized());
   REQUIRE(ipc->GetIpcMode() == IpcMode::kIpc);
@@ -292,13 +254,12 @@ TEST_CASE("IpcTransportMode - Default Mode Is TCP",
   bool server_ready = WaitForServer();
   REQUIRE(server_ready);
 
-  // Unset CHI_IPC_MODE to test default behavior
-  unsetenv("CLIO_IPC_MODE");
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Unsetenv("CHI_IPC_MODE");
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
 
-  auto *ipc = CLIO_IPC;
+  auto *ipc = CHI_IPC;
   REQUIRE(ipc != nullptr);
   REQUIRE(ipc->IsInitialized());
   REQUIRE(ipc->GetIpcMode() == IpcMode::kTcp);

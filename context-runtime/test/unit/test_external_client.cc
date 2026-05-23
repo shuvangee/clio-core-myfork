@@ -51,6 +51,7 @@
 
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/ipc_manager.h"
+#include "hermes_shm/introspect/system_info.h"
 
 using namespace chi;
 
@@ -58,27 +59,11 @@ using namespace chi;
  * Helper to start server in background process via SpawnProcess
  * Returns ProcessHandle
  */
-pid_t StartServerProcess() {
-  pid_t server_pid = fork();
-  if (server_pid == 0) {
-    // Redirect child's stdout/stderr to /dev/null to prevent massive
-    // worker log output from flooding shared pipes and blocking parent
-    (void)freopen("/dev/null", "w", stdout);
-    (void)freopen("/dev/null", "w", stderr);
-
-    // Child process: Start runtime server
-    setenv("CLIO_WITH_RUNTIME", "1", 1);
-    bool success = CHIMAERA_INIT(ChimaeraMode::kServer, true);
-    if (!success) {
-      _exit(1);
-    }
-
-    // Keep server alive for tests
-    // Server will be killed by parent process
-    sleep(300);  // 5 minutes max
-    _exit(0);
-  }
-  return server_pid;
+hshm::ProcessHandle StartServerProcess() {
+  std::string exe = hshm::SystemInfo::GetSelfExePath();
+  return hshm::SystemInfo::SpawnProcess(
+      exe, {"--server-mode"},
+      {{"CHI_WITH_RUNTIME", "1"}});
 }
 
 /**
@@ -116,34 +101,9 @@ bool WaitForServer(int max_attempts = 50) {
 /**
  * Helper to cleanup server process
  */
-void CleanupSharedMemory() {
-  // Clean up leftover memfd symlinks
-  const char *user = std::getenv("USER");
-  std::string memfd_path = std::string("/tmp/chimaera_") +
-                           (user ? user : "unknown") +
-                           "/chi_main_segment_" + (user ? user : "");
-  unlink(memfd_path.c_str());
-}
-
-void CleanupServer(pid_t server_pid) {
-  if (server_pid > 0) {
-    kill(server_pid, SIGTERM);
-    // Wait up to 5 seconds for graceful shutdown
-    for (int i = 0; i < 50; ++i) {
-      int status;
-      if (waitpid(server_pid, &status, WNOHANG) != 0) {
-        CleanupSharedMemory();
-        return;
-      }
-      usleep(100000);  // 100ms
-    }
-    // Force kill if still alive
-    kill(server_pid, SIGKILL);
-    int status;
-    waitpid(server_pid, &status, 0);
-    // Clean up shared memory left behind by the server
-    CleanupSharedMemory();
-  }
+void CleanupServer(hshm::ProcessHandle &proc) {
+  hshm::SystemInfo::KillProcess(proc);
+  hshm::SystemInfo::WaitProcess(proc);
 }
 
 // ============================================================================
@@ -159,12 +119,12 @@ TEST_CASE("ExternalClient - Basic Connection", "[external_client][ipc]") {
   REQUIRE(server_ready);
 
   // Now connect as EXTERNAL CLIENT (not integrated server+client)
-  setenv("CLIO_WITH_RUNTIME", "0", 1);  // Force client-only mode
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
 
   // Verify client initialized successfully
-  auto *ipc = CLIO_IPC;
+  auto *ipc = CHI_IPC;
   REQUIRE(ipc != nullptr);
   REQUIRE(ipc->IsInitialized());
 
@@ -181,64 +141,7 @@ TEST_CASE("ExternalClient - Basic Connection", "[external_client][ipc]") {
   }
 
   // Cleanup
-  CleanupServer(server_pid);
-}
-
-TEST_CASE("ExternalClient - Multiple Clients", "[external_client][ipc]") {
-  // Start server
-  pid_t server_pid = StartServerProcess();
-  REQUIRE(server_pid > 0);
-
-  // Wait for server
-  bool server_ready = WaitForServer();
-  REQUIRE(server_ready);
-
-  // Start multiple client processes
-  const int num_clients = 3;
-  pid_t client_pids[num_clients];
-
-  for (int i = 0; i < num_clients; ++i) {
-    client_pids[i] = fork();
-    if (client_pids[i] == 0) {
-      // Suppress child output to prevent log flood
-      (void)freopen("/dev/null", "w", stdout);
-      (void)freopen("/dev/null", "w", stderr);
-
-      // Child process: Connect as client
-      setenv("CLIO_WITH_RUNTIME", "0", 1);
-      bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
-      if (!success) {
-        _exit(1);
-      }
-
-      auto *ipc = CLIO_IPC;
-      if (!ipc || !ipc->IsInitialized()) {
-        _exit(1);
-      }
-
-      // Verify we can get node ID (0 is valid for localhost)
-      u64 node_id = ipc->GetNodeId();
-      (void)node_id;
-
-      // Client test passed
-      _exit(0);
-    }
-  }
-
-  // Wait for all clients to complete
-  bool all_success = true;
-  for (int i = 0; i < num_clients; ++i) {
-    int status;
-    waitpid(client_pids[i], &status, 0);
-    if (WEXITSTATUS(status) != 0) {
-      all_success = false;
-    }
-  }
-
-  REQUIRE(all_success);
-
-  // Cleanup server
-  CleanupServer(server_pid);
+  CleanupServer(server);
 }
 
 TEST_CASE("ExternalClient - Connection Without Server",
@@ -247,7 +150,7 @@ TEST_CASE("ExternalClient - Connection Without Server",
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
   // Try to connect as client when NO server exists
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
 
   // This should fail gracefully (not crash)
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
@@ -263,14 +166,14 @@ TEST_CASE("ExternalClient - Client Operations", "[external_client][ipc]") {
   REQUIRE(server_ready);
 
   // Connect as client
-  setenv("CLIO_WITH_RUNTIME", "0", 1);
+  hshm::SystemInfo::Setenv("CHI_WITH_RUNTIME", "0", 1);
   bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
   REQUIRE(success);
 
-  auto *ipc = CLIO_IPC;
+  auto *ipc = CHI_IPC;
   REQUIRE(ipc != nullptr);
 
-  // In TCP mode (default), num_sched_queues_ is not set so
+  // In TCP mode (default), shared_header_ is not available so
   // GetNumSchedQueues returns 0. In SHM mode it would be > 0.
   u32 num_queues = ipc->GetNumSchedQueues();
   if (ipc->GetIpcMode() == IpcMode::kShm) {

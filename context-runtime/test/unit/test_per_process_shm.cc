@@ -62,24 +62,13 @@ bool initialize_chimaera() {
 }
 
 /**
- * Start a CLIO Runtime server in a forked child process
- * @return Server process PID
+ * Start a Chimaera server in a child process via SpawnProcess
  */
-pid_t StartServerProcess() {
-  pid_t server_pid = fork();
-  if (server_pid == 0) {
-    // Redirect child output to prevent log flooding
-    (void)freopen("/dev/null", "w", stdout);
-    (void)freopen("/dev/null", "w", stderr);
-    setenv("CLIO_WITH_RUNTIME", "1", 1);
-    bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer, true);
-    if (!success) {
-      _exit(1);
-    }
-    sleep(300);
-    _exit(0);
-  }
-  return server_pid;
+hshm::ProcessHandle StartServerProcess() {
+  std::string exe = hshm::SystemInfo::GetSelfExePath();
+  return hshm::SystemInfo::SpawnProcess(
+      exe, {"--server-mode"},
+      {{"CHI_WITH_RUNTIME", "1"}});
 }
 
 /**
@@ -130,18 +119,12 @@ TEST_CASE("Per-process shared memory GetClientShmInfo",
   auto server = StartServerProcess();
   REQUIRE(WaitForServer());
 
-  // Fork a client child to test GetClientShmInfo
-  pid_t client_pid = fork();
-  if (client_pid == 0) {
-    (void)freopen("/dev/null", "w", stdout);
-    (void)freopen("/dev/null", "w", stderr);
-    setenv("CLIO_WITH_RUNTIME", "0", 1);
-    setenv("CLIO_IPC_MODE", "SHM", 1);
-    if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
-      _exit(1);
-    }
-    auto *client_ipc = CLIO_IPC;
-    if (!client_ipc) _exit(2);
+  // Spawn a client child process
+  std::string exe = hshm::SystemInfo::GetSelfExePath();
+  auto client_proc = hshm::SystemInfo::SpawnProcess(
+      exe, {"--client-shm-info-mode"},
+      {{"CHI_WITH_RUNTIME", "0"},
+       {"CHI_IPC_MODE", "SHM"}});
 
   int exit_code = hshm::SystemInfo::WaitProcess(client_proc);
   INFO("Client child exit code: " << exit_code);
@@ -154,11 +137,11 @@ TEST_CASE("Per-process shared memory AllocateBuffer medium sizes",
           "[ipc][per_process_shm][allocate][medium]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Allocate 100MB buffer") {
-    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
+    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
 
     REQUIRE_FALSE(buffer.IsNull());
     REQUIRE(buffer.ptr_ != nullptr);
@@ -171,7 +154,7 @@ TEST_CASE("Per-process shared memory AllocateBuffer medium sizes",
   }
 
   SECTION("Allocate 500MB buffer") {
-    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k500MB);
+    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k500MB);
 
     REQUIRE_FALSE(buffer.IsNull());
     REQUIRE(buffer.ptr_ != nullptr);
@@ -188,14 +171,12 @@ TEST_CASE("Per-process shared memory AllocateBuffer exceeding 1GB",
           "[ipc][per_process_shm][allocate][large]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Allocate 1.5GB buffer triggers IncreaseMemory") {
     auto start_time = std::chrono::high_resolution_clock::now();
-
-    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k1_5GB);
-
+    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k1_5GB);
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time);
@@ -218,12 +199,11 @@ TEST_CASE("Per-process shared memory multiple large allocations",
           "[ipc][per_process_shm][allocate][multiple_large]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Multiple allocations spanning segments") {
-    // Allocate multiple buffers that together exceed the initial segment
-    std::vector<ctp::ipc::FullPtr<char>> buffers;
+    std::vector<hipc::FullPtr<char>> buffers;
 
     auto buffer1 = ipc_manager->AllocateBuffer(600ULL * k1MB);
     REQUIRE_FALSE(buffer1.IsNull());
@@ -256,12 +236,12 @@ TEST_CASE("Per-process shared memory allocation patterns",
           "[ipc][per_process_shm][allocate][patterns]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Mixed small and large allocations") {
-    std::vector<ctp::ipc::FullPtr<char>> small_buffers;
-    std::vector<ctp::ipc::FullPtr<char>> large_buffers;
+    std::vector<hipc::FullPtr<char>> small_buffers;
+    std::vector<hipc::FullPtr<char>> large_buffers;
 
     for (int i = 0; i < 5; ++i) {
       auto buffer = ipc_manager->AllocateBuffer(k1MB);
@@ -304,12 +284,11 @@ TEST_CASE("Per-process shared memory FreeBuffer",
           "[ipc][per_process_shm][free]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Free allocated buffer") {
-    // Allocate a buffer
-    ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
+    hipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(k100MB);
     REQUIRE_FALSE(buffer.IsNull());
     buffer.ptr_[0] = 'T';
     buffer.ptr_[k100MB - 1] = 'E';
@@ -317,13 +296,11 @@ TEST_CASE("Per-process shared memory FreeBuffer",
   }
 
   SECTION("Allocate-free-allocate cycle") {
-    // Allocate
-    ctp::ipc::FullPtr<char> buffer1 = ipc_manager->AllocateBuffer(k100MB);
+    hipc::FullPtr<char> buffer1 = ipc_manager->AllocateBuffer(k100MB);
     REQUIRE_FALSE(buffer1.IsNull());
     ipc_manager->FreeBuffer(buffer1);
 
-    // Allocate again - should work
-    ctp::ipc::FullPtr<char> buffer2 = ipc_manager->AllocateBuffer(k100MB);
+    hipc::FullPtr<char> buffer2 = ipc_manager->AllocateBuffer(k100MB);
     REQUIRE_FALSE(buffer2.IsNull());
     buffer2.ptr_[0] = 'R';
     REQUIRE(buffer2.ptr_[0] == 'R');
@@ -334,19 +311,15 @@ TEST_CASE("Per-process shared memory ToFullPtr conversion",
           "[ipc][per_process_shm][tofullptr]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("ToFullPtr from raw pointer") {
-    // Allocate a buffer
-    ctp::ipc::FullPtr<char> original = ipc_manager->AllocateBuffer(k1MB);
+    hipc::FullPtr<char> original = ipc_manager->AllocateBuffer(k1MB);
     REQUIRE_FALSE(original.IsNull());
 
-    // Get the raw pointer
-    char* raw_ptr = original.ptr_;
-
-    // Convert back to FullPtr
-    ctp::ipc::FullPtr<char> converted = ipc_manager->ToFullPtr(raw_ptr);
+    char *raw_ptr = original.ptr_;
+    hipc::FullPtr<char> converted = ipc_manager->ToFullPtr(raw_ptr);
 
     REQUIRE_FALSE(converted.IsNull());
     REQUIRE(converted.ptr_ == raw_ptr);
@@ -363,13 +336,13 @@ TEST_CASE("Per-process shared memory stress test",
           "[ipc][per_process_shm][stress]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("Many small allocations") {
     const size_t num_allocs = 100;
-    const size_t alloc_size = 10 * k1MB;  // 10MB each = 1GB total
-    std::vector<ctp::ipc::FullPtr<char>> buffers;
+    const size_t alloc_size = 10 * k1MB;
+    std::vector<hipc::FullPtr<char>> buffers;
 
     auto start_time = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < num_allocs; ++i) {
@@ -397,7 +370,7 @@ TEST_CASE("Per-process shared memory ClientShmInfo",
           "[ipc][per_process_shm][shm_info]") {
   REQUIRE(initialize_chimaera());
 
-  auto* ipc_manager = CLIO_IPC;
+  auto *ipc_manager = CHI_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("ClientShmInfo struct creation") {
@@ -406,7 +379,8 @@ TEST_CASE("Per-process shared memory ClientShmInfo",
     info.owner_pid = hshm::SystemInfo::GetPid();
     info.shm_index = 0;
     info.size = k100MB;
-    info.alloc_id = ctp::ipc::AllocatorId(static_cast<chi::u32>(getpid()), 0);
+    info.alloc_id = hipc::AllocatorId(
+        static_cast<chi::u32>(hshm::SystemInfo::GetPid()), 0);
 
     REQUIRE(info.shm_name == "test_shm");
     REQUIRE(info.owner_pid == hshm::SystemInfo::GetPid());
