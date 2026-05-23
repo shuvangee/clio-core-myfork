@@ -40,10 +40,11 @@
 #include <iostream>
 
 #include "clio_runtime/admin/admin_client.h"
+#include "clio_runtime/clio_run_export.h"
 #include "clio_runtime/singletons.h"
 
 // Global pointer variable definition for CLIO Runtime manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::Chimaera, g_chimaera_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_CC(CLIO_RUN_CXX_API, chi::Chimaera, g_chimaera_manager);
 
 static void ChimaeraCleanupAtExit() {
   if (g_chimaera_manager) {
@@ -55,10 +56,10 @@ static void ChimaeraCleanupAtExit() {
 namespace clio::run {
 
 // CTP Thread-local storage key definitions
-ctp::ThreadLocalKey chi_cur_worker_key_;
-bool chi_cur_worker_key_created_ = false;
-ctp::ThreadLocalKey chi_task_counter_key_;
-ctp::ThreadLocalKey chi_is_client_thread_key_;
+CLIO_RUN_CXX_API ctp::ThreadLocalKey chi_cur_worker_key_;
+CLIO_RUN_CXX_API bool chi_cur_worker_key_created_ = false;
+CLIO_RUN_CXX_API ctp::ThreadLocalKey chi_task_counter_key_;
+CLIO_RUN_CXX_API ctp::ThreadLocalKey chi_is_client_thread_key_;
 
 /**
  * Create a new TaskId with current process/thread info and next major counter

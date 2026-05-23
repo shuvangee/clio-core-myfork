@@ -317,7 +317,7 @@ class PoolManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for Pool manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::PoolManager, g_pool_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_H(CLIO_RUN_CXX_API, chi::PoolManager, g_pool_manager);
 
 // Macro for accessing the Pool manager singleton using global pointer variable
 #define CLIO_POOL_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::PoolManager, g_pool_manager)

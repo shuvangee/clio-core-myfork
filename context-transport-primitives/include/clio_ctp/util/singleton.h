@@ -205,6 +205,9 @@ CTP_CROSS_FUN static inline T *GetGlobalCrossVar(T &instance) {
 #define CTP_DEFINE_GLOBAL_PTR_VAR_H(T, NAME) extern __TU(T) * NAME;
 #define CTP_DEFINE_GLOBAL_PTR_VAR_CC(T, NAME) __TU(T) *NAME = nullptr;
 #define CTP_GET_GLOBAL_PTR_VAR(T, NAME) ctp::GetGlobalPtrVar<__TU(T)>(NAME)
+// API-annotated variants for DLL-exported globals (Windows dllexport/dllimport)
+#define CTP_DEFINE_GLOBAL_API_PTR_VAR_H(API, T, NAME) extern API __TU(T) * NAME;
+#define CTP_DEFINE_GLOBAL_API_PTR_VAR_CC(API, T, NAME) API __TU(T) *NAME = nullptr;
 template <typename T>
 static inline T *GetGlobalPtrVar(T *&instance) {
   if (instance == nullptr) {

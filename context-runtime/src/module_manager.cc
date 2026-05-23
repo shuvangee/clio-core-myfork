@@ -45,7 +45,7 @@
 #include "clio_runtime/container.h"
 
 // Global pointer variable definition for Module manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::ModuleManager, g_module_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_CC(CLIO_RUN_CXX_API, chi::ModuleManager, g_module_manager);
 
 namespace clio::run {
 

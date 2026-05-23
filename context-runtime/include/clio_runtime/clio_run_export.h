@@ -31,31 +31,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * Admin ChiMod singleton
- *
- * Provides global access to the admin ChiMod client via CLIO_ADMIN macro.
- * The admin container is automatically created by the runtime and accessed
- * by clients without requiring explicit Create() calls.
- */
+#pragma once
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_ADMIN_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_ADMIN_H_
-
-#include "clio_runtime/types.h"
-
-// Forward declaration to avoid circular dependency
-namespace clio::run::admin {
-class Client;
-}
-
-// Global pointer variable declaration for Admin singleton
-CTP_DEFINE_GLOBAL_API_PTR_VAR_H(CLIO_RUN_CXX_API, clio::run::admin::Client, g_admin);
-
-// Macro for accessing the Admin singleton using global pointer variable
-#define CLIO_ADMIN CTP_GET_GLOBAL_PTR_VAR(::clio::run::admin::Client, g_admin)
-// Backward-compat alias (clio_run rebrand). External code that still
-// uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_ADMIN  CLIO_ADMIN
-
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_ADMIN_H_
+// CLIO_RUN_CXX_API: marks global data variables exported from clio_run_cxx.dll.
+// WINDOWS_EXPORT_ALL_SYMBOLS handles functions/class members but NOT data
+// symbols, so explicit dllexport/dllimport annotations are required for global
+// pointer singletons.
+#if defined(_WIN32)
+#  if defined(CLIO_RUN_CXX_BUILDING)
+#    define CLIO_RUN_CXX_API __declspec(dllexport)
+#  else
+#    define CLIO_RUN_CXX_API __declspec(dllimport)
+#  endif
+#else
+#  define CLIO_RUN_CXX_API
+#endif

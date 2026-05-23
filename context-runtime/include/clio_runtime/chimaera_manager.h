@@ -131,7 +131,7 @@ class Chimaera {
 }  // namespace clio::run
 
 // Global pointer variable declaration for CLIO Runtime manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::Chimaera, g_chimaera_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_H(CLIO_RUN_CXX_API, chi::Chimaera, g_chimaera_manager);
 
 // Macro for accessing the CLIO Runtime manager singleton using global pointer variable
 #define CLIO_CHIMAERA_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::Chimaera, g_chimaera_manager)

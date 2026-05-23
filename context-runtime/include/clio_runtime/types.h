@@ -568,10 +568,11 @@ enum MemorySegment {
 #define TEMP
 
 // CTP Thread-local storage keys
-extern ctp::ThreadLocalKey chi_cur_worker_key_;
-extern bool chi_cur_worker_key_created_;
-extern ctp::ThreadLocalKey chi_task_counter_key_;
-extern ctp::ThreadLocalKey chi_is_client_thread_key_;
+#include "clio_runtime/clio_run_export.h"
+extern CLIO_RUN_CXX_API ctp::ThreadLocalKey chi_cur_worker_key_;
+extern CLIO_RUN_CXX_API bool chi_cur_worker_key_created_;
+extern CLIO_RUN_CXX_API ctp::ThreadLocalKey chi_task_counter_key_;
+extern CLIO_RUN_CXX_API ctp::ThreadLocalKey chi_is_client_thread_key_;
 
 /**
  * Thread-local task counter for generating unique TaskId major and unique

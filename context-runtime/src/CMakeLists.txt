@@ -223,6 +223,10 @@ set_target_properties(${CHIMAERA_LIB_NAME} PROPERTIES
   OUTPUT_NAME "clio_run_cxx"
   WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
+# Mark that we are building the DLL so global data symbols get dllexport.
+# WINDOWS_EXPORT_ALL_SYMBOLS handles functions/classes; data (pointer globals)
+# requires explicit __declspec(dllexport) gated on this define.
+target_compile_definitions(${CHIMAERA_LIB_NAME} PRIVATE CLIO_RUN_CXX_BUILDING)
 
 # Export target for parent scope. EXPORT_NAME is intentionally `cxx` so the
 # installed alias is `chimaera::cxx` (the historical install-time name that

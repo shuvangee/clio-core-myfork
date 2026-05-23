@@ -194,7 +194,7 @@ class WorkOrchestrator {
 }  // namespace clio::run
 
 // Global pointer variable declaration for Work Orchestrator singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::WorkOrchestrator, g_work_orchestrator);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_H(CLIO_RUN_CXX_API, chi::WorkOrchestrator, g_work_orchestrator);
 
 // Macro for accessing the Work Orchestrator singleton using global pointer variable
 #define CLIO_WORK_ORCHESTRATOR CTP_GET_GLOBAL_PTR_VAR(::chi::WorkOrchestrator, g_work_orchestrator)

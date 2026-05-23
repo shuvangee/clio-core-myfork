@@ -48,7 +48,7 @@
 #include <fstream>
 
 // Global pointer variable definition for Pool manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::PoolManager, g_pool_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_CC(CLIO_RUN_CXX_API, chi::PoolManager, g_pool_manager);
 
 namespace clio::run {
 

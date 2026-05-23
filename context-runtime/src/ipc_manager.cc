@@ -80,7 +80,7 @@
 #endif
 
 // Global pointer variable definition for IPC manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_CC(chi::IpcManager, g_ipc_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_CC(CLIO_RUN_CXX_API, chi::IpcManager, g_ipc_manager);
 
 #include <clio_runtime/device_memcpy.h>
 

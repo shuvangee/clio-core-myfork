@@ -1508,7 +1508,7 @@ class IpcManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for IPC manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_H(CLIO_RUN_CXX_API, chi::IpcManager, g_ipc_manager);
 
 #define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
 #define CLIO_CPU_IPC CLIO_IPC

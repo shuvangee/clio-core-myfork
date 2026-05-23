@@ -374,7 +374,7 @@ class ConfigManager : public ctp::BaseConfig {
 }  // namespace clio::run
 
 // Global pointer variable declaration for Configuration manager singleton
-CTP_DEFINE_GLOBAL_PTR_VAR_H(chi::ConfigManager, g_config_manager);
+CTP_DEFINE_GLOBAL_API_PTR_VAR_H(CLIO_RUN_CXX_API, chi::ConfigManager, g_config_manager);
 
 // Macro for accessing the Configuration manager singleton using global pointer variable
 #define CLIO_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ConfigManager, g_config_manager)
