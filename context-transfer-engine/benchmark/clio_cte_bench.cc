@@ -47,8 +47,6 @@
 #include <clio_cte/core/core_client.h>
 #include <clio_ctp/util/logging.h>
 
-#include <unistd.h>
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>

@@ -11,9 +11,13 @@ cmake_minimum_required(VERSION 3.10)
 # Find required test dependencies
 # Catch2 is already found by root CMakeLists.txt
 
-# Create the test executable
+# Create the test executable — one file per target to avoid TEST_CASE
+# line-number collisions that produce duplicate symbol link errors.
 add_executable(cte_core_unit_tests
     test_core_minimal.cc
+)
+
+add_executable(cte_core_functionality_simple_tests
     test_core_functionality_simple.cc
 )
 
@@ -82,6 +86,10 @@ target_include_directories(cte_core_unit_tests PRIVATE
 
 )
 
+target_include_directories(cte_core_functionality_simple_tests PRIVATE
+
+)
+
 target_include_directories(test_core_functionality PRIVATE
 
 )
@@ -134,6 +142,17 @@ target_link_libraries(cte_core_unit_tests
     chimaera::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+target_link_libraries(cte_core_functionality_simple_tests
+    clio_cte_core_runtime
+    clio_cte_core_client
+    chimaera::admin_runtime
+    chimaera::admin_client
+    chimaera::bdev_runtime
+    chimaera::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 # Link test_core_functionality - using simple_test.h framework (NOT Catch2)
@@ -278,31 +297,31 @@ add_test(NAME cte_core_integration
     COMMAND cte_core_unit_tests)
 
 add_test(NAME cte_core_client_creation
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_params
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_target_config
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_tag_info
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_blob_info
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_tasks
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_helpers
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_workflow
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 add_test(NAME cte_core_performance
-    COMMAND cte_core_unit_tests)
+    COMMAND cte_core_functionality_simple_tests)
 
 # CTE Config and DPE tests (separate executable)
 add_test(NAME cte_config_tests
@@ -694,7 +713,7 @@ set_tests_properties(
 # ------------------------------------------------------------------------------
 # Install Targets
 # ------------------------------------------------------------------------------
-set(_CTE_TEST_TARGETS cte_core_unit_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_blob_block_reuse test_reorganize_blob)
+set(_CTE_TEST_TARGETS cte_core_unit_tests cte_core_functionality_simple_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_blob_block_reuse test_reorganize_blob)
 # (Legacy test_cte_gpu_coroutine / test_gpu_core / test_gpu_create were
 # removed along with the GPU runtime — see deletions earlier in this
 # file. The new CUDA test target test_cuda_cte_kernel_putget is added
