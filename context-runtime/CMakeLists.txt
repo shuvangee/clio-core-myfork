@@ -218,7 +218,14 @@ install(CODE "
     set(_HOME \"\$ENV{HOME}\")
   endif()
 
+  # During CPack packaging, CMAKE_INSTALL_PREFIX points to /usr (or similar)
+  # but files are actually staged under DESTDIR. If the source yaml does not
+  # exist at the bare prefix path, this is a packaging install — skip seeding.
   set(_DEFAULT_SRC \"\${CMAKE_INSTALL_PREFIX}/etc/chimaera/chimaera_default.yaml\")
+  if(NOT EXISTS \"\${_DEFAULT_SRC}\")
+    message(STATUS \"Skipping user config seed (packaging install): \${_DEFAULT_SRC} not present\")
+    return()
+  endif()
 
   # Per-destination seeding helper: directory + filename + optional chown
   foreach(_entry
