@@ -585,3 +585,5 @@ TEST_CASE("Performance Test Structure", "[cte][core][performance]") {
     INFO("Multiple operation simulation completed with " << operation_count << " operations");
   }
 }
+
+SIMPLE_TEST_MAIN()
