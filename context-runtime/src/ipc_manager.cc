@@ -1112,6 +1112,7 @@ namespace {
 // when the hostfile uses addresses instead of names.
 std::set<std::string> CollectLocalInterfaceIps() {
   std::set<std::string> ips;
+#ifndef _WIN32
   struct ifaddrs *ifaddr = nullptr;
   if (getifaddrs(&ifaddr) != 0 || ifaddr == nullptr) {
     return ips;  // Best-effort: empty set just disables IP matching.
@@ -1138,6 +1139,7 @@ std::set<std::string> CollectLocalInterfaceIps() {
     }
   }
   freeifaddrs(ifaddr);
+#endif  // _WIN32
   return ips;
 }
 

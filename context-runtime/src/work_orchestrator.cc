@@ -40,8 +40,10 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#ifndef _WIN32
 #include <pthread.h>
 #include <unistd.h>
+#endif
 
 #include "clio_runtime/container.h"
 #include "clio_runtime/pool_manager.h"
@@ -164,14 +166,14 @@ void WorkOrchestrator::StopWorkers() {
   HLOG(kDebug, "Stopping {} worker threads...", all_workers_.size());
 
   // Stop all workers and wake them from epoll_wait
-  pid_t runtime_pid = getpid();
+  int runtime_pid = ctp::SystemInfo::GetPid();
   for (auto *worker : all_workers_) {
     if (worker) {
       worker->Stop();
       // Wake worker from epoll_wait so it can observe is_running_ == false
       TaskLane *lane = worker->GetLane();
       if (lane) {
-        pid_t tid = lane->GetTid();
+        int tid = lane->GetTid();
         if (tid > 0) {
           ctp::lbm::EventManager::Signal(runtime_pid, tid);
         }
@@ -180,13 +182,13 @@ void WorkOrchestrator::StopWorkers() {
   }
 
   // Wait for worker threads with a hard 5-second deadline per thread.
-  // ctp::Thread uses pthread_create internally, so we use pthread_thread_
-  // directly — std_thread_ is never populated when using the Pthread model.
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
   size_t joined_count = 0;
   for (auto &thread : worker_threads_) {
-    // pthread_thread_ is 0 when the ctp Thread was never started
+#if CTP_ENABLE_PTHREADS
+    // ctp::Thread uses pthread_create internally on this platform.
+    // std_thread_ is never populated when using the Pthread model.
     if (thread.pthread_thread_ == 0) {
       ++joined_count;
       continue;
@@ -224,6 +226,13 @@ void WorkOrchestrator::StopWorkers() {
       pthread_detach(thread.pthread_thread_);
       thread.pthread_thread_ = 0;
     }
+#else
+    // On non-pthread platforms (e.g. Windows), use std::thread join.
+    if (thread.std_thread_.joinable()) {
+      thread.std_thread_.join();
+    }
+    ++joined_count;
+#endif
   }
 
   HLOG(kDebug, "Joined {} of {} worker threads", joined_count,
