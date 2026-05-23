@@ -106,15 +106,15 @@ ssize_t SendV(socket_t fd, const IoBuffer* iov, int count) {
   // Convert IoBuffer to WSABUF
   WSABUF wsa_bufs[64];
   int local_count = count < 64 ? count : 64;
-  DWORD total_expected = 0;
+  ::DWORD total_expected = 0;
   for (int i = 0; i < local_count; ++i) {
     wsa_bufs[i].buf = static_cast<char*>(iov[i].base);
     wsa_bufs[i].len = static_cast<ULONG>(iov[i].len);
     total_expected += wsa_bufs[i].len;
   }
 
-  DWORD bytes_sent = 0;
-  DWORD total_sent = 0;
+  ::DWORD bytes_sent = 0;
+  ::DWORD total_sent = 0;
   int buf_idx = 0;
 
   while (total_sent < total_expected) {
@@ -135,9 +135,9 @@ ssize_t SendV(socket_t fd, const IoBuffer* iov, int count) {
       return -1;
     }
     total_sent += bytes_sent;
-    DWORD remaining = bytes_sent;
+    ::DWORD remaining = bytes_sent;
     while (buf_idx < local_count &&
-           remaining >= static_cast<DWORD>(wsa_bufs[buf_idx].len)) {
+           remaining >= static_cast<::DWORD>(wsa_bufs[buf_idx].len)) {
       remaining -= wsa_bufs[buf_idx].len;
       buf_idx++;
     }

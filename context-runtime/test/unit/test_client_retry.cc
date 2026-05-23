@@ -172,7 +172,7 @@ void TestServerRestart(const std::string &mode) {
   REQUIRE(ready);
 
   // 7. ClientReconnect
-  bool reconnected = CHI_IPC->ClientReconnect();
+  bool reconnected = CHI_IPC->ReconnectToOriginalHost();
   REQUIRE(reconnected);
 
   // 8. Post-restart task
