@@ -247,7 +247,9 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   // Dedicated single peer recv thread: polls the main p2p transport
   // (port 9413 by default) and dispatches inbound task forwards/responses.
   peer_recv_thread_ = std::thread([this]() {
+#ifndef _WIN32
     pthread_setname_np(pthread_self(), "chi-peer-recv");
+#endif
     auto *ipc_manager = CLIO_IPC;
     ctp::lbm::Transport *lbm_transport = nullptr;
     for (int spin = 0; spin < 1000 && !recv_shutdown_.load(); ++spin) {
@@ -309,7 +311,9 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   // Dedicated single client recv thread: drains TCP (port 9416) and IPC
   // (unix socket) client transports via IpcCpu2CpuZmq::RuntimeRecv.
   client_recv_thread_ = std::thread([this]() {
+#ifndef _WIN32
     pthread_setname_np(pthread_self(), "chi-client-recv");
+#endif
     auto *ipc_manager = CLIO_IPC;
     HLOG(kInfo, "[ClientRecvThread] started");
     while (!recv_shutdown_.load(std::memory_order_acquire)) {
