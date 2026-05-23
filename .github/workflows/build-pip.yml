@@ -132,6 +132,10 @@ jobs:
         git pull
         .\bootstrap-vcpkg.bat
 
+    - name: Install vcpkg dependencies
+      run: |
+        C:/vcpkg/vcpkg install --triplet x64-windows zeromq yaml-cpp cereal msgpack-c
+
     - name: Install cibuildwheel
       run: pip install cibuildwheel
 
@@ -140,7 +144,6 @@ jobs:
         CIBW_BUILD: "cp310-win_amd64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64"
         CIBW_ENVIRONMENT_WINDOWS: >-
           CMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-          VCPKG_MANIFEST_DIR="${{github.workspace}}/installers/vcpkg"
           VCPKG_DEFAULT_TRIPLET=x64-windows
           CLIO_CORE_ENABLE_PYTHON=ON
           CLIO_CORE_ENABLE_TESTS=OFF
