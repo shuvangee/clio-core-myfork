@@ -440,7 +440,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     }
 
     // Get file size
-    ssize_t current_size = setup_io->GetAsyncFileSize();
+    ssize_t current_size = setup_io->GetFileSize();
     if (current_size < 0) {
       task->return_code_ = 2;
       setup_io->Close();
