@@ -263,7 +263,10 @@ endif()
 # over the generic IMPORTED_LOCATION.  We must override every config that
 # was registered so the linker always picks the static archive.
 # On Windows, vcpkg manages static vs shared via the triplet; skip the override.
-if(CLIO_CORE_STATIC_DEPS AND NOT WIN32)
+# On macOS, Homebrew ships only .dylib (no .a). delocate then bundles the
+# shared lib into the wheel — the wheel still self-contains, just via a
+# bundled dylib instead of a static archive.
+if(CLIO_CORE_STATIC_DEPS AND NOT WIN32 AND NOT APPLE)
     find_library(YAML_CPP_STATIC_LIB NAMES libyaml-cpp.a REQUIRED)
     if(YAML_CPP_STATIC_LIB)
         message(STATUS "Static yaml-cpp: ${YAML_CPP_STATIC_LIB}")
@@ -535,10 +538,11 @@ if(CLIO_CORE_ENABLE_ZMQ)
         pkg_check_modules(ZeroMQ QUIET libzmq)
         if(ZeroMQ_FOUND)
             message(STATUS "found zmq.h at ${ZeroMQ_INCLUDE_DIRS}")
-            if(CLIO_CORE_STATIC_DEPS AND NOT WIN32)
+            if(CLIO_CORE_STATIC_DEPS AND NOT WIN32 AND NOT APPLE)
                 # Find static .a archives directly — pkg-config _STATIC_LIBRARIES
                 # still returns -l flags that the linker resolves to shared libs.
-                # Skipped on Windows where vcpkg manages static/shared via triplet.
+                # Skipped on Windows (vcpkg manages static/shared via triplet)
+                # and macOS (Homebrew ships .dylib only; delocate bundles it).
                 find_library(ZMQ_STATIC_LIB NAMES libzmq.a REQUIRED)
                 set(ZMQ_LIBS ${ZMQ_STATIC_LIB})
                 # Pull in zmq's transitive static deps (libsodium, pthreads, etc.)
