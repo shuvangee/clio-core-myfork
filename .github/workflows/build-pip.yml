@@ -209,11 +209,17 @@ jobs:
     - name: Build macOS wheels
       env:
         CIBW_BUILD: ${{ matrix.cibw_build }}
-        # CMAKE_PREFIX_PATH points cmake at Homebrew, PKG_CONFIG_PATH
-        # picks up the same for pkg-config-based finds (libsodium etc.).
+        # CMAKE_PREFIX_PATH / PKG_CONFIG_PATH point cmake and pkg-config
+        # at Homebrew. SKBUILD_CMAKE_DEFINE overrides the pyproject.toml
+        # default (CLIO_CORE_ENABLE_RPATH=OFF, which exists because the
+        # Linux repair_wheel.sh rewrites RPATHs itself); we need it ON
+        # so the built binaries carry `@rpath/libclio_*.dylib` references
+        # that delocate can resolve against @loader_path/../lib and
+        # bundle into the wheel.
         CIBW_ENVIRONMENT_MACOS: >-
           CMAKE_PREFIX_PATH=${{ matrix.brew_prefix }}
           PKG_CONFIG_PATH=${{ matrix.brew_prefix }}/lib/pkgconfig
+          SKBUILD_CMAKE_DEFINE='CLIO_CORE_ENABLE_RPATH=ON'
         CIBW_TEST_COMMAND: >
           python -c "import iowarp_core; print('Version:', iowarp_core.get_version())"
       run: cibuildwheel --output-dir installers/pip/wheelhouse
