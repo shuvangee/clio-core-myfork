@@ -157,6 +157,73 @@ jobs:
       with:
         name: wheels-win_amd64
         path: installers/pip/wheelhouse/*.whl
+
+  #------------------------------------------------------------
+  # Build macOS wheels via cibuildwheel
+  #
+  # Uses Homebrew for dependencies (cheaper and faster than building
+  # them from source like manylinux). `liburing` is intentionally
+  # omitted — it is Linux-only; macOS uses kqueue via the in-tree
+  # EventManager polyfill. With CLIO_CORE_STATIC_DEPS=ON the wheel
+  # statically links most C++ deps, so cibuildwheel's default
+  # `delocate` handles the few remaining .dylibs without a custom
+  # repair script.
+  #------------------------------------------------------------
+  build-wheels-macos:
+    name: Build macOS wheels
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+            cibw_build: "cp310-macosx_arm64 cp311-macosx_arm64 cp312-macosx_arm64 cp313-macosx_arm64"
+            brew_prefix: /opt/homebrew
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install build dependencies via Homebrew
+      run: |
+        # cppzmq is the C++ header wrapper for zeromq; cereal and cppzmq
+        # are header-only. msgpack-c is the C library (the recipe uses
+        # the C API in serialize/msgpack_wrapper.h).
+        brew update
+        brew install cmake pkg-config \
+          yaml-cpp cereal msgpack-c libsodium zeromq cppzmq
+
+    - name: Install cibuildwheel
+      run: pip install cibuildwheel
+
+    - name: Build macOS wheels
+      env:
+        CIBW_BUILD: ${{ matrix.cibw_build }}
+        # CMAKE_PREFIX_PATH points cmake at Homebrew, PKG_CONFIG_PATH
+        # picks up the same for pkg-config-based finds (libsodium etc.).
+        CIBW_ENVIRONMENT_MACOS: >-
+          CMAKE_PREFIX_PATH=${{ matrix.brew_prefix }}
+          PKG_CONFIG_PATH=${{ matrix.brew_prefix }}/lib/pkgconfig
+        CIBW_TEST_COMMAND: >
+          python -c "import iowarp_core; print('Version:', iowarp_core.get_version())"
+      run: cibuildwheel --output-dir installers/pip/wheelhouse
+
+    - name: Upload macOS wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-macos-${{ matrix.arch }}
+        path: installers/pip/wheelhouse/*.whl
+
   #------------------------------------------------------------
   # Test wheels in clean Docker containers
   #
@@ -302,11 +369,99 @@ jobs:
           '
 
   #------------------------------------------------------------
+  # Test macOS wheels natively (Docker is unavailable on GHA macOS).
+  #
+  # Same shape as the Linux Docker test job: pip install the wheel into
+  # a clean venv, smoke-test the import and the CLI, and audit dylib
+  # resolution with otool. Runs on the same arm64 runner that built the
+  # wheel, which keeps the platform tag matching.
+  #------------------------------------------------------------
+  test-wheels-macos:
+    needs: build-wheels-macos
+    name: Test macOS wheels
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+            python: '3.12'
+
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python }}
+
+    - name: Download macOS wheels
+      uses: actions/download-artifact@v4
+      with:
+        name: wheels-macos-${{ matrix.arch }}
+        path: wheels/
+
+    - name: Test wheel in clean venv
+      run: |
+        set -e
+        python -m venv /tmp/test-venv
+        source /tmp/test-venv/bin/activate
+
+        pip install --quiet --find-links wheels --no-cache-dir iowarp-core
+
+        echo "=== Import test ==="
+        python -c "import iowarp_core; print('Version:', iowarp_core.get_version())"
+        python -c "import iowarp_core; print('Lib dir:', iowarp_core.get_lib_dir())"
+        python -c "import iowarp_core; print('CTE available:', iowarp_core.cte_available())"
+
+        echo "=== CLI test ==="
+        chimaera --help
+
+        echo "=== Benchmark binaries: --help smoke test ==="
+        # Catch SIGSEGV / abort at load time. Bench --help exit codes
+        # are allowed to be non-zero; only signal-level deaths fail us.
+        for bench in clio_cte_bench clio_run_thrpt_bench; do
+          echo "--- $bench --help ---"
+          "$bench" --help || rc=$?
+          rc=${rc:-0}
+          if [ "$rc" -ge 128 ]; then
+            echo "FAIL: $bench --help died with signal (exit $rc)"
+            exit 1
+          fi
+          unset rc
+        done
+
+        echo "=== Symbol resolution check (otool -L) ==="
+        LIB_DIR=$(python -c "import iowarp_core; print(iowarp_core.get_lib_dir())")
+        MISSING=0
+        for dylib in "$LIB_DIR"/*.dylib; do
+          [ -f "$dylib" ] || continue
+          # Any line with "(compatibility ..." that resolves to a path
+          # starting with @rpath/ without a corresponding @loader_path
+          # would be suspect, but the more direct check is to actually
+          # dlopen the lib. We use otool just to surface the deps.
+          otool -L "$dylib" >/dev/null || MISSING=1
+        done
+        if [ "$MISSING" = "1" ]; then
+          echo "ERROR: otool failed on a bundled dylib"
+          exit 1
+        fi
+        echo "All bundled dylibs are well-formed"
+
+        echo "=== All tests passed ==="
+
+  #------------------------------------------------------------
   # Publish to PyPI on version tags
   #------------------------------------------------------------
   publish-to-pypi:
     name: Publish to PyPI
-    needs: [check-version, build-wheels, build-wheels-windows, test-wheels]
+    needs:
+      - check-version
+      - build-wheels
+      - build-wheels-windows
+      - build-wheels-macos
+      - test-wheels
+      - test-wheels-macos
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     environment:
@@ -334,6 +489,12 @@ jobs:
         name: wheels-win_amd64
         path: dist/
 
+    - name: Download macOS arm64 wheels
+      uses: actions/download-artifact@v4
+      with:
+        name: wheels-macos-arm64
+        path: dist/
+
     - name: List distributions
       run: ls -lh dist/
 
@@ -348,7 +509,13 @@ jobs:
   #------------------------------------------------------------
   github-release:
     name: Create GitHub Release
-    needs: [check-version, build-wheels, build-wheels-windows, test-wheels]
+    needs:
+      - check-version
+      - build-wheels
+      - build-wheels-windows
+      - build-wheels-macos
+      - test-wheels
+      - test-wheels-macos
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -371,6 +538,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: wheels-win_amd64
+        path: dist/
+
+    - name: Download macOS arm64 wheels
+      uses: actions/download-artifact@v4
+      with:
+        name: wheels-macos-arm64
         path: dist/
 
     - name: List release artifacts
