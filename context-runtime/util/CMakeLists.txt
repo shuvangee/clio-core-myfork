@@ -43,10 +43,18 @@ install(TARGETS clio_run
 
 # Install `chimaera` as a symlink to `clio_run` (Windows: copy fallback).
 # Done at install time so it lands at ${CMAKE_INSTALL_PREFIX}/bin regardless
-# of CPACK/DESTDIR.
+# of CPACK/DESTDIR. The Windows source path needs the `.exe` suffix — the
+# bare-name check silently skipped on Windows wheels and shipped without
+# chimaera.exe, breaking `pip install iowarp-core` users' first-touch
+# experience.
 install(CODE "
-  set(_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\")
-  set(_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera\")
+  if(WIN32)
+    set(_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run.exe\")
+    set(_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera.exe\")
+  else()
+    set(_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\")
+    set(_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera\")
+  endif()
   if(EXISTS \"\${_src}\")
     if(WIN32)
       file(INSTALL \"\${_src}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\"
