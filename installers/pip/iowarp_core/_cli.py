@@ -1,58 +1,85 @@
 """CLI entry points for bundled IOWarp binaries.
 
-Locates a named binary bundled in the wheel (under ``iowarp_core/bin/``)
-and exec's it after ensuring IOWarp shared libraries are on the library
-search path.  Each ``[project.scripts]`` entry in pyproject.toml routes
-to a thin wrapper around ``_exec_iowarp_bin``.
+Locates a named binary under ``iowarp_core/bin/`` (auto-adding the
+``.exe`` suffix on Windows), wires up the platform's shared-library
+search path, and runs it. Each ``[project.scripts]`` entry in
+pyproject.toml routes to a thin wrapper around ``_exec_iowarp_bin``.
 """
 
 import importlib
 import os
+import subprocess
 import sys
 
 
-def _exec_iowarp_bin(name):
-    """Find ``iowarp_core/bin/<name>``, prepend ``lib/`` to LD_LIBRARY_PATH,
-    and replace the current process with it.
+def _locate_bin(name):
+    """Return (bin_path, bin_dir, lib_dir) for the named binary.
 
-    In scikit-build-core editable installs, ``__file__`` resolves to the
-    workspace source tree, but cmake-built artifacts (binaries, .so libs)
-    live in ``site-packages/iowarp_core/``.  Anchor to site-packages by
-    importing a cmake-built extension module — the editable finder always
-    serves those from site-packages — and walking from its .so location.
+    Tries the site-packages route via an installed cmake-built ext
+    module first (works around editable installs where ``__file__``
+    points at the source tree), then falls back to the directory of
+    this _cli.py file (normal wheel installs).
     """
-    bin_path = None
-    lib_dir = None
+    exe = name + (".exe" if sys.platform == "win32" else "")
+
     for _extmod in ("clio_cte_core_ext", "clio_cee"):
         try:
             _m = importlib.import_module(_extmod)
             _sp = os.path.dirname(os.path.abspath(_m.__file__))
-            _candidate = os.path.join(_sp, "iowarp_core", "bin", name)
+            _candidate = os.path.join(_sp, "iowarp_core", "bin", exe)
             if os.path.exists(_candidate):
-                bin_path = _candidate
-                lib_dir = os.path.join(_sp, "iowarp_core", "lib")
-                break
+                return (
+                    _candidate,
+                    os.path.dirname(_candidate),
+                    os.path.join(_sp, "iowarp_core", "lib"),
+                )
         except (ImportError, AttributeError):
             continue
 
-    if bin_path is None:
-        # Fallback for regular (non-editable) installs where _cli.py lives
-        # inside site-packages/iowarp_core/ itself.
-        package_dir = os.path.dirname(os.path.abspath(__file__))
-        bin_path = os.path.join(package_dir, "bin", name)
-        lib_dir = os.path.join(package_dir, "lib")
+    # Fallback: regular wheel install where _cli.py is inside
+    # site-packages/iowarp_core/ itself.
+    package_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate = os.path.join(package_dir, "bin", exe)
+    return candidate, os.path.join(package_dir, "bin"), os.path.join(package_dir, "lib")
 
+
+def _exec_iowarp_bin(name):
+    """Find ``iowarp_core/bin/<name>[.exe]``, set the platform's
+    dynamic-loader search path, and run it.
+    """
+    bin_path, bin_dir, lib_dir = _locate_bin(name)
     if not os.path.exists(bin_path):
-        print(f"Error: {name} binary not found at {bin_path}", file=sys.stderr)
+        exe = name + (".exe" if sys.platform == "win32" else "")
+        print(f"Error: {exe} binary not found at {bin_path}", file=sys.stderr)
         sys.exit(1)
 
-    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-    if lib_dir not in ld_path:
-        os.environ["LD_LIBRARY_PATH"] = (
-            lib_dir + ":" + ld_path if ld_path else lib_dir
+    env = os.environ.copy()
+    if sys.platform == "win32":
+        # CMake places .dll files in bin/ next to .exe files on
+        # Windows, so the standard DLL search (which checks the
+        # .exe's own dir first) handles the common case. Prepending
+        # bin/ + lib/ to PATH is belt-and-braces for cases where the
+        # spawned binary itself spawns a child that isn't co-located
+        # with its DLLs.
+        env["PATH"] = (
+            bin_dir + os.pathsep + lib_dir + os.pathsep + env.get("PATH", "")
         )
+        # os.execve has odd Windows semantics: cmd.exe doesn't really
+        # see the replaced process, argv quoting goes through MSVCRT,
+        # and the parent prompt returns control immediately. Use
+        # subprocess.run and forward the exit code instead.
+        result = subprocess.run([bin_path] + sys.argv[1:], env=env)
+        sys.exit(result.returncode)
 
-    os.execve(bin_path, [bin_path] + sys.argv[1:], os.environ)
+    if sys.platform == "darwin":
+        env_var = "DYLD_LIBRARY_PATH"
+    else:
+        env_var = "LD_LIBRARY_PATH"
+    existing = env.get(env_var, "")
+    env[env_var] = (
+        lib_dir + os.pathsep + existing if existing else lib_dir
+    )
+    os.execve(bin_path, [bin_path] + sys.argv[1:], env)
 
 
 def main():

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(iowarp-core VERSION 1.9.0 LANGUAGES C CXX)
+project(iowarp-core VERSION 1.9.1 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
 # Project Options
@@ -1424,10 +1424,16 @@ if(TARGET clio_run)
     COMPONENT pip_package
     RUNTIME DESTINATION bin)
   install(CODE "
-    set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera\")
-    if(EXISTS \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\" AND NOT EXISTS \"\${_pip_dst}\")
+    if(WIN32)
+      set(_pip_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run.exe\")
+      set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera.exe\")
+    else()
+      set(_pip_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\")
+      set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera\")
+    endif()
+    if(EXISTS \"\${_pip_src}\" AND NOT EXISTS \"\${_pip_dst}\")
       if(WIN32)
-        file(INSTALL \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\"
+        file(INSTALL \"\${_pip_src}\"
              DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\" RENAME chimaera.exe)
       else()
         execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink clio_run \"\${_pip_dst}\")
@@ -1441,10 +1447,16 @@ if(TARGET clio_run)
     install(TARGETS clio_run
       RUNTIME DESTINATION "${PYTHON_SITE_PACKAGES}/iowarp_core/bin")
     install(CODE "
-      set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera\")
-      if(EXISTS \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run\" AND NOT EXISTS \"\${_py_dst}\")
+      if(WIN32)
+        set(_py_src \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run.exe\")
+        set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera.exe\")
+      else()
+        set(_py_src \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run\")
+        set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera\")
+      endif()
+      if(EXISTS \"\${_py_src}\" AND NOT EXISTS \"\${_py_dst}\")
         if(WIN32)
-          file(INSTALL \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run\"
+          file(INSTALL \"\${_py_src}\"
                DESTINATION \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin\" RENAME chimaera.exe)
         else()
           execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink clio_run \"\${_py_dst}\")
