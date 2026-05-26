@@ -186,17 +186,126 @@ jobs:
         path: build-appimage/*.AppImage
 
   #-----------------------------------------------------------------------
+  # Install-and-smoke-test each native package on a clean container.
+  #
+  # Caught nothing in v1.9.0 because these jobs didn't exist — the
+  # equivalent failure mode for native packages was the dangling-DLL
+  # Windows wheel bug (#446). Mirror what test-wheels-{linux,macos,
+  # windows} do in build-pip.yml: pip install (here: native install) the
+  # artifact into a clean container, then run `clio_run --help` and
+  # treat a signal-level death (exit >= 128 / segfault / DLL-load
+  # failure) as a CI failure. Small positive exit codes are app-level
+  # "I printed usage and stopped", which is what --help typically does.
+  #-----------------------------------------------------------------------
+  test-deb:
+    name: Test DEB install
+    needs: [build-deb]
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    if: always() && needs.build-deb.result == 'success'
+    steps:
+    - name: Download DEB artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: deb-package
+        path: pkg/
+
+    - name: Install + smoke test
+      run: |
+        set -e
+        apt-get update
+        # dpkg-installs the .deb, then apt-get -f install pulls in any
+        # runtime deps the package declared (libzmq, libyaml-cpp, ...).
+        apt-get install -y ./pkg/*.deb || (apt-get -f install -y && apt-get install -y ./pkg/*.deb)
+        echo "=== clio_run --help ==="
+        clio_run --help; rc=$?
+        # --help prints usage and may exit 0 or small non-zero from the
+        # arg-parser. Signal-level deaths (>=128) or load failures
+        # (e.g. missing shared lib) are what we actually want to catch.
+        if [ "$rc" -ge 128 ] || [ "$rc" -lt 0 ]; then
+          echo "FAIL: clio_run --help died with exit code $rc"
+          exit 1
+        fi
+        echo "=== dpkg -L iowarp-core (file manifest) ==="
+        dpkg -L iowarp-core | head -40
+        echo "=== ldd $(command -v clio_run) ==="
+        ldd "$(command -v clio_run)" | grep -E "not found" && exit 1 || echo "All shared libraries resolve."
+
+  test-rpm:
+    name: Test RPM install
+    needs: [build-rpm]
+    runs-on: ubuntu-latest
+    container: fedora:40
+    if: always() && needs.build-rpm.result == 'success'
+    steps:
+    - name: Download RPM artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: rpm-package
+        path: pkg/
+
+    - name: Install + smoke test
+      run: |
+        set -e
+        # dnf install resolves declared runtime deps from the package
+        # metadata; --skip-broken=no so a missing dep fails the job.
+        dnf install -y ./pkg/*.rpm
+        echo "=== clio_run --help ==="
+        clio_run --help; rc=$?
+        if [ "$rc" -ge 128 ] || [ "$rc" -lt 0 ]; then
+          echo "FAIL: clio_run --help died with exit code $rc"
+          exit 1
+        fi
+        echo "=== rpm -ql iowarp-core (file manifest) ==="
+        rpm -ql iowarp-core | head -40
+        echo "=== ldd $(command -v clio_run) ==="
+        ldd "$(command -v clio_run)" | grep -E "not found" && exit 1 || echo "All shared libraries resolve."
+
+  test-appimage:
+    name: Test AppImage
+    needs: [build-appimage]
+    runs-on: ubuntu-latest
+    if: always() && needs.build-appimage.result == 'success'
+    steps:
+    - name: Download AppImage artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: appimage
+        path: pkg/
+
+    - name: Install fuse + smoke test
+      run: |
+        set -e
+        # GHA runners can run AppImages two ways:
+        #   1. Mount via FUSE (requires libfuse2 on the runner)
+        #   2. APPIMAGE_EXTRACT_AND_RUN=1 — extract to a tmpdir + exec
+        # Use (2) so the test runs even on minimal runners without FUSE.
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends file
+        chmod +x pkg/*.AppImage
+        echo "=== AppImage info ==="
+        file pkg/*.AppImage
+        APPIMG=$(ls pkg/*.AppImage | head -1)
+        echo "=== $APPIMG --help ==="
+        APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMG" --help; rc=$?
+        if [ "$rc" -ge 128 ] || [ "$rc" -lt 0 ]; then
+          echo "FAIL: AppImage --help died with exit code $rc"
+          exit 1
+        fi
+        echo "AppImage launches and prints usage."
+
+  #-----------------------------------------------------------------------
   # Publish all artifacts to GitHub Release on tag
   #
   # softprops/action-gh-release appends to an existing release when one
   # exists (created by build-pip.yml's github-release job), or creates a
   # new one if not. fail_on_unmatched_files=true so a missing artifact
   # is surfaced as a job failure instead of silently shipping a partial
-  # release.
+  # release. Gated on the test jobs so a broken package never ships.
   #-----------------------------------------------------------------------
   publish-release:
     name: Publish to GitHub Release
-    needs: [build-deb, build-rpm, build-appimage]
+    needs: [build-deb, build-rpm, build-appimage, test-deb, test-rpm, test-appimage]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
