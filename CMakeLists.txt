@@ -1517,6 +1517,24 @@ install(FILES installers/pip/iowarp_core.pth
   COMPONENT pip_package
   DESTINATION ..)
 
+# On Windows, bundle vcpkg runtime DLLs into bin/ so the installed .exe
+# binaries and the .pyd extensions can find their dependencies. vcpkg's
+# build-tree VCPKG_APPLOCAL_DEPS handles the .exe-adjacent copies during
+# build, but the install tree only contains our own DLLs unless we copy
+# the third-party ones ourselves. Without this step, every clio_cte_bench
+# invocation fails with "libzmq-mt-*.dll: cannot open shared object file".
+if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+  set(_vcpkg_bin "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+  if(IS_DIRECTORY "${_vcpkg_bin}")
+    file(GLOB _vcpkg_dlls "${_vcpkg_bin}/*.dll")
+    if(_vcpkg_dlls)
+      install(FILES ${_vcpkg_dlls}
+        COMPONENT pip_package
+        DESTINATION bin)
+    endif()
+  endif()
+endif()
+
 #------------------------------------------------------------------------------
 # CPack Configuration
 #------------------------------------------------------------------------------
