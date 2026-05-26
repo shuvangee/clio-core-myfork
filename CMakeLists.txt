@@ -1413,6 +1413,24 @@ if(PIP_LIB_TARGETS)
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
     PUBLIC_HEADER DESTINATION include/chimaera)
+  # Mirror the install into the default ("Unspecified") component so the
+  # same shared libs ship in the .deb / .rpm built by cpack -G DEB/RPM
+  # (those generators filter to CPACK_COMPONENTS_ALL=Unspecified). Without
+  # this, libclio_admin_client.so / libclio_admin_runtime.so /
+  # libclio_bdev_*.so / libchimaera_MOD_NAME_*.so are only in the pip
+  # wheel — and the .rpm's clio_run binary then fails to start with
+  #   error while loading shared libraries: libclio_admin_client.so
+  # because its NEEDED entry (Fedora's ld doesn't strip --as-needed as
+  # aggressively as Ubuntu's) can't be resolved. The .deb happened to
+  # work because Ubuntu's linker stripped the direct NEEDED reference,
+  # but the libs were still missing from the package — same root cause,
+  # different surface symptom. Shipping the libs in both packages is
+  # the correct fix.
+  install(TARGETS ${PIP_LIB_TARGETS}
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    PUBLIC_HEADER DESTINATION include/chimaera)
 endif()
 
 # CLI binary -> iowarp_core/bin/
