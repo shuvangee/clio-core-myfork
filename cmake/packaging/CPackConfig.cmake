@@ -49,8 +49,15 @@ if(CLIO_CORE_ENABLE_DEB_PACKAGE OR CLIO_CORE_ENABLE_CPACK)
             OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE
             OUTPUT_STRIP_TRAILING_WHITESPACE)
     endif()
-    # Runtime dependencies: libzmq5 or libzmq3-dev, libyaml-cpp0.8 or libyaml-cpp-dev
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libzmq3-dev, libyaml-cpp-dev")
+    # Runtime dependencies: external shared libraries our binaries NEED.
+    # Be exhaustive here — by symmetry with the RPM side, where we turn
+    # AUTOREQ off to silence false-positives on our internal libs, we
+    # also lose auto-detection of true external deps. Match the set of
+    # third-party .so files our binaries link against
+    # (readelf -d clio_run | grep NEEDED, plus the same for the bench
+    # binaries).
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS
+        "libzmq5, libyaml-cpp0.8, libmsgpack-c2, libsodium23")
 
     message(STATUS "CPack: DEB generator enabled (arch=${CPACK_DEBIAN_PACKAGE_ARCHITECTURE})")
 endif()
@@ -63,7 +70,11 @@ if(CLIO_CORE_ENABLE_RPM_PACKAGE OR CLIO_CORE_ENABLE_CPACK)
     # RPM-specific settings
     set(CPACK_RPM_PACKAGE_LICENSE "MIT")
     set(CPACK_RPM_PACKAGE_GROUP "System/Libraries")
-    set(CPACK_RPM_PACKAGE_REQUIRES "zeromq, yaml-cpp")
+    # External shared-library deps. AUTOREQ is off below (otherwise rpm
+    # generates spurious Requires on our OWN internal libs and fails to
+    # self-resolve), so list every external lib we link against. Match
+    # the NEEDED entries from `readelf -d clio_run` etc.
+    set(CPACK_RPM_PACKAGE_REQUIRES "zeromq, yaml-cpp, msgpack-c, libsodium")
     # Disable auto-generated Requires on internal libraries. With AUTOREQ
     # default-on, rpmbuild scans every installed .so and adds a
     # Requires: lib<x>.so()(64bit) for each one — including our OWN
