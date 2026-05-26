@@ -1,9 +1,17 @@
 name: Build and Publish Binary Packages
 
+# Build + install-test runs on every push to main and every PR, so a
+# broken .deb / .rpm / .AppImage is caught before merge. Only the
+# publish-release job (tag-gated below) actually uploads to a GitHub
+# Release — pushes to main produce artifacts that expire with normal
+# Actions retention, nothing user-facing.
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
