@@ -184,6 +184,16 @@ chi::TaskResume Runtime::Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_
       CLIO_CO_AWAIT(FlushData(typed_task, rctx));
       break;
     }
+    case Method::kSemanticSearch: {
+      ctp::ipc::FullPtr<SemanticSearchTask> typed_task = task_ptr.template Cast<SemanticSearchTask>();
+      CLIO_CO_AWAIT(SemanticSearch(typed_task, rctx));
+      break;
+    }
+    case Method::kTemporalSearch: {
+      ctp::ipc::FullPtr<TemporalSearchTask> typed_task = task_ptr.template Cast<TemporalSearchTask>();
+      CLIO_CO_AWAIT(TemporalSearch(typed_task, rctx));
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -316,6 +326,16 @@ void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
       archive << *typed_task.ptr_;
       break;
     }
+    case Method::kSemanticSearch: {
+      auto typed_task = task_ptr.template Cast<SemanticSearchTask>();
+      archive << *typed_task.ptr_;
+      break;
+    }
+    case Method::kTemporalSearch: {
+      auto typed_task = task_ptr.template Cast<TemporalSearchTask>();
+      archive << *typed_task.ptr_;
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -443,6 +463,16 @@ void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
     }
     case Method::kFlushData: {
       auto typed_task = task_ptr.template Cast<FlushDataTask>();
+      archive >> *typed_task.ptr_;
+      break;
+    }
+    case Method::kSemanticSearch: {
+      auto typed_task = task_ptr.template Cast<SemanticSearchTask>();
+      archive >> *typed_task.ptr_;
+      break;
+    }
+    case Method::kTemporalSearch: {
+      auto typed_task = task_ptr.template Cast<TemporalSearchTask>();
       archive >> *typed_task.ptr_;
       break;
     }
@@ -608,6 +638,17 @@ void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
       archive >> *typed_task.ptr_;
       break;
     }
+    case Method::kSemanticSearch: {
+      auto typed_task = task_ptr.template Cast<SemanticSearchTask>();
+      archive >> *typed_task.ptr_;
+      break;
+    }
+    case Method::kTemporalSearch: {
+      auto typed_task = task_ptr.template Cast<TemporalSearchTask>();
+      // Use archive operator which respects msg_type
+      archive >> *typed_task.ptr_;
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -766,6 +807,17 @@ void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
     }
     case Method::kFlushData: {
       auto typed_task = task_ptr.template Cast<FlushDataTask>();
+      // Use archive operator which respects msg_type
+      archive << *typed_task.ptr_;
+      break;
+    }
+    case Method::kSemanticSearch: {
+      auto typed_task = task_ptr.template Cast<SemanticSearchTask>();
+      archive << *typed_task.ptr_;
+      break;
+    }
+    case Method::kTemporalSearch: {
+      auto typed_task = task_ptr.template Cast<TemporalSearchTask>();
       // Use archive operator which respects msg_type
       archive << *typed_task.ptr_;
       break;
@@ -1048,6 +1100,24 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       }
       break;
     }
+    case Method::kSemanticSearch: {
+      auto new_task_ptr = ipc_manager->NewTask<SemanticSearchTask>();
+      if (!new_task_ptr.IsNull()) {
+        auto task_typed = orig_task_ptr.template Cast<SemanticSearchTask>();
+        new_task_ptr->Copy(task_typed);
+        return new_task_ptr.template Cast<chi::Task>();
+      }
+      break;
+    }
+    case Method::kTemporalSearch: {
+      auto new_task_ptr = ipc_manager->NewTask<TemporalSearchTask>();
+      if (!new_task_ptr.IsNull()) {
+        auto task_typed = orig_task_ptr.template Cast<TemporalSearchTask>();
+        new_task_ptr->Copy(task_typed);
+        return new_task_ptr.template Cast<chi::Task>();
+      }
+      break;
+    }
     default: {
       // For unknown methods, create base Task copy
       auto new_task_ptr = ipc_manager->NewTask<chi::Task>();
@@ -1164,6 +1234,14 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
     }
     case Method::kFlushData: {
       auto new_task_ptr = ipc_manager->NewTask<FlushDataTask>();
+      return new_task_ptr.template Cast<chi::Task>();
+    }
+    case Method::kSemanticSearch: {
+      auto new_task_ptr = ipc_manager->NewTask<SemanticSearchTask>();
+      return new_task_ptr.template Cast<chi::Task>();
+    }
+    case Method::kTemporalSearch: {
+      auto new_task_ptr = ipc_manager->NewTask<TemporalSearchTask>();
       return new_task_ptr.template Cast<chi::Task>();
     }
     default: {
@@ -1296,6 +1374,16 @@ void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
       typed_task->Aggregate(replica_task);
       break;
     }
+    case Method::kSemanticSearch: {
+      auto typed_task = orig_task.template Cast<SemanticSearchTask>();
+      typed_task->Aggregate(replica_task);
+      break;
+    }
+    case Method::kTemporalSearch: {
+      auto typed_task = orig_task.template Cast<TemporalSearchTask>();
+      typed_task->Aggregate(replica_task);
+      break;
+    }
     default: {
       orig_task->Aggregate(replica_task);
       break;
@@ -1401,6 +1489,14 @@ void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {
     }
     case Method::kFlushData: {
       ipc_manager->DelTask(task_ptr.template Cast<FlushDataTask>());
+      break;
+    }
+    case Method::kSemanticSearch: {
+      ipc_manager->DelTask(task_ptr.template Cast<SemanticSearchTask>());
+      break;
+    }
+    case Method::kTemporalSearch: {
+      ipc_manager->DelTask(task_ptr.template Cast<TemporalSearchTask>());
       break;
     }
     default: {

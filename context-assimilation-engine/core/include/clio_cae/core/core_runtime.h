@@ -38,6 +38,9 @@
 #include <clio_cae/core/core_tasks.h>
 #include <clio_cae/core/core_client.h>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 
 // Forward declaration for CTE client
 namespace clio::cte::core {
@@ -125,9 +128,50 @@ class Runtime : public chi::Container {
    */
   chi::TaskResume ExportData(ctp::ipc::FullPtr<ExportDataTask> task, chi::RunContext& ctx);
 
+  /**
+   * CTE interceptor handlers (Method::kPutBlob / kGetBlob / kGetOrCreateTag).
+   * Each forwards the inbound task to the configured next CTE pool. No
+   * labeling/intelligence yet — just passthrough so a client pointed at
+   * the CAE pool transparently lands data in CTE behind it.
+   */
+  chi::TaskResume PutBlob(ctp::ipc::FullPtr<PutBlobTask> task,
+                          chi::RunContext &ctx);
+  chi::TaskResume GetBlob(ctp::ipc::FullPtr<GetBlobTask> task,
+                          chi::RunContext &ctx);
+  chi::TaskResume GetOrCreateTag(ctp::ipc::FullPtr<GetOrCreateTagTask> task,
+                                 chi::RunContext &ctx);
+  chi::TaskResume SemanticSearch(ctp::ipc::FullPtr<SemanticSearchTask> task,
+                                 chi::RunContext &ctx);
+
+  /**
+   * Resolve PoolQuery::Dynamic() → PoolQuery::Local() for the interceptor
+   * methods so they run on the receiving container without re-routing.
+   */
+  chi::PoolQuery ScheduleTask(
+      const ctp::ipc::FullPtr<chi::Task> &task) override;
+
  private:
+  /** Resolve the next pool ID (CTE core) we should forward to. */
+  chi::PoolId ResolveNextPoolId() const;
+
   Client client_;
   std::shared_ptr<clio::cte::core::Client> cte_client_;
+  chi::PoolId next_pool_id_;  // CTE core pool when CAE is the interceptor
+
+  // Transparent labeling config snapshotted from CreateParams at Create
+  // time. Read-only afterwards, so no synchronization is needed for the
+  // PutBlob fast path.
+  std::vector<LabelMatch> label_matches_;
+  std::unordered_map<std::string, std::string> label_prompts_;
+  std::string label_endpoint_;
+
+  // tag_id → tag_name cache populated by GetOrCreateTag forwards.
+  // PutBlobTask carries tag_id but not tag_name; matching against
+  // LabelMatch::tag_re_ needs the name, so we remember it on the way
+  // through. Read under shared lock from PutBlob, written under
+  // exclusive lock from GetOrCreateTag.
+  std::unordered_map<clio::cte::core::TagId, std::string> tag_names_;
+  std::mutex tag_names_mu_;
 };
 
 }  // namespace clio::cae::core

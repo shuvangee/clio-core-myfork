@@ -27,6 +27,7 @@ jobs:
             arch: ARM64
     env:
       VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
+      CAE_LABEL_TEST_SKIP: "1"
 
     steps:
     - name: Checkout repository
@@ -69,7 +70,7 @@ jobs:
       run: cmake --build build --config Debug -j $env:NUMBER_OF_PROCESSORS
 
     - name: Run tests
-      run: ctest --test-dir build --build-config Debug --output-on-failure --timeout 120
+      run: ctest --test-dir build --build-config Debug --output-on-failure --timeout 120 -LE ollama
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

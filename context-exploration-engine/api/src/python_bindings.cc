@@ -69,6 +69,9 @@ NB_MODULE(clio_cee, m) {
             "Authentication token for source")
     .def_rw("dst_token", &clio::cae::core::AssimilationCtx::dst_token,
             "Authentication token for destination")
+    .def_rw("src_data", &clio::cae::core::AssimilationCtx::src_data,
+            "Inline payload bytes for src='string::<blob_name>' sources. "
+            "Stored verbatim as a single blob named <blob_name>.")
     .def("__repr__", [](const clio::cae::core::AssimilationCtx& ctx) {
       return "<AssimilationCtx src='" + ctx.src + "' dst='" + ctx.dst +
              "' format='" + ctx.format + "'>";
@@ -88,12 +91,28 @@ NB_MODULE(clio_cee, m) {
          "Returns:\n"
          "  0 on success, non-zero error code on failure")
     .def("context_query", &iowarp::ContextInterface::ContextQuery,
-         nb::arg("tag_re"), nb::arg("blob_re"), nb::arg("max_results") = 0,
+         nb::arg("tag_re"), nb::arg("blob_re"),
+         nb::arg("max_results") = 0,
+         nb::arg("prompt") = "",
+         nb::arg("time_begin") = uint64_t{0},
+         nb::arg("time_end") = uint64_t{0},
          "Retrieve the identities of objects matching tag and blob patterns\n\n"
+         "Three modes, in priority order:\n"
+         "  1. Temporal (time_begin or time_end non-zero): returns blobs\n"
+         "     whose last_modified falls within [time_begin, time_end]\n"
+         "     (epoch nanoseconds; 0 = no bound), sorted ascending by\n"
+         "     timestamp, capped at max_results.\n"
+         "  2. Semantic (prompt non-empty): BM25 keyword search over the\n"
+         "     regex-filtered candidate blobs; top max_results returned\n"
+         "     by descending score (0 falls back to top-10).\n"
+         "  3. Regex (default): BlobQuery listing all matching blob names.\n\n"
          "Parameters:\n"
          "  tag_re: Tag regex pattern to match\n"
          "  blob_re: Blob regex pattern to match\n"
-         "  max_results: Maximum number of results to return (0 = unlimited, default: 0)\n\n"
+         "  max_results: Result cap (0 = unlimited for regex/temporal; top-10 for BM25)\n"
+         "  prompt: Optional BM25 query text — empty disables semantic search\n"
+         "  time_begin: Temporal lower bound, epoch nanoseconds (0 = no bound)\n"
+         "  time_end: Temporal upper bound, epoch nanoseconds (0 = no bound)\n\n"
          "Returns:\n"
          "  List of matching blob names")
     .def("context_retrieve", &iowarp::ContextInterface::ContextRetrieve,

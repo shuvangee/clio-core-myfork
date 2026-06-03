@@ -99,7 +99,39 @@ NB_MODULE(clio_cte_core_ext, m) {
                   "net_timeout"_a = -1.0f,
                   "Create a Dynamic pool query (automatic routing optimization)")
       .def_static("Local", &chi::PoolQuery::Local,
-                  "Create a Local pool query (routes to local node only)");
+                  "parallelism"_a = 32,
+                  "Create a Local pool query (routes to local node only). "
+                  "parallelism defaults to 32 — matches C++ "
+                  "chi::PoolQuery::Local default");
+
+  // Bind SemanticSearchResult — one row in the ranked output of a
+  // SemanticSearch task. Exposed as a plain dataclass-style object so
+  // Python callers can iterate the returned list and read the fields
+  // directly (results[0].tag_id, .blob_name, .score).
+  nb::class_<clio::cte::core::SemanticSearchResult>(m, "SemanticSearchResult")
+      .def(nb::init<>())
+      .def_rw("tag_id", &clio::cte::core::SemanticSearchResult::tag_id_)
+      .def_rw("blob_name", &clio::cte::core::SemanticSearchResult::blob_name_)
+      .def_rw("score", &clio::cte::core::SemanticSearchResult::score_)
+      .def("__repr__", [](const clio::cte::core::SemanticSearchResult &r) {
+        return std::string("SemanticSearchResult(tag_id=(") +
+               std::to_string(r.tag_id_.major_) + "," +
+               std::to_string(r.tag_id_.minor_) + "), blob_name='" +
+               r.blob_name_ + "', score=" + std::to_string(r.score_) + ")";
+      });
+
+  nb::class_<clio::cte::core::TemporalSearchResult>(m, "TemporalSearchResult")
+      .def(nb::init<>())
+      .def_rw("tag_id", &clio::cte::core::TemporalSearchResult::tag_id_)
+      .def_rw("blob_name", &clio::cte::core::TemporalSearchResult::blob_name_)
+      .def_rw("last_modified", &clio::cte::core::TemporalSearchResult::last_modified_)
+      .def("__repr__", [](const clio::cte::core::TemporalSearchResult &r) {
+        return std::string("TemporalSearchResult(tag_id=(") +
+               std::to_string(r.tag_id_.major_) + "," +
+               std::to_string(r.tag_id_.minor_) + "), blob_name='" +
+               r.blob_name_ + "', last_modified=" +
+               std::to_string(r.last_modified_) + ")";
+      });
 
   // Bind CteTelemetry structure
   nb::class_<clio::cte::core::CteTelemetry>(m, "CteTelemetry")
@@ -171,6 +203,52 @@ NB_MODULE(clio_cte_core_ext, m) {
          },
          "tag_regex"_a, "blob_regex"_a, "max_blobs"_a = 0, "pool_query"_a,
          "Query blobs by tag and blob regex patterns, returns vector of (tag_name, blob_name) pairs")
+     .def("SemanticSearch",
+         [](clio::cte::core::Client &self,
+            const std::string &tag_regex, const std::string &blob_regex,
+            const std::string &query_text, uint32_t k,
+            const chi::PoolQuery &pool_query) {
+           // Server-side BM25 over the (tag, blob) pairs that match
+           // both regexes. Returns the top-k scored results already
+           // sorted descending. Wait() here is fine for the Python
+           // binding because the call is synchronous from the caller's
+           // perspective; the server runs the heavy lifting as a
+           // coroutine.
+           auto task = self.AsyncSemanticSearch(tag_regex, blob_regex,
+                                                query_text, k, pool_query);
+           task.Wait();
+           return task->results_;
+         },
+         "tag_regex"_a, "blob_regex"_a, "query_text"_a, "k"_a = 10,
+         "pool_query"_a,
+         "BM25 keyword search over blob contents. Filters candidate "
+         "blobs by tag_regex AND blob_regex (full-string std::regex_match), "
+         "tokenizes each candidate's bytes, scores against query_text, "
+         "returns top-k SemanticSearchResult sorted by descending score. "
+         "Args: tag_regex (str), blob_regex (str), query_text (str), "
+         "k (int, default 10; 0 = no cap), pool_query (PoolQuery; "
+         "use PoolQuery.Broadcast() to search all nodes). "
+         "Returns: list[SemanticSearchResult]")
+     .def("TemporalSearch",
+         [](clio::cte::core::Client &self,
+            const std::string &tag_regex, const std::string &blob_regex,
+            uint64_t time_begin, uint64_t time_end, uint32_t max_entries,
+            const chi::PoolQuery &pool_query) {
+           auto task = self.AsyncTemporalSearch(tag_regex, blob_regex,
+                                                time_begin, time_end,
+                                                max_entries, pool_query);
+           task.Wait();
+           return task->results_;
+         },
+         "tag_regex"_a, "blob_regex"_a,
+         "time_begin"_a = uint64_t{0}, "time_end"_a = uint64_t{0},
+         "max_entries"_a = uint32_t{0}, "pool_query"_a,
+         "Find blobs by last-modified timestamp. Filters by tag_regex AND "
+         "blob_regex (full-string std::regex_match), then returns blobs whose "
+         "last_modified metadata falls within [time_begin, time_end] (epoch "
+         "nanoseconds; 0 = no bound). Results are sorted ascending by "
+         "last_modified and capped at max_entries (0 = unlimited). "
+         "Returns: list[TemporalSearchResult]")
      .def("RegisterTarget",
          [](clio::cte::core::Client &self,
             const std::string &target_name, clio::run::bdev::BdevType bdev_type,

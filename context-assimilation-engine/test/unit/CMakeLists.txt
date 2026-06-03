@@ -300,6 +300,225 @@ set_tests_properties(
 )
 
 #------------------------------------------------------------------------------
+# Test 7: CAE -> CTE Interceptor Integration Test
+#------------------------------------------------------------------------------
+# Brings up CAE at pool 512.0 (CTE entrypoint) with next_pool_id 513.0,
+# CTE core at 513.0. Validates that CLIO_CTE_CLIENT->{GetOrCreateTag,
+# PutBlob, GetBlob} flow through the CAE interceptor and round-trip
+# correctly. See GitHub issue #467.
+#------------------------------------------------------------------------------
+add_executable(test_cae_cte_interceptor
+  ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_cte_interceptor.cc
+)
+
+target_include_directories(test_cae_cte_interceptor
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+target_link_libraries(test_cae_cte_interceptor
+  PRIVATE
+    clio_cae_core_client
+    clio_cae_core_runtime
+    clio_cte_core_client
+    clio_cte_core_runtime
+    chimaera::admin_runtime
+    chimaera::admin_client
+    chimaera::bdev_runtime
+    chimaera::bdev_client
+    chimaera::cxx
+    ctp::cxx
+    ctp::configure
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+# Copy compose config next to binary so the test can find it via __FILE__.
+add_custom_command(TARGET test_cae_cte_interceptor POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_cte_interceptor_config.yaml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_cae_cte_interceptor_config.yaml
+)
+
+install(TARGETS test_cae_cte_interceptor DESTINATION bin)
+
+add_test(NAME cae_interceptor_roundtrip
+    COMMAND test_cae_cte_interceptor)
+
+set_tests_properties(
+    cae_interceptor_roundtrip
+    PROPERTIES
+        TIMEOUT 180
+        LABELS "cae;interceptor;integration;msan_skip"
+        RESOURCE_LOCK "chimaera_runtime"
+)
+
+#------------------------------------------------------------------------------
+# Test 8: CAE Transparent Labeling Integration Test (uses local Ollama)
+#------------------------------------------------------------------------------
+# Brings up CAE with label_matches pointing at a local Ollama instance
+# (127.0.0.1:11434, gemma3:1b). Verifies that a PutBlob whose tag+blob
+# name matches the rule produces a `{name}_label` blob with non-empty
+# contents. CAE_LABEL_TEST_SKIP=1 short-circuits the test for environments
+# without Ollama.
+#------------------------------------------------------------------------------
+add_executable(test_cae_labeling
+  ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_labeling.cc
+)
+
+target_include_directories(test_cae_labeling
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+target_link_libraries(test_cae_labeling
+  PRIVATE
+    clio_cae_core_client
+    clio_cae_core_runtime
+    clio_cte_core_client
+    clio_cte_core_runtime
+    chimaera::admin_runtime
+    chimaera::admin_client
+    chimaera::bdev_runtime
+    chimaera::bdev_client
+    chimaera::cxx
+    ctp::cxx
+    ctp::configure
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+add_custom_command(TARGET test_cae_labeling POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_labeling_config.yaml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_cae_labeling_config.yaml
+)
+
+install(TARGETS test_cae_labeling DESTINATION bin)
+
+add_test(NAME cae_labeling_ollama
+    COMMAND test_cae_labeling)
+
+# 5-min timeout — gemma3:1b on CPU is usually under 10s but cold-start
+# weights can take longer. msan_skip because libcurl/openssl aren't
+# instrumented and we don't run a real LLM under MSan anyway.
+set_tests_properties(
+    cae_labeling_ollama
+    PROPERTIES
+        TIMEOUT 300
+        LABELS "cae;labeling;ollama;integration;msan_skip"
+        RESOURCE_LOCK "chimaera_runtime"
+)
+
+#------------------------------------------------------------------------------
+# Test 9: CAE labels 10 docs; CTE SemanticSearch returns top-5
+#------------------------------------------------------------------------------
+# Puts 10 short documents through CAE (auto-labels via local Ollama),
+# then exercises the new CTE/CAE SemanticSearch API: BM25-ranked top-5
+# results for a natural-language query. Validates the full
+# transparent-labeling → keyword-search pipeline.
+#------------------------------------------------------------------------------
+add_executable(test_cae_semantic_search
+  ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_semantic_search.cc
+)
+
+target_include_directories(test_cae_semantic_search
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+target_link_libraries(test_cae_semantic_search
+  PRIVATE
+    clio_cae_core_client
+    clio_cae_core_runtime
+    clio_cte_core_client
+    clio_cte_core_runtime
+    chimaera::admin_runtime
+    chimaera::admin_client
+    chimaera::bdev_runtime
+    chimaera::bdev_client
+    chimaera::cxx
+    ctp::cxx
+    ctp::configure
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+add_custom_command(TARGET test_cae_semantic_search POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_semantic_search_config.yaml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_cae_semantic_search_config.yaml
+)
+
+install(TARGETS test_cae_semantic_search DESTINATION bin)
+
+add_test(NAME cae_semantic_search
+    COMMAND test_cae_semantic_search)
+
+# 10 sequential Ollama inferences + a server-side BM25 sweep — give
+# this enough wall budget for cold-start model load on slower CI.
+set_tests_properties(
+    cae_semantic_search
+    PROPERTIES
+        TIMEOUT 600
+        LABELS "cae;cte;bm25;semantic-search;ollama;integration;msan_skip"
+        RESOURCE_LOCK "chimaera_runtime"
+)
+
+#------------------------------------------------------------------------------
+# Test 10: StringDataAssimilator (string:: src + src_data payload)
+#------------------------------------------------------------------------------
+# Self-contained kServer test: brings up CAE (400.0) and CTE (512.0) as
+# peer pools and exercises the new in-memory assimilator path that the
+# agentic loop uses to push generated bytes directly into Clio without
+# touching the filesystem.
+#------------------------------------------------------------------------------
+add_executable(test_cae_string_assim
+  ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_string_assim.cc
+)
+
+target_include_directories(test_cae_string_assim
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+target_link_libraries(test_cae_string_assim
+  PRIVATE
+    clio_cae_core_client
+    clio_cae_core_runtime
+    clio_cte_core_client
+    clio_cte_core_runtime
+    chimaera::admin_runtime
+    chimaera::admin_client
+    chimaera::bdev_runtime
+    chimaera::bdev_client
+    chimaera::cxx
+    ctp::cxx
+    ctp::configure
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+add_custom_command(TARGET test_cae_string_assim POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_cae_string_assim_config.yaml
+    ${CMAKE_CURRENT_BINARY_DIR}/test_cae_string_assim_config.yaml
+)
+
+install(TARGETS test_cae_string_assim DESTINATION bin)
+
+add_test(NAME cae_string_assim
+    COMMAND test_cae_string_assim)
+
+set_tests_properties(
+    cae_string_assim
+    PROPERTIES
+        TIMEOUT 180
+        LABELS "cae;string-assim;integration;msan_skip"
+        RESOURCE_LOCK "chimaera_runtime"
+)
+
+#------------------------------------------------------------------------------
 # Test Summary Target
 #------------------------------------------------------------------------------
 # Custom target to run all tests with verbose output

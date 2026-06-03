@@ -71,19 +71,37 @@ public:
   int ContextBundle(const std::vector<clio::cae::core::AssimilationCtx> &bundle);
 
   /**
-   * Retrieve the identities of objects matching tag and blob patterns
+   * Retrieve the identities of objects matching tag and blob patterns.
    *
-   * Queries the CTE system for blobs matching the specified regex patterns.
-   * This is useful for discovering what objects are available in the system.
+   * Three modes, in priority order:
+   *   1. Temporal (time_begin or time_end non-zero): TemporalSearch —
+   *      returns blobs whose last_modified falls within
+   *      [time_begin, time_end] (epoch nanoseconds; 0 = no bound),
+   *      sorted ascending by timestamp, capped at max_results.
+   *   2. Semantic (prompt non-empty): BM25 keyword search via
+   *      SemanticSearch — tag_re/blob_re filter the candidate set and
+   *      the prompt is scored against blob payloads; the top max_results
+   *      blob names (ordered by descending score) are returned.
+   *   3. Regex (default): listing via BlobQuery — tag/blob names
+   *      matching tag_re AND blob_re are returned.
    *
-   * @param tag_re Tag regex pattern to match
-   * @param blob_re Blob regex pattern to match
-   * @param max_results Maximum number of results to return (0 = unlimited)
+   * max_results = 0 means "unlimited" for the regex/temporal paths and
+   * falls back to a default cap of 10 for the BM25 path.
+   *
+   * @param tag_re      Tag regex pattern to match
+   * @param blob_re     Blob regex pattern to match
+   * @param max_results Result cap (0 = unlimited for regex/temporal; 10 for BM25)
+   * @param prompt      Optional BM25 query text. Empty = not a semantic query.
+   * @param time_begin  Temporal lower bound, epoch nanoseconds (0 = no bound)
+   * @param time_end    Temporal upper bound, epoch nanoseconds (0 = no bound)
    * @return Vector of matching blob names
    */
   std::vector<std::string> ContextQuery(const std::string &tag_re,
                                          const std::string &blob_re,
-                                         unsigned int max_results = 0);
+                                         unsigned int max_results = 0,
+                                         const std::string &prompt = "",
+                                         uint64_t time_begin = 0,
+                                         uint64_t time_end = 0);
 
   /**
    * Retrieve the identities and data of objects matching patterns
