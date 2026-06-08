@@ -67,23 +67,20 @@
 // Global pointer variable definition for IPC manager singleton
 CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::IpcManager, g_ipc_manager);
 
-#include <clio_runtime/device_memcpy.h>
-
 namespace clio::run {
 
-// Definitions of the device-aware memcpy + IsDevicePointer hooks
-// declared in chimaera/device_memcpy.h. ServerInitGpuQueuesSycl (or
-// its CUDA/ROCm equivalent) installs function pointers here at
-// server-init time so the bdev runtime — built without -fsycl — can
-// route memcpys involving device USM through the GPU runtime, and
-// stage through host buffers only when the data is actually on the
-// device.
-CLIO_RUN_API std::atomic<DeviceAwareMemcpyFn> g_device_aware_memcpy{nullptr};
-CLIO_RUN_API std::atomic<IsDevicePointerFn> g_is_device_pointer{nullptr};
-
-}  // namespace clio::run
-
-namespace clio::run {
+// ChiServerBootstrap{Hip,Sycl}Gpu are defined in the GPU companion lib
+// (clio_run_cxx_gpu) and called from ServerInit below. Declare them at
+// namespace scope (not block scope) so MSVC mangles the references as
+// clio::run::ChiServerBootstrap*Gpu to match the GPU lib's exports — a
+// block-scope `extern` declaration binds to the global namespace on MSVC
+// (it binds to the enclosing namespace on GCC, which is why it worked there).
+CLIO_RUN_GPU_API bool ChiServerBootstrapHipGpu(IpcManager *self,
+                                               u32 queue_depth,
+                                               size_t backend_bytes);
+CLIO_RUN_GPU_API bool ChiServerBootstrapSyclGpu(IpcManager *self,
+                                                u32 queue_depth,
+                                                size_t backend_bytes);
 
 namespace {
 
@@ -361,15 +358,13 @@ bool IpcManager::ServerInit() {
   // CUDA / ROCm slim path: GPU is a pure task producer that pushes onto
   // gpu2cpu_queue. The bootstrap mirrors the SYCL one — pinned host
   // gpu2cpu_queue + gpu2cpu_copy_backend, on-device GpuTaskQueue
-  // construction, then install the chi::DeviceAwareMemcpy /
-  // IsDevicePointer hooks. Source lives in src/gpu/gpu2cpu_init_hip.cc
-  // and is compiled by nvcc/hipcc so the kernel launch syntax resolves.
+  // construction. Source lives in src/gpu/gpu2cpu_init_hip.cc and is
+  // compiled by nvcc/hipcc so the kernel launch syntax resolves.
+  // (Device-aware memcpy is now ctp::DeviceAwareMemcpy in gpu_api.h.)
   {
     ConfigManager *config = CLIO_CONFIG_MANAGER;
     u32 queue_depth = config->GetQueueDepth();
     constexpr size_t kHipClientBackendBytes = 64 * 1024 * 1024;  // 64 MB
-    extern bool ChiServerBootstrapHipGpu(IpcManager *self, u32 queue_depth,
-                                          size_t backend_bytes);
     if (!ChiServerBootstrapHipGpu(this, queue_depth,
                                    kHipClientBackendBytes)) {
       return false;
@@ -385,8 +380,6 @@ bool IpcManager::ServerInit() {
     ConfigManager *config = CLIO_CONFIG_MANAGER;
     u32 queue_depth = config->GetQueueDepth();
     constexpr size_t kSyclClientBackendBytes = 64 * 1024 * 1024;  // 64 MB
-    extern bool ChiServerBootstrapSyclGpu(IpcManager *self, u32 queue_depth,
-                                           size_t backend_bytes);
     if (!ChiServerBootstrapSyclGpu(this, queue_depth,
                                     kSyclClientBackendBytes)) {
       return false;

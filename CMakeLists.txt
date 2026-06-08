@@ -151,6 +151,10 @@ option(CLIO_CTE_ENABLE_HDF5_VOL "Enable HDF5 VOL connector (requires HDF5 >= 1.1
 # CAE (context-assimilation-engine) Options
 #------------------------------------------------------------------------------
 option(CAE_ENABLE_GLOBUS "Enable Globus transfer support in CAE" OFF)
+# LLM labeling/summary + semantic-search features and their integration tests
+# require a running Ollama service. OFF by default so default builds don't
+# build or run them without Ollama.
+option(CLIO_CAE_ENABLE_SUMMARY "Enable CAE LLM labeling/summary + semantic-search (requires a running Ollama service)" OFF)
 
 #------------------------------------------------------------------------------
 # External Examples and Applications
@@ -911,11 +915,24 @@ if(NOT MSVC)
     endif()
 else()
     # MSVC compiler flags
-    # /FS enables synchronized PDB writes to avoid C1041 errors with parallel builds
-    add_compile_options(/FS)
+    # /FS enables synchronized PDB writes to avoid C1041 errors with parallel
+    # builds. Scope it per-language: passed directly for C/CXX, but routed
+    # through -Xcompiler for CUDA — nvcc treats a bare "/FS" as a second input
+    # file ("nvcc fatal : A single input file is required ...").
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/FS>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/FS>)
+    # CUDA 13.x CCCL headers (cuda/std/*) require MSVC's conformant
+    # preprocessor and #error out on the traditional one. Enable it for the
+    # CUDA host compile only, so the existing CXX build is unaffected.
+    add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>)
     # Prevent windows.h from defining min/max macros that conflict with
     # std::numeric_limits<>::max() and similar standard library usage.
     add_compile_definitions(NOMINMAX)
+    # In the CUDA build, nvcc force-includes cuda_runtime.h (which pulls in
+    # windows.h, and thus the legacy winsock.h) before the socket sources can
+    # include winsock2.h, causing 'sockaddr' redefinition (C2011). Keep the
+    # legacy winsock out of windows.h for the CUDA host compile.
+    add_compile_definitions($<$<COMPILE_LANGUAGE:CUDA>:WIN32_LEAN_AND_MEAN>)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Od /DDEBUG")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
 endif()

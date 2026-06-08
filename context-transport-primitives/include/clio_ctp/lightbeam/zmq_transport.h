@@ -215,11 +215,9 @@ class ZeroMqTransport : public Transport {
       // routing prefix.  hostname:pid keeps it debuggable and unique
       // across processes.
       {
-        char hostname_buf[64] = {};
-        gethostname(hostname_buf, sizeof(hostname_buf) - 1);
+        std::string hostname = ctp::SystemInfo::GetHostname();
         uint32_t pid = static_cast<uint32_t>(ctp::SystemInfo::GetPid());
-        std::string identity = std::string(hostname_buf) + ":" +
-                                std::to_string(pid);
+        std::string identity = hostname + ":" + std::to_string(pid);
         zmq_setsockopt(socket_, ZMQ_IDENTITY, identity.data(),
                         identity.size());
       }
@@ -505,7 +503,12 @@ class ZeroMqTransport : public Transport {
     if (info.rc != 0) {
       return info;
     }
+#if !CTP_IS_GPU
+    // identity_ only exists off-device (it's a std::string; ZMQ is host-only).
+    // Guard the use so nvcc's device pass — which still parses this host-only
+    // template body — doesn't trip over the #if !CTP_IS_GPU'd-out member.
     info.identity_ = meta.client_info_.identity_;
+#endif
     // Set up recv entries from send descriptors.
     for (const auto& send_bulk : meta.send) {
       Bulk recv_bulk;
@@ -649,39 +652,12 @@ class ZeroMqTransport : public Transport {
 
   std::string GetAddress() const { return addr_; }
 
-  /** Check if the server is still alive via a TCP connect probe. */
+  /** Check if the server is still alive via a connect probe. The actual
+   *  socket API lives in socket_{win,posix}.cc so no Windows header leaks in
+   *  through this header. */
   bool IsServerAlive(const LbmContext& ctx = LbmContext()) const {
     (void)ctx;
-    if (protocol_ == "ipc") {
-      // Unix domain socket — try connect
-      sock::socket_t fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-      if (fd == sock::kInvalidSocket) return false;
-      struct sockaddr_un sun;
-      std::memset(&sun, 0, sizeof(sun));
-      sun.sun_family = AF_UNIX;
-      std::strncpy(sun.sun_path, addr_.c_str(), sizeof(sun.sun_path) - 1);
-      int rc = ::connect(fd, reinterpret_cast<struct sockaddr*>(&sun),
-                         sizeof(sun));
-      sock::Close(fd);
-      return rc == 0;
-    }
-    // TCP — probe addr_:port_
-    sock::socket_t fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd == sock::kInvalidSocket) return false;
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 500000;
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
-               reinterpret_cast<const char*>(&tv), sizeof(tv));
-    struct sockaddr_in sa;
-    std::memset(&sa, 0, sizeof(sa));
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port_));
-    ::inet_pton(AF_INET, addr_.c_str(), &sa.sin_addr);
-    int rc = ::connect(fd, reinterpret_cast<struct sockaddr*>(&sa),
-                       sizeof(sa));
-    sock::Close(fd);
-    return rc == 0;
+    return sock::IsServerAlive(addr_, port_, protocol_);
   }
 
  private:

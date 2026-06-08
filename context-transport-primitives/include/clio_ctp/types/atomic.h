@@ -39,7 +39,14 @@
 
 #include "clio_ctp/constants/macros.h"
 #include "numbers.h"
-#if CTP_IS_CUDA_COMPILER
+// <cuda/atomic> (CCCL) on the MSVC host pass selects CCCL's win32 thread API,
+// which includes <windows.h> and leaks Yield()/min/max macros that break our
+// headers. We don't actually use cuda::atomic, but excluding it from only ONE
+// of nvcc's two passes makes the device/host stub inconsistent
+// ("'::cuda' has not been declared"), so the include must be all-or-nothing per
+// platform: include it in both passes off Windows (original behaviour), and in
+// neither pass on Windows.
+#if CTP_IS_CUDA_COMPILER && !defined(_WIN32)
 #include <cuda/atomic>
 #endif
 #if CTP_IS_ROCM_COMPILER
