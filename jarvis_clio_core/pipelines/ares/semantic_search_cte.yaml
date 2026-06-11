@@ -1,0 +1,87 @@
+# CTE SemanticSearch weak-scaling test (Ares cluster).
+#
+# Pipeline-test format (config + vars + loop): sweeps the SLURM node count
+# 1 -> 2 -> 4 -> 8 with the blob count scaled proportionally (1000 blobs/node)
+# so the work PER node is constant -- weak scaling. A single client ingests the
+# blobs (distributed across the N-node CTE pool via Dynamic PutBlob), then
+# issues one broadcast SemanticSearch; the benchmark reports the avg/min/max
+# latency to query the top-k blobs (see clio_cte_semantic_bench --query-iters),
+# captured per run via the package's _get_stat -> results.csv.
+#
+# Mode B (scheduler.nodes is a swept var): each (node-count x repeat) is
+# submitted as its own SLURM job. Run with:
+#   jarvis ppl run yaml '<this file>'
+# (`jarvis ppl submit` is rejected in this mode.)
+
+# Top-level scheduler = per-iteration template; scheduler.nodes is overridden
+# per combination.
+scheduler:
+  name: slurm
+  job_name: sem_cte
+  ntasks_per_node: 1
+  cpus_per_task: 32
+  partition: compute
+  time: "00:05:00"
+  output: slurm-%j.out
+  error: slurm-%j.err
+  pre_cmds:
+    - 'source /etc/profile.d/lmod.sh 2>/dev/null || source /etc/profile.d/modules.sh'
+    - 'mkdir -p /home/llogan/iowarp_prte_tmp'
+
+config:
+  name: semantic_search_cte
+  ssh_cmd: "env -u LD_LIBRARY_PATH ssh"
+
+  env:
+    TMPDIR: "/home/llogan/iowarp_prte_tmp"
+    CLIO_MEMFD_DIR: "/home/llogan/iowarp_chimaera_tmp_${HOSTNAME}"
+    # Pin iowarp/lightbeam ZMQ daemon<->daemon traffic to the 40G NIC.
+    LIGHTBEAM_TCP_DEVICE: enp47s0np0
+    CLIO_IPC_MODE: "shm"
+
+  pkgs:
+    - pkg_type: jarvis_clio_core.clio_runtime
+      pkg_name: runtime
+      num_threads: 4
+      client_data_segment_size: "2G"
+      port: 9413
+      ipc_mode: "shm"
+      log_level: "debug"
+      sleep: 4
+      install_method: spack
+      install_query: iowarp@main+fuse
+
+    - pkg_type: jarvis_clio_core.clio_cte
+      pkg_name: cte_core
+      devices:
+        - ["ram::cte_ram_tier1", "2GB", 1.0]
+      dpe_type: "max_bw"
+      neighborhood: 1
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
+      pool_query: "local"
+
+    - pkg_type: jarvis_clio_core.clio_cte_semantic_bench
+      pkg_name: semantic_bench
+      blobs: 1000
+      blob_size: 4096
+      results: 10
+      keyword: "needle"
+      query_iters: 5
+      nprocs: 1
+      ppn: 1
+      init_runtime: false
+
+# Weak-scaling sweep: blob count grows with the node count (1000 blobs/node),
+# so the work PER node stays constant while total data scales with N. The two
+# vars are zipped (paired by index) in a single loop group.
+vars:
+  scheduler.nodes:      [1, 2, 4, 8]
+  semantic_bench.blobs: [1000, 2000, 4000, 8000]
+
+loop:
+  - [scheduler.nodes, semantic_bench.blobs]
+
+repeat: 1
+
+output: "${HOME}/semantic_weak_scaling_results"
