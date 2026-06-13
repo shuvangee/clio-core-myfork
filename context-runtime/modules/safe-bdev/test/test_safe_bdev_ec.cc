@@ -51,6 +51,7 @@
 #include <memory>
 #include <vector>
 
+#include "clio_runtime/safe_bdev/ec/declustered.h"
 #include "clio_runtime/safe_bdev/ec/ec_array.h"
 #include "clio_runtime/safe_bdev/ec/gf256.h"
 #include "clio_runtime/safe_bdev/ec/reed_solomon.h"
@@ -315,6 +316,81 @@ TEST_CASE("ec_array_recover_parity_drive", "[safe_bdev][ec][recover]") {
 
   // Recovered parity must match the originally-computed parity bytes.
   REQUIRE(replacement->bytes() == original_parity0);
+}
+
+TEST_CASE("declustered_parity_spread", "[safe_bdev][ec][declustered]") {
+  // k=3, m=1, N=4: over N consecutive stripes each member must be parity
+  // exactly m=1 time — i.e., parity is spread evenly (declustered), not pinned.
+  const size_t shard_len = 16;
+  ec::DeclusteredArray arr(shard_len);
+  std::vector<std::unique_ptr<ec::MemoryStore>> stores;
+  std::vector<int> ids;
+  for (int i = 0; i < 4; ++i) {
+    stores.push_back(std::make_unique<ec::MemoryStore>(shard_len * 8));
+    ids.push_back(arr.AddMemberStore(stores.back().get()));
+  }
+  const int e = arr.OpenGeneration(3, 1, ids, /*num_stripes=*/4);
+  for (int mid : ids) {
+    REQUIRE(arr.ParityCountForMember(e, mid, 4) == 1);
+  }
+}
+
+TEST_CASE("declustered_variable_width_recover", "[safe_bdev][ec][declustered]") {
+  // Two generations of different width over a shared member pool:
+  //   gen0: k=3, m=1 over members {0,1,2,3}    -> stripes [0,4)
+  //   gen1: k=4, m=1 over members {0,1,2,4 | 3} -> stripes [4,8)  (widened)
+  // Existing (gen0) stripes keep their geometry; gen1 uses the added member 4.
+  const size_t shard_len = 32;
+  const uint64_t total = 8;
+  ec::DeclusteredArray arr(shard_len);
+  std::vector<std::unique_ptr<ec::MemoryStore>> stores;
+  std::vector<int> ids;
+  for (int i = 0; i < 5; ++i) {
+    stores.push_back(std::make_unique<ec::MemoryStore>(shard_len * total));
+    ids.push_back(arr.AddMemberStore(stores.back().get()));
+  }
+  arr.OpenGeneration(3, 1, {ids[0], ids[1], ids[2], ids[3]}, 4);
+  arr.OpenGeneration(4, 1, {ids[0], ids[1], ids[2], ids[4], ids[3]}, 4);
+  REQUIRE(arr.total_stripes() == total);
+
+  auto write_all = [&]() {
+    for (uint64_t g = 0; g < total; ++g) {
+      const int k = arr.GenerationK(arr.EpochOf(g));
+      std::vector<std::vector<uint8_t>> ds(static_cast<size_t>(k));
+      for (int c = 0; c < k; ++c) {
+        ds[c] = GenShard(c, static_cast<int>(g), shard_len);
+      }
+      REQUIRE(arr.WriteStripe(g, ds));
+    }
+  };
+  auto verify_all = [&]() {
+    for (uint64_t g = 0; g < total; ++g) {
+      const int k = arr.GenerationK(arr.EpochOf(g));
+      std::vector<std::vector<uint8_t>> rd;
+      REQUIRE(arr.ReadStripe(g, &rd));
+      REQUIRE(static_cast<int>(rd.size()) == k);
+      for (int c = 0; c < k; ++c) {
+        REQUIRE(rd[c] == GenShard(c, static_cast<int>(g), shard_len));
+      }
+    }
+  };
+
+  write_all();
+  verify_all();  // happy path across both generations
+
+  // Fault member 0 (participates in BOTH generations): degraded reads
+  // reconstruct in each generation under its own (k,m) geometry.
+  arr.MarkFaulty(ids[0]);
+  verify_all();
+
+  // Recover member 0 onto a fresh store; reads are non-degraded again.
+  auto repl = std::make_unique<ec::MemoryStore>(shard_len * total);
+  REQUIRE(arr.RecoverMember(ids[0], repl.get()));
+  verify_all();
+
+  // Redundancy restored: fault a different member, still reconstructs.
+  arr.MarkFaulty(ids[1]);
+  verify_all();
 }
 
 SIMPLE_TEST_MAIN()
