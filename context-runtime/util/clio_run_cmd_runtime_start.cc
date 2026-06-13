@@ -101,14 +101,13 @@ bool InductNode() {
 }
 
 void PrintRuntimeStartUsage() {
-  HIPRINT("Usage: chimaera runtime start [--induct]");
-  HIPRINT("  Starts the Chimaera runtime server");
-  HIPRINT("  --induct: Register this node with all existing cluster nodes");
-}
-
-void PrintRuntimeRestartUsage() {
-  HIPRINT("Usage: chimaera runtime restart [--induct]");
-  HIPRINT("  Restarts the Chimaera runtime, replaying WAL to recover address table");
+  HIPRINT("Usage: clio_run start [--ephemeral] [--induct]");
+  HIPRINT("  Starts the Clio runtime server.");
+  HIPRINT("  By default the runtime is PERSISTENT: it recomposes saved pools");
+  HIPRINT("  and replays the address-table WAL so filesystem state survives");
+  HIPRINT("  across sessions (like `docker start`).");
+  HIPRINT("  --ephemeral: start a completely fresh session, ignoring saved");
+  HIPRINT("               state (intended for unit tests / benchmarks).");
   HIPRINT("  --induct: Register this node with all existing cluster nodes");
 }
 
@@ -116,9 +115,12 @@ void PrintRuntimeRestartUsage() {
 
 int RuntimeStart(int argc, char* argv[]) {
   bool induct = false;
+  bool ephemeral = false;
   for (int i = 0; i < argc; ++i) {
     if (std::strcmp(argv[i], "--induct") == 0) {
       induct = true;
+    } else if (std::strcmp(argv[i], "--ephemeral") == 0) {
+      ephemeral = true;
     } else if (std::strcmp(argv[i], "--help") == 0 ||
                std::strcmp(argv[i], "-h") == 0) {
       PrintRuntimeStartUsage();
@@ -133,67 +135,24 @@ int RuntimeStart(int argc, char* argv[]) {
   std::signal(SIGTERM, SignalHandler);
   std::signal(SIGINT, SignalHandler);
 
-  HLOG(kDebug, "Starting Chimaera runtime...");
+  // Persistent by default: recompose saved pools and replay the address-table
+  // WAL so filesystem state survives across sessions (the behavior formerly
+  // exposed as `restart`). `--ephemeral` opts back into a fresh session.
+  const bool is_restart = !ephemeral;
+  if (ephemeral) {
+    HLOG(kInfo, "Starting Clio runtime (ephemeral: fresh session)...");
+  } else {
+    HLOG(kInfo,
+         "Starting Clio runtime (persistent: recovering saved state)...");
+  }
 
-  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kRuntime, true)) {
+  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kRuntime, true,
+                          /*is_restart=*/is_restart)) {
     HLOG(kError, "Failed to initialize Chimaera runtime");
     return 1;
   }
 
   HLOG(kDebug, "Chimaera runtime started successfully");
-
-  if (!InitializeAdminChiMod()) {
-    HLOG(kError, "FATAL ERROR: Failed to find or initialize admin ChiMod");
-    return 1;
-  }
-
-  HLOG(kDebug, "Admin ChiMod initialized successfully with pool ID {}", chi::kAdminPoolId);
-
-  if (induct) {
-    if (!InductNode()) {
-      HLOG(kError, "FATAL ERROR: Failed to induct node into cluster");
-      return 1;
-    }
-  }
-
-  while (g_keep_running) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  }
-
-  HLOG(kDebug, "Shutting down Chimaera runtime...");
-  ShutdownAdminChiMod();
-  HLOG(kDebug, "Chimaera runtime stopped (finalization will happen automatically)");
-  return 0;
-}
-
-int RuntimeRestart(int argc, char* argv[]) {
-  bool induct = false;
-  for (int i = 0; i < argc; ++i) {
-    if (std::strcmp(argv[i], "--induct") == 0) {
-      induct = true;
-    } else if (std::strcmp(argv[i], "--help") == 0 ||
-               std::strcmp(argv[i], "-h") == 0) {
-      PrintRuntimeRestartUsage();
-      return 0;
-    } else {
-      HLOG(kError, "Unknown argument: {}", argv[i]);
-      PrintRuntimeRestartUsage();
-      return 1;
-    }
-  }
-
-  std::signal(SIGTERM, SignalHandler);
-  std::signal(SIGINT, SignalHandler);
-
-  HLOG(kInfo, "Restarting Chimaera runtime (WAL replay enabled)...");
-
-  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kRuntime, true,
-                           /*is_restart=*/true)) {
-    HLOG(kError, "Failed to restart Chimaera runtime");
-    return 1;
-  }
-
-  HLOG(kInfo, "Chimaera runtime restarted successfully");
 
   if (!InitializeAdminChiMod()) {
     HLOG(kError, "FATAL ERROR: Failed to find or initialize admin ChiMod");

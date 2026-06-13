@@ -272,9 +272,10 @@ def restart_node(ip_address, port=9413):
     """Restart a node's Chimaera runtime (non-blocking).
 
     Assumes the runtime is already dead (shutdown_node was called first).
-    Launches ``clio_run runtime restart`` (WAL replay) so the node rejoins
-    the existing cluster. Returns immediately — the dashboard's topology
-    polling (TCP-based) will detect when the node comes back.
+    Launches ``clio_run runtime start`` (persistent: recomposes saved pools
+    and replays the WAL) so the node rejoins the existing cluster. Returns
+    immediately — the dashboard's topology polling (TCP-based) will detect
+    when the node comes back.
     """
     import os
     import subprocess
@@ -289,7 +290,7 @@ def restart_node(ip_address, port=9413):
         print("[restart_node] Launching local runtime via Popen", flush=True)
         try:
             subprocess.Popen(
-                ["chimaera", "runtime", "restart"],
+                ["chimaera", "runtime", "start"],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -314,7 +315,7 @@ def restart_node(ip_address, port=9413):
         env_str = ("export " + " ".join(env_parts) + " && ") if env_parts else ""
         remote_cmd = (
             f"{env_str}"
-            f"nohup setsid clio_run runtime restart "
+            f"nohup setsid clio_run runtime start "
             f"</dev/null >/dev/null 2>&1 & disown; exit 0"
         )
         cmd = [
