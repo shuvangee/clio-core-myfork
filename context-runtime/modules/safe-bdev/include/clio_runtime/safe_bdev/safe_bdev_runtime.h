@@ -39,6 +39,8 @@
 #include <clio_runtime/bdev/bdev_client.h>
 
 #include <memory>
+#include <mutex>
+#include <set>
 #include <vector>
 
 #include "ec/ec_array.h"  // ec::EcRole, ec::EcState, ec::ReedSolomon
@@ -75,6 +77,9 @@ class Runtime : public chi::Container {
 
   /** Fixed per-member stripe (shard) length in bytes. */
   static constexpr chi::u64 kShardLen = 65536;
+
+  /** Background parity-builder poll period (microseconds): 50 ms. */
+  static constexpr double kBuildParityPeriodUs = 50000.0;
 
   /**
    * Get live task statistics for this task instance.
@@ -203,6 +208,29 @@ class Runtime : public chi::Container {
   // Clients for delegating data-plane I/O to member bdevs. members_ and
   // member_clients_ are kept index-aligned.
   std::vector<clio::run::bdev::Client> member_clients_;
+
+  // Async-write parity bookkeeping. Write writes data shards immediately and
+  // records the stripe as dirty (parity not yet current); BuildParity drains
+  // the dirty set and (re)computes all current parity rows. written_stripes_
+  // tracks every stripe that holds data so a parity-level increase can re-dirty
+  // exactly those. Guarded by stripe_mu_ for the brief set operations (never
+  // held across a co_await). A stripe is safe to reconstruct only when NOT
+  // dirty — degraded reads / recovery refuse a dirty (unprotected) stripe.
+  std::set<chi::u64> dirty_stripes_;
+  std::set<chi::u64> written_stripes_;
+  mutable std::mutex stripe_mu_;
+
+  /** Mark a stripe as holding data and needing (re)parity. */
+  void MarkStripeDirty(chi::u64 stripe) {
+    std::lock_guard<std::mutex> g(stripe_mu_);
+    written_stripes_.insert(stripe);
+    dirty_stripes_.insert(stripe);
+  }
+  /** True if the stripe's parity is not yet current (unprotected). */
+  bool IsStripeDirty(chi::u64 stripe) const {
+    std::lock_guard<std::mutex> g(stripe_mu_);
+    return dirty_stripes_.count(stripe) != 0;
+  }
 
   //==========================================================================
   // EC helpers (defined in safe_bdev_runtime.cc; run inside task fibers).

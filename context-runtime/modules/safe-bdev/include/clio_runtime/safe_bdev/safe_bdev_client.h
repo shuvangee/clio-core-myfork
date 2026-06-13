@@ -207,12 +207,19 @@ class Client : public chi::ContainerClient {
 
   /**
    * Build/raise parity for dirty stripes - asynchronous.
+   * @param max_batch  max stripes to (re)build this pass; 0 = drain all.
+   * @param period_us  if > 0, register as a periodic background task.
    */
   chi::Future<BuildParityTask> AsyncBuildParity(const chi::PoolQuery &pool_query,
-                                                chi::u32 max_batch = 0) {
+                                                chi::u32 max_batch = 0,
+                                                double period_us = 0) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<BuildParityTask>(
         chi::CreateTaskId(), pool_id_, pool_query, max_batch);
+    if (period_us > 0) {
+      task->SetPeriod(period_us, chi::kMicro);
+      task->SetFlags(TASK_PERIODIC);
+    }
     return ipc_manager->Send(task);
   }
 };

@@ -228,6 +228,16 @@ TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
 
   // (2) Degraded read: fault data member 1, reconstruct on read.
   {
+    // Parity is computed asynchronously off the write path (the background
+    // BuildParity task). Flush it as a durability barrier so the stripe is
+    // protected before we induce a failure — otherwise the stripe would be in
+    // its bounded unprotected window and reconstruction would (correctly)
+    // refuse.
+    auto flush = safe.AsyncBuildParity(chi::PoolQuery::Dynamic(),
+                                       /*max_batch=*/0);
+    flush.Wait();
+    REQUIRE(flush->GetReturnCode() == 0);
+
     auto rm = safe.AsyncRemoveBdev(chi::PoolQuery::Dynamic(), data_ids[1],
                                    /*was_faulty=*/1);
     rm.Wait();

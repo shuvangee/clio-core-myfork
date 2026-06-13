@@ -255,6 +255,13 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
        task->pool_name_.str(), k_, max_failures_, num_stripes_,
        logical_capacity_);
 
+  // Kick off the background parity builder. Write records dirty stripes off the
+  // critical path; this periodic task converges them to full protection
+  // (design.md B.6). An on-demand AsyncBuildParity(max_batch=0) is also
+  // available as a durability barrier.
+  client_.AsyncBuildParity(MemberQuery(), /*max_batch=*/0,
+                           /*period_us=*/kBuildParityPeriodUs);
+
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -312,7 +319,7 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
   const chi::u64 per_stripe_data = static_cast<chi::u64>(k_) * kShardLen;
 
   // This first cut assumes stripe/shard-aligned, full-stripe writes (the test
-  // writes aligned data). Compute parity inline (synchronous redundancy).
+  // writes aligned data). Parity is deferred to BuildParity (see below).
   if (logical_base % per_stripe_data != 0 || len % per_stripe_data != 0) {
     HLOG(kError,
          "safe_bdev Write: unaligned write (offset={}, len={}, stripe={}) "
@@ -357,29 +364,11 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
           buf.shm_.template Cast<void>(), kShardLen));
     }
 
-    // Inline parity: encode and write each active parity row.
-    std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
-    for (int c = 0; c < k_; ++c) {
-      ptrs[static_cast<size_t>(c)] = data_shards[c].data();
-    }
-    for (size_t mi = 0; mi < members_.size() && dispatch_ok; ++mi) {
-      MemberSlot &m = members_[mi];
-      if (m.role_ != ec::EcRole::kParity || m.state_ != ec::EcState::kActive) {
-        continue;
-      }
-      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
-      if (buf.IsNull()) {
-        dispatch_ok = false;
-        break;
-      }
-      rs_->EncodeParityShard(m.index_, ptrs, kShardLen,
-                             reinterpret_cast<uint8_t *>(buf.ptr_));
-      bufs.push_back(buf);
-      futs.push_back(member_clients_[mi].AsyncWrite(
-          MemberQuery(), ShardBlocks(m, s),
-          buf.shm_.template Cast<void>(), kShardLen));
-    }
-
+    // Parity is deferred off the write path: once the data shards land, the
+    // stripe is recorded dirty and BuildParity (on-demand or periodic) computes
+    // parity asynchronously. This is the "no heavy write penalty" path — the
+    // stripe is unprotected only during the bounded window before BuildParity
+    // runs.
     bool stripe_ok = dispatch_ok;
     for (auto &f : futs) {
       CLIO_CO_AWAIT(f);
@@ -395,6 +384,7 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
       task->return_code_ = 1;
       CLIO_CO_RETURN;
     }
+    MarkStripeDirty(s);
     bytes_written += per_stripe_data;
   }
 
@@ -454,6 +444,15 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
                                 data_shards[c].data(), rctx, rd_ok));
         stripe_ok = rd_ok;
       }
+    } else if (IsStripeDirty(s)) {
+      // A data member is down AND this stripe's parity is not yet current:
+      // it is unprotected, so reconstruction would yield wrong bytes. Fail
+      // loudly rather than return corrupt data.
+      HLOG(kError,
+           "safe_bdev Read: stripe {} is dirty (parity not built) and a data "
+           "member is down — cannot reconstruct",
+           s);
+      stripe_ok = false;
     } else {
       // Degraded: reconstruct all data shards from survivors.
       CLIO_CO_AWAIT(ReconstructStripe(s, /*exclude=*/-1, rctx, data_shards,
@@ -526,55 +525,25 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   slot.base_offset_ = alloc->blocks_[0].offset_;
 
   if (as_parity && current_parity_level_ < max_failures_) {
-    // AddParityDrive: append parity row r and incrementally compute it for
-    // every stripe from the existing data (no rewrite of data / other parity).
+    // Append parity row r and raise the target level. Parity computation is
+    // deferred: re-dirtying every written stripe lets BuildParity compute the
+    // new row off the critical path. The incremental RS property means each
+    // parity row is an independent function of the data, so existing parity is
+    // never read or rewritten.
     const int r = static_cast<int>(current_parity_level_);
     slot.role_ = ec::EcRole::kParity;
     slot.index_ = r;
     members_.push_back(slot);
-
-    auto *ipc = CLIO_IPC;
-    for (chi::u64 s = 0; s < num_stripes_; ++s) {
-      // Read the existing data shards (reconstruct if a data member is down).
-      std::vector<std::vector<uint8_t>> data_shards;
-      bool rd_ok = false;
-      CLIO_CO_AWAIT(ReconstructStripe(s, /*exclude=*/-1, rctx, data_shards,
-                                      rd_ok));
-      if (!rd_ok) {
-        members_.pop_back();
-        member_clients_.pop_back();
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-      std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
-      for (int c = 0; c < k_; ++c) {
-        ptrs[static_cast<size_t>(c)] = data_shards[static_cast<size_t>(c)].data();
-      }
-      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
-      if (buf.IsNull()) {
-        members_.pop_back();
-        member_clients_.pop_back();
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-      rs_->EncodeParityShard(r, ptrs, kShardLen,
-                             reinterpret_cast<uint8_t *>(buf.ptr_));
-      auto fut = member_clients_[new_mi].AsyncWrite(
-          MemberQuery(), ShardBlocks(members_.back(), s),
-          buf.shm_.template Cast<void>(), kShardLen);
-      CLIO_CO_AWAIT(fut);
-      const bool ok = (fut->return_code_ == 0) &&
-                      (fut->bytes_written_ == kShardLen);
-      ipc->FreeBuffer(buf);
-      if (!ok) {
-        members_.pop_back();
-        member_clients_.pop_back();
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
+    ++current_parity_level_;
+    {
+      std::lock_guard<std::mutex> g(stripe_mu_);
+      for (chi::u64 s : written_stripes_) {
+        dirty_stripes_.insert(s);
       }
     }
-    ++current_parity_level_;
-    HLOG(kInfo, "safe_bdev AddBdev: parity drive added, parity_level={}",
+    HLOG(kInfo,
+         "safe_bdev AddBdev: parity drive added, parity_level={} "
+         "(parity build deferred to BuildParity)",
          current_parity_level_);
   } else {
     // Added as a data member (or parity cap reached). This begins a new column
@@ -658,6 +627,18 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
   const int index = members_[static_cast<size_t>(failed)].index_;
 
   for (chi::u64 s = 0; s < num_stripes_; ++s) {
+    // Recovering a DATA member reconstructs its shard from the survivors, which
+    // needs current parity. A dirty stripe is unprotected, so refuse rather
+    // than write back corrupt data. (Recovering a PARITY member only reads the
+    // data shards and re-encodes, so it is unaffected.)
+    if (role == ec::EcRole::kData && IsStripeDirty(s)) {
+      HLOG(kError,
+           "safe_bdev RecoverBdev: stripe {} dirty (parity not built); cannot "
+           "reconstruct failed data member",
+           s);
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
     // Reconstruct the stripe's data from the OTHER survivors.
     std::vector<std::vector<uint8_t>> data_shards;
     bool rd_ok = false;
@@ -720,11 +701,98 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
                                      chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
-  // Inline-parity first cut writes parity synchronously on the Write path, so
-  // there is no dirty-stripe backlog to drain. TODO(#543): async dirty-log +
-  // background convergence (design.md B.6).
-  (void)task->max_batch_;
+  if (rs_ == nullptr || current_parity_level_ == 0) {
+    // No parity configured: nothing to protect. Drop any pending dirty marks.
+    std::lock_guard<std::mutex> g(stripe_mu_);
+    dirty_stripes_.clear();
+    task->return_code_ = 0;
+    CLIO_CO_RETURN;
+  }
+
+  // Snapshot a batch of dirty stripes (max_batch_==0 drains all). Stripes are
+  // erased only AFTER their parity is durably written, so an observer that sees
+  // an empty dirty set knows every stripe is protected (single builder: this is
+  // a periodic task, rescheduled only after completion, so no two BuildParity
+  // instances run at once). A stripe that cannot be built (a data member is
+  // down) is simply left dirty for a later pass.
+  std::vector<chi::u64> batch;
+  {
+    std::lock_guard<std::mutex> g(stripe_mu_);
+    for (chi::u64 s : dirty_stripes_) {
+      batch.push_back(s);
+      if (task->max_batch_ != 0 &&
+          batch.size() >= static_cast<size_t>(task->max_batch_)) {
+        break;
+      }
+    }
+  }
+
+  auto *ipc = CLIO_IPC;
+  chi::u32 built = 0;
+  for (chi::u64 s : batch) {
+    // Read the k data shards (all data members must be active to build).
+    std::vector<std::vector<uint8_t>> data_shards(
+        static_cast<size_t>(k_), std::vector<uint8_t>(kShardLen, 0));
+    bool rd_ok = true;
+    for (int c = 0; c < k_; ++c) {
+      if (members_[static_cast<size_t>(c)].state_ != ec::EcState::kActive) {
+        rd_ok = false;
+        break;
+      }
+      bool one = false;
+      CLIO_CO_AWAIT(ReadShard(static_cast<size_t>(c), s,
+                              data_shards[static_cast<size_t>(c)].data(), rctx,
+                              one));
+      rd_ok = one;
+      if (!rd_ok) {
+        break;
+      }
+    }
+    if (!rd_ok) {
+      continue;  // leave dirty; retry next pass
+    }
+
+    std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
+    for (int c = 0; c < k_; ++c) {
+      ptrs[static_cast<size_t>(c)] = data_shards[static_cast<size_t>(c)].data();
+    }
+
+    // (Re)compute and write every active parity row for this stripe.
+    bool wr_ok = true;
+    for (size_t mi = 0; mi < members_.size(); ++mi) {
+      MemberSlot &m = members_[mi];
+      if (m.role_ != ec::EcRole::kParity || m.state_ != ec::EcState::kActive) {
+        continue;
+      }
+      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
+      if (buf.IsNull()) {
+        wr_ok = false;
+        break;
+      }
+      rs_->EncodeParityShard(m.index_, ptrs, kShardLen,
+                             reinterpret_cast<uint8_t *>(buf.ptr_));
+      auto fut = member_clients_[mi].AsyncWrite(
+          MemberQuery(), ShardBlocks(m, s), buf.shm_.template Cast<void>(),
+          kShardLen);
+      CLIO_CO_AWAIT(fut);
+      wr_ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kShardLen);
+      ipc->FreeBuffer(buf);
+      if (!wr_ok) {
+        break;
+      }
+    }
+    if (!wr_ok) {
+      continue;  // leave dirty; retry next pass
+    }
+    {
+      std::lock_guard<std::mutex> g(stripe_mu_);
+      dirty_stripes_.erase(s);
+    }
+    ++built;
+  }
+  if (built > 0) {
+    HLOG(kDebug, "safe_bdev BuildParity: built parity for {} stripe(s)", built);
+  }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -735,13 +803,19 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   if (task->query_ == "stats") {
+    chi::u32 dirty = 0;
+    {
+      std::lock_guard<std::mutex> g(stripe_mu_);
+      dirty = static_cast<chi::u32>(dirty_stripes_.size());
+    }
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
-    pk.pack_map(4);
+    pk.pack_map(5);
     pk.pack("pool_name");    pk.pack(pool_name_);
     pk.pack("max_failures"); pk.pack(max_failures_);
     pk.pack("num_members");  pk.pack(static_cast<chi::u32>(members_.size()));
     pk.pack("parity_level"); pk.pack(current_parity_level_);
+    pk.pack("dirty_stripes"); pk.pack(dirty);
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }
   task->SetReturnCode(0);
