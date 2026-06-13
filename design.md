@@ -337,13 +337,18 @@ parity, and recovery routines (Part A) are reused unchanged per generation.
 
 | Component | Status |
 |---|---|
-| GF(2⁸), RS encode/decode, incremental parity, `EcArray`, recovery | **Done + tested** (`ec/`, 8 passing unit tests) |
-| Module scaffold, tasks, client, autogen, build wiring | **Done** (compiles) |
-| Runtime async fan-out (B.3/B.4), PoolId resolution, buffers | **Next** |
-| Dirty-stripe log + `BuildParity` periodic task (B.6) | **Next** |
-| `RecoverBdev` streaming over member bdevs (B.5) | **Next** |
-| Generations + declustered placement (Part C) | **Staged** |
-| Daemon-level end-to-end recovery test | **Staged** |
+| GF(2⁸), RS encode/decode, incremental parity, `EcArray`, recovery | **Done + tested** (`ec/`, 10 passing unit tests) |
+| Module scaffold, tasks, client, autogen, build wiring | **Done** |
+| Runtime async fan-out (B.3/B.4), PoolId resolution, buffers | **Done + tested** (daemon test) |
+| Dirty-stripe log + `BuildParity` periodic task (B.6) | **Done + tested** |
+| `RecoverBdev` streaming over member bdevs (B.5) | **Done + tested** |
+| Generations + declustered placement (Part C) | **Done + tested** (`ec/declustered.h` + generation-aware runtime; daemon variable-width test) |
+| Daemon-level end-to-end recovery test | **Done** (`cr_all_safe_bdev_tests`) |
+
+Remaining refinements (TODO #543): partial/unaligned writes (full-stripe-aligned
+only today), concurrent write-during-`BuildParity` re-dirty handling, an
+`AllocateBlocks` free-list, multi-node remote member routing, and subset
+declustering (`N > k+m`).
 
 ### Testing strategy
 
@@ -353,8 +358,6 @@ parity, and recovery routines (Part A) are reused unchanged per generation.
   data, fault a member (`RemoveBdev(was_faulty)`), read-reconstruct, `RecoverBdev`
   onto a fresh pool, and assert byte equality through the full async path.
 
-### Known cleanups
-
-The scaffold's `safe_bdev_runtime.cc` has minor clang-tidy nits (brace style,
-`f`→`F` float suffix, `const auto*`, a couple `static`/narrowing warnings) that
-get resolved when the passthrough handlers are replaced by the Part B fan-out.
+The daemon test (`cr_all_safe_bdev_tests`) covers both the recovery flow and the
+variable-width generations flow; the EC core/declustered math is covered by
+`cr_safe_bdev_ec_tests` (10 cases).

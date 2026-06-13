@@ -71,6 +71,7 @@ class Runtime : public chi::Container {
         current_parity_level_(0),
         k_(0),
         num_stripes_(0),
+        next_stripe_(0),
         logical_capacity_(0),
         logical_next_(0) {}
   ~Runtime() override = default;
@@ -180,30 +181,53 @@ class Runtime : public chi::Container {
                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
  private:
-  // Per-member runtime bookkeeping: EC role/state/index plus the member's
-  // reserved contiguous backing region on its bdev pool.
+  // Per-member runtime bookkeeping: EC state plus the member's reserved
+  // contiguous backing region on its bdev pool. NOTE: with declustered
+  // placement (Part C) a member's ROLE for a given stripe is computed by the
+  // rotation, not stored here — role_/index_ are kept only as a convenience for
+  // logging and are NOT used for placement. A member's shard for GLOBAL stripe
+  // g lives at base_offset_ + g*kShardLen (slot == global stripe index).
   struct MemberSlot {
     chi::PoolId pool_id_;
     std::string pool_name_;
     chi::u32 node_id_ = 0;
     ec::EcRole role_ = ec::EcRole::kData;
     ec::EcState state_ = ec::EcState::kActive;
-    int index_ = -1;            // data column (role==kData) or parity row
+    int index_ = -1;            // legacy hint only; placement is rotation-based
     chi::u64 base_offset_ = 0;  // byte offset of stripe 0 on the member pool
+  };
+
+  // A generation (epoch) is a frozen (k, m, member-set) config owning a
+  // contiguous range of GLOBAL stripe indices, mirroring
+  // ec::DeclusteredArray::Generation. Adding a DATA member closes the current
+  // generation and opens a wider one (k+1) for FUTURE stripes; existing
+  // generations keep their geometry forever (variable width). Within a
+  // generation of N = k+m members, the RS shard each member holds rotates by
+  // the stripe index (rotated-parity declustering).
+  struct Generation {
+    int k = 0;
+    int m = 0;                  // currently realized parity rows for this gen
+    chi::u64 seed = 0;          // rotation seed (varies per generation)
+    chi::u64 first_stripe = 0;  // first GLOBAL stripe owned by this gen
+    chi::u64 num_stripes = 0;   // 0 while the generation is open (current)
+    chi::u64 logical_base = 0;  // logical byte offset of this gen's stripe 0
+    std::vector<int> member_pos;  // global member ids (indices into members_)
+    std::unique_ptr<ec::ReedSolomon> rs;  // code (k, max_failures_)
   };
 
   // Client for making calls back to this ChiMod.
   Client client_;
 
   // EC / membership state.
-  std::vector<MemberSlot> members_;  // [0,k) data, then parity in add order
+  std::vector<MemberSlot> members_;  // global member registry
+  std::vector<Generation> generations_;  // epochs; last one is the open gen
   chi::u32 max_failures_;            // Fault-tolerance target (M)
-  chi::u32 current_parity_level_;    // Currently realized parity level (m)
-  int k_;                            // Number of data members
-  chi::u64 num_stripes_;             // Stripes reserved per member
-  chi::u64 logical_capacity_;        // k * kShardLen * num_stripes_
+  chi::u32 current_parity_level_;    // Parity members added so far (== m grows)
+  int k_;                            // k of the CURRENT (open) generation
+  chi::u64 num_stripes_;             // Total stripe capacity reserved per member
+  chi::u64 next_stripe_;             // Global stripe cursor (next unwritten g)
+  chi::u64 logical_capacity_;        // Usable logical bytes across generations
   chi::u64 logical_next_;            // Bump cursor for logical allocation
-  std::unique_ptr<ec::ReedSolomon> rs_;  // Code (k, max_failures_)
 
   // Clients for delegating data-plane I/O to member bdevs. members_ and
   // member_clients_ are kept index-aligned.
@@ -239,12 +263,89 @@ class Runtime : public chi::Container {
   /** Per-member pool query (members are independent local bdev pools). */
   chi::PoolQuery MemberQuery() const { return chi::PoolQuery::Local(); }
 
-  /** Global shard index for a member slot (data: col, parity: k+row). */
-  int GlobalShardIndex(const MemberSlot &m) const {
-    return (m.role_ == ec::EcRole::kData) ? m.index_ : (k_ + m.index_);
+  //==========================================================================
+  // Declustered placement (mirrors ec::DeclusteredArray; see Part C). For a
+  // generation of N = k+m members, the RS shard index q played by member
+  // position p for global stripe g rotates by (local_stripe + seed) mod N.
+  //==========================================================================
+
+  /** Epoch (index into generations_) owning global stripe g, or -1. */
+  int EpochOf(chi::u64 g) const {
+    for (size_t e = 0; e < generations_.size(); ++e) {
+      const Generation &gen = generations_[e];
+      const chi::u64 span =
+          (gen.num_stripes != 0) ? gen.num_stripes : (next_stripe_ -
+                                                      gen.first_stripe);
+      if (g >= gen.first_stripe && g < gen.first_stripe + span) {
+        return static_cast<int>(e);
+      }
+    }
+    return -1;
   }
 
-  /** Block list addressing stripe `s` shard region on a member. */
+  /** RS shard index q held by member position p (in gen) for global stripe g.
+   *  q in [0,k) is data column q; q in [k,N) is parity row q-k. */
+  int ShardOfPosition(const Generation &gen, chi::u64 g, int p) const {
+    const int n = static_cast<int>(gen.member_pos.size());
+    const chi::u64 local = g - gen.first_stripe;
+    const int r = static_cast<int>((local + gen.seed) % static_cast<chi::u64>(n));
+    return ((p - r) % n + n) % n;
+  }
+
+  /** Member position holding RS shard q for global stripe g (inverse). */
+  int PositionOfShard(const Generation &gen, chi::u64 g, int q) const {
+    const int n = static_cast<int>(gen.member_pos.size());
+    const chi::u64 local = g - gen.first_stripe;
+    const int r = static_cast<int>((local + gen.seed) % static_cast<chi::u64>(n));
+    return (q + r) % n;
+  }
+
+  /** Global member id (index into members_) holding RS shard q for stripe g. */
+  int MemberOfShard(const Generation &gen, chi::u64 g, int q) const {
+    return gen.member_pos[static_cast<size_t>(PositionOfShard(gen, g, q))];
+  }
+
+  /**
+   * Map a logical byte offset L to its (epoch, global stripe g, data column c).
+   * The logical space is SEGMENTED per generation: generation e owns the range
+   * [gen.logical_base, gen.logical_base + gen.k*kShardLen*span) where span is
+   * the number of stripes the generation owns (next_stripe_-first_stripe while
+   * open). Returns false if L is out of range. Requires L to be stripe-aligned
+   * within its generation for c to be meaningful (callers assert full-stripe
+   * alignment in this first-cut milestone).
+   */
+  bool LogicalToStripe(chi::u64 logical, int *epoch, chi::u64 *g,
+                       int *col) const {
+    for (size_t e = 0; e < generations_.size(); ++e) {
+      const Generation &gen = generations_[e];
+      const chi::u64 span =
+          (gen.num_stripes != 0) ? gen.num_stripes
+                                 : (next_stripe_ - gen.first_stripe);
+      const chi::u64 per_stripe = static_cast<chi::u64>(gen.k) * kShardLen;
+      const chi::u64 bytes = per_stripe * span;
+      if (logical >= gen.logical_base && logical < gen.logical_base + bytes) {
+        const chi::u64 within = logical - gen.logical_base;
+        *epoch = static_cast<int>(e);
+        *g = gen.first_stripe + within / per_stripe;
+        *col = static_cast<int>((within % per_stripe) / kShardLen);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Position of global member id `mid` within gen.member_pos, or -1. */
+  int PositionInGen(const Generation &gen, int mid) const {
+    for (size_t p = 0; p < gen.member_pos.size(); ++p) {
+      if (gen.member_pos[p] == mid) {
+        return static_cast<int>(p);
+      }
+    }
+    return -1;
+  }
+
+  /** Block list addressing the GLOBAL-stripe `stripe` shard region on member.
+   *  Slot == global stripe index: offset = base_offset + stripe*kShardLen. */
   chi::priv::vector<clio::run::bdev::Block> ShardBlocks(const MemberSlot &m,
                                                         chi::u64 stripe) const;
 
@@ -262,8 +363,10 @@ class Runtime : public chi::Container {
                             chi::RunContext &rctx, bool &ok);
 
   /**
-   * Reconstruct all k data shards for `stripe` from active survivors (decode),
-   * optionally excluding member index `exclude`. `out` receives k buffers.
+   * Reconstruct all gen.k data shards for global `stripe` from active
+   * survivors (decode), optionally excluding member id `exclude`. `out`
+   * receives gen.k buffers. Survivor global shard indices come from the
+   * rotated placement (ShardOfPosition).
    */
   chi::TaskResume ReconstructStripe(chi::u64 stripe, int exclude,
                                     chi::RunContext &rctx,

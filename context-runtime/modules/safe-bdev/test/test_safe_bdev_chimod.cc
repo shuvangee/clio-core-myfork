@@ -283,4 +283,192 @@ TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
   HLOG(kInfo, "safe_bdev EC end-to-end test PASSED");
 }
 
+TEST_CASE("safe_bdev_variable_width_generations",
+          "[safe_bdev][ec][generations]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  auto member_name = [&](int idx) {
+    return "vw_member_" + std::to_string(getpid()) + "_" + std::to_string(idx);
+  };
+
+  // --- gen0: k=3 RAM data members + 1 parity. ---
+  const int k0 = 3;
+  std::vector<chi::PoolId> data_ids;
+  for (int c = 0; c < k0; ++c) {
+    chi::PoolId id(static_cast<chi::u32>(9500 + pidsalt + c), 0);
+    clio::run::bdev::Client client(id);
+    REQUIRE(CreateRamMember(client, member_name(c), id));
+    data_ids.push_back(client.pool_id_);
+  }
+  chi::PoolId parity_id(static_cast<chi::u32>(9560 + pidsalt), 0);
+  clio::run::bdev::Client parity_client(parity_id);
+  REQUIRE(CreateRamMember(parity_client, member_name(50), parity_id));
+  parity_id = parity_client.pool_id_;
+
+  // 4th DATA member that opens gen1 (k=4).
+  chi::PoolId data4_id(static_cast<chi::u32>(9570 + pidsalt), 0);
+  clio::run::bdev::Client data4_client(data4_id);
+  REQUIRE(CreateRamMember(data4_client, member_name(60), data4_id));
+  data4_id = data4_client.pool_id_;
+
+  // --- Create safe_bdev over the 3 data members, max_failures=1. ---
+  chi::PoolId safe_id(static_cast<chi::u32>(9580 + pidsalt), 0);
+  clio::run::safe_bdev::Client safe(safe_id);
+  std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
+  for (int c = 0; c < k0; ++c) {
+    members.emplace_back(member_name(c), /*node_id=*/0, data_ids[c]);
+  }
+  auto create_task = safe.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                      "safe_bdev_vw_pool", safe_id,
+                                      /*max_failures=*/1, members);
+  create_task.Wait();
+  safe.pool_id_ = create_task->new_pool_id_;
+  REQUIRE(create_task->GetReturnCode() == 0);
+
+  // Add the parity member (parity_level -> 1 on generation 0).
+  auto add_par = safe.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_name(50),
+                                   /*node_id=*/0, parity_id, /*as_parity=*/1);
+  add_par.Wait();
+  REQUIRE(add_par->GetReturnCode() == 0);
+
+  // Helpers to allocate + write + read a stripe of a given width.
+  auto write_stripe = [&](chi::u64 io_len, ctp::u8 seed,
+                          clio::run::bdev::Block *out_block,
+                          std::vector<ctp::u8> *out_pattern) {
+    auto alloc = safe.AsyncAllocateBlocks(chi::PoolQuery::Dynamic(), io_len);
+    alloc.Wait();
+    REQUIRE(alloc->GetReturnCode() == 0);
+    REQUIRE(alloc->blocks_.size() > 0);
+    *out_block = alloc->blocks_[0];
+
+    *out_pattern = MakePattern(io_len, seed);
+    chi::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
+    wblocks.push_back(*out_block);
+    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(wbuf.IsNull());
+    memcpy(wbuf.ptr_, out_pattern->data(), io_len);
+    auto wt = safe.AsyncWrite(chi::PoolQuery::Dynamic(), wblocks,
+                              wbuf.shm_.template Cast<void>(), io_len);
+    wt.Wait();
+    REQUIRE(wt->GetReturnCode() == 0);
+    REQUIRE(wt->bytes_written_ == io_len);
+    CLIO_IPC->FreeBuffer(wbuf);
+  };
+  auto read_stripe = [&](const clio::run::bdev::Block &block, chi::u64 io_len,
+                         std::vector<ctp::u8> *out) {
+    chi::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
+    rblocks.push_back(block);
+    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(rbuf.IsNull());
+    memset(rbuf.ptr_, 0, io_len);
+    auto rt = safe.AsyncRead(chi::PoolQuery::Dynamic(), rblocks,
+                             rbuf.shm_.template Cast<void>(), io_len);
+    rt.Wait();
+    REQUIRE(rt->GetReturnCode() == 0);
+    REQUIRE(rt->bytes_read_ == io_len);
+    out->resize(io_len);
+    memcpy(out->data(), rbuf.ptr_, io_len);
+    CLIO_IPC->FreeBuffer(rbuf);
+  };
+  auto flush_parity = [&]() {
+    auto flush = safe.AsyncBuildParity(chi::PoolQuery::Dynamic(),
+                                       /*max_batch=*/0);
+    flush.Wait();
+    REQUIRE(flush->GetReturnCode() == 0);
+  };
+
+  // Several stripes per generation so the per-stripe parity rotation places
+  // every member (in particular the soon-to-fault member 0) as DATA in some
+  // stripes and PARITY in others — exercising genuine reconstruction.
+  const int kStripesPerGen = 4;
+
+  // --- Phase 1: write + flush + read kStripesPerGen gen0 stripes (k=3). ---
+  const chi::u64 len0 = static_cast<chi::u64>(k0) * kShardLen;
+  std::vector<clio::run::bdev::Block> blocks0;
+  std::vector<std::vector<ctp::u8>> patterns0;
+  for (int i = 0; i < kStripesPerGen; ++i) {
+    clio::run::bdev::Block b;
+    std::vector<ctp::u8> p;
+    write_stripe(len0, static_cast<ctp::u8>(0x11 + i), &b, &p);
+    blocks0.push_back(b);
+    patterns0.push_back(std::move(p));
+  }
+  flush_parity();
+  for (int i = 0; i < kStripesPerGen; ++i) {
+    std::vector<ctp::u8> got;
+    read_stripe(blocks0[i], len0, &got);
+    REQUIRE(got == patterns0[i]);
+  }
+  HLOG(kInfo, "safe_bdev VW: gen0 (k=3) roundtrip OK ({} stripes)",
+       kStripesPerGen);
+
+  // --- Phase 2: AddBdev a 4th DATA member -> opens gen1 (k=4). ---
+  auto add_data = safe.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_name(60),
+                                    /*node_id=*/0, data4_id, /*as_parity=*/0);
+  add_data.Wait();
+  REQUIRE(add_data->GetReturnCode() == 0);
+  HLOG(kInfo, "safe_bdev VW: added 4th data member (opened gen1, k=4)");
+
+  // --- Phase 3: write + flush + read kStripesPerGen gen1 stripes (k=4). ---
+  const int k1 = 4;
+  const chi::u64 len1 = static_cast<chi::u64>(k1) * kShardLen;
+  std::vector<clio::run::bdev::Block> blocks1;
+  std::vector<std::vector<ctp::u8>> patterns1;
+  for (int i = 0; i < kStripesPerGen; ++i) {
+    clio::run::bdev::Block b;
+    std::vector<ctp::u8> p;
+    write_stripe(len1, static_cast<ctp::u8>(0xC0 + i), &b, &p);
+    blocks1.push_back(b);
+    patterns1.push_back(std::move(p));
+  }
+  flush_parity();
+  for (int i = 0; i < kStripesPerGen; ++i) {
+    std::vector<ctp::u8> got;
+    read_stripe(blocks1[i], len1, &got);
+    REQUIRE(got == patterns1[i]);
+  }
+  HLOG(kInfo, "safe_bdev VW: gen1 (k=4) roundtrip OK ({} stripes)",
+       kStripesPerGen);
+
+  // --- Phase 4: read BOTH generations back (non-degraded). ---
+  for (int i = 0; i < kStripesPerGen; ++i) {
+    std::vector<ctp::u8> g0;
+    std::vector<ctp::u8> g1;
+    read_stripe(blocks0[i], len0, &g0);
+    read_stripe(blocks1[i], len1, &g1);
+    REQUIRE(g0 == patterns0[i]);
+    REQUIRE(g1 == patterns1[i]);
+  }
+  HLOG(kInfo, "safe_bdev VW: both generations readable after widening");
+
+  // --- Phase 5: fault a data member participating in BOTH generations
+  //     (member 0) and confirm degraded reads reconstruct in each. Across
+  //     kStripesPerGen stripes member 0 holds DATA in some, forcing decode. ---
+  {
+    flush_parity();  // ensure both generations' parity is current
+    auto rm = safe.AsyncRemoveBdev(chi::PoolQuery::Dynamic(), data_ids[0],
+                                   /*was_faulty=*/1);
+    rm.Wait();
+    REQUIRE(rm->GetReturnCode() == 0);
+
+    for (int i = 0; i < kStripesPerGen; ++i) {
+      std::vector<ctp::u8> g0;
+      std::vector<ctp::u8> g1;
+      read_stripe(blocks0[i], len0, &g0);
+      read_stripe(blocks1[i], len1, &g1);
+      REQUIRE(g0 == patterns0[i]);
+      REQUIRE(g1 == patterns1[i]);
+    }
+    HLOG(kInfo,
+         "safe_bdev VW: degraded reads reconstruct in BOTH generations after "
+         "faulting a shared data member");
+  }
+
+  HLOG(kInfo, "safe_bdev variable-width generations test PASSED");
+}
+
 SIMPLE_TEST_MAIN()
