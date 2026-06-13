@@ -101,6 +101,7 @@ chi::TaskResume Runtime::WriteShard(size_t mi, chi::u64 stripe,
       buf.shm_.template Cast<void>(), kShardLen);
   CLIO_CO_AWAIT(fut);
   ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kShardLen);
+  MaybeFaultMember(mi, fut->io_error_);
   ipc->FreeBuffer(buf);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -124,6 +125,79 @@ chi::TaskResume Runtime::ReadShard(size_t mi, chi::u64 stripe, uint8_t *dst,
   if (fut->return_code_ == 0 && fut->bytes_read_ == kShardLen) {
     std::memcpy(dst, buf.ptr_, kShardLen);
     ok = true;
+  }
+  MaybeFaultMember(mi, fut->io_error_);
+  ipc->FreeBuffer(buf);
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+//===========================================================================
+// Member superblock helpers (mirror WriteShard/ReadShard)
+//===========================================================================
+
+chi::TaskResume Runtime::WriteSuperblock(size_t mi, chi::RunContext &ctx,
+                                         bool &ok) {
+  chi::RunContext &rctx = ctx;
+  CLIO_TASK_BODY_BEGIN
+  ok = false;
+  auto *ipc = CLIO_IPC;
+  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kSuperblockSize);
+  if (buf.IsNull()) {
+    CLIO_CO_RETURN;
+  }
+  // Serialize the array identity into a zero-padded superblock buffer.
+  std::memset(buf.ptr_, 0, kSuperblockSize);
+  MemberSuperblock sb;
+  sb.magic = kMemberSuperblockMagic;
+  sb.format_version = kMemberSuperblockVersion;
+  sb.flags = 0;
+  sb.array_major = static_cast<uint64_t>(pool_id_.major_);
+  sb.array_minor = static_cast<uint64_t>(pool_id_.minor_);
+  sb.member_slot = static_cast<uint32_t>(mi);
+  sb.role = static_cast<uint32_t>(members_[mi].role_);
+  sb.index = static_cast<uint32_t>(members_[mi].index_);
+  sb.max_failures = max_failures_;
+  sb.shard_len = kShardLen;
+  sb.epoch = static_cast<uint64_t>(generations_.size());
+  sb.checksum = sb.ComputeChecksum();
+  std::memcpy(buf.ptr_, &sb, sizeof(sb));
+
+  // The superblock lives at absolute offset 0 on the member.
+  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
+  blocks.push_back(clio::run::bdev::Block(0, kSuperblockSize, 0));
+  auto fut = member_clients_[mi].AsyncWrite(
+      MemberQuery(), blocks, buf.shm_.template Cast<void>(), kSuperblockSize);
+  CLIO_CO_AWAIT(fut);
+  ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kSuperblockSize);
+  MaybeFaultMember(mi, fut->io_error_);
+  ipc->FreeBuffer(buf);
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+chi::TaskResume Runtime::ReadSuperblock(size_t mi, chi::RunContext &ctx,
+                                        MemberSuperblock &sb, bool &present,
+                                        bool &ok) {
+  chi::RunContext &rctx = ctx;
+  CLIO_TASK_BODY_BEGIN
+  ok = false;
+  present = false;
+  auto *ipc = CLIO_IPC;
+  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kSuperblockSize);
+  if (buf.IsNull()) {
+    CLIO_CO_RETURN;
+  }
+  std::memset(buf.ptr_, 0, kSuperblockSize);
+  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
+  blocks.push_back(clio::run::bdev::Block(0, kSuperblockSize, 0));
+  auto fut = member_clients_[mi].AsyncRead(
+      MemberQuery(), blocks, buf.shm_.template Cast<void>(), kSuperblockSize);
+  CLIO_CO_AWAIT(fut);
+  if (fut->return_code_ == 0 && fut->bytes_read_ == kSuperblockSize) {
+    ok = true;
+    std::memcpy(&sb, buf.ptr_, sizeof(sb));
+    present = sb.Validate();
   }
   ipc->FreeBuffer(buf);
   CLIO_CO_RETURN;
@@ -210,6 +284,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   generations_.clear();
   next_stripe_ = 0;
   logical_next_ = 0;
+  reattached_members_ = 0;
 
   // Initial members are DATA members; k = number supplied.
   k_ = static_cast<int>(params.members_.size());
@@ -236,17 +311,27 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
       min_remaining = stats->remaining_size_;
     }
   }
-  num_stripes_ = min_remaining / kShardLen;
+  // The first kSuperblockSize bytes of every member are reserved for its
+  // superblock; DATA shards begin at offset kSuperblockSize. Subtract the
+  // superblock before carving stripe capacity.
+  const chi::u64 usable =
+      (min_remaining > kSuperblockSize) ? (min_remaining - kSuperblockSize) : 0;
+  num_stripes_ = usable / kShardLen;
   if (num_stripes_ == 0) {
     HLOG(kError, "safe_bdev Create: member too small for even one stripe");
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
 
-  // Reserve a contiguous backing region on each member and seat it as a data
-  // column. Slot == global stripe index, so we reserve the FULL stripe capacity
-  // up front (region = num_stripes_*kShardLen) on every member.
-  const chi::u64 region = num_stripes_ * kShardLen;
+  // Seat each member as a data column. Placement no longer relies on a
+  // per-member AllocateBlocks call: shards are addressed at a FIXED absolute
+  // offset (kSuperblockSize + g*kShardLen), so base_offset_ is kSuperblockSize
+  // for every member and stripe g's shard follows from ShardBlocks().
+  //
+  // Before seating, read the member's superblock to classify it:
+  //   - not present (blank/zeros)  -> FRESH: write our identity.
+  //   - present AND it is OURS     -> re-attach: reuse, do not rewrite data.
+  //   - present AND it is FOREIGN  -> REFUSE: another array owns it.
   int col = 0;
   std::vector<int> gen0_members;
   for (const auto &desc : params.members_) {
@@ -257,17 +342,52 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     slot.role_ = ec::EcRole::kData;
     slot.state_ = ec::EcState::kActive;
     slot.index_ = col;
-    auto alloc = member_clients_[col].AsyncAllocateBlocks(MemberQuery(), region);
-    CLIO_CO_AWAIT(alloc);
-    if (alloc->return_code_ != 0 || alloc->blocks_.size() == 0) {
-      HLOG(kError, "safe_bdev Create: AllocateBlocks failed for member '{}'",
+    slot.base_offset_ = kSuperblockSize;
+    members_.push_back(slot);
+    gen0_members.push_back(col);
+
+    MemberSuperblock sb;
+    bool present = false;
+    bool sb_ok = false;
+    CLIO_CO_AWAIT(ReadSuperblock(static_cast<size_t>(col), rctx, sb, present,
+                                 sb_ok));
+    if (!sb_ok) {
+      HLOG(kError, "safe_bdev Create: superblock read failed for member '{}'",
            desc.pool_name_);
       task->return_code_ = 1;
       CLIO_CO_RETURN;
     }
-    slot.base_offset_ = alloc->blocks_[0].offset_;
-    members_.push_back(slot);
-    gen0_members.push_back(col);
+    if (!present) {
+      // Fresh member: stamp this array's identity.
+      bool wr_ok = false;
+      CLIO_CO_AWAIT(WriteSuperblock(static_cast<size_t>(col), rctx, wr_ok));
+      if (!wr_ok) {
+        HLOG(kError,
+             "safe_bdev Create: superblock write failed for fresh member '{}'",
+             desc.pool_name_);
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
+      }
+      HLOG(kInfo, "safe_bdev Create: initialized fresh member '{}' (slot {})",
+           desc.pool_name_, col);
+    } else if (sb.array_major == static_cast<uint64_t>(pool_id_.major_) &&
+               sb.array_minor == static_cast<uint64_t>(pool_id_.minor_)) {
+      // Already ours (restart / re-attach): reuse without rewriting data.
+      ++reattached_members_;
+      HLOG(kInfo,
+           "safe_bdev Create: re-attached member '{}' (slot {}) already owned "
+           "by this array ({},{})",
+           desc.pool_name_, col, pool_id_.major_, pool_id_.minor_);
+    } else {
+      // Foreign device initialized by another safe_bdev: refuse, do not clobber.
+      HLOG(kError,
+           "safe_bdev Create: REFUSING member '{}' — already initialized by a "
+           "FOREIGN array ({},{}); this array is ({},{})",
+           desc.pool_name_, sb.array_major, sb.array_minor, pool_id_.major_,
+           pool_id_.minor_);
+      task->return_code_ = 2;
+      CLIO_CO_RETURN;
+    }
     ++col;
   }
 
@@ -609,26 +729,16 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
 
   const bool as_parity = (task->as_parity_ != 0);
 
-  // Build a client for the new member and reserve its backing region.
+  // Build a client for the new member. Placement is fixed-offset (shards at
+  // kSuperblockSize + g*kShardLen), so no per-member AllocateBlocks is needed.
   member_clients_.emplace_back(task->member_pool_id_);
-  const size_t new_mi = member_clients_.size() - 1;
-  const chi::u64 region = num_stripes_ * kShardLen;
-  auto alloc = member_clients_[new_mi].AsyncAllocateBlocks(MemberQuery(), region);
-  CLIO_CO_AWAIT(alloc);
-  if (alloc->return_code_ != 0 || alloc->blocks_.size() == 0) {
-    HLOG(kError, "safe_bdev AddBdev: AllocateBlocks failed for '{}'",
-         task->pool_name_.str());
-    member_clients_.pop_back();
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
 
   MemberSlot slot;
   slot.pool_id_ = task->member_pool_id_;
   slot.pool_name_ = task->pool_name_.str();
   slot.node_id_ = task->node_id_;
   slot.state_ = ec::EcState::kActive;
-  slot.base_offset_ = alloc->blocks_[0].offset_;
+  slot.base_offset_ = kSuperblockSize;
 
   if (as_parity && current_parity_level_ < max_failures_) {
     // Append a parity member to the CURRENT (open) generation and raise its m
@@ -714,6 +824,20 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
          generations_.back().first_stripe);
   }
 
+  // Stamp the new member's superblock with this array's identity and the
+  // member's seated slot/role/index.
+  {
+    const size_t new_mi = members_.size() - 1;
+    bool wr_ok = false;
+    CLIO_CO_AWAIT(WriteSuperblock(new_mi, rctx, wr_ok));
+    if (!wr_ok) {
+      HLOG(kWarning,
+           "safe_bdev AddBdev: superblock write failed for new member '{}' "
+           "(member seated; will be re-stamped on next attach)",
+           task->pool_name_.str());
+    }
+  }
+
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -768,18 +892,10 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
     CLIO_CO_RETURN;
   }
 
-  // Seat the fresh member: new client, reserve its backing region.
+  // Seat the fresh member: new client. Placement is fixed-offset (shards at
+  // kSuperblockSize + g*kShardLen), so no per-member AllocateBlocks is needed.
   clio::run::bdev::Client new_client(task->new_pool_id_);
-  const chi::u64 region = num_stripes_ * kShardLen;
-  auto alloc = new_client.AsyncAllocateBlocks(MemberQuery(), region);
-  CLIO_CO_AWAIT(alloc);
-  if (alloc->return_code_ != 0 || alloc->blocks_.size() == 0) {
-    HLOG(kError, "safe_bdev RecoverBdev: AllocateBlocks failed for '{}'",
-         task->pool_name_.str());
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-  const chi::u64 new_base = alloc->blocks_[0].offset_;
+  const chi::u64 new_base = kSuperblockSize;
   member_clients_[static_cast<size_t>(failed)] = new_client;
   // Point the slot at the new backing region now; the failed member is still
   // excluded from reconstruction via `exclude=failed`, and stays non-active
@@ -879,6 +995,18 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
   members_[static_cast<size_t>(failed)].node_id_ = task->node_id_;
   members_[static_cast<size_t>(failed)].base_offset_ = new_base;
   members_[static_cast<size_t>(failed)].state_ = ec::EcState::kActive;
+
+  // Stamp the fresh recovery member's superblock with this array's identity.
+  {
+    bool wr_ok = false;
+    CLIO_CO_AWAIT(WriteSuperblock(static_cast<size_t>(failed), rctx, wr_ok));
+    if (!wr_ok) {
+      HLOG(kWarning,
+           "safe_bdev RecoverBdev: superblock write failed for recovered "
+           "member {} (data reconstructed; will be re-stamped on next attach)",
+           failed);
+    }
+  }
 
   HLOG(kInfo, "safe_bdev RecoverBdev: member {} recovered onto '{}'", failed,
        task->pool_name_.str());
@@ -1021,7 +1149,7 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
     }
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
-    pk.pack_map(6);
+    pk.pack_map(7);
     pk.pack("pool_name");    pk.pack(pool_name_);
     pk.pack("max_failures"); pk.pack(max_failures_);
     pk.pack("num_members");  pk.pack(static_cast<chi::u32>(members_.size()));
@@ -1029,6 +1157,7 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
     pk.pack("dirty_stripes"); pk.pack(dirty);
     pk.pack("num_generations");
     pk.pack(static_cast<chi::u32>(generations_.size()));
+    pk.pack("reattached_members"); pk.pack(reattached_members_);
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }
   task->SetReturnCode(0);

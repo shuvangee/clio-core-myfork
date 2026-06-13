@@ -459,9 +459,10 @@ struct WriteTask : public chi::Task {
   IN ctp::ipc::ShmPtr<> data_;              // Data to write (pointer-based)
   IN size_t length_;                    // Size of data to write
   OUT chi::u64 bytes_written_;          // Number of bytes actually written
+  OUT chi::u32 io_error_;               // ctp::IoError category (0 == kOk)
 
   /** SHM default constructor */
-  CTP_CROSS_FUN WriteTask() : chi::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_written_(0) {}
+  CTP_CROSS_FUN WriteTask() : chi::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_written_(0), io_error_(0) {}
 
   /** Emplace constructor */
   CTP_CROSS_FUN explicit WriteTask(const chi::TaskId &task_node, const chi::PoolId &pool_id,
@@ -472,7 +473,8 @@ struct WriteTask : public chi::Task {
         blocks_(blocks),
         data_(data),
         length_(length),
-        bytes_written_(0) {
+        bytes_written_(0),
+        io_error_(0) {
   }
 
   /** Destructor - free buffer if TASK_DATA_OWNER is set */
@@ -501,7 +503,7 @@ struct WriteTask : public chi::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(bytes_written_);
+    ar(bytes_written_, io_error_);
   }
 
   /** Fix up priv::vector SVO pointer after cudaMemcpy D→H */
@@ -527,6 +529,7 @@ struct WriteTask : public chi::Task {
     data_ = other->data_;
     length_ = other->length_;
     bytes_written_ = other->bytes_written_;
+    io_error_ = other->io_error_;
   }
 };
 
@@ -540,9 +543,10 @@ struct ReadTask : public chi::Task {
   INOUT size_t
       length_;  // Size of data buffer (IN: buffer size, OUT: actual size)
   OUT chi::u64 bytes_read_;  // Number of bytes actually read
+  OUT chi::u32 io_error_;    // ctp::IoError category (0 == kOk)
 
   /** SHM default constructor */
-  CTP_CROSS_FUN ReadTask() : chi::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_read_(0) {}
+  CTP_CROSS_FUN ReadTask() : chi::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_read_(0), io_error_(0) {}
 
   /** Emplace constructor */
   CTP_CROSS_FUN explicit ReadTask(const chi::TaskId &task_node, const chi::PoolId &pool_id,
@@ -553,7 +557,8 @@ struct ReadTask : public chi::Task {
         blocks_(blocks),
         data_(data),
         length_(length),
-        bytes_read_(0) {
+        bytes_read_(0),
+        io_error_(0) {
   }
 
   /** Destructor - free buffer if TASK_DATA_OWNER is set */
@@ -581,7 +586,7 @@ struct ReadTask : public chi::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(length_, bytes_read_);
+    ar(length_, bytes_read_, io_error_);
     // Use BULK_XFER to actually transfer the read data back
     ar.bulk(data_, length_, BULK_XFER);
   }
@@ -609,6 +614,7 @@ struct ReadTask : public chi::Task {
     data_ = other->data_;
     length_ = other->length_;
     bytes_read_ = other->bytes_read_;
+    io_error_ = other->io_error_;
   }
 };
 

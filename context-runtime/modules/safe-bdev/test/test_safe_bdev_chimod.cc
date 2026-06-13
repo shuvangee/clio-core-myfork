@@ -76,6 +76,9 @@ using namespace std::chrono_literals;
 #include <clio_runtime/admin/admin_client.h>
 #include <clio_runtime/admin/admin_tasks.h>
 
+// msgpack for parsing Monitor "stats" output (reattached_members).
+#include <clio_ctp/serialize/msgpack_wrapper.h>
+
 namespace {
 
 bool g_initialized = false;
@@ -469,6 +472,213 @@ TEST_CASE("safe_bdev_variable_width_generations",
   }
 
   HLOG(kInfo, "safe_bdev variable-width generations test PASSED");
+}
+
+namespace {
+
+/**
+ * Query safe_bdev Monitor("stats") and extract the "reattached_members" field.
+ * Returns -1 if the field/blob could not be parsed.
+ */
+long QueryReattachedMembers(clio::run::safe_bdev::Client &safe) {
+  auto mon = safe.AsyncMonitor(chi::PoolQuery::Dynamic(), "stats");
+  mon.Wait();
+  if (mon->GetReturnCode() != 0) {
+    return -1;
+  }
+  for (const auto &kv_blob : mon->results_) {
+    const std::string &blob = kv_blob.second;
+    if (blob.empty()) {
+      continue;
+    }
+    msgpack::object_handle oh = msgpack::unpack(blob.data(), blob.size());
+    const msgpack::object &obj = oh.get();
+    if (obj.type != msgpack::type::MAP) {
+      continue;
+    }
+    for (uint32_t j = 0; j < obj.via.map.size; ++j) {
+      const auto &kv = obj.via.map.ptr[j];
+      std::string key;
+      kv.key.convert(key);
+      if (key == "reattached_members") {
+        chi::u32 v = 0;
+        kv.val.convert(v);
+        return static_cast<long>(v);
+      }
+    }
+  }
+  return -1;
+}
+
+}  // namespace
+
+TEST_CASE("safe_bdev_superblock_reattach", "[safe_bdev][superblock][reattach]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  auto member_name = [&](int idx) {
+    return "sb_member_" + std::to_string(getpid()) + "_" + std::to_string(idx);
+  };
+
+  // --- Create k=3 fresh RAM data members. ---
+  const int k = 3;
+  std::vector<chi::PoolId> data_ids;
+  for (int c = 0; c < k; ++c) {
+    chi::PoolId id(static_cast<chi::u32>(9600 + pidsalt + c), 0);
+    clio::run::bdev::Client client(id);
+    REQUIRE(CreateRamMember(client, member_name(c), id));
+    data_ids.push_back(client.pool_id_);
+  }
+
+  // --- Phase 1: create safe_bdev pool X over the fresh members. ---
+  chi::PoolId safe_id(static_cast<chi::u32>(9650 + pidsalt), 0);
+  clio::run::safe_bdev::Client safe(safe_id);
+  std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
+  for (int c = 0; c < k; ++c) {
+    members.emplace_back(member_name(c), /*node_id=*/0, data_ids[c]);
+  }
+  {
+    auto create_task = safe.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                        "safe_bdev_sb_poolX", safe_id,
+                                        /*max_failures=*/1, members);
+    create_task.Wait();
+    safe.pool_id_ = create_task->new_pool_id_;
+    REQUIRE(create_task->GetReturnCode() == 0);
+  }
+
+  // Fresh members must NOT be reattached.
+  REQUIRE(QueryReattachedMembers(safe) == 0);
+
+  // Write + flush + read a stripe so the members hold real data.
+  const chi::u64 io_len = static_cast<chi::u64>(k) * kShardLen;
+  auto alloc = safe.AsyncAllocateBlocks(chi::PoolQuery::Dynamic(), io_len);
+  alloc.Wait();
+  REQUIRE(alloc->GetReturnCode() == 0);
+  REQUIRE(alloc->blocks_.size() > 0);
+  clio::run::bdev::Block block = alloc->blocks_[0];
+  std::vector<ctp::u8> pattern = MakePattern(io_len, 0x77);
+
+  {
+    chi::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
+    wblocks.push_back(block);
+    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(wbuf.IsNull());
+    memcpy(wbuf.ptr_, pattern.data(), io_len);
+    auto wt = safe.AsyncWrite(chi::PoolQuery::Dynamic(), wblocks,
+                              wbuf.shm_.template Cast<void>(), io_len);
+    wt.Wait();
+    REQUIRE(wt->GetReturnCode() == 0);
+    REQUIRE(wt->bytes_written_ == io_len);
+    CLIO_IPC->FreeBuffer(wbuf);
+  }
+  {
+    auto flush = safe.AsyncBuildParity(chi::PoolQuery::Dynamic(), 0);
+    flush.Wait();
+    REQUIRE(flush->GetReturnCode() == 0);
+  }
+  {
+    chi::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
+    rblocks.push_back(block);
+    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(rbuf.IsNull());
+    memset(rbuf.ptr_, 0, io_len);
+    auto rt = safe.AsyncRead(chi::PoolQuery::Dynamic(), rblocks,
+                             rbuf.shm_.template Cast<void>(), io_len);
+    rt.Wait();
+    REQUIRE(rt->GetReturnCode() == 0);
+    std::vector<ctp::u8> got(io_len);
+    memcpy(got.data(), rbuf.ptr_, io_len);
+    REQUIRE(got == pattern);
+    CLIO_IPC->FreeBuffer(rbuf);
+  }
+  HLOG(kInfo, "safe_bdev SB: phase 1 (fresh create + roundtrip) OK");
+
+  // --- Tear down array X (members + their superblocks persist as independent
+  //     bdev pools). A single daemon's get-or-create is keyed by name/id, so a
+  //     plain re-Create would short-circuit to the existing container without
+  //     re-running Create; destroying first forces a genuine re-attach that
+  //     re-reads each member's superblock. ---
+  {
+    clio::run::admin::Client admin(chi::kAdminPoolId);
+    auto destroy = admin.AsyncDestroyPool(chi::PoolQuery::Dynamic(),
+                                          safe.pool_id_);
+    destroy.Wait();
+    REQUIRE(destroy->GetReturnCode() == 0);
+    std::this_thread::sleep_for(100ms);
+  }
+
+  // --- Phase 2: create AGAIN with the SAME pool id X over the SAME members.
+  //     Every member already carries our superblock => all re-attached. ---
+  chi::PoolId safe_id2 = safe_id;  // same identity
+  clio::run::safe_bdev::Client safe2(safe_id2);
+  {
+    auto create_task = safe2.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                         "safe_bdev_sb_poolX", safe_id2,
+                                         /*max_failures=*/1, members);
+    create_task.Wait();
+    safe2.pool_id_ = create_task->new_pool_id_;
+    REQUIRE(create_task->GetReturnCode() == 0);
+  }
+  long reattached = QueryReattachedMembers(safe2);
+  HLOG(kInfo, "safe_bdev SB: re-attach reported reattached_members={}",
+       reattached);
+  REQUIRE(reattached > 0);
+  REQUIRE(reattached == k);
+  HLOG(kInfo, "safe_bdev superblock reattach test PASSED");
+}
+
+TEST_CASE("safe_bdev_superblock_foreign_refuse",
+          "[safe_bdev][superblock][foreign]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  auto member_name = [&](int idx) {
+    return "fr_member_" + std::to_string(getpid()) + "_" + std::to_string(idx);
+  };
+
+  // --- Create k=3 fresh RAM data members. ---
+  const int k = 3;
+  std::vector<chi::PoolId> data_ids;
+  for (int c = 0; c < k; ++c) {
+    chi::PoolId id(static_cast<chi::u32>(9700 + pidsalt + c), 0);
+    clio::run::bdev::Client client(id);
+    REQUIRE(CreateRamMember(client, member_name(c), id));
+    data_ids.push_back(client.pool_id_);
+  }
+  std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
+  for (int c = 0; c < k; ++c) {
+    members.emplace_back(member_name(c), /*node_id=*/0, data_ids[c]);
+  }
+
+  // --- Array X claims the members (writes superblocks). ---
+  chi::PoolId safe_idX(static_cast<chi::u32>(9750 + pidsalt), 0);
+  clio::run::safe_bdev::Client safeX(safe_idX);
+  {
+    auto create_task = safeX.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                         "safe_bdev_fr_poolX", safe_idX,
+                                         /*max_failures=*/1, members);
+    create_task.Wait();
+    safeX.pool_id_ = create_task->new_pool_id_;
+    REQUIRE(create_task->GetReturnCode() == 0);
+  }
+
+  // --- Array Y (DIFFERENT pool id) over the SAME members => must REFUSE. ---
+  chi::PoolId safe_idY(static_cast<chi::u32>(9760 + pidsalt), 0);
+  clio::run::safe_bdev::Client safeY(safe_idY);
+  {
+    auto create_task = safeY.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                         "safe_bdev_fr_poolY", safe_idY,
+                                         /*max_failures=*/1, members);
+    create_task.Wait();
+    HLOG(kInfo, "safe_bdev FR: foreign create returned rc={}",
+         create_task->GetReturnCode());
+    REQUIRE(create_task->GetReturnCode() != 0);
+  }
+  HLOG(kInfo, "safe_bdev superblock foreign-refuse test PASSED");
 }
 
 SIMPLE_TEST_MAIN()

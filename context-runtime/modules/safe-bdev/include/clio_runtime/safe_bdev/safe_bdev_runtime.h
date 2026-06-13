@@ -43,8 +43,11 @@
 #include <set>
 #include <vector>
 
+#include <clio_ctp/io/io_error.h>  // ctp::IoError, ctp::IsFatalDevice
+
 #include "ec/ec_array.h"  // ec::EcRole, ec::EcState, ec::ReedSolomon
 #include "safe_bdev_client.h"
+#include "safe_bdev_superblock.h"  // MemberSuperblock, kMemberSuperblockMagic
 #include "safe_bdev_tasks.h"
 
 /**
@@ -73,11 +76,19 @@ class Runtime : public chi::Container {
         num_stripes_(0),
         next_stripe_(0),
         logical_capacity_(0),
-        logical_next_(0) {}
+        logical_next_(0),
+        reattached_members_(0) {}
   ~Runtime() override = default;
 
   /** Fixed per-member stripe (shard) length in bytes. */
   static constexpr chi::u64 kShardLen = 65536;
+
+  /**
+   * Reserved superblock area at the front of every member bdev (absolute
+   * offset 0). DATA shards begin at offset kSuperblockSize; a member's shard
+   * for global stripe g is at absolute offset kSuperblockSize + g*kShardLen.
+   */
+  static constexpr chi::u64 kSuperblockSize = 65536;
 
   /** Background parity-builder poll period (microseconds): 50 ms. */
   static constexpr double kBuildParityPeriodUs = 50000.0;
@@ -228,6 +239,7 @@ class Runtime : public chi::Container {
   chi::u64 next_stripe_;             // Global stripe cursor (next unwritten g)
   chi::u64 logical_capacity_;        // Usable logical bytes across generations
   chi::u64 logical_next_;            // Bump cursor for logical allocation
+  chi::u32 reattached_members_;      // Members recognized as already ours at Create
 
   // Clients for delegating data-plane I/O to member bdevs. members_ and
   // member_clients_ are kept index-aligned.
@@ -262,6 +274,26 @@ class Runtime : public chi::Container {
 
   /** Per-member pool query (members are independent local bdev pools). */
   chi::PoolQuery MemberQuery() const { return chi::PoolQuery::Local(); }
+
+  /**
+   * Automatic down-detection. Inspect a member-bdev future's io_error_ after a
+   * shard I/O completes: a fatal device error (DeviceFault / Disconnected) ejects
+   * member `mi` (state_ = kFaulty) so the degraded-read / reconstruct path takes
+   * over. A TRANSIENT error never faults the member. (A consecutive-failure
+   * circuit breaker for kDeviceFault is a future refinement; this cut faults
+   * immediately on any IsFatalDevice, which is acceptable.)
+   */
+  void MaybeFaultMember(size_t mi, chi::u32 io_error) {
+    const auto e = static_cast<ctp::IoError>(io_error);
+    if (ctp::IsFatalDevice(e) && mi < members_.size() &&
+        members_[mi].state_ == ec::EcState::kActive) {
+      members_[mi].state_ = ec::EcState::kFaulty;
+      HLOG(kWarning,
+           "safe_bdev: member {} auto-faulted on fatal device error '{}' "
+           "(io_error={})",
+           mi, ctp::IoErrorName(e), io_error);
+    }
+  }
 
   //==========================================================================
   // Declustered placement (mirrors ec::DeclusteredArray; see Part C). For a
@@ -348,6 +380,21 @@ class Runtime : public chi::Container {
    *  Slot == global stripe index: offset = base_offset + stripe*kShardLen. */
   chi::priv::vector<clio::run::bdev::Block> ShardBlocks(const MemberSlot &m,
                                                         chi::u64 stripe) const;
+
+  /**
+   * Serialize this array's identity for member `mi` into a zero-padded
+   * kSuperblockSize buffer and AsyncWrite it to that member at absolute
+   * offset 0. Returns false on I/O failure.
+   */
+  chi::TaskResume WriteSuperblock(size_t mi, chi::RunContext &rctx, bool &ok);
+
+  /**
+   * AsyncRead kSuperblockSize bytes at absolute offset 0 from member `mi`,
+   * parse the superblock into `sb`, and set `present` = (magic matches &&
+   * checksum valid). A blank member reads back zeros => present == false.
+   */
+  chi::TaskResume ReadSuperblock(size_t mi, chi::RunContext &rctx,
+                                 MemberSuperblock &sb, bool &present, bool &ok);
 
   /**
    * Async write `kShardLen` bytes from host buffer `src` to member `mi`'s

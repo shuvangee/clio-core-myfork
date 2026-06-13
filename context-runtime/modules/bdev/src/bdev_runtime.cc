@@ -38,6 +38,7 @@
 #include <clio_runtime/worker.h>
 
 #include <clio_ctp/introspect/system_info.h>
+#include <clio_ctp/io/io_error.h>
 #include <clio_ctp/serialize/msgpack_wrapper.h>
 
 #include <algorithm>
@@ -731,6 +732,7 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
     case BdevType::kPinned:
       // Removed tiers; reject as unsupported.
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_written_ = 0;
       break;
     case BdevType::kNoop:
@@ -739,6 +741,7 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
       break;
     default:
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_written_ = 0;
       break;
   }
@@ -761,6 +764,7 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
     case BdevType::kPinned:
       // Removed tiers; reject as unsupported.
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_read_ = 0;
       break;
     case BdevType::kNoop:
@@ -769,6 +773,7 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
       break;
     default:
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_read_ = 0;
       break;
   }
@@ -814,6 +819,7 @@ chi::TaskResume Runtime::WriteToFile(ctp::ipc::FullPtr<WriteTask> task,
     if (io_ctx == nullptr || !io_ctx->is_initialized_ || !io_ctx->async_io_) {
       HLOG(kError, "WriteToFile called with invalid I/O context");
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_written_ = total_bytes_written;
       CLIO_CO_RETURN;
     }
@@ -825,6 +831,7 @@ chi::TaskResume Runtime::WriteToFile(ctp::ipc::FullPtr<WriteTask> task,
       HLOG(kError, "Failed to submit async write: offset={}, size={}",
            block.offset_, block_write_size);
       task->return_code_ = 2;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_written_ = total_bytes_written;
       CLIO_CO_RETURN;
     }
@@ -837,6 +844,8 @@ chi::TaskResume Runtime::WriteToFile(ctp::ipc::FullPtr<WriteTask> task,
     if (result.error_code != 0) {
       HLOG(kError, "Async write failed: error_code={}", result.error_code);
       task->return_code_ = 4;
+      task->io_error_ =
+          static_cast<chi::u32>(ctp::ClassifyErrno(result.error_code));
       task->bytes_written_ = total_bytes_written;
       CLIO_CO_RETURN;
     }
@@ -891,6 +900,7 @@ chi::TaskResume Runtime::ReadFromFile(ctp::ipc::FullPtr<ReadTask> task,
     if (io_ctx == nullptr || !io_ctx->is_initialized_ || !io_ctx->async_io_) {
       HLOG(kError, "ReadFromFile called with invalid I/O context");
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_read_ = total_bytes_read;
       CLIO_CO_RETURN;
     }
@@ -902,6 +912,7 @@ chi::TaskResume Runtime::ReadFromFile(ctp::ipc::FullPtr<ReadTask> task,
       HLOG(kError, "Failed to submit async read: offset={}, size={}",
            block.offset_, block_read_size);
       task->return_code_ = 2;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_read_ = total_bytes_read;
       CLIO_CO_RETURN;
     }
@@ -914,6 +925,8 @@ chi::TaskResume Runtime::ReadFromFile(ctp::ipc::FullPtr<ReadTask> task,
     if (result.error_code != 0) {
       HLOG(kError, "Async read failed: error_code={}", result.error_code);
       task->return_code_ = 4;
+      task->io_error_ =
+          static_cast<chi::u32>(ctp::ClassifyErrno(result.error_code));
       task->bytes_read_ = total_bytes_read;
       CLIO_CO_RETURN;
     }
@@ -1100,6 +1113,7 @@ void Runtime::WriteToRam(ctp::ipc::FullPtr<WriteTask> task) {
     if (ram_capacity_ != std::numeric_limits<chi::u64>::max() &&
         block.offset_ + block_write_size > ram_capacity_) {
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_written_ = total_bytes_written;
       HLOG(kError,
            "Write to RAM beyond capacity offset: {}, length: {}, "
@@ -1156,6 +1170,7 @@ void Runtime::ReadFromRam(ctp::ipc::FullPtr<ReadTask> task) {
     if (ram_capacity_ != std::numeric_limits<chi::u64>::max() &&
         block.offset_ + block_read_size > ram_capacity_) {
       task->return_code_ = 1;
+      task->io_error_ = static_cast<chi::u32>(ctp::IoError::kInvalid);
       task->bytes_read_ = total_bytes_read;
       HLOG(kError,
            "Read from RAM beyond capacity offset: {}, length: {}, "
