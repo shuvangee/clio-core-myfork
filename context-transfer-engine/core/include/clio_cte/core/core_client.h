@@ -123,12 +123,13 @@ class Client : public chi::ContainerClient {
       chi::u64 total_size,
       const chi::PoolQuery &target_query = chi::PoolQuery::Local(),
       const chi::PoolId &bdev_id = chi::PoolId::GetNull(),
-      const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic()) {
+      const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic(),
+      chi::u32 attach_existing = 0) {
     auto *ipc_manager = CLIO_CPU_IPC;
 
     auto task = ipc_manager->NewTask<RegisterTargetTask>(
         chi::CreateTaskId(), pool_id_, pool_query, target_name,
-        bdev_type, total_size, target_query, bdev_id);
+        bdev_type, total_size, target_query, bdev_id, attach_existing);
 
     return ipc_manager->Send(task);
   }

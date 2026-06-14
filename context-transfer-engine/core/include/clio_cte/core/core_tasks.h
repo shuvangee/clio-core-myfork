@@ -295,6 +295,11 @@ struct RegisterTargetTask : public chi::Task {
   IN chi::u64 total_size_;                 // Total size for allocation
   IN chi::PoolQuery target_query_;  // Target pool query for bdev API calls
   IN chi::PoolId bdev_id_;          // PoolId to create for the underlying bdev
+  // 0 = create a new bdev at bdev_id_ (default, as before); 1 = bind to the
+  // ALREADY-EXISTING pool at bdev_id_ without creating it (e.g. a safe-bdev
+  // pool). When attaching, the handler validates the pool via GetStats and
+  // skips AsyncCreate.
+  IN chi::u32 attach_existing_;
 
   // SHM constructor
   CTP_CROSS_FUN RegisterTargetTask()
@@ -302,20 +307,23 @@ struct RegisterTargetTask : public chi::Task {
         target_name_(CLIO_PRIV_ALLOC),
         bdev_type_(clio::run::bdev::BdevType::kFile),
         total_size_(0),
-        bdev_id_(chi::PoolId::GetNull()) {}
+        bdev_id_(chi::PoolId::GetNull()),
+        attach_existing_(0) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit RegisterTargetTask(
       const chi::TaskId &task_id, const chi::PoolId &pool_id,
       const chi::PoolQuery &pool_query, const std::string &target_name,
       clio::run::bdev::BdevType bdev_type, chi::u64 total_size,
-      const chi::PoolQuery &target_query, const chi::PoolId &bdev_id)
+      const chi::PoolQuery &target_query, const chi::PoolId &bdev_id,
+      chi::u32 attach_existing = 0)
       : chi::Task(task_id, pool_id, pool_query, Method::kRegisterTarget),
         target_name_(CLIO_PRIV_ALLOC, target_name),
         bdev_type_(bdev_type),
         total_size_(total_size),
         target_query_(target_query),
-        bdev_id_(bdev_id) {
+        bdev_id_(bdev_id),
+        attach_existing_(attach_existing) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kRegisterTarget;
@@ -329,7 +337,8 @@ struct RegisterTargetTask : public chi::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeIn(Archive &ar) {
     Task::SerializeIn(ar);
-    ar(target_name_, bdev_type_, total_size_, target_query_, bdev_id_);
+    ar(target_name_, bdev_type_, total_size_, target_query_, bdev_id_,
+       attach_existing_);
   }
 
   /**
@@ -358,6 +367,7 @@ struct RegisterTargetTask : public chi::Task {
     total_size_ = other->total_size_;
     target_query_ = other->target_query_;
     bdev_id_ = other->bdev_id_;
+    attach_existing_ = other->attach_existing_;
   }
 
   /**
