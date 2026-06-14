@@ -37,6 +37,7 @@
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/comutex.h>
 #include <clio_runtime/bdev/bdev_client.h>
+#include <clio_runtime/bdev/bdev_runtime.h>  // bdev::Heap, bdev::GlobalBlockMap
 
 #include <memory>
 #include <mutex>
@@ -51,12 +52,21 @@
 #include "safe_bdev_tasks.h"
 
 /**
- * Runtime container for safe_bdev ChiMod
+ * Runtime container for safe_bdev ChiMod.
  *
- * Provides a declustered, erasure-coded block device built on top of one or
- * more member bdevs. The erasure-coding internals are stubbed for issue #543;
- * the data plane currently delegates to a single primary member bdev so the
- * device is a working (degenerate, no-parity) device that compiles and runs.
+ * safe_bdev presents the bdev task interface (AllocateBlocks/FreeBlocks/Write/
+ * Read/GetStats) over a fixed array of member bdevs using a RAID-0-data +
+ * dedicated-parity layout (single fixed k/m):
+ *
+ *   - members_[0 .. k-1]   are DATA members (RAID-0 striped).
+ *   - members_[k .. k+m-1] are PARITY members (appended via AddBdev).
+ *
+ * The logical address space is striped over the k data members in fixed-size
+ * kChunkLen units (RAID-0). For each ROW r (a kChunkLen slice on every member),
+ * parity member j holds the Reed-Solomon parity shard j computed over the k
+ * FULL data chunks of that row. Parity is built off the write path (deferred to
+ * a periodic BuildParity task over a dirty-ROW set), and reads reconstruct a
+ * down data member's chunk on demand (decode from the row's survivors).
  */
 
 namespace clio::run::safe_bdev {
@@ -71,22 +81,21 @@ class Runtime : public chi::Container {
 
   Runtime()
       : max_failures_(1),
-        current_parity_level_(0),
+        parity_level_(0),
         k_(0),
-        num_stripes_(0),
-        next_stripe_(0),
+        num_rows_(0),
         logical_capacity_(0),
-        logical_next_(0),
         reattached_members_(0) {}
   ~Runtime() override = default;
 
-  /** Fixed per-member stripe (shard) length in bytes. */
-  static constexpr chi::u64 kShardLen = 65536;
+  /** RAID-0 stripe unit (data shard / parity chunk length) in bytes. */
+  static constexpr chi::u64 kChunkLen = 65536;
 
   /**
    * Reserved superblock area at the front of every member bdev (absolute
-   * offset 0). DATA shards begin at offset kSuperblockSize; a member's shard
-   * for global stripe g is at absolute offset kSuperblockSize + g*kShardLen.
+   * offset 0). The member's usable region begins at offset kSuperblockSize; a
+   * member's chunk for row r is at absolute offset kSuperblockSize +
+   * r*kChunkLen.
    */
   static constexpr chi::u64 kSuperblockSize = 65536;
 
@@ -137,7 +146,7 @@ class Runtime : public chi::Container {
   chi::TaskResume RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
                               chi::RunContext &ctx);
 
-  /** Build/raise parity for dirty stripes (Method::kBuildParity). */
+  /** Build/raise parity for dirty rows (Method::kBuildParity). */
   chi::TaskResume BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
                               chi::RunContext &ctx);
 
@@ -192,96 +201,93 @@ class Runtime : public chi::Container {
                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
  private:
-  // Per-member runtime bookkeeping: EC state plus the member's reserved
-  // contiguous backing region on its bdev pool. NOTE: with declustered
-  // placement (Part C) a member's ROLE for a given stripe is computed by the
-  // rotation, not stored here — role_/index_ are kept only as a convenience for
-  // logging and are NOT used for placement. A member's shard for GLOBAL stripe
-  // g lives at base_offset_ + g*kShardLen (slot == global stripe index).
+  // Per-member runtime bookkeeping. role_ (DATA vs PARITY) and index_ (data
+  // column c, or parity row j) are FIXED for the member's lifetime — no
+  // rotation, no generations. members_[0..k-1] are DATA (index_ == column),
+  // members_[k..k+m-1] are PARITY (index_ == parity row j). A member's chunk
+  // for row r lives at absolute offset kSuperblockSize + r*kChunkLen.
   struct MemberSlot {
     chi::PoolId pool_id_;
     std::string pool_name_;
     chi::u32 node_id_ = 0;
     ec::EcRole role_ = ec::EcRole::kData;
     ec::EcState state_ = ec::EcState::kActive;
-    int index_ = -1;            // legacy hint only; placement is rotation-based
-    chi::u64 base_offset_ = 0;  // byte offset of stripe 0 on the member pool
-  };
-
-  // A generation (epoch) is a frozen (k, m, member-set) config owning a
-  // contiguous range of GLOBAL stripe indices, mirroring
-  // ec::DeclusteredArray::Generation. Adding a DATA member closes the current
-  // generation and opens a wider one (k+1) for FUTURE stripes; existing
-  // generations keep their geometry forever (variable width). Within a
-  // generation of N = k+m members, the RS shard each member holds rotates by
-  // the stripe index (rotated-parity declustering).
-  struct Generation {
-    int k = 0;
-    int m = 0;                  // currently realized parity rows for this gen
-    chi::u64 seed = 0;          // rotation seed (varies per generation)
-    chi::u64 first_stripe = 0;  // first GLOBAL stripe owned by this gen
-    chi::u64 num_stripes = 0;   // 0 while the generation is open (current)
-    chi::u64 logical_base = 0;  // logical byte offset of this gen's stripe 0
-    std::vector<int> member_pos;  // global member ids (indices into members_)
-    std::unique_ptr<ec::ReedSolomon> rs;  // code (k, max_failures_)
+    int index_ = -1;  // data column c (DATA) or parity row j (PARITY)
   };
 
   // Client for making calls back to this ChiMod.
   Client client_;
 
   // EC / membership state.
-  std::vector<MemberSlot> members_;  // global member registry
-  std::vector<Generation> generations_;  // epochs; last one is the open gen
-  chi::u32 max_failures_;            // Fault-tolerance target (M)
-  chi::u32 current_parity_level_;    // Parity members added so far (== m grows)
-  int k_;                            // k of the CURRENT (open) generation
-  chi::u64 num_stripes_;             // Total stripe capacity reserved per member
-  chi::u64 next_stripe_;             // Global stripe cursor (next unwritten g)
-  chi::u64 logical_capacity_;        // Usable logical bytes across generations
-  chi::u64 logical_next_;            // Bump cursor for logical allocation
-  chi::u32 reattached_members_;      // Members recognized as already ours at Create
+  std::vector<MemberSlot> members_;  // [0,k) data, [k,k+m) parity
+  chi::u32 max_failures_;            // Fault-tolerance target (M == m_max)
+  chi::u32 parity_level_;            // Parity members added so far (m)
+  int k_;                           // Number of DATA members (fixed)
+  chi::u64 num_rows_;               // Rows of kChunkLen reserved per member
+  chi::u64 logical_capacity_;       // Usable logical bytes = k*num_rows*kChunkLen
+  chi::u32 reattached_members_;     // Members recognized as already ours at Create
+
+  // One Reed-Solomon code (k, max_failures). Data column for data member i is
+  // i; parity member j carries global RS shard index k+j.
+  std::unique_ptr<ec::ReedSolomon> rs_;
 
   // Clients for delegating data-plane I/O to member bdevs. members_ and
   // member_clients_ are kept index-aligned.
   std::vector<clio::run::bdev::Client> member_clients_;
 
-  // Async-write parity bookkeeping. Write writes data shards immediately and
-  // records the stripe as dirty (parity not yet current); BuildParity drains
-  // the dirty set and (re)computes all current parity rows. written_stripes_
-  // tracks every stripe that holds data so a parity-level increase can re-dirty
-  // exactly those. Guarded by stripe_mu_ for the brief set operations (never
-  // held across a co_await). A stripe is safe to reconstruct only when NOT
-  // dirty — degraded reads / recovery refuse a dirty (unprotected) stripe.
-  std::set<chi::u64> dirty_stripes_;
-  std::set<chi::u64> written_stripes_;
-  mutable std::mutex stripe_mu_;
+  // Real reclaimable allocator over the logical capacity. Reuses bdev's
+  // free-list + heap (allocate-from-free-list-else-heap), so freed blocks are
+  // reused and allocation sizes are uneven exactly like bdev. Offsets returned
+  // are logical-space byte offsets.
+  clio::run::bdev::GlobalBlockMap block_map_;
+  clio::run::bdev::Heap heap_;
+  std::atomic<chi::u64> allocated_bytes_{0};
 
-  /** Mark a stripe as holding data and needing (re)parity. */
-  void MarkStripeDirty(chi::u64 stripe) {
-    std::lock_guard<std::mutex> g(stripe_mu_);
-    written_stripes_.insert(stripe);
-    dirty_stripes_.insert(stripe);
+  // Async-parity bookkeeping. Write writes data chunks immediately and records
+  // each touched ROW as dirty (parity not yet current); BuildParity drains the
+  // dirty set and (re)computes all parity rows. written_rows_ tracks every row
+  // that holds data so a parity-level increase (AddBdev as_parity) can re-dirty
+  // exactly those. Guarded by row_mu_ (never held across a co_await). A row is
+  // safe to reconstruct only when NOT dirty — degraded reads / recovery refuse
+  // a dirty (unprotected) row.
+  std::set<chi::u64> dirty_rows_;
+  std::set<chi::u64> written_rows_;
+  mutable std::mutex row_mu_;
+
+  /** Mark a row as holding data and needing (re)parity. */
+  void MarkRowDirty(chi::u64 row) {
+    std::lock_guard<std::mutex> g(row_mu_);
+    written_rows_.insert(row);
+    dirty_rows_.insert(row);
   }
-  /** True if the stripe's parity is not yet current (unprotected). */
-  bool IsStripeDirty(chi::u64 stripe) const {
-    std::lock_guard<std::mutex> g(stripe_mu_);
-    return dirty_stripes_.count(stripe) != 0;
+  /** True if the row's parity is not yet current (unprotected). */
+  bool IsRowDirty(chi::u64 row) const {
+    std::lock_guard<std::mutex> g(row_mu_);
+    return dirty_rows_.count(row) != 0;
   }
 
   //==========================================================================
-  // EC helpers (defined in safe_bdev_runtime.cc; run inside task fibers).
+  // RAID-0 address mapping. A logical byte offset L maps to:
+  //   chunk    = L / kChunkLen;     within = L % kChunkLen
+  //   data_col = chunk % k;         row    = chunk / k
+  // physical offset on DATA member data_col = kSuperblockSize + row*kChunkLen +
+  // within. Parity member j's chunk for row r is at the same physical offset
+  // kSuperblockSize + r*kChunkLen.
   //==========================================================================
+
+  /** Absolute member-pool offset of row `r`'s chunk start. */
+  static chi::u64 ChunkOffset(chi::u64 row) {
+    return kSuperblockSize + row * kChunkLen;
+  }
 
   /** Per-member pool query (members are independent local bdev pools). */
   chi::PoolQuery MemberQuery() const { return chi::PoolQuery::Local(); }
 
   /**
    * Automatic down-detection. Inspect a member-bdev future's io_error_ after a
-   * shard I/O completes: a fatal device error (DeviceFault / Disconnected) ejects
-   * member `mi` (state_ = kFaulty) so the degraded-read / reconstruct path takes
-   * over. A TRANSIENT error never faults the member. (A consecutive-failure
-   * circuit breaker for kDeviceFault is a future refinement; this cut faults
-   * immediately on any IsFatalDevice, which is acceptable.)
+   * chunk I/O completes: a fatal device error (DeviceFault / Disconnected)
+   * ejects member `mi` (state_ = kFaulty) so the degraded-read / reconstruct
+   * path takes over. A TRANSIENT error never faults the member.
    */
   void MaybeFaultMember(size_t mi, chi::u32 io_error) {
     const auto e = static_cast<ctp::IoError>(io_error);
@@ -296,90 +302,46 @@ class Runtime : public chi::Container {
   }
 
   //==========================================================================
-  // Declustered placement (mirrors ec::DeclusteredArray; see Part C). For a
-  // generation of N = k+m members, the RS shard index q played by member
-  // position p for global stripe g rotates by (local_stripe + seed) mod N.
+  // EC / I/O helpers (defined in safe_bdev_runtime.cc; run inside task fibers).
   //==========================================================================
 
-  /** Epoch (index into generations_) owning global stripe g, or -1. */
-  int EpochOf(chi::u64 g) const {
-    for (size_t e = 0; e < generations_.size(); ++e) {
-      const Generation &gen = generations_[e];
-      const chi::u64 span =
-          (gen.num_stripes != 0) ? gen.num_stripes : (next_stripe_ -
-                                                      gen.first_stripe);
-      if (g >= gen.first_stripe && g < gen.first_stripe + span) {
-        return static_cast<int>(e);
-      }
-    }
-    return -1;
-  }
-
-  /** RS shard index q held by member position p (in gen) for global stripe g.
-   *  q in [0,k) is data column q; q in [k,N) is parity row q-k. */
-  int ShardOfPosition(const Generation &gen, chi::u64 g, int p) const {
-    const int n = static_cast<int>(gen.member_pos.size());
-    const chi::u64 local = g - gen.first_stripe;
-    const int r = static_cast<int>((local + gen.seed) % static_cast<chi::u64>(n));
-    return ((p - r) % n + n) % n;
-  }
-
-  /** Member position holding RS shard q for global stripe g (inverse). */
-  int PositionOfShard(const Generation &gen, chi::u64 g, int q) const {
-    const int n = static_cast<int>(gen.member_pos.size());
-    const chi::u64 local = g - gen.first_stripe;
-    const int r = static_cast<int>((local + gen.seed) % static_cast<chi::u64>(n));
-    return (q + r) % n;
-  }
-
-  /** Global member id (index into members_) holding RS shard q for stripe g. */
-  int MemberOfShard(const Generation &gen, chi::u64 g, int q) const {
-    return gen.member_pos[static_cast<size_t>(PositionOfShard(gen, g, q))];
-  }
+  /** Block list addressing [offset, offset+len) on a member pool. */
+  chi::priv::vector<clio::run::bdev::Block> MemberBlocks(chi::u64 offset,
+                                                         chi::u64 len) const;
 
   /**
-   * Map a logical byte offset L to its (epoch, global stripe g, data column c).
-   * The logical space is SEGMENTED per generation: generation e owns the range
-   * [gen.logical_base, gen.logical_base + gen.k*kShardLen*span) where span is
-   * the number of stripes the generation owns (next_stripe_-first_stripe while
-   * open). Returns false if L is out of range. Requires L to be stripe-aligned
-   * within its generation for c to be meaningful (callers assert full-stripe
-   * alignment in this first-cut milestone).
+   * AsyncWrite `len` bytes from host buffer `src` to member `mi` at absolute
+   * member-pool offset `offset`. Auto-faults the member on a fatal io_error.
    */
-  bool LogicalToStripe(chi::u64 logical, int *epoch, chi::u64 *g,
-                       int *col) const {
-    for (size_t e = 0; e < generations_.size(); ++e) {
-      const Generation &gen = generations_[e];
-      const chi::u64 span =
-          (gen.num_stripes != 0) ? gen.num_stripes
-                                 : (next_stripe_ - gen.first_stripe);
-      const chi::u64 per_stripe = static_cast<chi::u64>(gen.k) * kShardLen;
-      const chi::u64 bytes = per_stripe * span;
-      if (logical >= gen.logical_base && logical < gen.logical_base + bytes) {
-        const chi::u64 within = logical - gen.logical_base;
-        *epoch = static_cast<int>(e);
-        *g = gen.first_stripe + within / per_stripe;
-        *col = static_cast<int>((within % per_stripe) / kShardLen);
-        return true;
-      }
-    }
-    return false;
-  }
+  chi::TaskResume WriteSegment(size_t mi, chi::u64 offset, const uint8_t *src,
+                               chi::u64 len, chi::RunContext &rctx, bool &ok);
 
-  /** Position of global member id `mid` within gen.member_pos, or -1. */
-  int PositionInGen(const Generation &gen, int mid) const {
-    for (size_t p = 0; p < gen.member_pos.size(); ++p) {
-      if (gen.member_pos[p] == mid) {
-        return static_cast<int>(p);
-      }
-    }
-    return -1;
-  }
+  /**
+   * AsyncRead `len` bytes at absolute member-pool offset `offset` from member
+   * `mi` into host buffer `dst`. Auto-faults the member on a fatal io_error.
+   */
+  chi::TaskResume ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
+                              chi::u64 len, chi::RunContext &rctx, bool &ok);
 
-  /** Block list addressing the GLOBAL-stripe `stripe` shard region on member.
-   *  Slot == global stripe index: offset = base_offset + stripe*kShardLen. */
-  chi::priv::vector<clio::run::bdev::Block> ShardBlocks(const MemberSlot &m,
-                                                        chi::u64 stripe) const;
+  /**
+   * Reconstruct the FULL kChunkLen chunk of DATA member `data_col` for row
+   * `row` by gathering k survivors among the k data + m parity members'
+   * chunks at that row (excluding faulty / `exclude`), DecodeData. `out`
+   * receives kChunkLen bytes. Returns false if too few survivors.
+   */
+  chi::TaskResume ReconstructDataChunk(chi::u64 row, int data_col, int exclude,
+                                       chi::RunContext &rctx,
+                                       std::vector<uint8_t> &out, bool &ok);
+
+  /**
+   * Reconstruct ALL k data chunks for row `row` from active survivors
+   * (DecodeData), optionally excluding member id `exclude`. `out` receives k
+   * buffers of kChunkLen bytes. Returns false on too few survivors.
+   */
+  chi::TaskResume ReconstructRow(chi::u64 row, int exclude,
+                                 chi::RunContext &rctx,
+                                 std::vector<std::vector<uint8_t>> &out,
+                                 bool &ok);
 
   /**
    * Serialize this array's identity for member `mi` into a zero-padded
@@ -395,30 +357,6 @@ class Runtime : public chi::Container {
    */
   chi::TaskResume ReadSuperblock(size_t mi, chi::RunContext &rctx,
                                  MemberSuperblock &sb, bool &present, bool &ok);
-
-  /**
-   * Async write `kShardLen` bytes from host buffer `src` to member `mi`'s
-   * shard for `stripe`. Returns false on dispatch failure.
-   */
-  chi::TaskResume WriteShard(size_t mi, chi::u64 stripe, const uint8_t *src,
-                             chi::RunContext &rctx, bool &ok);
-
-  /**
-   * Async read member `mi`'s shard for `stripe` into host buffer `dst`.
-   */
-  chi::TaskResume ReadShard(size_t mi, chi::u64 stripe, uint8_t *dst,
-                            chi::RunContext &rctx, bool &ok);
-
-  /**
-   * Reconstruct all gen.k data shards for global `stripe` from active
-   * survivors (decode), optionally excluding member id `exclude`. `out`
-   * receives gen.k buffers. Survivor global shard indices come from the
-   * rotated placement (ShardOfPosition).
-   */
-  chi::TaskResume ReconstructStripe(chi::u64 stripe, int exclude,
-                                    chi::RunContext &rctx,
-                                    std::vector<std::vector<uint8_t>> &out,
-                                    bool &ok);
 };
 
 }  // namespace clio::run::safe_bdev

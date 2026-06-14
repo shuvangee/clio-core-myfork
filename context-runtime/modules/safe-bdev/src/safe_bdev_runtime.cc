@@ -35,6 +35,7 @@
 
 #include <clio_ctp/serialize/msgpack_wrapper.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -71,59 +72,57 @@ chi::TaskStat Runtime::GetTaskStats(const chi::Task *task) const {
   }
 }
 
-chi::priv::vector<clio::run::bdev::Block> Runtime::ShardBlocks(
-    const MemberSlot &m, chi::u64 stripe) const {
+chi::priv::vector<clio::run::bdev::Block> Runtime::MemberBlocks(
+    chi::u64 offset, chi::u64 len) const {
   chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
-  const chi::u64 off = m.base_offset_ + stripe * kShardLen;
-  blocks.push_back(clio::run::bdev::Block(off, kShardLen, 0));
+  blocks.push_back(clio::run::bdev::Block(offset, len, 0));
   return blocks;
 }
 
 //===========================================================================
-// EC fan-out helpers (run inside task fibers; co_await member bdev I/O)
+// Segment I/O helpers (run inside task fibers; co_await member bdev I/O)
 //===========================================================================
 
-chi::TaskResume Runtime::WriteShard(size_t mi, chi::u64 stripe,
-                                    const uint8_t *src, chi::RunContext &ctx,
-                                    bool &ok) {
+chi::TaskResume Runtime::WriteSegment(size_t mi, chi::u64 offset,
+                                      const uint8_t *src, chi::u64 len,
+                                      chi::RunContext &ctx, bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
-  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
+  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(len);
   if (buf.IsNull()) {
     CLIO_CO_RETURN;
   }
-  std::memcpy(buf.ptr_, src, kShardLen);
-  MemberSlot &m = members_[mi];
+  std::memcpy(buf.ptr_, src, len);
   auto fut = member_clients_[mi].AsyncWrite(
-      MemberQuery(), ShardBlocks(m, stripe),
-      buf.shm_.template Cast<void>(), kShardLen);
+      MemberQuery(), MemberBlocks(offset, len),
+      buf.shm_.template Cast<void>(), len);
   CLIO_CO_AWAIT(fut);
-  ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kShardLen);
+  ok = (fut->return_code_ == 0) && (fut->bytes_written_ == len);
   MaybeFaultMember(mi, fut->io_error_);
   ipc->FreeBuffer(buf);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReadShard(size_t mi, chi::u64 stripe, uint8_t *dst,
-                                   chi::RunContext &ctx, bool &ok) {
+chi::TaskResume Runtime::ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
+                                     chi::u64 len, chi::RunContext &ctx,
+                                     bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
-  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
+  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(len);
   if (buf.IsNull()) {
     CLIO_CO_RETURN;
   }
-  MemberSlot &m = members_[mi];
   auto fut = member_clients_[mi].AsyncRead(
-      MemberQuery(), ShardBlocks(m, stripe),
-      buf.shm_.template Cast<void>(), kShardLen);
+      MemberQuery(), MemberBlocks(offset, len),
+      buf.shm_.template Cast<void>(), len);
   CLIO_CO_AWAIT(fut);
-  if (fut->return_code_ == 0 && fut->bytes_read_ == kShardLen) {
-    std::memcpy(dst, buf.ptr_, kShardLen);
+  if (fut->return_code_ == 0 && fut->bytes_read_ == len) {
+    std::memcpy(dst, buf.ptr_, len);
     ok = true;
   }
   MaybeFaultMember(mi, fut->io_error_);
@@ -133,7 +132,7 @@ chi::TaskResume Runtime::ReadShard(size_t mi, chi::u64 stripe, uint8_t *dst,
 }
 
 //===========================================================================
-// Member superblock helpers (mirror WriteShard/ReadShard)
+// Member superblock helpers
 //===========================================================================
 
 chi::TaskResume Runtime::WriteSuperblock(size_t mi, chi::RunContext &ctx,
@@ -158,16 +157,15 @@ chi::TaskResume Runtime::WriteSuperblock(size_t mi, chi::RunContext &ctx,
   sb.role = static_cast<uint32_t>(members_[mi].role_);
   sb.index = static_cast<uint32_t>(members_[mi].index_);
   sb.max_failures = max_failures_;
-  sb.shard_len = kShardLen;
-  sb.epoch = static_cast<uint64_t>(generations_.size());
+  sb.shard_len = kChunkLen;
+  sb.epoch = 0;
   sb.checksum = sb.ComputeChecksum();
   std::memcpy(buf.ptr_, &sb, sizeof(sb));
 
   // The superblock lives at absolute offset 0 on the member.
-  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
-  blocks.push_back(clio::run::bdev::Block(0, kSuperblockSize, 0));
   auto fut = member_clients_[mi].AsyncWrite(
-      MemberQuery(), blocks, buf.shm_.template Cast<void>(), kSuperblockSize);
+      MemberQuery(), MemberBlocks(0, kSuperblockSize),
+      buf.shm_.template Cast<void>(), kSuperblockSize);
   CLIO_CO_AWAIT(fut);
   ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kSuperblockSize);
   MaybeFaultMember(mi, fut->io_error_);
@@ -189,10 +187,9 @@ chi::TaskResume Runtime::ReadSuperblock(size_t mi, chi::RunContext &ctx,
     CLIO_CO_RETURN;
   }
   std::memset(buf.ptr_, 0, kSuperblockSize);
-  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
-  blocks.push_back(clio::run::bdev::Block(0, kSuperblockSize, 0));
   auto fut = member_clients_[mi].AsyncRead(
-      MemberQuery(), blocks, buf.shm_.template Cast<void>(), kSuperblockSize);
+      MemberQuery(), MemberBlocks(0, kSuperblockSize),
+      buf.shm_.template Cast<void>(), kSuperblockSize);
   CLIO_CO_AWAIT(fut);
   if (fut->return_code_ == 0 && fut->bytes_read_ == kSuperblockSize) {
     ok = true;
@@ -204,63 +201,75 @@ chi::TaskResume Runtime::ReadSuperblock(size_t mi, chi::RunContext &ctx,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReconstructStripe(
-    chi::u64 stripe, int exclude, chi::RunContext &ctx,
+//===========================================================================
+// Row reconstruction (decode the k data chunks of a row from survivors)
+//===========================================================================
+
+chi::TaskResume Runtime::ReconstructRow(
+    chi::u64 row, int exclude, chi::RunContext &ctx,
     std::vector<std::vector<uint8_t>> &out, bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
-  const int e = EpochOf(stripe);
-  if (e < 0) {
-    CLIO_CO_RETURN;
-  }
-  // Snapshot the generation's geometry up front so it stays valid across the
-  // co_awaits below (a concurrent AddBdev could reallocate generations_).
-  const int gk = generations_[static_cast<size_t>(e)].k;
-  const chi::u64 gseed = generations_[static_cast<size_t>(e)].seed;
-  const chi::u64 gfirst = generations_[static_cast<size_t>(e)].first_stripe;
-  std::vector<int> gen_members = generations_[static_cast<size_t>(e)].member_pos;
-  ec::ReedSolomon *grs = generations_[static_cast<size_t>(e)].rs.get();
-  const int n = static_cast<int>(gen_members.size());
-  const chi::u64 local = stripe - gfirst;
-  const int rot = static_cast<int>((local + gseed) % static_cast<chi::u64>(n));
-  // RS shard index for member position p (rotation; mirrors ShardOfPosition).
-  auto shard_of_pos = [&](int p) { return ((p - rot) % n + n) % n; };
+  const chi::u64 off = ChunkOffset(row);
 
-  // Gather up to gen.k active survivors (data + parity) from this generation's
-  // member set, excluding `exclude`. Each survivor's global RS shard index
-  // comes from the rotated placement for THIS stripe.
+  // Gather up to k active survivors among the k data + m parity members at
+  // this row offset, excluding `exclude` and any non-active member. Each
+  // survivor's global RS shard index is its data column i (data) or k+j
+  // (parity j) — fixed roles, no rotation.
   std::vector<int> survivor_index;
   std::vector<std::vector<uint8_t>> survivor_buf;
-  for (int p = 0; p < n; ++p) {
-    const int mid = gen_members[static_cast<size_t>(p)];
+  const int total = static_cast<int>(members_.size());
+  for (int mid = 0; mid < total; ++mid) {
     if (mid == exclude) {
       continue;
     }
-    if (members_[static_cast<size_t>(mid)].state_ != ec::EcState::kActive) {
+    const MemberSlot &m = members_[static_cast<size_t>(mid)];
+    if (m.state_ != ec::EcState::kActive) {
       continue;
     }
-    std::vector<uint8_t> buf(kShardLen, 0);
+    std::vector<uint8_t> buf(kChunkLen, 0);
     bool rd_ok = false;
-    CLIO_CO_AWAIT(ReadShard(static_cast<size_t>(mid), stripe, buf.data(), rctx,
-                            rd_ok));
+    CLIO_CO_AWAIT(ReadSegment(static_cast<size_t>(mid), off, buf.data(),
+                              kChunkLen, rctx, rd_ok));
     if (!rd_ok) {
       CLIO_CO_RETURN;
     }
-    survivor_index.push_back(shard_of_pos(p));
+    const int global_shard =
+        (m.role_ == ec::EcRole::kData) ? m.index_ : (k_ + m.index_);
+    survivor_index.push_back(global_shard);
     survivor_buf.push_back(std::move(buf));
-    if (static_cast<int>(survivor_index.size()) == gk) {
+    if (static_cast<int>(survivor_index.size()) == k_) {
       break;
     }
   }
-  if (static_cast<int>(survivor_index.size()) < gk) {
+  if (static_cast<int>(survivor_index.size()) < k_) {
     CLIO_CO_RETURN;  // Too many failures to reconstruct.
   }
   std::vector<const uint8_t *> ptrs(survivor_buf.size());
   for (size_t i = 0; i < survivor_buf.size(); ++i) {
     ptrs[i] = survivor_buf[i].data();
   }
-  ok = grs->DecodeData(survivor_index, ptrs, kShardLen, &out);
+  ok = rs_->DecodeData(survivor_index, ptrs, kChunkLen, &out);
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+chi::TaskResume Runtime::ReconstructDataChunk(chi::u64 row, int data_col,
+                                              int exclude, chi::RunContext &ctx,
+                                              std::vector<uint8_t> &out,
+                                              bool &ok) {
+  chi::RunContext &rctx = ctx;
+  CLIO_TASK_BODY_BEGIN
+  ok = false;
+  std::vector<std::vector<uint8_t>> data_chunks;
+  bool rec_ok = false;
+  CLIO_CO_AWAIT(ReconstructRow(row, exclude, rctx, data_chunks, rec_ok));
+  if (!rec_ok) {
+    CLIO_CO_RETURN;
+  }
+  out = std::move(data_chunks[static_cast<size_t>(data_col)]);
+  ok = true;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
@@ -278,13 +287,15 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   CreateParams params = task->GetParams();
 
   max_failures_ = params.max_failures_;
-  current_parity_level_ = 0;
+  parity_level_ = 0;
   members_.clear();
   member_clients_.clear();
-  generations_.clear();
-  next_stripe_ = 0;
-  logical_next_ = 0;
   reattached_members_ = 0;
+  {
+    std::lock_guard<std::mutex> g(row_mu_);
+    dirty_rows_.clear();
+    written_rows_.clear();
+  }
 
   // Initial members are DATA members; k = number supplied.
   k_ = static_cast<int>(params.members_.size());
@@ -294,8 +305,9 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     CLIO_CO_RETURN;
   }
 
-  // Determine how many stripes we can reserve. Query the smallest member's
-  // remaining capacity and carve a contiguous region of num_stripes*kShardLen.
+  // Query the smallest member's remaining capacity. usable_per_member is the
+  // largest multiple of kChunkLen that fits after the superblock; num_rows is
+  // that many chunks, and logical_capacity is k*num_rows*kChunkLen.
   chi::u64 min_remaining = ~static_cast<chi::u64>(0);
   for (const auto &desc : params.members_) {
     member_clients_.emplace_back(desc.pool_id_);
@@ -311,29 +323,22 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
       min_remaining = stats->remaining_size_;
     }
   }
-  // The first kSuperblockSize bytes of every member are reserved for its
-  // superblock; DATA shards begin at offset kSuperblockSize. Subtract the
-  // superblock before carving stripe capacity.
-  const chi::u64 usable =
+  const chi::u64 avail =
       (min_remaining > kSuperblockSize) ? (min_remaining - kSuperblockSize) : 0;
-  num_stripes_ = usable / kShardLen;
-  if (num_stripes_ == 0) {
-    HLOG(kError, "safe_bdev Create: member too small for even one stripe");
+  const chi::u64 usable_per_member = (avail / kChunkLen) * kChunkLen;
+  num_rows_ = usable_per_member / kChunkLen;
+  if (num_rows_ == 0) {
+    HLOG(kError, "safe_bdev Create: member too small for even one chunk");
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
 
-  // Seat each member as a data column. Placement no longer relies on a
-  // per-member AllocateBlocks call: shards are addressed at a FIXED absolute
-  // offset (kSuperblockSize + g*kShardLen), so base_offset_ is kSuperblockSize
-  // for every member and stripe g's shard follows from ShardBlocks().
-  //
-  // Before seating, read the member's superblock to classify it:
+  // Seat each member as a DATA column. Before seating, read the member's
+  // superblock to classify it:
   //   - not present (blank/zeros)  -> FRESH: write our identity.
   //   - present AND it is OURS     -> re-attach: reuse, do not rewrite data.
   //   - present AND it is FOREIGN  -> REFUSE: another array owns it.
   int col = 0;
-  std::vector<int> gen0_members;
   for (const auto &desc : params.members_) {
     MemberSlot slot;
     slot.pool_id_ = desc.pool_id_;
@@ -342,9 +347,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     slot.role_ = ec::EcRole::kData;
     slot.state_ = ec::EcState::kActive;
     slot.index_ = col;
-    slot.base_offset_ = kSuperblockSize;
     members_.push_back(slot);
-    gen0_members.push_back(col);
 
     MemberSuperblock sb;
     bool present = false;
@@ -358,7 +361,6 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
       CLIO_CO_RETURN;
     }
     if (!present) {
-      // Fresh member: stamp this array's identity.
       bool wr_ok = false;
       CLIO_CO_AWAIT(WriteSuperblock(static_cast<size_t>(col), rctx, wr_ok));
       if (!wr_ok) {
@@ -372,14 +374,12 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
            desc.pool_name_, col);
     } else if (sb.array_major == static_cast<uint64_t>(pool_id_.major_) &&
                sb.array_minor == static_cast<uint64_t>(pool_id_.minor_)) {
-      // Already ours (restart / re-attach): reuse without rewriting data.
       ++reattached_members_;
       HLOG(kInfo,
            "safe_bdev Create: re-attached member '{}' (slot {}) already owned "
            "by this array ({},{})",
            desc.pool_name_, col, pool_id_.major_, pool_id_.minor_);
     } else {
-      // Foreign device initialized by another safe_bdev: refuse, do not clobber.
       HLOG(kError,
            "safe_bdev Create: REFUSING member '{}' — already initialized by a "
            "FOREIGN array ({},{}); this array is ({},{})",
@@ -391,36 +391,32 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     ++col;
   }
 
-  // Open generation 0 over the k initial DATA members with m=0 parity (parity
-  // members are added later via AddBdev). The generation owns the entire stripe
-  // capacity until a data widening (AddBdev-as-data) closes it. ReedSolomon is
-  // built (k, max_failures_) so all parity rows are available as m grows.
+  // One Reed-Solomon code (k, max_failures). Parity rows become available as
+  // parity members are appended via AddBdev.
+  rs_ = std::make_unique<ec::ReedSolomon>(k_, static_cast<int>(max_failures_));
+
+  logical_capacity_ = static_cast<chi::u64>(k_) * num_rows_ * kChunkLen;
+
+  // Real reclaimable allocator over the logical capacity. Reuse bdev's
+  // free-list (GlobalBlockMap) + bump heap (Heap): AllocateBlocks tries the
+  // free list first, then the heap; FreeBlocks returns blocks to the free
+  // list. alignment 4096 matches bdev. allocated_bytes_ tracks the live set
+  // for GetStats.
   {
-    Generation g;
-    g.k = k_;
-    g.m = 0;
-    g.seed = 0;
-    g.first_stripe = 0;
-    g.num_stripes = 0;  // open
-    g.logical_base = 0;
-    g.member_pos = gen0_members;
-    g.rs = std::make_unique<ec::ReedSolomon>(k_, static_cast<int>(max_failures_));
-    generations_.push_back(std::move(g));
+    chi::WorkOrchestrator *wo = CLIO_WORK_ORCHESTRATOR;
+    const size_t num_workers = (wo != nullptr) ? wo->GetWorkerCount() : 16;
+    block_map_.Init(num_workers);
+    heap_.Init(logical_capacity_, /*alignment=*/4096);
+    allocated_bytes_.store(0);
   }
 
-  logical_capacity_ =
-      static_cast<chi::u64>(k_) * kShardLen * num_stripes_;
-
   HLOG(kInfo,
-       "safe_bdev Create: pool='{}', k={}, M={}, num_stripes={}, "
-       "logical_capacity={}, generations=1",
-       task->pool_name_.str(), k_, max_failures_, num_stripes_,
-       logical_capacity_);
+       "safe_bdev Create: pool='{}', k={}, M={}, num_rows={}, "
+       "logical_capacity={} (RAID-0 data + dedicated parity)",
+       task->pool_name_.str(), k_, max_failures_, num_rows_, logical_capacity_);
 
-  // Kick off the background parity builder. Write records dirty stripes off the
-  // critical path; this periodic task converges them to full protection
-  // (design.md B.6). An on-demand AsyncBuildParity(max_batch=0) is also
-  // available as a durability barrier.
+  // Kick off the background parity builder. Write records dirty rows off the
+  // critical path; this periodic task converges them to full protection.
   client_.AsyncBuildParity(MemberQuery(), /*max_batch=*/0,
                            /*period_us=*/kBuildParityPeriodUs);
 
@@ -433,39 +429,45 @@ chi::TaskResume Runtime::AllocateBlocks(
     ctp::ipc::FullPtr<AllocateBlocksTask> task, chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
-  // Bump-allocate whole stripes from the CURRENT (open) generation. Each
-  // generation has its own per-stripe data size (gen.k*kShardLen), so the
-  // logical space is segmented: allocations advance both the logical cursor and
-  // the GLOBAL stripe counter, keeping a clean logical<->stripe mapping.
-  if (generations_.empty()) {
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-  const Generation &open = generations_.back();
-  const chi::u64 per_stripe = static_cast<chi::u64>(open.k) * kShardLen;
+  // Real reclaimable allocation over the logical space: try the free list
+  // first (reuse a freed block), else carve from the heap. This mirrors bdev's
+  // allocator so freed blocks are reclaimed and block sizes are uneven.
   const chi::u64 size = task->size_;
-  if (size == 0 || size % per_stripe != 0) {
-    HLOG(kError,
-         "safe_bdev AllocateBlocks: size {} must be a multiple of the current "
-         "generation's stripe size {} (k={})",
-         size, per_stripe, open.k);
+  if (size == 0) {
+    task->blocks_.clear();
+    task->return_code_ = 0;
+    CLIO_CO_RETURN;
+  }
+  chi::Worker *worker = CLIO_CUR_WORKER;
+  const int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId())
+                                            : 0;
+
+  clio::run::bdev::Block block;
+  bool allocated = block_map_.AllocateBlock(worker_id, size, block);
+  if (!allocated) {
+    // Heap snaps the size up to a 4096-aligned block_type bucket (like bdev).
+    int block_type = 0;
+    const size_t buckets[] = {4096,    16384,   32768,
+                              65536,   131072,  1048576};
+    for (size_t i = 0; i < 6; ++i) {
+      if (buckets[i] >= size) {
+        block_type = static_cast<int>(i);
+        break;
+      }
+      block_type = 5;
+    }
+    allocated = heap_.Allocate(size, block_type, block);
+  }
+  if (!allocated) {
+    HLOG(kError, "safe_bdev AllocateBlocks: out of logical capacity ({} bytes)",
+         size);
+    task->blocks_.clear();
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
-  const chi::u64 n_stripes = size / per_stripe;
-  if (next_stripe_ + n_stripes > num_stripes_) {
-    HLOG(kError,
-         "safe_bdev AllocateBlocks: out of stripe capacity ({} + {} > {})",
-         next_stripe_, n_stripes, num_stripes_);
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-  const chi::u64 offset = logical_next_;
-  logical_next_ += size;
-  next_stripe_ += n_stripes;
+  allocated_bytes_.fetch_add(block.size_, std::memory_order_relaxed);
   task->blocks_.clear();
-  task->blocks_.push_back(clio::run::bdev::Block(offset, size, 0));
+  task->blocks_.push_back(block);
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -476,8 +478,28 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
-  // The simple bump allocator does not reclaim freed regions (sufficient for
-  // the first-cut milestone; TODO(#543) free-list).
+  // Return blocks to the free list (real reclaim). Normalize block_type_ from
+  // the block SIZE so AllocateBlock (which picks the free list by size class)
+  // can find them again — mirrors bdev::FreeBlocks.
+  chi::Worker *worker = CLIO_CUR_WORKER;
+  const int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId())
+                                            : 0;
+  const size_t buckets[] = {4096, 16384, 32768, 65536, 131072, 1048576};
+  for (size_t i = 0; i < task->blocks_.size(); ++i) {
+    clio::run::bdev::Block b = task->blocks_[i];
+    int bt = 5;
+    for (size_t j = 0; j < 6; ++j) {
+      if (buckets[j] >= static_cast<size_t>(b.size_)) {
+        bt = static_cast<int>(j);
+        break;
+      }
+    }
+    b.block_type_ = static_cast<chi::u32>(bt);
+    block_map_.FreeBlock(worker_id, b);
+    const chi::u64 cur = allocated_bytes_.load(std::memory_order_relaxed);
+    allocated_bytes_.store(cur >= b.size_ ? cur - b.size_ : 0,
+                           std::memory_order_relaxed);
+  }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -487,104 +509,84 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
                                chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  if (generations_.empty() || task->blocks_.size() == 0) {
+  if (rs_ == nullptr || task->blocks_.size() == 0) {
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
 
   auto *ipc = CLIO_IPC;
-  ctp::ipc::FullPtr<char> data = ipc->ToFullPtr(task->data_).template Cast<char>();
-  const chi::u64 logical_base = task->blocks_[0].offset_;
-  const chi::u64 len = task->length_;
+  ctp::ipc::FullPtr<char> data =
+      ipc->ToFullPtr(task->data_).template Cast<char>();
 
-  // Resolve the starting generation + global stripe from the logical offset.
-  int epoch = -1;
-  chi::u64 g0 = 0;
-  int col0 = 0;
-  if (!LogicalToStripe(logical_base, &epoch, &g0, &col0) || col0 != 0) {
-    HLOG(kError,
-         "safe_bdev Write: offset {} is not stripe-aligned / out of range",
-         logical_base);
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-  // This first cut assumes full-stripe writes that do not cross a generation
-  // boundary (the tests write one generation's stripes at a time). The stripe
-  // data size is fixed by the generation's k.
-  const int gk = generations_[static_cast<size_t>(epoch)].k;
-  const chi::u64 per_stripe_data = static_cast<chi::u64>(gk) * kShardLen;
-  if (len % per_stripe_data != 0) {
-    HLOG(kError,
-         "safe_bdev Write: unaligned write (offset={}, len={}, stripe={}) "
-         "not supported in first-cut milestone",
-         logical_base, len, per_stripe_data);
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-
-  const chi::u64 n_stripes = len / per_stripe_data;
+  // The data buffer fills the allocated blocks in order. For each block, walk
+  // its CHUNK-segments: a segment is the block's intersection with one RAID-0
+  // chunk [ci*kChunkLen, (ci+1)*kChunkLen). It maps to DATA member (ci % k) at
+  // physical offset kSuperblockSize + (ci/k)*kChunkLen + (within-chunk start),
+  // length = segment size. Segments across data members are dispatched in
+  // parallel. Parity is deferred (rows marked dirty).
+  chi::u64 buf_pos = 0;  // running offset into the host data buffer
   chi::u64 bytes_written = 0;
+  std::set<chi::u64> touched_rows;
 
-  for (chi::u64 si = 0; si < n_stripes; ++si) {
-    const chi::u64 s = g0 + si;
-    const int e = EpochOf(s);
-    if (e < 0 || generations_[static_cast<size_t>(e)].k != gk) {
-      // Crossed into another generation (different width): unsupported here.
-      HLOG(kError, "safe_bdev Write: stripe {} crosses a generation boundary",
-           s);
-      task->bytes_written_ = bytes_written;
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
-    }
-    const Generation &gen = generations_[static_cast<size_t>(e)];
+  for (size_t bi = 0; bi < task->blocks_.size(); ++bi) {
+    const chi::u64 lo = task->blocks_[bi].offset_;
+    const chi::u64 ls = task->blocks_[bi].size_;
+    const chi::u64 hi = lo + ls;
 
-    // Slice the gen.k data shards for this stripe out of the host buffer and
-    // write each to its rotated member (declustered placement).
     std::vector<chi::Future<WriteTask>> futs;
     std::vector<ctp::ipc::FullPtr<char>> bufs;
     bool dispatch_ok = true;
-    for (int c = 0; c < gk; ++c) {
-      const int mid = MemberOfShard(gen, s, c);
-      MemberSlot &m = members_[static_cast<size_t>(mid)];
-      if (m.state_ != ec::EcState::kActive) {
-        continue;
+
+    chi::u64 cur = lo;
+    while (cur < hi && dispatch_ok) {
+      const chi::u64 ci = cur / kChunkLen;
+      const chi::u64 chunk_end = (ci + 1) * kChunkLen;
+      const chi::u64 seg_end = std::min(hi, chunk_end);
+      const chi::u64 seg_len = seg_end - cur;
+      const int data_col = static_cast<int>(ci % static_cast<chi::u64>(k_));
+      const chi::u64 row = ci / static_cast<chi::u64>(k_);
+      const chi::u64 within = cur % kChunkLen;
+      const chi::u64 phys = ChunkOffset(row) + within;
+
+      MemberSlot &m = members_[static_cast<size_t>(data_col)];
+      if (m.state_ == ec::EcState::kActive) {
+        ctp::ipc::FullPtr<char> seg = ipc->AllocateBuffer(seg_len);
+        if (seg.IsNull()) {
+          dispatch_ok = false;
+          break;
+        }
+        std::memcpy(seg.ptr_, data.ptr_ + buf_pos, seg_len);
+        bufs.push_back(seg);
+        futs.push_back(member_clients_[static_cast<size_t>(data_col)].AsyncWrite(
+            MemberQuery(), MemberBlocks(phys, seg_len),
+            seg.shm_.template Cast<void>(), seg_len));
       }
-      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
-      if (buf.IsNull()) {
-        dispatch_ok = false;
-        break;
-      }
-      const chi::u64 off =
-          si * per_stripe_data + static_cast<chi::u64>(c) * kShardLen;
-      std::memcpy(buf.ptr_, data.ptr_ + off, kShardLen);
-      bufs.push_back(buf);
-      futs.push_back(member_clients_[static_cast<size_t>(mid)].AsyncWrite(
-          MemberQuery(), ShardBlocks(m, s),
-          buf.shm_.template Cast<void>(), kShardLen));
+      touched_rows.insert(row);
+      buf_pos += seg_len;
+      cur = seg_end;
     }
 
-    // Parity is deferred off the write path: once the data shards land, the
-    // stripe is recorded dirty and BuildParity (on-demand or periodic) computes
-    // parity asynchronously. This is the "no heavy write penalty" path — the
-    // stripe is unprotected only during the bounded window before BuildParity
-    // runs.
-    bool stripe_ok = dispatch_ok;
+    bool block_ok = dispatch_ok;
     for (auto &f : futs) {
       CLIO_CO_AWAIT(f);
-      if (f->return_code_ != 0 || f->bytes_written_ != kShardLen) {
-        stripe_ok = false;
+      if (f->return_code_ != 0) {
+        block_ok = false;
       }
     }
     for (auto &b : bufs) {
       ipc->FreeBuffer(b);
     }
-    if (!stripe_ok) {
+    if (!block_ok) {
       task->bytes_written_ = bytes_written;
       task->return_code_ = 1;
       CLIO_CO_RETURN;
     }
-    MarkStripeDirty(s);
-    bytes_written += per_stripe_data;
+    bytes_written += ls;
+  }
+
+  // Mark all rows the write touched dirty; BuildParity (re)computes parity.
+  for (chi::u64 r : touched_rows) {
+    MarkRowDirty(r);
   }
 
   task->bytes_written_ = bytes_written;
@@ -597,107 +599,71 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
                               chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  if (generations_.empty() || task->blocks_.size() == 0) {
+  if (rs_ == nullptr || task->blocks_.size() == 0) {
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
 
   auto *ipc = CLIO_IPC;
-  ctp::ipc::FullPtr<char> data = ipc->ToFullPtr(task->data_).template Cast<char>();
-  const chi::u64 logical_base = task->blocks_[0].offset_;
-  const chi::u64 len = task->length_;
+  ctp::ipc::FullPtr<char> data =
+      ipc->ToFullPtr(task->data_).template Cast<char>();
 
-  int epoch = -1;
-  chi::u64 g0 = 0;
-  int col0 = 0;
-  if (!LogicalToStripe(logical_base, &epoch, &g0, &col0) || col0 != 0) {
-    HLOG(kError,
-         "safe_bdev Read: offset {} is not stripe-aligned / out of range",
-         logical_base);
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-  const int gk = generations_[static_cast<size_t>(epoch)].k;
-  const chi::u64 per_stripe_data = static_cast<chi::u64>(gk) * kShardLen;
-  if (len % per_stripe_data != 0) {
-    HLOG(kError,
-         "safe_bdev Read: unaligned read (offset={}, len={}, stripe={}) "
-         "not supported in first-cut milestone",
-         logical_base, len, per_stripe_data);
-    task->return_code_ = 1;
-    CLIO_CO_RETURN;
-  }
-
-  const chi::u64 n_stripes = len / per_stripe_data;
+  // Symmetric decomposition of Write: walk each block's chunk-segments. If the
+  // segment's DATA member is active, AsyncRead it directly; if faulty,
+  // reconstruct that member's FULL chunk for the row (guarding dirty rows) and
+  // copy the needed within-slice.
+  chi::u64 buf_pos = 0;
   chi::u64 bytes_read = 0;
 
-  for (chi::u64 si = 0; si < n_stripes; ++si) {
-    const chi::u64 s = g0 + si;
-    const int e = EpochOf(s);
-    if (e < 0 || generations_[static_cast<size_t>(e)].k != gk) {
-      HLOG(kError, "safe_bdev Read: stripe {} crosses a generation boundary",
-           s);
-      task->bytes_read_ = bytes_read;
-      task->length_ = bytes_read;
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
-    }
-    const Generation &gen = generations_[static_cast<size_t>(e)];
+  for (size_t bi = 0; bi < task->blocks_.size(); ++bi) {
+    const chi::u64 lo = task->blocks_[bi].offset_;
+    const chi::u64 ls = task->blocks_[bi].size_;
+    const chi::u64 hi = lo + ls;
 
-    // Are all data members for this stripe active? (Their identity rotates per
-    // stripe.) If so, plain parallel read of the rotated data shards; else
-    // reconstruct.
-    bool all_data_active = true;
-    for (int c = 0; c < gk; ++c) {
-      const int mid = MemberOfShard(gen, s, c);
-      if (members_[static_cast<size_t>(mid)].state_ != ec::EcState::kActive) {
-        all_data_active = false;
-        break;
+    chi::u64 cur = lo;
+    while (cur < hi) {
+      const chi::u64 ci = cur / kChunkLen;
+      const chi::u64 chunk_end = (ci + 1) * kChunkLen;
+      const chi::u64 seg_end = std::min(hi, chunk_end);
+      const chi::u64 seg_len = seg_end - cur;
+      const int data_col = static_cast<int>(ci % static_cast<chi::u64>(k_));
+      const chi::u64 row = ci / static_cast<chi::u64>(k_);
+      const chi::u64 within = cur % kChunkLen;
+      const chi::u64 phys = ChunkOffset(row) + within;
+
+      const MemberSlot &m = members_[static_cast<size_t>(data_col)];
+      bool seg_ok = false;
+      if (m.state_ == ec::EcState::kActive) {
+        CLIO_CO_AWAIT(ReadSegment(static_cast<size_t>(data_col), phys,
+                                  reinterpret_cast<uint8_t *>(data.ptr_) +
+                                      buf_pos,
+                                  seg_len, rctx, seg_ok));
+      } else if (IsRowDirty(row)) {
+        // A data member is down AND this row's parity is not current: it is
+        // unprotected, so reconstruction would yield wrong bytes. Fail loudly.
+        HLOG(kError,
+             "safe_bdev Read: row {} is dirty (parity not built) and data "
+             "member {} is down — cannot reconstruct",
+             row, data_col);
+        seg_ok = false;
+      } else {
+        std::vector<uint8_t> chunk;
+        CLIO_CO_AWAIT(ReconstructDataChunk(row, data_col, /*exclude=*/-1, rctx,
+                                           chunk, seg_ok));
+        if (seg_ok) {
+          std::memcpy(data.ptr_ + buf_pos, chunk.data() + within, seg_len);
+        }
       }
-    }
-
-    std::vector<std::vector<uint8_t>> data_shards;
-    bool stripe_ok = true;
-    if (all_data_active) {
-      data_shards.assign(static_cast<size_t>(gk),
-                         std::vector<uint8_t>(kShardLen, 0));
-      for (int c = 0; c < gk && stripe_ok; ++c) {
-        const int mid = MemberOfShard(gen, s, c);
-        bool rd_ok = false;
-        CLIO_CO_AWAIT(ReadShard(static_cast<size_t>(mid), s,
-                                data_shards[c].data(), rctx, rd_ok));
-        stripe_ok = rd_ok;
+      if (!seg_ok) {
+        task->bytes_read_ = bytes_read;
+        task->length_ = bytes_read;
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
       }
-    } else if (IsStripeDirty(s)) {
-      // A data member is down AND this stripe's parity is not yet current:
-      // it is unprotected, so reconstruction would yield wrong bytes. Fail
-      // loudly rather than return corrupt data.
-      HLOG(kError,
-           "safe_bdev Read: stripe {} is dirty (parity not built) and a data "
-           "member is down — cannot reconstruct",
-           s);
-      stripe_ok = false;
-    } else {
-      // Degraded: reconstruct all data shards from survivors.
-      CLIO_CO_AWAIT(ReconstructStripe(s, /*exclude=*/-1, rctx, data_shards,
-                                      stripe_ok));
+      buf_pos += seg_len;
+      cur = seg_end;
     }
-
-    if (!stripe_ok) {
-      task->bytes_read_ = bytes_read;
-      task->length_ = bytes_read;
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
-    }
-
-    // Copy the gen.k data shards out into the caller's buffer.
-    for (int c = 0; c < gk; ++c) {
-      const chi::u64 off =
-          si * per_stripe_data + static_cast<chi::u64>(c) * kShardLen;
-      std::memcpy(data.ptr_ + off, data_shards[static_cast<size_t>(c)].data(),
-                  kShardLen);
-    }
-    bytes_read += per_stripe_data;
+    bytes_read += ls;
   }
 
   task->bytes_read_ = bytes_read;
@@ -711,12 +677,11 @@ chi::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
                                   chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  // Aggregate remaining capacity across data members (parity is overhead and
-  // is not counted toward usable logical capacity).
-  chi::u64 remaining = (logical_capacity_ > logical_next_)
-                           ? (logical_capacity_ - logical_next_)
-                           : 0;
-  task->remaining_size_ = remaining;
+  (void)rctx;
+  // Usable remaining from the allocator's live set.
+  const chi::u64 used = allocated_bytes_.load(std::memory_order_relaxed);
+  task->remaining_size_ =
+      (logical_capacity_ > used) ? (logical_capacity_ - used) : 0;
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -729,111 +694,63 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
 
   const bool as_parity = (task->as_parity_ != 0);
 
-  // Build a client for the new member. Placement is fixed-offset (shards at
-  // kSuperblockSize + g*kShardLen), so no per-member AllocateBlocks is needed.
-  member_clients_.emplace_back(task->member_pool_id_);
+  if (!as_parity) {
+    // Adding a DATA member would change the RAID-0 mapping (k changes the
+    // column count and chunk placement of every existing logical offset) and
+    // requires a reshape. Unsupported in this fixed-k RAID-0 model.
+    HLOG(kError,
+         "safe_bdev AddBdev: add-data/reshape not supported in RAID-0 mode "
+         "(member '{}'); TODO #543",
+         task->pool_name_.str());
+    task->return_code_ = 1;
+    CLIO_CO_RETURN;
+  }
 
+  if (parity_level_ >= max_failures_) {
+    HLOG(kWarning,
+         "safe_bdev AddBdev: parity already at max_failures={} (member '{}' "
+         "not added)",
+         max_failures_, task->pool_name_.str());
+    task->return_code_ = 1;
+    CLIO_CO_RETURN;
+  }
+
+  // Append a PARITY member. Its parity row j == parity_level_, global RS shard
+  // index = k + j. Parity computation is deferred: re-dirty every written row
+  // so BuildParity computes the new parity column off the critical path. The
+  // incremental RS property means each parity row is an independent function of
+  // the data, so existing parity is never read or rewritten.
+  member_clients_.emplace_back(task->member_pool_id_);
   MemberSlot slot;
   slot.pool_id_ = task->member_pool_id_;
   slot.pool_name_ = task->pool_name_.str();
   slot.node_id_ = task->node_id_;
+  slot.role_ = ec::EcRole::kParity;
   slot.state_ = ec::EcState::kActive;
-  slot.base_offset_ = kSuperblockSize;
+  slot.index_ = static_cast<int>(parity_level_);
+  const size_t new_mi = members_.size();
+  members_.push_back(slot);
+  ++parity_level_;
 
-  if (as_parity && current_parity_level_ < max_failures_) {
-    // Append a parity member to the CURRENT (open) generation and raise its m
-    // (and the global parity level). Parity computation is deferred: re-dirty
-    // this generation's written stripes so BuildParity computes the new row off
-    // the critical path. The incremental RS property means each parity row is
-    // an independent function of the data, so existing parity is never read or
-    // rewritten.
-    const int r = static_cast<int>(current_parity_level_);
-    slot.role_ = ec::EcRole::kParity;
-    slot.index_ = r;
-    const int new_mid = static_cast<int>(members_.size());
-    members_.push_back(slot);
-    Generation &open = generations_.back();
-    open.member_pos.push_back(new_mid);  // N = k+m grows by one
-    ++open.m;
-    ++current_parity_level_;
-    {
-      std::lock_guard<std::mutex> g(stripe_mu_);
-      for (chi::u64 s : written_stripes_) {
-        if (EpochOf(s) == static_cast<int>(generations_.size()) - 1) {
-          dirty_stripes_.insert(s);
-        }
-      }
-    }
-    HLOG(kInfo,
-         "safe_bdev AddBdev: parity drive added to generation {}, "
-         "parity_level={} (parity build deferred to BuildParity)",
-         generations_.size() - 1, current_parity_level_);
-  } else {
-    // Added as a DATA member: this is the variable-width widening. CLOSE the
-    // current generation (freeze its stripe span) and OPEN a new generation
-    // with k+1 data columns over {previous data members, new data member,
-    // previous parity members}. Future writes widen; existing stripes keep
-    // their geometry (Part C) — no data is rewritten.
-    slot.role_ = ec::EcRole::kData;
-    const int new_mid = static_cast<int>(members_.size());
-    slot.index_ = -1;  // legacy hint only; placement is rotation-based
-    members_.push_back(slot);
-
-    Generation &cur = generations_.back();
-    // Freeze the closing generation's span at what has been allocated so far.
-    cur.num_stripes = next_stripe_ - cur.first_stripe;
-
-    // Build the new generation's member list: data members of the closing gen
-    // (positions [0,k)) + the new data member, then the parity members
-    // (positions [k, k+m)).
-    std::vector<int> new_members;
-    new_members.reserve(cur.member_pos.size() + 1);
-    for (int c = 0; c < cur.k; ++c) {
-      new_members.push_back(cur.member_pos[static_cast<size_t>(c)]);
-    }
-    new_members.push_back(new_mid);
-    for (int pr = 0; pr < cur.m; ++pr) {
-      new_members.push_back(cur.member_pos[static_cast<size_t>(cur.k + pr)]);
-    }
-
-    Generation ng;
-    ng.k = cur.k + 1;
-    ng.m = cur.m;
-    ng.seed = static_cast<chi::u64>(generations_.size());
-    ng.first_stripe = next_stripe_;
-    ng.num_stripes = 0;  // open
-    ng.logical_base = logical_next_;
-    ng.member_pos = std::move(new_members);
-    ng.rs = std::make_unique<ec::ReedSolomon>(ng.k,
-                                              static_cast<int>(max_failures_));
-    k_ = ng.k;
-    generations_.push_back(std::move(ng));
-
-    // Recompute usable logical capacity: bytes already committed to closed
-    // generations plus the open generation's remaining stripe budget.
-    chi::u64 closed_bytes = logical_next_;
-    chi::u64 remaining_stripes = num_stripes_ - next_stripe_;
-    logical_capacity_ =
-        closed_bytes +
-        static_cast<chi::u64>(k_) * kShardLen * remaining_stripes;
-
-    HLOG(kInfo,
-         "safe_bdev AddBdev: data member added — opened generation {} (k={}, "
-         "m={}, first_stripe={})",
-         generations_.size() - 1, k_, generations_.back().m,
-         generations_.back().first_stripe);
-  }
-
-  // Stamp the new member's superblock with this array's identity and the
-  // member's seated slot/role/index.
   {
-    const size_t new_mi = members_.size() - 1;
+    std::lock_guard<std::mutex> g(row_mu_);
+    for (chi::u64 r : written_rows_) {
+      dirty_rows_.insert(r);
+    }
+  }
+  HLOG(kInfo,
+       "safe_bdev AddBdev: parity drive added (parity_level={}, all written "
+       "rows re-dirtied; parity build deferred to BuildParity)",
+       parity_level_);
+
+  // Stamp the new member's superblock with this array's identity.
+  {
     bool wr_ok = false;
     CLIO_CO_AWAIT(WriteSuperblock(new_mi, rctx, wr_ok));
     if (!wr_ok) {
       HLOG(kWarning,
-           "safe_bdev AddBdev: superblock write failed for new member '{}' "
-           "(member seated; will be re-stamped on next attach)",
+           "safe_bdev AddBdev: superblock write failed for new parity member "
+           "'{}' (member seated; will be re-stamped on next attach)",
            task->pool_name_.str());
     }
   }
@@ -855,11 +772,9 @@ chi::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
         members_[i].state_ = ec::EcState::kFaulty;
         HLOG(kInfo, "safe_bdev RemoveBdev: member {} marked faulty", i);
       } else {
-        // Clean removal: mark the member removed (no migration, no recovery).
-        // We do NOT erase it from members_/member_clients_ because the global
-        // member id is referenced by every generation's member_pos; erasing
-        // would shift indices and corrupt placement. kRemoved is excluded from
-        // I/O exactly like kFaulty but is not a recovery candidate.
+        // Clean removal: mark removed (excluded from I/O like faulty, but not
+        // a recovery candidate). We do NOT erase the slot because data column
+        // / parity row index is positional.
         members_[i].state_ = ec::EcState::kRemoved;
         HLOG(kInfo, "safe_bdev RemoveBdev: member {} unlinked (marked removed)",
              i);
@@ -892,100 +807,66 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
     CLIO_CO_RETURN;
   }
 
-  // Seat the fresh member: new client. Placement is fixed-offset (shards at
-  // kSuperblockSize + g*kShardLen), so no per-member AllocateBlocks is needed.
-  clio::run::bdev::Client new_client(task->new_pool_id_);
-  const chi::u64 new_base = kSuperblockSize;
-  member_clients_[static_cast<size_t>(failed)] = new_client;
-  // Point the slot at the new backing region now; the failed member is still
-  // excluded from reconstruction via `exclude=failed`, and stays non-active
-  // until the whole recovery completes.
-  members_[static_cast<size_t>(failed)].base_offset_ = new_base;
+  // Seat the fresh member on its new pool. It stays non-active and is excluded
+  // from reconstruction via `exclude=failed` until recovery completes.
+  member_clients_[static_cast<size_t>(failed)] =
+      clio::run::bdev::Client(task->new_pool_id_);
 
+  const bool is_data = (members_[static_cast<size_t>(failed)].role_ ==
+                        ec::EcRole::kData);
+  const int idx = members_[static_cast<size_t>(failed)].index_;
   auto *ipc = CLIO_IPC;
 
-  // Reconstruct the failed member's shards across EVERY generation it belongs
-  // to (mirrors DeclusteredArray::RecoverMember). The role it plays for each
-  // stripe (data column vs. parity row) is placement-derived, not fixed.
-  for (size_t ei = 0; ei < generations_.size(); ++ei) {
-    // Snapshot this generation's geometry (stable across co_awaits).
-    const int gk = generations_[ei].k;
-    const chi::u64 gseed = generations_[ei].seed;
-    const chi::u64 gfirst = generations_[ei].first_stripe;
-    const chi::u64 gspan = (generations_[ei].num_stripes != 0)
-                               ? generations_[ei].num_stripes
-                               : (next_stripe_ - gfirst);
-    std::vector<int> gmembers = generations_[ei].member_pos;
-    ec::ReedSolomon *grs = generations_[ei].rs.get();
-    const int n = static_cast<int>(gmembers.size());
-    int pos = -1;
-    for (int p = 0; p < n; ++p) {
-      if (gmembers[static_cast<size_t>(p)] == failed) {
-        pos = p;
-        break;
-      }
-    }
-    if (pos < 0) {
-      continue;  // member not in this generation
+  // Rebuild the failed member's chunk for every row. A DATA member's chunk is
+  // reconstructed by decoding the row excluding it (guard dirty rows). A PARITY
+  // member's chunk is re-encoded from the row's k data chunks (no dirty guard
+  // needed: it only reads data + re-encodes).
+  for (chi::u64 r = 0; r < num_rows_; ++r) {
+    if (is_data && IsRowDirty(r)) {
+      HLOG(kError,
+           "safe_bdev RecoverBdev: row {} dirty (parity not built); cannot "
+           "reconstruct failed data member",
+           r);
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
     }
 
-    for (chi::u64 s = gfirst; s < gfirst + gspan; ++s) {
-      const chi::u64 local = s - gfirst;
-      const int rot =
-          static_cast<int>((local + gseed) % static_cast<chi::u64>(n));
-      const int q = ((pos - rot) % n + n) % n;  // RS shard for this stripe
+    std::vector<std::vector<uint8_t>> data_chunks;
+    bool rd_ok = false;
+    CLIO_CO_AWAIT(ReconstructRow(r, /*exclude=*/failed, rctx, data_chunks,
+                                 rd_ok));
+    if (!rd_ok) {
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
 
-      // Recovering a DATA shard reconstructs from survivors, which needs
-      // current parity. A dirty stripe is unprotected, so refuse rather than
-      // write back corrupt data. (A parity shard only reads data + re-encodes,
-      // so it is unaffected.)
-      if (q < gk && IsStripeDirty(s)) {
-        HLOG(kError,
-             "safe_bdev RecoverBdev: stripe {} dirty (parity not built); "
-             "cannot reconstruct failed data shard",
-             s);
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
+    ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
+    if (buf.IsNull()) {
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
+    if (is_data) {
+      std::memcpy(buf.ptr_, data_chunks[static_cast<size_t>(idx)].data(),
+                  kChunkLen);
+    } else {
+      std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
+      for (int c = 0; c < k_; ++c) {
+        ptrs[static_cast<size_t>(c)] = data_chunks[static_cast<size_t>(c)].data();
       }
+      rs_->EncodeParityShard(idx, ptrs, kChunkLen,
+                             reinterpret_cast<uint8_t *>(buf.ptr_));
+    }
 
-      std::vector<std::vector<uint8_t>> data_shards;
-      bool rd_ok = false;
-      CLIO_CO_AWAIT(ReconstructStripe(s, /*exclude=*/failed, rctx, data_shards,
-                                      rd_ok));
-      if (!rd_ok) {
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-
-      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
-      if (buf.IsNull()) {
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-      if (q < gk) {
-        std::memcpy(buf.ptr_, data_shards[static_cast<size_t>(q)].data(),
-                    kShardLen);
-      } else {
-        std::vector<const uint8_t *> ptrs(static_cast<size_t>(gk));
-        for (int c = 0; c < gk; ++c) {
-          ptrs[static_cast<size_t>(c)] =
-              data_shards[static_cast<size_t>(c)].data();
-        }
-        grs->EncodeParityShard(q - gk, ptrs, kShardLen,
-                               reinterpret_cast<uint8_t *>(buf.ptr_));
-      }
-
-      auto fut = member_clients_[static_cast<size_t>(failed)].AsyncWrite(
-          MemberQuery(), ShardBlocks(members_[static_cast<size_t>(failed)], s),
-          buf.shm_.template Cast<void>(), kShardLen);
-      CLIO_CO_AWAIT(fut);
-      const bool ok = (fut->return_code_ == 0) &&
-                      (fut->bytes_written_ == kShardLen);
-      ipc->FreeBuffer(buf);
-      if (!ok) {
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
+    auto fut = member_clients_[static_cast<size_t>(failed)].AsyncWrite(
+        MemberQuery(), MemberBlocks(ChunkOffset(r), kChunkLen),
+        buf.shm_.template Cast<void>(), kChunkLen);
+    CLIO_CO_AWAIT(fut);
+    const bool ok =
+        (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
+    ipc->FreeBuffer(buf);
+    if (!ok) {
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
     }
   }
 
@@ -993,7 +874,6 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
   members_[static_cast<size_t>(failed)].pool_id_ = task->new_pool_id_;
   members_[static_cast<size_t>(failed)].pool_name_ = task->pool_name_.str();
   members_[static_cast<size_t>(failed)].node_id_ = task->node_id_;
-  members_[static_cast<size_t>(failed)].base_offset_ = new_base;
   members_[static_cast<size_t>(failed)].state_ = ec::EcState::kActive;
 
   // Stamp the fresh recovery member's superblock with this array's identity.
@@ -1019,25 +899,24 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
                                      chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  if (current_parity_level_ == 0) {
-    // No parity configured anywhere: nothing to protect. Drop pending marks.
-    std::lock_guard<std::mutex> g(stripe_mu_);
-    dirty_stripes_.clear();
+  if (parity_level_ == 0) {
+    // No parity configured: nothing to protect. Drop pending marks.
+    std::lock_guard<std::mutex> g(row_mu_);
+    dirty_rows_.clear();
     task->return_code_ = 0;
     CLIO_CO_RETURN;
   }
 
-  // Snapshot a batch of dirty stripes (max_batch_==0 drains all). Stripes are
-  // erased only AFTER their parity is durably written, so an observer that sees
-  // an empty dirty set knows every stripe is protected (single builder: this is
-  // a periodic task, rescheduled only after completion, so no two BuildParity
-  // instances run at once). A stripe that cannot be built (a data member is
-  // down) is simply left dirty for a later pass.
+  // Snapshot a batch of dirty rows (max_batch_==0 drains all). Rows are erased
+  // only AFTER their parity is durably written, so an observer that sees an
+  // empty dirty set knows every row is protected (single periodic builder,
+  // rescheduled only after completion). A row that cannot be built (a data
+  // member is down) is left dirty for a later pass.
   std::vector<chi::u64> batch;
   {
-    std::lock_guard<std::mutex> g(stripe_mu_);
-    for (chi::u64 s : dirty_stripes_) {
-      batch.push_back(s);
+    std::lock_guard<std::mutex> g(row_mu_);
+    for (chi::u64 r : dirty_rows_) {
+      batch.push_back(r);
       if (task->max_batch_ != 0 &&
           batch.size() >= static_cast<size_t>(task->max_batch_)) {
         break;
@@ -1047,38 +926,21 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
 
   auto *ipc = CLIO_IPC;
   chi::u32 built = 0;
-  for (chi::u64 s : batch) {
-    const int e = EpochOf(s);
-    if (e < 0) {
-      continue;
-    }
-    // Snapshot this generation's geometry (stable across co_awaits below).
-    const int gk = generations_[static_cast<size_t>(e)].k;
-    const int gm = generations_[static_cast<size_t>(e)].m;
-    if (gm == 0) {
-      // This generation has no parity members yet: nothing to build. Clear the
-      // mark so an observer sees the stripe as "as protected as it can be".
-      std::lock_guard<std::mutex> g(stripe_mu_);
-      dirty_stripes_.erase(s);
-      continue;
-    }
-    ec::ReedSolomon *grs = generations_[static_cast<size_t>(e)].rs.get();
-
-    // Read the gen.k data shards from their rotated members (all must be
-    // active to build parity).
-    std::vector<std::vector<uint8_t>> data_shards(
-        static_cast<size_t>(gk), std::vector<uint8_t>(kShardLen, 0));
+  for (chi::u64 r : batch) {
+    // Read the k FULL data chunks at this row offset (all data members must be
+    // active to build parity over the full chunks).
+    std::vector<std::vector<uint8_t>> data_chunks(
+        static_cast<size_t>(k_), std::vector<uint8_t>(kChunkLen, 0));
     bool rd_ok = true;
-    for (int c = 0; c < gk; ++c) {
-      const int mid = MemberOfShard(generations_[static_cast<size_t>(e)], s, c);
-      if (members_[static_cast<size_t>(mid)].state_ != ec::EcState::kActive) {
+    for (int c = 0; c < k_; ++c) {
+      if (members_[static_cast<size_t>(c)].state_ != ec::EcState::kActive) {
         rd_ok = false;
         break;
       }
       bool one = false;
-      CLIO_CO_AWAIT(ReadShard(static_cast<size_t>(mid), s,
-                              data_shards[static_cast<size_t>(c)].data(), rctx,
-                              one));
+      CLIO_CO_AWAIT(ReadSegment(static_cast<size_t>(c), ChunkOffset(r),
+                                data_chunks[static_cast<size_t>(c)].data(),
+                                kChunkLen, rctx, one));
       rd_ok = one;
       if (!rd_ok) {
         break;
@@ -1088,33 +950,30 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
       continue;  // leave dirty; retry next pass
     }
 
-    std::vector<const uint8_t *> ptrs(static_cast<size_t>(gk));
-    for (int c = 0; c < gk; ++c) {
-      ptrs[static_cast<size_t>(c)] = data_shards[static_cast<size_t>(c)].data();
+    std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
+    for (int c = 0; c < k_; ++c) {
+      ptrs[static_cast<size_t>(c)] = data_chunks[static_cast<size_t>(c)].data();
     }
 
-    // (Re)compute and write every active parity row for this stripe onto its
-    // rotated parity member.
+    // (Re)compute and write each active parity member's chunk for this row.
     bool wr_ok = true;
-    for (int pr = 0; pr < gm; ++pr) {
-      const int mid =
-          MemberOfShard(generations_[static_cast<size_t>(e)], s, gk + pr);
-      MemberSlot &m = members_[static_cast<size_t>(mid)];
-      if (m.state_ != ec::EcState::kActive) {
+    for (int j = 0; j < static_cast<int>(parity_level_); ++j) {
+      const size_t mi = static_cast<size_t>(k_ + j);
+      if (members_[mi].state_ != ec::EcState::kActive) {
         continue;
       }
-      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kShardLen);
+      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
       if (buf.IsNull()) {
         wr_ok = false;
         break;
       }
-      grs->EncodeParityShard(pr, ptrs, kShardLen,
+      rs_->EncodeParityShard(j, ptrs, kChunkLen,
                              reinterpret_cast<uint8_t *>(buf.ptr_));
-      auto fut = member_clients_[static_cast<size_t>(mid)].AsyncWrite(
-          MemberQuery(), ShardBlocks(m, s), buf.shm_.template Cast<void>(),
-          kShardLen);
+      auto fut = member_clients_[mi].AsyncWrite(
+          MemberQuery(), MemberBlocks(ChunkOffset(r), kChunkLen),
+          buf.shm_.template Cast<void>(), kChunkLen);
       CLIO_CO_AWAIT(fut);
-      wr_ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kShardLen);
+      wr_ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
       ipc->FreeBuffer(buf);
       if (!wr_ok) {
         break;
@@ -1124,13 +983,13 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
       continue;  // leave dirty; retry next pass
     }
     {
-      std::lock_guard<std::mutex> g(stripe_mu_);
-      dirty_stripes_.erase(s);
+      std::lock_guard<std::mutex> g(row_mu_);
+      dirty_rows_.erase(r);
     }
     ++built;
   }
   if (built > 0) {
-    HLOG(kDebug, "safe_bdev BuildParity: built parity for {} stripe(s)", built);
+    HLOG(kDebug, "safe_bdev BuildParity: built parity for {} row(s)", built);
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -1144,19 +1003,18 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
   if (task->query_ == "stats") {
     chi::u32 dirty = 0;
     {
-      std::lock_guard<std::mutex> g(stripe_mu_);
-      dirty = static_cast<chi::u32>(dirty_stripes_.size());
+      std::lock_guard<std::mutex> g(row_mu_);
+      dirty = static_cast<chi::u32>(dirty_rows_.size());
     }
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
     pk.pack_map(7);
-    pk.pack("pool_name");    pk.pack(pool_name_);
-    pk.pack("max_failures"); pk.pack(max_failures_);
-    pk.pack("num_members");  pk.pack(static_cast<chi::u32>(members_.size()));
-    pk.pack("parity_level"); pk.pack(current_parity_level_);
-    pk.pack("dirty_stripes"); pk.pack(dirty);
-    pk.pack("num_generations");
-    pk.pack(static_cast<chi::u32>(generations_.size()));
+    pk.pack("pool_name");     pk.pack(pool_name_);
+    pk.pack("max_failures");  pk.pack(max_failures_);
+    pk.pack("k");             pk.pack(static_cast<chi::u32>(k_));
+    pk.pack("parity_level");  pk.pack(parity_level_);
+    pk.pack("num_rows");      pk.pack(num_rows_);
+    pk.pack("dirty_rows");    pk.pack(dirty);
     pk.pack("reattached_members"); pk.pack(reattached_members_);
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }

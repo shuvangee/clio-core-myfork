@@ -9,10 +9,13 @@ into:
 - **Part A — Erasure-coding core** (GF(2⁸), Reed–Solomon, the member array).
   *Implemented and unit-tested* (`modules/safe-bdev/.../ec/`, 8 passing tests).
 - **Part B — Runtime data plane** (mapping the core onto real, possibly remote
-  member bdevs; async fan-out; dirty-stripe log; recovery). *Designed here,
-  partially scaffolded; the async wiring is the next implementation step.*
-- **Part C — Declustered placement & variable-width stripes** (the target layout
-  the membership ops evolve toward).
+  member bdevs; async fan-out; dirty-row log; recovery). *Implemented and
+  daemon-tested.*
+- **Part C — RAID-0-data + dedicated-parity layout** (the layout the runtime
+  data plane actually implements: a single fixed `k`/`m`, RAID-0 striping of
+  data, dedicated parity members, a real reclaimable allocator). Declustered
+  placement + variable-width stripes are set aside as a future direction
+  (see C.5).
 
 Notation: `k` = number of data shards in a stripe, `m` = number of parity shards,
 `M` = target maximum tolerated failures (`m` grows toward `M`). All shard
@@ -276,60 +279,84 @@ stripes are marked dirty and this task converges them to the current
 
 ---
 
-## Part C — Declustered placement & variable-width stripes
+## Part C — RAID-0-data + dedicated-parity layout
 
-The chosen layout (vs. the fixed dedicated-parity array in Part A) is
-**declustered parity** + **variable-width stripes**. Both are expressed as a
-placement function over *generations* so that adding drives never rewrites
-existing data.
+The runtime data plane implements a **single fixed `k`/`m`** layout: the data is
+**RAID-0 striped** across `k` dedicated DATA members, and `m` dedicated PARITY
+members carry per-row Reed–Solomon parity. There is no rotation and there are no
+generations — `members_[0..k-1]` are DATA (data column = index), and
+`members_[k..k+m-1]` are PARITY (parity row `j`, global RS shard `k+j`). One
+`ReedSolomon(k, M)` code serves the whole array; raising `m` toward `M` only
+appends a parity member and re-derives its independent parity row.
 
-### C.1 Generations (epochs)
+### C.1 Constants & sizing
 
-Membership/tolerance changes bump an epoch. A **generation** `G_e` is the set of
-stripes allocated while epoch `e` is current, with frozen config:
-
-```
-G_e = { k_e, m_target_e, ordered member list members_e[0..N_e-1], seed_e }
-```
-
-A stripe id is `(e, local_s)`. New writes go to the current generation; old
-generations keep their original geometry forever. This is exactly how
-"variable-width" stays cheap: widening `k` starts a new generation rather than
-re-encoding existing stripes.
-
-### C.2 Declustered placement function
-
-Within generation `e`, stripe `local_s` chooses which of the `N_e` members hold
-its `k_e` data shards and `m_e` parity shards by a deterministic rotation:
+`kChunkLen = 65536` is the RAID-0 stripe unit (one data shard / one parity
+chunk). `kSuperblockSize = 65536` is reserved at absolute offset 0 of every
+member (Part B.5 superblock). At `Create`:
 
 ```
-Place(e, local_s):
-    base = (local_s · STRIDE + seed_e) mod N_e          # STRIDE coprime to N_e
-    positions = [ members_e[(base + j) mod N_e] for j in 0..k_e+m_e-1 ]
-    data positions   = positions[0 .. k_e-1]
-    parity positions = positions[k_e .. k_e+m_e-1]
+avail              = min_member_remaining - kSuperblockSize
+usable_per_member  = floor(avail / kChunkLen) * kChunkLen
+num_rows           = usable_per_member / kChunkLen
+logical_capacity   = k * num_rows * kChunkLen
 ```
 
-Rotating `base` by `local_s` spreads parity (and therefore rebuild-read load)
-across *all* members instead of pinning it to dedicated drives — so a single
-failure's reconstruction reads are declustered over the whole pool, shortening
-rebuild time. The shard offset within a member is still `local_s · shard_len`
-(per-member stripe slot), with a small per-member slot map when a member
-participates in multiple generations.
+Every member's usable region starts at `kSuperblockSize`; the chunk for row `r`
+lives at absolute member offset `kSuperblockSize + r·kChunkLen`.
 
-### C.3 Reconstruction under declustering
+### C.2 RAID-0 address mapping
 
-Identical math to A.4; only the *survivor set* per stripe comes from
-`Place(e, local_s)` instead of fixed columns. The RS row used for a parity
-survivor at parity position `r` is Cauchy row `r` of the generation's
-`(k_e, m_e)` code.
+A logical byte offset `L` maps to a data member + physical offset:
 
-### C.4 Relationship to the implemented core
+```
+chunk    = L / kChunkLen ;   within = L mod kChunkLen
+data_col = chunk mod k   ;   row    = chunk / k
+phys     = kSuperblockSize + row·kChunkLen + within   (on DATA member data_col)
+```
 
-The implemented `EcArray` is the **single-generation, identity-placement** case
-(`Place` returns columns `0..k-1` for data, `k..k+m-1` for parity). Part C
-generalizes placement and adds generations; the RS encode/decode, incremental
-parity, and recovery routines (Part A) are reused unchanged per generation.
+So data member `d` holds logical chunks `d, d+k, d+2k, …` stacked at successive
+`kChunkLen` rows — a textbook RAID-0 stripe across the `k` data members.
+
+### C.3 Per-row parity over FULL chunks
+
+Parity member `j` stores, at member offset `kSuperblockSize + row·kChunkLen`, the
+RS parity shard `j` computed over the `k` data chunks of that row, where each
+data chunk is the **full `kChunkLen` chunk** read from data member `i` at that
+same offset (`i in 0..k-1`). Parity is computed over whole chunks even when a
+write only partially filled one — this is exactly what makes arbitrary,
+non-chunk-aligned and partial writes correct: a partial write touches a chunk,
+marks its row dirty, and `BuildParity` later re-reads the full (now-updated)
+chunks and recomputes parity. Reconstruction (A.4) of a down data member's full
+chunk gathers `k` survivors among the row's data + parity chunks and decodes;
+the read path then copies the requested within-chunk slice.
+
+Parity is **deferred off the write path** (Part B.6): writes record dirty rows;
+a single periodic `BuildParity` drains them. A degraded read or recovery of a
+data member refuses a row whose parity is not yet built (it would be
+unprotected).
+
+### C.4 Real reclaimable allocator
+
+`AllocateBlocks` / `FreeBlocks` use a real free-list + heap allocator over
+`[0, logical_capacity)` (the same `GlobalBlockMap` + `Heap` the `bdev` module
+uses): allocate from the free list first, else carve from the bump heap; free
+returns the block to the free list classified by size. Freed space is genuinely
+reclaimed (a free-then-alloc of the same size reuses the region), and block
+sizes are uneven exactly like `bdev`. `GetStats` reports
+`logical_capacity − live_allocated`.
+
+### C.5 Set aside: declustering & variable-width
+
+The earlier declustered-parity + variable-width-generation design (rotated shard
+placement over epochs) is **set aside**. Its standalone, daemon-free artifact
+(`ec/declustered.h` + its unit tests) remains in the tree and passing, but the
+runtime no longer uses it. The dedicated-parity layout trades declustering's
+spread rebuild-read load for simplicity and correct partial writes: parity I/O
+concentrates on the `m` parity members, so they are a **write/rebuild hotspot**
+(every row's parity update and every rebuild reads/writes them). Capacity-aware
+and load-aware placement (and reintroducing declustering / variable width on top
+of a real allocator) remain **TODO #543**.
 
 ---
 
@@ -339,16 +366,20 @@ parity, and recovery routines (Part A) are reused unchanged per generation.
 |---|---|
 | GF(2⁸), RS encode/decode, incremental parity, `EcArray`, recovery | **Done + tested** (`ec/`, 10 passing unit tests) |
 | Module scaffold, tasks, client, autogen, build wiring | **Done** |
+| RAID-0 data mapping + per-row parity (Part C) | **Done + tested** (daemon roundtrip/striping/partial tests) |
 | Runtime async fan-out (B.3/B.4), PoolId resolution, buffers | **Done + tested** (daemon test) |
-| Dirty-stripe log + `BuildParity` periodic task (B.6) | **Done + tested** |
-| `RecoverBdev` streaming over member bdevs (B.5) | **Done + tested** |
-| Generations + declustered placement (Part C) | **Done + tested** (`ec/declustered.h` + generation-aware runtime; daemon variable-width test) |
+| Dirty-row log + `BuildParity` periodic task (B.6) | **Done + tested** |
+| `RecoverBdev` over member bdevs (data decode / parity re-encode, B.5) | **Done + tested** |
+| Real reclaimable `AllocateBlocks`/`FreeBlocks` (free-list + heap, C.4) | **Done + tested** (daemon reclaim test) |
+| Member superblocks (fresh / re-attach / foreign-refuse) | **Done + tested** |
+| Partial / arbitrary-size writes | **Done + tested** (parity over full chunks) |
+| Declustered placement + variable-width generations | **Set aside** (daemon-free `ec/declustered.h` kept + unit-tested) |
 | Daemon-level end-to-end recovery test | **Done** (`cr_all_safe_bdev_tests`) |
 
-Remaining refinements (TODO #543): partial/unaligned writes (full-stripe-aligned
-only today), concurrent write-during-`BuildParity` re-dirty handling, an
-`AllocateBlocks` free-list, multi-node remote member routing, and subset
-declustering (`N > k+m`).
+Remaining refinements (TODO #543): `AddBdev` as DATA (`k` reshape — currently
+refused in RAID-0 mode), capacity/load-aware placement, the dedicated-parity
+write/rebuild hotspot, concurrent write-during-`BuildParity` re-dirty handling,
+and multi-node remote member routing.
 
 ### Testing strategy
 
@@ -358,6 +389,7 @@ declustering (`N > k+m`).
   data, fault a member (`RemoveBdev(was_faulty)`), read-reconstruct, `RecoverBdev`
   onto a fresh pool, and assert byte equality through the full async path.
 
-The daemon test (`cr_all_safe_bdev_tests`) covers both the recovery flow and the
-variable-width generations flow; the EC core/declustered math is covered by
-`cr_safe_bdev_ec_tests` (10 cases).
+The daemon test (`cr_all_safe_bdev_tests`) covers roundtrip across striped data,
+RAID-0 striping (members verified directly), allocator reclaim, degraded read +
+recover, partial-chunk writes, and the superblock reattach / foreign-refuse
+flows; the EC core/declustered math is covered by `cr_safe_bdev_ec_tests`.
