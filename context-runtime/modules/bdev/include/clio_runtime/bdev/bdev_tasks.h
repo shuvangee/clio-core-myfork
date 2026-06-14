@@ -158,6 +158,10 @@ struct CreateParams {
   // Persistence level for this block device
   PersistenceLevel persistence_level_ = PersistenceLevel::kVolatile;
 
+  // Path to the persistent allocator-state log (WAL). Empty => logging
+  // disabled (no file created), preserving pre-WAL behavior.
+  std::string alloc_log_path_;
+
   // Required: chimod library name for module manager
   static constexpr const char *chimod_lib_name = "clio_bdev";
 
@@ -199,11 +203,13 @@ struct CreateParams {
 
   // Constructor with optional performance metrics (as last parameter)
   CreateParams(BdevType bdev_type, chi::u64 total_size, chi::u32 io_depth,
-               chi::u32 alignment, const PerfMetrics *perf_metrics = nullptr)
+               chi::u32 alignment, const PerfMetrics *perf_metrics = nullptr,
+               const std::string &alloc_log_path = "")
       : bdev_type_(bdev_type),
         total_size_(total_size),
         io_depth_(io_depth),
-        alignment_(alignment) {
+        alignment_(alignment),
+        alloc_log_path_(alloc_log_path) {
     // Set performance metrics (use provided metrics or defaults)
     if (perf_metrics != nullptr) {
       perf_metrics_ = *perf_metrics;
@@ -232,7 +238,8 @@ struct CreateParams {
   // Serialization support for cereal
   template <class Archive>
   void serialize(Archive &ar) {
-    ar(bdev_type_, total_size_, io_depth_, alignment_, perf_metrics_, persistence_level_);
+    ar(bdev_type_, total_size_, io_depth_, alignment_, perf_metrics_,
+       persistence_level_, alloc_log_path_);
   }
 
   /**
@@ -295,6 +302,11 @@ struct CreateParams {
       if (perf["iops"]) {
         perf_metrics_.iops_ = perf["iops"].as<double>();
       }
+    }
+
+    // Load allocator-state log path (optional). Empty => logging disabled.
+    if (config["alloc_log"]) {
+      alloc_log_path_ = config["alloc_log"].as<std::string>();
     }
 
     if (config["persistence_level"]) {
@@ -672,6 +684,51 @@ struct GetStatsTask : public chi::Task {
   void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<GetStatsTask>());
+  }
+};
+
+/**
+ * FlushAllocLogTask - Periodic task that flushes (and compacts) the
+ * persistent allocator-state log. Registered as TASK_PERIODIC from Create
+ * when an alloc_log_path is configured. Carries no I/O parameters.
+ */
+struct FlushAllocLogTask : public chi::Task {
+  /** SHM default constructor */
+  CTP_CROSS_FUN FlushAllocLogTask() : chi::Task() {}
+
+  /** Emplace constructor */
+  CTP_CROSS_FUN explicit FlushAllocLogTask(const chi::TaskId &task_node,
+                                           const chi::PoolId &pool_id,
+                                           const chi::PoolQuery &pool_query)
+      : chi::Task(task_node, pool_id, pool_query, Method::kFlushAllocLog) {
+    task_id_ = task_node;
+    pool_id_ = pool_id;
+    method_ = Method::kFlushAllocLog;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  /** Serialize IN and INOUT parameters */
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+  }
+
+  /** Serialize OUT and INOUT parameters */
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+  }
+
+  /** Copy from another FlushAllocLogTask */
+  void Copy(const ctp::ipc::FullPtr<FlushAllocLogTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+  }
+
+  /** Aggregate replica results into this task */
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
+    Task::Aggregate(other_base);
+    Copy(other_base.template Cast<FlushAllocLogTask>());
   }
 };
 

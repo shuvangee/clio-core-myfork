@@ -88,6 +88,12 @@ chi::TaskResume Runtime::Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_
       co_await Update(typed_task, rctx);
       break;
     }
+    case Method::kFlushAllocLog: {
+      // Cast task FullPtr to specific type
+      ctp::ipc::FullPtr<FlushAllocLogTask> typed_task = task_ptr.template Cast<FlushAllocLogTask>();
+      CLIO_CO_AWAIT(FlushAllocLog(typed_task, rctx));
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -145,6 +151,11 @@ void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
       archive << *typed_task.ptr_;
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
+      archive << *typed_task.ptr_;
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -197,6 +208,11 @@ void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
     }
     case Method::kUpdate: {
       auto typed_task = task_ptr.template Cast<UpdateTask>();
+      archive >> *typed_task.ptr_;
+      break;
+    }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
       archive >> *typed_task.ptr_;
       break;
     }
@@ -272,6 +288,12 @@ void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
       archive >> *typed_task.ptr_;
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
+      // Use archive operator which respects msg_type
+      archive >> *typed_task.ptr_;
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -340,6 +362,12 @@ void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
     }
     case Method::kUpdate: {
       auto typed_task = task_ptr.template Cast<UpdateTask>();
+      // Use archive operator which respects msg_type
+      archive << *typed_task.ptr_;
+      break;
+    }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
       // Use archive operator which respects msg_type
       archive << *typed_task.ptr_;
       break;
@@ -457,6 +485,17 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       }
       break;
     }
+    case Method::kFlushAllocLog: {
+      // Allocate new task
+      auto new_task_ptr = ipc_manager->NewTask<FlushAllocLogTask>();
+      if (!new_task_ptr.IsNull()) {
+        // Copy task fields (includes base Task fields)
+        auto task_typed = orig_task_ptr.template Cast<FlushAllocLogTask>();
+        new_task_ptr->Copy(task_typed);
+        return new_task_ptr.template Cast<chi::Task>();
+      }
+      break;
+    }
     default: {
       // For unknown methods, create base Task copy
       auto new_task_ptr = ipc_manager->NewTask<chi::Task>();
@@ -515,6 +554,10 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
       auto new_task_ptr = ipc_manager->NewTask<UpdateTask>();
       return new_task_ptr.template Cast<chi::Task>();
     }
+    case Method::kFlushAllocLog: {
+      auto new_task_ptr = ipc_manager->NewTask<FlushAllocLogTask>();
+      return new_task_ptr.template Cast<chi::Task>();
+    }
     default: {
       // For unknown methods, return null pointer
       return ctp::ipc::FullPtr<chi::Task>();
@@ -570,6 +613,11 @@ void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
       typed_task->Aggregate(replica_task);
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto typed_task = orig_task.template Cast<FlushAllocLogTask>();
+      typed_task->Aggregate(replica_task);
+      break;
+    }
     default: {
       orig_task->Aggregate(replica_task);
       break;
@@ -615,6 +663,10 @@ void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {
     }
     case Method::kUpdate: {
       ipc_manager->DelTask(task_ptr.template Cast<UpdateTask>());
+      break;
+    }
+    case Method::kFlushAllocLog: {
+      ipc_manager->DelTask(task_ptr.template Cast<FlushAllocLogTask>());
       break;
     }
     default: {

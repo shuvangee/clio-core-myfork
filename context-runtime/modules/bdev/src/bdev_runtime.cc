@@ -193,6 +193,40 @@ void GlobalBlockMap::Init(size_t num_workers) {
   worker_locks_.resize(num_workers);
 }
 
+void GlobalBlockMap::SeedFreeRange(chi::u64 offset, chi::u64 size) {
+  if (size == 0 || worker_maps_.empty()) {
+    return;
+  }
+  // Carve [offset, offset+size) into the allocator's nominal size classes,
+  // largest-first, and file each carved block into worker 0's free list under
+  // the size class that AllocateBlock would consult for that size. A freed
+  // gap thus becomes reusable by a subsequent AllocateBlock of the same (or
+  // smaller) class. The tail that is smaller than the smallest class is
+  // filed into the smallest bucket so it is still reachable for sub-class
+  // requests (AllocateBlock validates min_size).
+  const size_t kMaxIdx =
+      static_cast<size_t>(BlockSizeCategory::kMaxCategories) - 1;
+  chi::ScopedCoMutex lock(worker_locks_[0]);
+  chi::u64 cur = offset;
+  chi::u64 left = size;
+  while (left > 0) {
+    // Pick the largest nominal class <= left (clamp to smallest class if the
+    // remaining gap is below the smallest class).
+    size_t idx = 0;
+    for (size_t i = kMaxIdx + 1; i-- > 0;) {
+      if (kBlockSizes[i] <= left) {
+        idx = i;
+        break;
+      }
+    }
+    chi::u64 chunk = std::min<chi::u64>(left, kBlockSizes[idx]);
+    Block block(cur, chunk, static_cast<chi::u32>(idx));
+    worker_maps_[0].FreeBlock(block);
+    cur += chunk;
+    left -= chunk;
+  }
+}
+
 int GlobalBlockMap::FindBlockType(size_t io_size) {
   // Use the shared helper function to find block type
   size_t block_size;  // Not needed here, but required by the function signature
@@ -265,6 +299,25 @@ void Heap::Init(chi::u64 total_size, chi::u32 alignment) {
   total_size_ = total_size;
   alignment_ = (alignment == 0) ? 4096 : alignment;
   heap_.store(0);
+}
+
+void Heap::InitFromLive(const std::vector<LiveBlock> &live, chi::u64 total_size,
+                        chi::u32 alignment) {
+  total_size_ = total_size;
+  alignment_ = (alignment == 0) ? 4096 : alignment;
+  // Bump high-water = max(offset+size) over all live blocks (0 if none). Any
+  // new heap allocation starts past every recovered block, so AllocateBlock
+  // via the heap can never overlap a live offset. The gaps below the bump are
+  // handed to the free list by GlobalBlockMap::SeedFreeRange (see
+  // InitializeAllocatorFromLive).
+  chi::u64 bump = 0;
+  for (const auto &b : live) {
+    chi::u64 end = b.offset + b.size;
+    if (end > bump) {
+      bump = end;
+    }
+  }
+  heap_.store(bump);
 }
 
 bool Heap::Allocate(size_t block_size, int block_type, Block &block) {
@@ -542,8 +595,36 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   alignment_ = params.alignment_;
   io_depth_ = params.io_depth_;
 
-  // Initialize the data allocator
-  InitializeAllocator();
+  // Open the persistent allocator-state log (WAL). Empty path => disabled
+  // (no file created). On recover, replay the log so we can reconstruct the
+  // allocator without re-handing-out any still-live offset.
+  bool recovered = false;
+  if (!params.alloc_log_path_.empty()) {
+    if (!alloc_log_.Open(params.alloc_log_path_, /*recover=*/true)) {
+      HLOG(kWarning, "bdev: failed to open alloc log at {}, logging disabled",
+           params.alloc_log_path_);
+    } else {
+      const std::vector<LiveBlock> &live = alloc_log_.live(/*group_id=*/0);
+      if (!live.empty()) {
+        InitializeAllocatorFromLive(live);
+        recovered = true;
+      }
+    }
+  }
+
+  // Initialize the data allocator (skip if we already rebuilt from a
+  // recovered live set).
+  if (!recovered) {
+    InitializeAllocator();
+  }
+
+  // Register a periodic task that flushes (and compacts) the WAL. Only when
+  // logging is enabled. Mirrors admin/CTE's SetPeriod + TASK_PERIODIC pattern
+  // via client_ (initialized in Init()).
+  if (alloc_log_.enabled()) {
+    constexpr double kFlushPeriodUs = 50000.0;  // 50 ms
+    client_.AsyncFlushAllocLog(chi::PoolQuery::Local(), kFlushPeriodUs);
+  }
 
   // UpdateTask is sent in PostGpuContainerCreate(), called after the GPU
   // container is registered so it arrives when the container is ready.
@@ -650,6 +731,10 @@ chi::TaskResume Runtime::AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> ta
   for (size_t i = 0; i < local_blocks.size(); i++) {
     task->blocks_.push_back(local_blocks[i]);
     alloc_bytes += local_blocks[i].size_;
+    // Persist the allocation in the WAL (group_id 0 = plain bdev). No-op
+    // when logging is disabled.
+    alloc_log_.LogAlloc(/*group_id=*/0, local_blocks[i].offset_,
+                        local_blocks[i].size_, local_blocks[i].block_type_);
   }
   // Track LIVE allocated bytes (same per-block size FreeBlocks subtracts),
   // independent of free-list vs heap source. Drives GetStats' true
@@ -701,6 +786,10 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
     block_copy.block_type_ = static_cast<chi::u32>(bt);
     freed_bytes += block_copy.size_;
     global_block_map_.FreeBlock(worker_id, block_copy);
+    // Persist the free in the WAL (removes the matching live alloc by
+    // (group_id, offset) on replay). No-op when logging is disabled.
+    alloc_log_.LogFree(/*group_id=*/0, block_copy.offset_, block_copy.size_,
+                       block_copy.block_type_);
   }
   // Reclaim live-byte accounting so GetStats' remaining recovers as
   // blocks are reused (pairs with AllocateBlocks' fetch_add). Guard the
@@ -961,6 +1050,32 @@ chi::TaskResume Runtime::Update(ctp::ipc::FullPtr<UpdateTask> task,
 }
 
 
+chi::TaskResume Runtime::FlushAllocLog(ctp::ipc::FullPtr<FlushAllocLogTask> task,
+                                       chi::RunContext &ctx) {
+#ifdef __NVCOMPILER
+  chi::RunContext& rctx = ctx;
+#else
+  (void)ctx;
+#endif
+  CLIO_TASK_BODY_BEGIN
+  // Append buffered records to disk (also folds them into the in-memory
+  // recovered model). Idempotent when the buffer is empty.
+  alloc_log_.Flush();
+  // Compact when the on-disk record count has grown past the threshold:
+  // max(kMinCompactRecords, live * kCompactGrowthFactor). Compaction rewrites
+  // the log down to one record per live block, bounding the file size.
+  chi::u64 live = alloc_log_.live_block_count();
+  chi::u64 on_disk = alloc_log_.records_on_disk();
+  chi::u64 threshold = std::max<chi::u64>(kMinCompactRecords,
+                                          live * kCompactGrowthFactor);
+  if (on_disk > threshold) {
+    alloc_log_.Compact();
+  }
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 chi::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
                                   chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
@@ -1015,6 +1130,10 @@ chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
   // Worker I/O contexts (and their AsyncIO instances) are cleaned up by destructor
   // Note: GlobalBlockMap and Heap cleanup is handled by their destructors
 
+  // Persist any buffered allocator-state records before teardown so a clean
+  // pool destroy leaves a recoverable log on disk.
+  alloc_log_.Flush();
+
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -1029,6 +1148,40 @@ void Runtime::InitializeAllocator() {
 
   // Initialize heap with total file size and alignment requirement
   heap_.Init(file_size_, alignment_);
+}
+
+void Runtime::InitializeAllocatorFromLive(const std::vector<LiveBlock> &live) {
+  // Initialize global block map with actual number of workers
+  chi::WorkOrchestrator *work_orchestrator = CLIO_WORK_ORCHESTRATOR;
+  size_t num_workers =
+      work_orchestrator ? work_orchestrator->GetWorkerCount() : 16;
+  global_block_map_.Init(num_workers);
+
+  // Set the heap bump past every recovered live block so the heap never
+  // re-hands a live offset.
+  heap_.InitFromLive(live, file_size_, alignment_);
+
+  // Sort live by offset and push the gaps in [0, bump) not covered by any
+  // live block into the free list so freed gaps are reusable. After this the
+  // allocator is equivalent to one that had allocated exactly `live`.
+  std::vector<LiveBlock> sorted = live;
+  std::sort(sorted.begin(), sorted.end(),
+            [](const LiveBlock &a, const LiveBlock &b) {
+              return a.offset < b.offset;
+            });
+  chi::u64 cursor = 0;
+  for (const auto &b : sorted) {
+    if (b.offset > cursor) {
+      global_block_map_.SeedFreeRange(cursor, b.offset - cursor);
+    }
+    chi::u64 end = b.offset + b.size;
+    if (end > cursor) {
+      cursor = end;
+    }
+  }
+  HLOG(kInfo,
+       "bdev: recovered allocator from {} live blocks, heap bump at {}",
+       live.size(), cursor);
 }
 
 size_t Runtime::GetBlockSize(int block_type) {

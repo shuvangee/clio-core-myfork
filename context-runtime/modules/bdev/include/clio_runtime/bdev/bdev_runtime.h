@@ -38,6 +38,7 @@
 #include <clio_runtime/comutex.h>
 #include "bdev_client.h"
 #include "bdev_tasks.h"
+#include "bdev_alloc_log.h"
 #include <clio_ctp/io/async_io_factory.h>
 #include <vector>
 #include <list>
@@ -167,6 +168,16 @@ class GlobalBlockMap {
   void Init(size_t num_workers);
 
   /**
+   * Push a free range [offset, offset+size) into worker 0's free list,
+   * split into the allocator's size-class buckets (largest-first, like
+   * FreeBlock classifies by size). Used during recovery to make the gaps
+   * between live blocks reusable.
+   * @param offset Start of the free range (assumed alignment-aligned)
+   * @param size Size of the free range
+   */
+  void SeedFreeRange(chi::u64 offset, chi::u64 size);
+
+  /**
    * Allocate a block for a given worker
    * @param worker Worker ID
    * @param io_size Requested I/O size
@@ -208,6 +219,21 @@ class Heap {
    * @param alignment Alignment requirement for offsets and sizes (default 4096)
    */
   void Init(chi::u64 total_size, chi::u32 alignment = 4096);
+
+  /**
+   * Reconstruct the heap bump pointer from a recovered live set so no live
+   * offset is ever re-handed-out. Sets the bump to max(offset+size) over the
+   * live blocks (0 if none). The gaps in [0, bump) not covered by any live
+   * block are NOT placed in the heap (which is a pure bump allocator); the
+   * caller (GlobalBlockMap::InitFromLive) is responsible for pushing those
+   * gaps into the size-class free lists so freed gaps remain reusable.
+   *
+   * @param live Recovered live blocks (any order)
+   * @param total_size Total size available for allocation
+   * @param alignment Alignment requirement for offsets and sizes
+   */
+  void InitFromLive(const std::vector<LiveBlock> &live, chi::u64 total_size,
+                    chi::u32 alignment = 4096);
 
   /**
    * Allocate a block from the heap
@@ -296,6 +322,14 @@ class Runtime : public chi::Container {
    * Monitor container state (Method::kMonitor)
    */
   chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task, chi::RunContext &rctx);
+
+  /**
+   * Periodically flush the allocator WAL to disk and compact it when it has
+   * grown past a threshold (Method::kFlushAllocLog). Registered as a
+   * TASK_PERIODIC task from Create when an alloc_log_path is configured.
+   */
+  chi::TaskResume FlushAllocLog(ctp::ipc::FullPtr<FlushAllocLogTask> task,
+                                chi::RunContext &ctx);
 
   /**
    * Destroy the container (Method::kDestroy)
@@ -406,6 +440,15 @@ class Runtime : public chi::Container {
   GlobalBlockMap global_block_map_;              // Global block cache with per-worker locking
   Heap heap_;                                     // Heap allocator for new blocks
 
+  // Persistent allocator-state log (WAL). Disabled (no file) when the
+  // configured alloc_log_path is empty — preserves pre-WAL behavior.
+  AllocatorLog alloc_log_;
+  // Compaction threshold: when records-on-disk exceeds max(kMinCompactRecords,
+  // live*kCompactGrowthFactor) the periodic task rewrites the log down to the
+  // live set. Bounds the file to ~live-block count over time.
+  static constexpr chi::u64 kCompactGrowthFactor = 2;
+  static constexpr chi::u64 kMinCompactRecords = 256;
+
   // Performance tracking
   std::atomic<chi::u64> total_reads_;
   std::atomic<chi::u64> total_writes_;
@@ -428,6 +471,15 @@ class Runtime : public chi::Container {
    * Initialize the data allocator
    */
   void InitializeAllocator();
+
+  /**
+   * Initialize the data allocator from a recovered live set (group_id 0).
+   * Reconstructs the heap bump and seeds the free list with the gaps so that
+   * AllocateBlock never returns a range overlapping a live block and freed
+   * gaps are reusable.
+   * @param live Recovered live blocks
+   */
+  void InitializeAllocatorFromLive(const std::vector<LiveBlock> &live);
 
   /**
    * Initialize POSIX AIO control blocks
