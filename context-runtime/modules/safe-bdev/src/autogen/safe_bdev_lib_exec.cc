@@ -108,6 +108,12 @@ chi::TaskResume Runtime::Run(chi::u32 method,
       CLIO_CO_AWAIT(BuildParity(typed_task, rctx));
       break;
     }
+    case Method::kFlushAllocLog: {
+      ctp::ipc::FullPtr<FlushAllocLogTask> typed_task =
+          task_ptr.template Cast<FlushAllocLogTask>();
+      CLIO_CO_AWAIT(FlushAllocLog(typed_task, rctx));
+      break;
+    }
     default: {
       // Unknown method - do nothing
       break;
@@ -180,6 +186,11 @@ void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive &archive,
       archive << *typed_task.ptr_;
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
+      archive << *typed_task.ptr_;
+      break;
+    }
     default: {
       break;
     }
@@ -246,6 +257,11 @@ void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive &archive,
     }
     case Method::kBuildParity: {
       auto typed_task = task_ptr.template Cast<BuildParityTask>();
+      archive >> *typed_task.ptr_;
+      break;
+    }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
       archive >> *typed_task.ptr_;
       break;
     }
@@ -327,6 +343,11 @@ void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive,
       archive >> *typed_task.ptr_;
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
+      archive >> *typed_task.ptr_;
+      break;
+    }
     default: {
       break;
     }
@@ -402,6 +423,11 @@ void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive &archive,
     }
     case Method::kBuildParity: {
       auto typed_task = task_ptr.template Cast<BuildParityTask>();
+      archive << *typed_task.ptr_;
+      break;
+    }
+    case Method::kFlushAllocLog: {
+      auto typed_task = task_ptr.template Cast<FlushAllocLogTask>();
       archive << *typed_task.ptr_;
       break;
     }
@@ -527,6 +553,15 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(
       }
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto new_task_ptr = ipc_manager->NewTask<FlushAllocLogTask>();
+      if (!new_task_ptr.IsNull()) {
+        auto task_typed = orig_task_ptr.template Cast<FlushAllocLogTask>();
+        new_task_ptr->Copy(task_typed);
+        return new_task_ptr.template Cast<chi::Task>();
+      }
+      break;
+    }
     default: {
       auto new_task_ptr = ipc_manager->NewTask<chi::Task>();
       if (!new_task_ptr.IsNull()) {
@@ -594,6 +629,10 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
     }
     case Method::kBuildParity: {
       auto new_task_ptr = ipc_manager->NewTask<BuildParityTask>();
+      return new_task_ptr.template Cast<chi::Task>();
+    }
+    case Method::kFlushAllocLog: {
+      auto new_task_ptr = ipc_manager->NewTask<FlushAllocLogTask>();
       return new_task_ptr.template Cast<chi::Task>();
     }
     default: {
@@ -665,6 +704,11 @@ void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
       typed_task->Aggregate(replica_task);
       break;
     }
+    case Method::kFlushAllocLog: {
+      auto typed_task = orig_task.template Cast<FlushAllocLogTask>();
+      typed_task->Aggregate(replica_task);
+      break;
+    }
     default: {
       orig_task->Aggregate(replica_task);
       break;
@@ -722,6 +766,10 @@ void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {
     }
     case Method::kBuildParity: {
       ipc_manager->DelTask(task_ptr.template Cast<BuildParityTask>());
+      break;
+    }
+    case Method::kFlushAllocLog: {
+      ipc_manager->DelTask(task_ptr.template Cast<FlushAllocLogTask>());
       break;
     }
     default: {

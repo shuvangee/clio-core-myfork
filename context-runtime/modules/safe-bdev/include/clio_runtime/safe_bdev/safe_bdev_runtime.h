@@ -38,6 +38,7 @@
 #include <clio_runtime/comutex.h>
 #include <clio_runtime/bdev/bdev_client.h>
 #include <clio_runtime/bdev/bdev_runtime.h>  // bdev::Heap, bdev::GlobalBlockMap
+#include <clio_runtime/bdev/bdev_alloc_log.h>  // bdev::AllocatorLog (reused WAL)
 
 #include <memory>
 #include <mutex>
@@ -112,6 +113,14 @@ class Runtime : public chi::Container {
   /** Background parity-builder poll period (microseconds): 50 ms. */
   static constexpr double kBuildParityPeriodUs = 50000.0;
 
+  /** Allocator-WAL flush/compact poll period (microseconds): 50 ms. */
+  static constexpr double kFlushAllocLogPeriodUs = 50000.0;
+
+  /** Compaction policy: rewrite the WAL once on-disk records exceed
+   *  max(kMinCompactRecords, live * kCompactGrowthFactor). Mirrors bdev. */
+  static constexpr chi::u64 kMinCompactRecords = 1024;
+  static constexpr chi::u64 kCompactGrowthFactor = 4;
+
   /**
    * Sanity bound on the number of append-only stripe groups (one per AddBdev
    * -as-data, plus the create group). Groups are sized DYNAMICALLY — the current
@@ -169,6 +178,10 @@ class Runtime : public chi::Container {
   /** Build/raise parity for dirty rows (Method::kBuildParity). */
   chi::TaskResume BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
                               chi::RunContext &ctx);
+
+  /** Flush/compact the persistent allocator log (Method::kFlushAllocLog). */
+  chi::TaskResume FlushAllocLog(ctp::ipc::FullPtr<FlushAllocLogTask> task,
+                                chi::RunContext &ctx);
 
   /** Monitor container state (Method::kMonitor). */
   chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task,
@@ -280,6 +293,13 @@ class Runtime : public chi::Container {
   // Append-only stripe groups, held by pointer so the std::atomic inside each
   // Group never moves when the vector grows.
   std::vector<std::unique_ptr<Group>> groups_;
+  // Persistent allocator-state log (WAL). REUSED from the bdev module. Each
+  // group's per-group allocator state is namespaced by the group's INDEX in
+  // groups_ (group_id 0,1,2,...; stable because groups_ is append-only). The
+  // append-only group geometry itself is persisted via LogGroupOpen /
+  // LogGroupFreeze. Empty path => disabled (every API is a no-op), so the
+  // pre-WAL behaviour is preserved unchanged.
+  clio::run::bdev::AllocatorLog alloc_log_;
   chi::u32 max_failures_;           // Fault-tolerance target (M == m_max)
   chi::u32 parity_level_;           // Parity members added so far (m)
   chi::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
@@ -457,6 +477,18 @@ class Runtime : public chi::Container {
    *  group's rs_, block_map_ and heap_ are constructed; appended to groups_. */
   void OpenGroup(int k, chi::u64 first_row, chi::u64 num_rows,
                  chi::u64 logical_base);
+
+  /**
+   * Rebuild group `gi`'s per-group allocator (heap bump + free list) from a
+   * recovered live set. `live` offsets are GLOBAL logical offsets, so the
+   * group-local offset = global - group.logical_base_. Mirrors bdev's
+   * InitializeAllocatorFromLive (Heap::InitFromLive over the local offsets, +
+   * GlobalBlockMap::SeedFreeRange for the gaps below the bump). Also sets the
+   * group's allocated_bytes_ to the sum of live sizes. Call AFTER OpenGroup so
+   * the group's heap_/block_map_ exist.
+   */
+  void SeedGroupAllocatorFromLive(
+      size_t gi, const std::vector<clio::run::bdev::LiveBlock> &live);
 };
 
 }  // namespace clio::run::safe_bdev

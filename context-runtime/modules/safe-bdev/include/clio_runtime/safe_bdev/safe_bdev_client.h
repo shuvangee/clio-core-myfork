@@ -67,7 +67,8 @@ class Client : public chi::ContainerClient {
   chi::Future<clio::run::safe_bdev::CreateTask> AsyncCreate(
       const chi::PoolQuery &pool_query, const std::string &pool_name,
       const chi::PoolId &custom_pool_id, chi::u32 max_failures,
-      const std::vector<MemberBdevDesc> &members) {
+      const std::vector<MemberBdevDesc> &members,
+      const std::string &alloc_log_path = "") {
     auto *ipc_manager = CLIO_CPU_IPC;
 
     // CreateTask must always go through the admin pool, never pool_id_.
@@ -80,7 +81,7 @@ class Client : public chi::ContainerClient {
         custom_pool_id,                 // target pool ID to create
         this,                           // Client pointer for PostWait
         // CreateParams constructor arguments:
-        max_failures, members);
+        max_failures, members, alloc_log_path);
 
     return ipc_manager->Send(task);
   }
@@ -216,6 +217,27 @@ class Client : public chi::ContainerClient {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<BuildParityTask>(
         chi::CreateTaskId(), pool_id_, pool_query, max_batch);
+    if (period_us > 0) {
+      task->SetPeriod(period_us, chi::kMicro);
+      task->SetFlags(TASK_PERIODIC);
+    }
+    return ipc_manager->Send(task);
+  }
+
+  /**
+   * Flush (and periodically compact) the persistent allocator-state log -
+   * asynchronous. When period_us > 0 the task is registered as TASK_PERIODIC
+   * so the runtime re-runs it on the given interval; period 0 is a one-shot
+   * flush barrier (used by tests before destroying the pool). Mirrors bdev's
+   * AsyncFlushAllocLog.
+   * @param pool_query Pool query for routing
+   * @param period_us Period in microseconds (0 = one-shot)
+   */
+  chi::Future<FlushAllocLogTask> AsyncFlushAllocLog(
+      const chi::PoolQuery &pool_query, double period_us = 0) {
+    auto *ipc_manager = CLIO_CPU_IPC;
+    auto task = ipc_manager->NewTask<FlushAllocLogTask>(
+        chi::CreateTaskId(), pool_id_, pool_query);
     if (period_us > 0) {
       task->SetPeriod(period_us, chi::kMicro);
       task->SetFlags(TASK_PERIODIC);

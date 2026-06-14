@@ -160,20 +160,28 @@ struct MemberBdevDesc {
 struct CreateParams {
   chi::u32 max_failures_;                  // Max simultaneous member failures to tolerate
   std::vector<MemberBdevDesc> members_;    // Initial member bdev descriptors
+  // Path to the persistent allocator-state log (WAL). Empty => logging disabled
+  // (no file created, no behavior change). When set, the per-group allocators
+  // and the append-only group structure are persisted here and recovered on a
+  // subsequent create over the same members + same path.
+  std::string alloc_log_path_;
 
   // Required: chimod library name for module manager
   static constexpr const char *chimod_lib_name = "clio_safe_bdev";
 
-  CreateParams() : max_failures_(1), members_() {}
+  CreateParams() : max_failures_(1), members_(), alloc_log_path_() {}
 
   CreateParams(chi::u32 max_failures,
-               const std::vector<MemberBdevDesc> &members)
-      : max_failures_(max_failures), members_(members) {}
+               const std::vector<MemberBdevDesc> &members,
+               const std::string &alloc_log_path = "")
+      : max_failures_(max_failures),
+        members_(members),
+        alloc_log_path_(alloc_log_path) {}
 
   // Serialization support for cereal
   template <class Archive>
   void serialize(Archive &ar) {
-    ar(max_failures_, members_);
+    ar(max_failures_, members_, alloc_log_path_);
   }
 
   /**
@@ -186,6 +194,10 @@ struct CreateParams {
 
     if (config["max_failures"]) {
       max_failures_ = config["max_failures"].as<chi::u32>();
+    }
+
+    if (config["alloc_log"]) {
+      alloc_log_path_ = config["alloc_log"].as<std::string>();
     }
 
     if (config["members"] && config["members"].IsSequence()) {
@@ -422,6 +434,52 @@ struct BuildParityTask : public chi::Task {
   void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
     Task::Aggregate(other_base);
     Copy(other_base.template Cast<BuildParityTask>());
+  }
+};
+
+/**
+ * FlushAllocLogTask - Periodic task that flushes (and compacts) the persistent
+ * allocator-state log (WAL). Registered as TASK_PERIODIC from Create when an
+ * alloc_log_path is configured. Carries no I/O parameters. Mirrors bdev's
+ * FlushAllocLogTask.
+ */
+struct FlushAllocLogTask : public chi::Task {
+  /** SHM default constructor */
+  CTP_CROSS_FUN FlushAllocLogTask() : chi::Task() {}
+
+  /** Emplace constructor */
+  CTP_CROSS_FUN explicit FlushAllocLogTask(const chi::TaskId &task_node,
+                                           const chi::PoolId &pool_id,
+                                           const chi::PoolQuery &pool_query)
+      : chi::Task(task_node, pool_id, pool_query, Method::kFlushAllocLog) {
+    task_id_ = task_node;
+    pool_id_ = pool_id;
+    method_ = Method::kFlushAllocLog;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  /** Serialize IN and INOUT parameters */
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+  }
+
+  /** Serialize OUT and INOUT parameters */
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+  }
+
+  /** Copy from another FlushAllocLogTask */
+  void Copy(const ctp::ipc::FullPtr<FlushAllocLogTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+  }
+
+  /** Aggregate replica results into this task */
+  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
+    Task::Aggregate(other_base);
+    Copy(other_base.template Cast<FlushAllocLogTask>());
   }
 };
 

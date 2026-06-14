@@ -28,3 +28,4 @@ kAddBdev: 16            # Add a member bdev
 kRemoveBdev: 17         # Remove a member bdev
 kRecoverBdev: 18        # Recover a failed member bdev onto a new member
 kBuildParity: 19        # Build/raise parity for dirty stripes (periodic)
+kFlushAllocLog: 20      # Flush/compact the persistent allocator-state log (periodic)

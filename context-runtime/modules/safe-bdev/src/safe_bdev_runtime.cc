@@ -100,6 +100,53 @@ void Runtime::OpenGroup(int k, chi::u64 first_row, chi::u64 num_rows,
   groups_.push_back(std::move(g));
 }
 
+void Runtime::SeedGroupAllocatorFromLive(
+    size_t gi, const std::vector<clio::run::bdev::LiveBlock> &live) {
+  // Rebuild group `gi`'s allocator to a state equivalent to one that had
+  // allocated exactly `live`. The recovered offsets are GLOBAL logical offsets;
+  // the group's heap_/block_map_ operate in the GROUP-LOCAL space [0, span), so
+  // convert each: local = global - logical_base_. Then mirror bdev:
+  //   1. Heap::InitFromLive over the LOCAL live blocks -> bump = max(off+size)
+  //      so the heap never re-hands a live offset.
+  //   2. SeedFreeRange over the gaps in [0, bump) not covered by any live block
+  //      so freed gaps stay reusable.
+  Group &g = *groups_[gi];
+
+  std::vector<clio::run::bdev::LiveBlock> local;
+  local.reserve(live.size());
+  chi::u64 live_bytes = 0;
+  for (const auto &b : live) {
+    clio::run::bdev::LiveBlock lb = b;
+    lb.offset = (b.offset >= g.logical_base_) ? (b.offset - g.logical_base_) : 0;
+    local.push_back(lb);
+    live_bytes += b.size;
+  }
+
+  g.heap_->InitFromLive(local, g.logical_span_, /*alignment=*/4096);
+
+  std::sort(local.begin(), local.end(),
+            [](const clio::run::bdev::LiveBlock &a,
+               const clio::run::bdev::LiveBlock &b) {
+              return a.offset < b.offset;
+            });
+  chi::u64 cursor = 0;
+  for (const auto &b : local) {
+    if (b.offset > cursor) {
+      g.block_map_->SeedFreeRange(cursor, b.offset - cursor);
+    }
+    const chi::u64 end = b.offset + b.size;
+    if (end > cursor) {
+      cursor = end;
+    }
+  }
+
+  g.allocated_bytes_.store(live_bytes, std::memory_order_relaxed);
+  HLOG(kInfo,
+       "safe_bdev: recovered group {} allocator from {} live blocks "
+       "(local heap bump at {}, {} live bytes, logical_base={})",
+       gi, live.size(), cursor, live_bytes, g.logical_base_);
+}
+
 //===========================================================================
 // Segment I/O helpers (run inside task fibers; co_await member bdev I/O)
 //===========================================================================
@@ -406,6 +453,21 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   // from whatever the current group hasn't filled.
   const chi::u64 num_rows0 = max_phys_rows_;
 
+  // Open the persistent allocator-state log (WAL). Empty path => disabled (no
+  // file created). On recover, replay it so we can reconstruct the append-only
+  // group structure and each group's allocator without re-handing-out any
+  // still-live logical offset. REUSED from the bdev module.
+  bool recovered_groups = false;
+  if (!alloc_log_.Open(params.alloc_log_path_, /*recover=*/true)) {
+    HLOG(kWarning,
+         "safe_bdev Create: failed to open alloc log at '{}', logging disabled",
+         params.alloc_log_path_);
+  }
+  const std::vector<clio::run::bdev::GroupRec> recovered_grps =
+      alloc_log_.enabled() ? alloc_log_.groups()
+                           : std::vector<clio::run::bdev::GroupRec>{};
+  recovered_groups = !recovered_grps.empty();
+
   // Seat each member as a DATA column. Before seating, read the member's
   // superblock to classify it:
   //   - not present (blank/zeros)  -> FRESH: write our identity.
@@ -465,16 +527,54 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     ++col;
   }
 
-  // Open group 0 spanning rows [0, num_rows0) over k0 data drives, logical base
-  // 0. Its rs_ / allocator are constructed by OpenGroup.
-  OpenGroup(k0, /*first_row=*/0, num_rows0, /*logical_base=*/0);
-  total_rows_ = num_rows0;
+  if (recovered_groups) {
+    // RECOVERY: reconstruct the append-only group structure from the recovered
+    // GroupRecs (in group_id order; group_id == group INDEX) using the recovered
+    // geometry verbatim (do NOT recompute sizes). Then seed each group's
+    // allocator from its recovered live set. total_rows_/max_phys_rows_ stay as
+    // computed from member capacity above (the physical row count is a property
+    // of the members, unchanged across restart).
+    total_rows_ = max_phys_rows_;
+    std::vector<clio::run::bdev::GroupRec> ordered = recovered_grps;
+    std::sort(ordered.begin(), ordered.end(),
+              [](const clio::run::bdev::GroupRec &a,
+                 const clio::run::bdev::GroupRec &b) {
+                return a.group_id < b.group_id;
+              });
+    for (const auto &gr : ordered) {
+      OpenGroup(static_cast<int>(gr.k), gr.first_row, gr.num_rows,
+                gr.logical_base);
+      const size_t gi = groups_.size() - 1;
+      const std::vector<clio::run::bdev::LiveBlock> &live =
+          alloc_log_.live(static_cast<chi::u32>(gr.group_id));
+      SeedGroupAllocatorFromLive(gi, live);
+    }
+    HLOG(kInfo,
+         "safe_bdev Create: RECOVERED {} group(s) from alloc log '{}' "
+         "(widest k={}, max_phys_rows={})",
+         groups_.size(), params.alloc_log_path_,
+         groups_.empty() ? 0 : groups_.back()->k_, max_phys_rows_);
+  } else {
+    // FRESH: open group 0 spanning rows [0, num_rows0) over k0 data drives,
+    // logical base 0. Its rs_ / allocator are constructed by OpenGroup. Log the
+    // group-open so a later restart can recover the geometry.
+    OpenGroup(k0, /*first_row=*/0, num_rows0, /*logical_base=*/0);
+    total_rows_ = num_rows0;
+    alloc_log_.LogGroupOpen(/*group_id=*/0, static_cast<chi::u32>(k0),
+                            /*first_row=*/0, num_rows0, /*logical_base=*/0);
 
-  HLOG(kInfo,
-       "safe_bdev Create: pool='{}', k0={}, M={}, num_rows0={}, "
-       "logical_span0={} (append-only RAID-0 groups + dedicated parity)",
-       task->pool_name_.str(), k0, max_failures_, num_rows0,
-       groups_[0]->logical_span_);
+    HLOG(kInfo,
+         "safe_bdev Create: pool='{}', k0={}, M={}, num_rows0={}, "
+         "logical_span0={} (append-only RAID-0 groups + dedicated parity)",
+         task->pool_name_.str(), k0, max_failures_, num_rows0,
+         groups_[0]->logical_span_);
+  }
+
+  // Register a periodic task that flushes (and compacts) the WAL. Only when
+  // logging is enabled. Mirrors bdev's SetPeriod + TASK_PERIODIC pattern.
+  if (alloc_log_.enabled()) {
+    client_.AsyncFlushAllocLog(MemberQuery(), kFlushAllocLogPeriodUs);
+  }
 
   // Kick off the background parity builder. Write records dirty rows off the
   // critical path; this periodic task converges them to full protection.
@@ -538,6 +638,10 @@ chi::TaskResume Runtime::AllocateBlocks(
     CLIO_CO_RETURN;
   }
   g.allocated_bytes_.fetch_add(block.size_, std::memory_order_relaxed);
+  // Persist the allocation under the CURRENT group's id (== its index in
+  // groups_). block.offset_ is the GLOBAL logical offset.
+  const chi::u32 gi = static_cast<chi::u32>(groups_.size() - 1);
+  alloc_log_.LogAlloc(gi, block.offset_, block.size_, block.block_type_);
   task->blocks_.clear();
   task->blocks_.push_back(block);
   task->return_code_ = 0;
@@ -581,6 +685,11 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
     const chi::u64 cur = g.allocated_bytes_.load(std::memory_order_relaxed);
     g.allocated_bytes_.store(cur >= b.size_ ? cur - b.size_ : 0,
                              std::memory_order_relaxed);
+    // Persist the free under the owning group's id (== its index in groups_).
+    // b.offset_ is the GLOBAL logical offset; the WAL drops the matching live
+    // alloc by (group_id, offset) on recovery.
+    alloc_log_.LogFree(static_cast<chi::u32>(gi), b.offset_, b.size_,
+                       b.block_type_);
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -912,7 +1021,17 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
     const int new_k = static_cast<int>(data_members_.size());
     const chi::u64 new_num_rows = max_phys_rows_ - new_first_row;
     const chi::u64 logical_base = prev.LogicalEnd();
+
+    // Persist the group transition: freeze the previous group at its high-water
+    // (used_rows) and open the new wider group. group_id == group INDEX in
+    // groups_. The freeze records the previous group's index (size()-1 BEFORE
+    // the new group is pushed); the open records the new group's index.
+    const chi::u32 prev_gi = static_cast<chi::u32>(groups_.size() - 1);
+    alloc_log_.LogGroupFreeze(prev_gi, used_rows);
     OpenGroup(new_k, new_first_row, new_num_rows, logical_base);
+    const chi::u32 new_gi = static_cast<chi::u32>(groups_.size() - 1);
+    alloc_log_.LogGroupOpen(new_gi, static_cast<chi::u32>(new_k), new_first_row,
+                            new_num_rows, logical_base);
 
     HLOG(kInfo,
          "safe_bdev AddBdev(as_data): froze group {} at {} rows; opened group {} "
@@ -1258,6 +1377,30 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
   CLIO_TASK_BODY_END
 }
 
+chi::TaskResume Runtime::FlushAllocLog(
+    ctp::ipc::FullPtr<FlushAllocLogTask> task, chi::RunContext &ctx) {
+  chi::RunContext &rctx = ctx;
+  CLIO_TASK_BODY_BEGIN
+  (void)rctx;
+  // Append buffered records to disk (also folds them into the in-memory
+  // recovered model). Idempotent when the buffer is empty.
+  alloc_log_.Flush();
+  // Compact when the on-disk record count has grown past the threshold:
+  // max(kMinCompactRecords, live * kCompactGrowthFactor). Compaction rewrites
+  // the log down to one group-open per group + one record per live block,
+  // bounding the file size. Mirrors bdev's FlushAllocLog.
+  const chi::u64 live = alloc_log_.live_block_count();
+  const chi::u64 on_disk = alloc_log_.records_on_disk();
+  const chi::u64 threshold =
+      std::max<chi::u64>(kMinCompactRecords, live * kCompactGrowthFactor);
+  if (on_disk > threshold) {
+    alloc_log_.Compact();
+  }
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  chi::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
@@ -1270,7 +1413,7 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
     }
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
-    pk.pack_map(8);
+    pk.pack_map(9);
     pk.pack("pool_name");     pk.pack(pool_name_);
     pk.pack("max_failures");  pk.pack(max_failures_);
     pk.pack("data_count");
@@ -1281,6 +1424,8 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
     pk.pack("total_rows");    pk.pack(total_rows_);
     pk.pack("dirty_rows");    pk.pack(dirty);
     pk.pack("reattached_members"); pk.pack(reattached_members_);
+    pk.pack("alloc_log_records");
+    pk.pack(static_cast<chi::u64>(alloc_log_.records_on_disk()));
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }
   task->SetReturnCode(0);
@@ -1293,6 +1438,9 @@ chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
+  // Persist any buffered allocator-state records before teardown so a clean
+  // pool destroy leaves a recoverable log on disk.
+  alloc_log_.Flush();
   // Member clients/state are released by their destructors.
   task->return_code_ = 0;
   CLIO_CO_RETURN;

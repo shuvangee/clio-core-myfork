@@ -29,8 +29,9 @@ GLOBAL_CROSS_CONST chi::u32 kAddBdev = 16;
 GLOBAL_CROSS_CONST chi::u32 kRemoveBdev = 17;
 GLOBAL_CROSS_CONST chi::u32 kRecoverBdev = 18;
 GLOBAL_CROSS_CONST chi::u32 kBuildParity = 19;
+GLOBAL_CROSS_CONST chi::u32 kFlushAllocLog = 20;
 
-GLOBAL_CROSS_CONST chi::u32 kMaxMethodId = 20;
+GLOBAL_CROSS_CONST chi::u32 kMaxMethodId = 21;
 
 inline const std::vector<std::string>& GetMethodNames() {
   static const std::vector<std::string> names = [] {
@@ -47,6 +48,7 @@ inline const std::vector<std::string>& GetMethodNames() {
     v[17] = "RemoveBdev";
     v[18] = "RecoverBdev";
     v[19] = "BuildParity";
+    v[20] = "FlushAllocLog";
     return v;
   }();
   return names;

@@ -123,6 +123,30 @@ bool CreateRamMember(clio::run::bdev::Client &client,
   return create_task->GetReturnCode() == 0;
 }
 
+/**
+ * Create a FILE-backed member bdev pool over `file_path`. File-backed members
+ * persist their bytes across a safe-bdev pool destroy, which is what makes the
+ * restart/recovery test meaningful: re-creating a bdev pool over the SAME file
+ * re-exposes the SAME data (including the safe-bdev superblock).
+ */
+bool CreateFileMember(clio::run::bdev::Client &client,
+                      const std::string &file_path,
+                      const chi::PoolId &pool_id) {
+  auto create_task = client.AsyncCreate(
+      chi::PoolQuery::Dynamic(), file_path, pool_id,
+      clio::run::bdev::BdevType::kFile, kMemberRamSize);
+  create_task.Wait();
+  client.pool_id_ = create_task->new_pool_id_;
+  client.return_code_ = create_task->return_code_;
+  return create_task->GetReturnCode() == 0;
+}
+
+/** Whether two [offset,size) logical ranges overlap. */
+bool RangesOverlap(chi::u64 a_off, chi::u64 a_size, chi::u64 b_off,
+                   chi::u64 b_size) {
+  return a_off < b_off + b_size && b_off < a_off + a_size;
+}
+
 /** A repeating, position-dependent byte pattern. */
 std::vector<ctp::u8> MakePattern(size_t size, ctp::u8 seed) {
   std::vector<ctp::u8> v(size);
@@ -883,6 +907,254 @@ TEST_CASE("safe_bdev_add_data_no_reshuffle",
   HLOG(kInfo, "safe_bdev add-data: degraded read of pattern B (group 1, k=3) OK");
 
   HLOG(kInfo, "safe_bdev add-data no-reshuffle test PASSED");
+}
+
+TEST_CASE("safe_bdev_alloc_log_restart_recovery",
+          "[safe_bdev][alloc_log][recover][groups]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  auto member_file = [&](int idx) {
+    return std::string("/tmp/safe_alog_member_") + std::to_string(getpid()) +
+           "_" + std::to_string(idx) + ".bin";
+  };
+  const std::string log_path =
+      std::string("/tmp/safe_alog_") + std::to_string(getpid()) + ".alog";
+
+  // Fresh start: remove any stale member files + alloc log.
+  for (int i = 0; i < 4; ++i) {
+    std::filesystem::remove(member_file(i));
+  }
+  std::filesystem::remove(log_path);
+
+  // The safe-bdev pool id is STABLE across the restart so the recovered array
+  // recognizes its own superblocks (reattach, not foreign).
+  const chi::PoolId safe_id(static_cast<chi::u32>(10500 + pidsalt), 0);
+
+  // k=2 data + 1 parity. Group 0 has k=2; after AddBdev a 3rd data member,
+  // group 1 has k=3.
+  const int k0 = 2;
+
+  // Patterns: A lands in group 0 (k=2, 4 chunks); B lands in group 1 (k=3,
+  // 6 chunks). Captured here so phase 2 can verify them post-recovery.
+  const chi::u64 lenA = 2 * static_cast<chi::u64>(k0) * kChunkLen;  // 4 chunks
+  const chi::u64 lenB = 2 * 3 * kChunkLen;                          // 6 chunks
+  std::vector<ctp::u8> patternA = MakePattern(lenA, 0xA1);
+  std::vector<ctp::u8> patternB = MakePattern(lenB, 0xB2);
+  clio::run::bdev::Block blockA;
+  clio::run::bdev::Block blockB;
+
+  // Member pool ids (reused verbatim in phase 2 so each bdev pool re-opens the
+  // SAME backing file).
+  std::vector<chi::PoolId> data_ids;
+  chi::PoolId parity_id(static_cast<chi::u32>(10560 + pidsalt), 0);
+  chi::PoolId data3_id(static_cast<chi::u32>(10570 + pidsalt), 0);
+
+  // A write+flush(parity) helper bound to a given safe client.
+  auto write_pattern = [&](clio::run::safe_bdev::Client &safe, chi::u64 io_len,
+                           const std::vector<ctp::u8> &pattern,
+                           clio::run::bdev::Block &out_block) {
+    auto alloc = safe.AsyncAllocateBlocks(chi::PoolQuery::Dynamic(), io_len);
+    alloc.Wait();
+    REQUIRE(alloc->GetReturnCode() == 0);
+    REQUIRE(alloc->blocks_.size() > 0);
+    out_block = alloc->blocks_[0];
+
+    chi::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
+    wblocks.push_back(clio::run::bdev::Block(out_block.offset_, io_len, 0));
+    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(wbuf.IsNull());
+    memcpy(wbuf.ptr_, pattern.data(), io_len);
+    auto wt = safe.AsyncWrite(chi::PoolQuery::Dynamic(), wblocks,
+                              wbuf.shm_.template Cast<void>(), io_len);
+    wt.Wait();
+    REQUIRE(wt->GetReturnCode() == 0);
+    REQUIRE(wt->bytes_written_ == io_len);
+    CLIO_IPC->FreeBuffer(wbuf);
+
+    auto flush = safe.AsyncBuildParity(chi::PoolQuery::Dynamic(), 0);
+    flush.Wait();
+    REQUIRE(flush->GetReturnCode() == 0);
+  };
+
+  auto read_verify = [&](clio::run::safe_bdev::Client &safe,
+                         const clio::run::bdev::Block &block, chi::u64 io_len,
+                         const std::vector<ctp::u8> &expect) {
+    chi::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
+    rblocks.push_back(clio::run::bdev::Block(block.offset_, io_len, 0));
+    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(rbuf.IsNull());
+    memset(rbuf.ptr_, 0, io_len);
+    auto rt = safe.AsyncRead(chi::PoolQuery::Dynamic(), rblocks,
+                             rbuf.shm_.template Cast<void>(), io_len);
+    rt.Wait();
+    REQUIRE(rt->GetReturnCode() == 0);
+    REQUIRE(rt->bytes_read_ == io_len);
+    std::vector<ctp::u8> got(io_len);
+    memcpy(got.data(), rbuf.ptr_, io_len);
+    REQUIRE(got == expect);
+    CLIO_IPC->FreeBuffer(rbuf);
+  };
+
+  // ======================================================================
+  // PHASE 1: create, write A (group 0), add a 3rd data member (open group 1),
+  //          write B (group 1), flush the alloc log, then destroy the pool.
+  // ======================================================================
+  {
+    std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
+    for (int c = 0; c < k0; ++c) {
+      chi::PoolId id(static_cast<chi::u32>(10510 + pidsalt + c), 0);
+      clio::run::bdev::Client client(id);
+      REQUIRE(CreateFileMember(client, member_file(c), id));
+      data_ids.push_back(client.pool_id_);
+      members.emplace_back(member_file(c), /*node_id=*/0, client.pool_id_);
+    }
+    clio::run::bdev::Client parity_client(parity_id);
+    REQUIRE(CreateFileMember(parity_client, member_file(3), parity_id));
+    parity_id = parity_client.pool_id_;
+
+    clio::run::safe_bdev::Client safe(safe_id);
+    auto create_task = safe.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                        "safe_bdev_alog_pool", safe_id,
+                                        /*max_failures=*/1, members, log_path);
+    create_task.Wait();
+    safe.pool_id_ = create_task->new_pool_id_;
+    REQUIRE(create_task->GetReturnCode() == 0);
+
+    auto add_par = safe.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_file(3),
+                                     /*node_id=*/0, parity_id, /*as_parity=*/1);
+    add_par.Wait();
+    REQUIRE(add_par->GetReturnCode() == 0);
+    REQUIRE(QueryStatField(safe, "num_groups") == 1);
+
+    // Pattern A in group 0 (k=2).
+    write_pattern(safe, lenA, patternA, blockA);
+    read_verify(safe, blockA, lenA, patternA);
+    HLOG(kInfo, "safe_bdev alog: phase1 pattern A in group 0 (offset {})",
+         blockA.offset_);
+
+    // Add a 3rd DATA member => opens group 1 (k=3).
+    clio::run::bdev::Client data3_client(data3_id);
+    REQUIRE(CreateFileMember(data3_client, member_file(2), data3_id));
+    data3_id = data3_client.pool_id_;
+    data_ids.push_back(data3_id);
+    auto add_data = safe.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_file(2),
+                                      /*node_id=*/0, data3_id, /*as_parity=*/0);
+    add_data.Wait();
+    REQUIRE(add_data->GetReturnCode() == 0);
+    REQUIRE(QueryStatField(safe, "num_groups") == 2);
+    REQUIRE(QueryStatField(safe, "data_count") == 3);
+
+    // Pattern B in group 1 (k=3); its logical offset is above group 0's range.
+    write_pattern(safe, lenB, patternB, blockB);
+    read_verify(safe, blockB, lenB, patternB);
+    REQUIRE(blockB.offset_ >= lenA);
+    HLOG(kInfo, "safe_bdev alog: phase1 pattern B in group 1 (offset {})",
+         blockB.offset_);
+
+    // Explicit one-shot alloc-log flush barrier (mirrors bdev's WAL test): the
+    // PoolManager DestroyPool does not invoke the container Destroy handler, so
+    // flush the buffered records before tearing the pool down.
+    {
+      auto fl = safe.AsyncFlushAllocLog(chi::PoolQuery::Dynamic(), /*period=*/0);
+      fl.Wait();
+      REQUIRE(fl->GetReturnCode() == 0);
+    }
+    {
+      auto fl2 = safe.AsyncBuildParity(chi::PoolQuery::Dynamic(), 0);
+      fl2.Wait();
+      REQUIRE(fl2->GetReturnCode() == 0);
+    }
+
+    clio::run::admin::Client admin(chi::kAdminPoolId);
+    auto destroy = admin.AsyncDestroyPool(chi::PoolQuery::Dynamic(),
+                                          safe.pool_id_);
+    destroy.Wait();
+    REQUIRE(destroy->GetReturnCode() == 0);
+    std::this_thread::sleep_for(150ms);
+  }
+
+  // ======================================================================
+  // PHASE 2 (RESTART): create a NEW safe-bdev pool over the SAME member files
+  //          (re-opened bdev pools) + SAME alloc_log_path + SAME safe pool id.
+  //          Assert recovery: num_groups==2, A and B intact, and a fresh alloc
+  //          does NOT collide with the recovered live blocks.
+  // ======================================================================
+  {
+    // Re-open the bdev member pools over the SAME backing files (fresh bdev
+    // pool ids; the files — and thus the bytes + superblocks — persist).
+    std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
+    for (int c = 0; c < 3; ++c) {
+      chi::PoolId id(static_cast<chi::u32>(10580 + pidsalt + c), 0);
+      clio::run::bdev::Client client(id);
+      REQUIRE(CreateFileMember(client, member_file(c), id));
+      members.emplace_back(member_file(c), /*node_id=*/0, client.pool_id_);
+    }
+    chi::PoolId rparity_id(static_cast<chi::u32>(10590 + pidsalt), 0);
+    clio::run::bdev::Client rparity_client(rparity_id);
+    REQUIRE(CreateFileMember(rparity_client, member_file(3), rparity_id));
+    rparity_id = rparity_client.pool_id_;
+
+    clio::run::safe_bdev::Client safe2(safe_id);
+    auto create_task = safe2.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                         "safe_bdev_alog_pool", safe_id,
+                                         /*max_failures=*/1, members, log_path);
+    create_task.Wait();
+    safe2.pool_id_ = create_task->new_pool_id_;
+    REQUIRE(create_task->GetReturnCode() == 0);
+
+    // (a) The append-only group structure recovered: 2 groups, 3 data members.
+    const long ng = QueryStatField(safe2, "num_groups");
+    HLOG(kInfo, "safe_bdev alog: RESTART recovered num_groups={}", ng);
+    REQUIRE(ng == 2);
+    REQUIRE(QueryStatField(safe2, "data_count") == 3);
+    // The members carry our superblock => they re-attach (not fresh/foreign).
+    REQUIRE(QueryReattachedMembers(safe2) == 3);
+
+    // Re-attach parity so degraded paths remain available (data still intact;
+    // this also re-dirties rows but we only read active members here).
+    auto add_par = safe2.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_file(3),
+                                      /*node_id=*/0, rparity_id,
+                                      /*as_parity=*/1);
+    add_par.Wait();
+    REQUIRE(add_par->GetReturnCode() == 0);
+
+    // (b) Pattern A (group 0) AND pattern B (group 1) read back correctly —
+    //     data intact on the file members + correct group/allocator recovery.
+    read_verify(safe2, blockA, lenA, patternA);
+    HLOG(kInfo, "safe_bdev alog: RESTART pattern A intact (group 0, offset {})",
+         blockA.offset_);
+    read_verify(safe2, blockB, lenB, patternB);
+    HLOG(kInfo, "safe_bdev alog: RESTART pattern B intact (group 1, offset {})",
+         blockB.offset_);
+
+    // (c) A fresh allocation must NOT overlap the recovered live blocks of A/B.
+    auto alloc = safe2.AsyncAllocateBlocks(chi::PoolQuery::Dynamic(), kChunkLen);
+    alloc.Wait();
+    REQUIRE(alloc->GetReturnCode() == 0);
+    REQUIRE(alloc->blocks_.size() > 0);
+    const clio::run::bdev::Block nb = alloc->blocks_[0];
+    REQUIRE_FALSE(RangesOverlap(nb.offset_, nb.size_, blockA.offset_, lenA));
+    REQUIRE_FALSE(RangesOverlap(nb.offset_, nb.size_, blockB.offset_, lenB));
+    HLOG(kInfo,
+         "safe_bdev alog: RESTART fresh alloc at offset {} (size {}) does NOT "
+         "collide with recovered A/B",
+         nb.offset_, nb.size_);
+
+    clio::run::admin::Client admin(chi::kAdminPoolId);
+    auto destroy = admin.AsyncDestroyPool(chi::PoolQuery::Dynamic(),
+                                          safe2.pool_id_);
+    destroy.Wait();
+  }
+
+  // Cleanup backing files + log.
+  for (int i = 0; i < 4; ++i) {
+    std::filesystem::remove(member_file(i));
+  }
+  std::filesystem::remove(log_path);
+  HLOG(kInfo, "safe_bdev alloc-log restart/recovery test PASSED");
 }
 
 SIMPLE_TEST_MAIN()
