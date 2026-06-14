@@ -79,13 +79,34 @@ chi::priv::vector<clio::run::bdev::Block> Runtime::MemberBlocks(
   return blocks;
 }
 
+void Runtime::OpenGroup(int k, chi::u64 first_row, chi::u64 num_rows,
+                        chi::u64 logical_base) {
+  auto g = std::make_unique<Group>();
+  g->k_ = k;
+  g->first_row_ = first_row;
+  g->num_rows_ = num_rows;
+  g->logical_base_ = logical_base;
+  g->logical_span_ = static_cast<chi::u64>(k) * num_rows * kChunkLen;
+  g->rs_ = std::make_unique<ec::ReedSolomon>(k, static_cast<int>(max_failures_));
+
+  chi::WorkOrchestrator *wo = CLIO_WORK_ORCHESTRATOR;
+  const size_t num_workers = (wo != nullptr) ? wo->GetWorkerCount() : 16;
+  g->block_map_ = std::make_unique<clio::run::bdev::GlobalBlockMap>();
+  g->block_map_->Init(num_workers);
+  g->heap_ = std::make_unique<clio::run::bdev::Heap>();
+  g->heap_->Init(g->logical_span_, /*alignment=*/4096);
+  g->allocated_bytes_.store(0);
+
+  groups_.push_back(std::move(g));
+}
+
 //===========================================================================
 // Segment I/O helpers (run inside task fibers; co_await member bdev I/O)
 //===========================================================================
 
-chi::TaskResume Runtime::WriteSegment(size_t mi, chi::u64 offset,
-                                      const uint8_t *src, chi::u64 len,
-                                      chi::RunContext &ctx, bool &ok) {
+chi::TaskResume Runtime::WriteDataSegment(size_t col, chi::u64 offset,
+                                          const uint8_t *src, chi::u64 len,
+                                          chi::RunContext &ctx, bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
@@ -95,20 +116,20 @@ chi::TaskResume Runtime::WriteSegment(size_t mi, chi::u64 offset,
     CLIO_CO_RETURN;
   }
   std::memcpy(buf.ptr_, src, len);
-  auto fut = member_clients_[mi].AsyncWrite(
+  auto fut = data_clients_[col].AsyncWrite(
       MemberQuery(), MemberBlocks(offset, len),
       buf.shm_.template Cast<void>(), len);
   CLIO_CO_AWAIT(fut);
   ok = (fut->return_code_ == 0) && (fut->bytes_written_ == len);
-  MaybeFaultMember(mi, fut->io_error_);
+  MaybeFaultData(col, fut->io_error_);
   ipc->FreeBuffer(buf);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
-                                     chi::u64 len, chi::RunContext &ctx,
-                                     bool &ok) {
+chi::TaskResume Runtime::ReadDataSegment(size_t col, chi::u64 offset,
+                                         uint8_t *dst, chi::u64 len,
+                                         chi::RunContext &ctx, bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
@@ -117,7 +138,7 @@ chi::TaskResume Runtime::ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
   if (buf.IsNull()) {
     CLIO_CO_RETURN;
   }
-  auto fut = member_clients_[mi].AsyncRead(
+  auto fut = data_clients_[col].AsyncRead(
       MemberQuery(), MemberBlocks(offset, len),
       buf.shm_.template Cast<void>(), len);
   CLIO_CO_AWAIT(fut);
@@ -125,7 +146,7 @@ chi::TaskResume Runtime::ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
     std::memcpy(dst, buf.ptr_, len);
     ok = true;
   }
-  MaybeFaultMember(mi, fut->io_error_);
+  MaybeFaultData(col, fut->io_error_);
   ipc->FreeBuffer(buf);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -135,8 +156,8 @@ chi::TaskResume Runtime::ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
 // Member superblock helpers
 //===========================================================================
 
-chi::TaskResume Runtime::WriteSuperblock(size_t mi, chi::RunContext &ctx,
-                                         bool &ok) {
+chi::TaskResume Runtime::WriteSuperblock(bool is_parity, size_t idx,
+                                         chi::RunContext &ctx, bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
@@ -147,15 +168,17 @@ chi::TaskResume Runtime::WriteSuperblock(size_t mi, chi::RunContext &ctx,
   }
   // Serialize the array identity into a zero-padded superblock buffer.
   std::memset(buf.ptr_, 0, kSuperblockSize);
+  const MemberSlot &m =
+      is_parity ? parity_members_[idx] : data_members_[idx];
   MemberSuperblock sb;
   sb.magic = kMemberSuperblockMagic;
   sb.format_version = kMemberSuperblockVersion;
   sb.flags = 0;
   sb.array_major = static_cast<uint64_t>(pool_id_.major_);
   sb.array_minor = static_cast<uint64_t>(pool_id_.minor_);
-  sb.member_slot = static_cast<uint32_t>(mi);
-  sb.role = static_cast<uint32_t>(members_[mi].role_);
-  sb.index = static_cast<uint32_t>(members_[mi].index_);
+  sb.member_slot = static_cast<uint32_t>(idx);
+  sb.role = static_cast<uint32_t>(m.role_);
+  sb.index = static_cast<uint32_t>(m.index_);
   sb.max_failures = max_failures_;
   sb.shard_len = kChunkLen;
   sb.epoch = 0;
@@ -163,18 +186,24 @@ chi::TaskResume Runtime::WriteSuperblock(size_t mi, chi::RunContext &ctx,
   std::memcpy(buf.ptr_, &sb, sizeof(sb));
 
   // The superblock lives at absolute offset 0 on the member.
-  auto fut = member_clients_[mi].AsyncWrite(
-      MemberQuery(), MemberBlocks(0, kSuperblockSize),
-      buf.shm_.template Cast<void>(), kSuperblockSize);
+  auto &client = is_parity ? parity_clients_[idx] : data_clients_[idx];
+  auto fut = client.AsyncWrite(MemberQuery(),
+                               MemberBlocks(0, kSuperblockSize),
+                               buf.shm_.template Cast<void>(), kSuperblockSize);
   CLIO_CO_AWAIT(fut);
   ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kSuperblockSize);
-  MaybeFaultMember(mi, fut->io_error_);
+  if (is_parity) {
+    MaybeFaultParity(idx, fut->io_error_);
+  } else {
+    MaybeFaultData(idx, fut->io_error_);
+  }
   ipc->FreeBuffer(buf);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReadSuperblock(size_t mi, chi::RunContext &ctx,
+chi::TaskResume Runtime::ReadSuperblock(bool is_parity, size_t idx,
+                                        chi::RunContext &ctx,
                                         MemberSuperblock &sb, bool &present,
                                         bool &ok) {
   chi::RunContext &rctx = ctx;
@@ -187,9 +216,9 @@ chi::TaskResume Runtime::ReadSuperblock(size_t mi, chi::RunContext &ctx,
     CLIO_CO_RETURN;
   }
   std::memset(buf.ptr_, 0, kSuperblockSize);
-  auto fut = member_clients_[mi].AsyncRead(
-      MemberQuery(), MemberBlocks(0, kSuperblockSize),
-      buf.shm_.template Cast<void>(), kSuperblockSize);
+  auto &client = is_parity ? parity_clients_[idx] : data_clients_[idx];
+  auto fut = client.AsyncRead(MemberQuery(), MemberBlocks(0, kSuperblockSize),
+                              buf.shm_.template Cast<void>(), kSuperblockSize);
   CLIO_CO_AWAIT(fut);
   if (fut->return_code_ == 0 && fut->bytes_read_ == kSuperblockSize) {
     ok = true;
@@ -202,61 +231,95 @@ chi::TaskResume Runtime::ReadSuperblock(size_t mi, chi::RunContext &ctx,
 }
 
 //===========================================================================
-// Row reconstruction (decode the k data chunks of a row from survivors)
+// Row reconstruction (decode a group's k_g data chunks from survivors)
 //===========================================================================
 
 chi::TaskResume Runtime::ReconstructRow(
-    chi::u64 row, int exclude, chi::RunContext &ctx,
+    const Group &g, chi::u64 row, int exclude_col, chi::RunContext &ctx,
     std::vector<std::vector<uint8_t>> &out, bool &ok) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
+  const int kg = g.k_;
   const chi::u64 off = ChunkOffset(row);
 
-  // Gather up to k active survivors among the k data + m parity members at
-  // this row offset, excluding `exclude` and any non-active member. Each
-  // survivor's global RS shard index is its data column i (data) or k+j
-  // (parity j) — fixed roles, no rotation.
+  // Gather up to k_g active survivors among the group's k_g data + m parity
+  // members at this row offset, excluding `exclude_col` (a data column) and any
+  // non-active member. A data survivor's global RS shard index is its data
+  // column i; a parity survivor's is k_g + j.
   std::vector<int> survivor_index;
   std::vector<std::vector<uint8_t>> survivor_buf;
-  const int total = static_cast<int>(members_.size());
-  for (int mid = 0; mid < total; ++mid) {
-    if (mid == exclude) {
+
+  // Data survivors (columns [0, k_g)).
+  for (int col = 0; col < kg; ++col) {
+    if (col == exclude_col) {
       continue;
     }
-    const MemberSlot &m = members_[static_cast<size_t>(mid)];
-    if (m.state_ != ec::EcState::kActive) {
+    if (data_members_[static_cast<size_t>(col)].state_ !=
+        ec::EcState::kActive) {
       continue;
     }
     std::vector<uint8_t> buf(kChunkLen, 0);
     bool rd_ok = false;
-    CLIO_CO_AWAIT(ReadSegment(static_cast<size_t>(mid), off, buf.data(),
-                              kChunkLen, rctx, rd_ok));
+    CLIO_CO_AWAIT(ReadDataSegment(static_cast<size_t>(col), off, buf.data(),
+                                  kChunkLen, rctx, rd_ok));
     if (!rd_ok) {
-      CLIO_CO_RETURN;
+      continue;
     }
-    const int global_shard =
-        (m.role_ == ec::EcRole::kData) ? m.index_ : (k_ + m.index_);
-    survivor_index.push_back(global_shard);
+    survivor_index.push_back(col);
     survivor_buf.push_back(std::move(buf));
-    if (static_cast<int>(survivor_index.size()) == k_) {
+    if (static_cast<int>(survivor_index.size()) == kg) {
       break;
     }
   }
-  if (static_cast<int>(survivor_index.size()) < k_) {
+
+  // Parity survivors (rows [0, m)) if still short.
+  for (int j = 0; j < static_cast<int>(parity_level_) &&
+                  static_cast<int>(survivor_index.size()) < kg;
+       ++j) {
+    if (parity_members_[static_cast<size_t>(j)].state_ !=
+        ec::EcState::kActive) {
+      continue;
+    }
+    std::vector<uint8_t> buf(kChunkLen, 0);
+    bool rd_ok = false;
+    auto *ipc = CLIO_IPC;
+    ctp::ipc::FullPtr<char> rbuf = ipc->AllocateBuffer(kChunkLen);
+    if (rbuf.IsNull()) {
+      CLIO_CO_RETURN;
+    }
+    auto fut = parity_clients_[static_cast<size_t>(j)].AsyncRead(
+        MemberQuery(), MemberBlocks(off, kChunkLen),
+        rbuf.shm_.template Cast<void>(), kChunkLen);
+    CLIO_CO_AWAIT(fut);
+    rd_ok = (fut->return_code_ == 0) && (fut->bytes_read_ == kChunkLen);
+    if (rd_ok) {
+      std::memcpy(buf.data(), rbuf.ptr_, kChunkLen);
+    }
+    MaybeFaultParity(static_cast<size_t>(j), fut->io_error_);
+    ipc->FreeBuffer(rbuf);
+    if (!rd_ok) {
+      continue;
+    }
+    survivor_index.push_back(kg + j);
+    survivor_buf.push_back(std::move(buf));
+  }
+
+  if (static_cast<int>(survivor_index.size()) < kg) {
     CLIO_CO_RETURN;  // Too many failures to reconstruct.
   }
   std::vector<const uint8_t *> ptrs(survivor_buf.size());
   for (size_t i = 0; i < survivor_buf.size(); ++i) {
     ptrs[i] = survivor_buf[i].data();
   }
-  ok = rs_->DecodeData(survivor_index, ptrs, kChunkLen, &out);
+  ok = g.rs_->DecodeData(survivor_index, ptrs, kChunkLen, &out);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReconstructDataChunk(chi::u64 row, int data_col,
-                                              int exclude, chi::RunContext &ctx,
+chi::TaskResume Runtime::ReconstructDataChunk(const Group &g, chi::u64 row,
+                                              int data_col, int exclude_col,
+                                              chi::RunContext &ctx,
                                               std::vector<uint8_t> &out,
                                               bool &ok) {
   chi::RunContext &rctx = ctx;
@@ -264,7 +327,7 @@ chi::TaskResume Runtime::ReconstructDataChunk(chi::u64 row, int data_col,
   ok = false;
   std::vector<std::vector<uint8_t>> data_chunks;
   bool rec_ok = false;
-  CLIO_CO_AWAIT(ReconstructRow(row, exclude, rctx, data_chunks, rec_ok));
+  CLIO_CO_AWAIT(ReconstructRow(g, row, exclude_col, rctx, data_chunks, rec_ok));
   if (!rec_ok) {
     CLIO_CO_RETURN;
   }
@@ -288,8 +351,13 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
 
   max_failures_ = params.max_failures_;
   parity_level_ = 0;
-  members_.clear();
-  member_clients_.clear();
+  data_members_.clear();
+  parity_members_.clear();
+  data_clients_.clear();
+  parity_clients_.clear();
+  groups_.clear();
+  total_rows_ = 0;
+  max_phys_rows_ = 0;
   reattached_members_ = 0;
   {
     std::lock_guard<std::mutex> g(row_mu_);
@@ -297,21 +365,23 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     written_rows_.clear();
   }
 
-  // Initial members are DATA members; k = number supplied.
-  k_ = static_cast<int>(params.members_.size());
-  if (k_ <= 0) {
+  // Initial members are DATA members; k_0 = number supplied.
+  const int k0 = static_cast<int>(params.members_.size());
+  if (k0 <= 0) {
     HLOG(kError, "safe_bdev Create: no member bdevs supplied");
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
 
   // Query the smallest member's remaining capacity. usable_per_member is the
-  // largest multiple of kChunkLen that fits after the superblock; num_rows is
-  // that many chunks, and logical_capacity is k*num_rows*kChunkLen.
+  // largest multiple of kChunkLen that fits after the superblock; max_phys_rows
+  // is that many chunks. Group 0 spans ALL of these rows, so a never-grown array
+  // uses the full member capacity; an added data drive later freezes the current
+  // group at its high-water mark and the new group takes the remaining rows.
   chi::u64 min_remaining = ~static_cast<chi::u64>(0);
   for (const auto &desc : params.members_) {
-    member_clients_.emplace_back(desc.pool_id_);
-    auto stats = member_clients_.back().AsyncGetStats();
+    data_clients_.emplace_back(desc.pool_id_);
+    auto stats = data_clients_.back().AsyncGetStats();
     CLIO_CO_AWAIT(stats);
     if (stats->return_code_ != 0) {
       HLOG(kError, "safe_bdev Create: GetStats failed for member '{}'",
@@ -326,12 +396,15 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   const chi::u64 avail =
       (min_remaining > kSuperblockSize) ? (min_remaining - kSuperblockSize) : 0;
   const chi::u64 usable_per_member = (avail / kChunkLen) * kChunkLen;
-  num_rows_ = usable_per_member / kChunkLen;
-  if (num_rows_ == 0) {
-    HLOG(kError, "safe_bdev Create: member too small for even one chunk");
+  max_phys_rows_ = usable_per_member / kChunkLen;
+  if (max_phys_rows_ == 0) {
+    HLOG(kError, "safe_bdev Create: member too small for even one stripe row");
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
+  // Group 0 spans ALL physical rows (full capacity); later add-data groups carve
+  // from whatever the current group hasn't filled.
+  const chi::u64 num_rows0 = max_phys_rows_;
 
   // Seat each member as a DATA column. Before seating, read the member's
   // superblock to classify it:
@@ -347,13 +420,13 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     slot.role_ = ec::EcRole::kData;
     slot.state_ = ec::EcState::kActive;
     slot.index_ = col;
-    members_.push_back(slot);
+    data_members_.push_back(slot);
 
     MemberSuperblock sb;
     bool present = false;
     bool sb_ok = false;
-    CLIO_CO_AWAIT(ReadSuperblock(static_cast<size_t>(col), rctx, sb, present,
-                                 sb_ok));
+    CLIO_CO_AWAIT(ReadSuperblock(/*is_parity=*/false, static_cast<size_t>(col),
+                                 rctx, sb, present, sb_ok));
     if (!sb_ok) {
       HLOG(kError, "safe_bdev Create: superblock read failed for member '{}'",
            desc.pool_name_);
@@ -362,7 +435,8 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     }
     if (!present) {
       bool wr_ok = false;
-      CLIO_CO_AWAIT(WriteSuperblock(static_cast<size_t>(col), rctx, wr_ok));
+      CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/false,
+                                    static_cast<size_t>(col), rctx, wr_ok));
       if (!wr_ok) {
         HLOG(kError,
              "safe_bdev Create: superblock write failed for fresh member '{}'",
@@ -391,29 +465,16 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     ++col;
   }
 
-  // One Reed-Solomon code (k, max_failures). Parity rows become available as
-  // parity members are appended via AddBdev.
-  rs_ = std::make_unique<ec::ReedSolomon>(k_, static_cast<int>(max_failures_));
-
-  logical_capacity_ = static_cast<chi::u64>(k_) * num_rows_ * kChunkLen;
-
-  // Real reclaimable allocator over the logical capacity. Reuse bdev's
-  // free-list (GlobalBlockMap) + bump heap (Heap): AllocateBlocks tries the
-  // free list first, then the heap; FreeBlocks returns blocks to the free
-  // list. alignment 4096 matches bdev. allocated_bytes_ tracks the live set
-  // for GetStats.
-  {
-    chi::WorkOrchestrator *wo = CLIO_WORK_ORCHESTRATOR;
-    const size_t num_workers = (wo != nullptr) ? wo->GetWorkerCount() : 16;
-    block_map_.Init(num_workers);
-    heap_.Init(logical_capacity_, /*alignment=*/4096);
-    allocated_bytes_.store(0);
-  }
+  // Open group 0 spanning rows [0, num_rows0) over k0 data drives, logical base
+  // 0. Its rs_ / allocator are constructed by OpenGroup.
+  OpenGroup(k0, /*first_row=*/0, num_rows0, /*logical_base=*/0);
+  total_rows_ = num_rows0;
 
   HLOG(kInfo,
-       "safe_bdev Create: pool='{}', k={}, M={}, num_rows={}, "
-       "logical_capacity={} (RAID-0 data + dedicated parity)",
-       task->pool_name_.str(), k_, max_failures_, num_rows_, logical_capacity_);
+       "safe_bdev Create: pool='{}', k0={}, M={}, num_rows0={}, "
+       "logical_span0={} (append-only RAID-0 groups + dedicated parity)",
+       task->pool_name_.str(), k0, max_failures_, num_rows0,
+       groups_[0]->logical_span_);
 
   // Kick off the background parity builder. Write records dirty rows off the
   // critical path; this periodic task converges them to full protection.
@@ -429,21 +490,27 @@ chi::TaskResume Runtime::AllocateBlocks(
     ctp::ipc::FullPtr<AllocateBlocksTask> task, chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  // Real reclaimable allocation over the logical space: try the free list
-  // first (reuse a freed block), else carve from the heap. This mirrors bdev's
-  // allocator so freed blocks are reclaimed and block sizes are uneven.
+  // Real reclaimable allocation from the CURRENT (widest) group: try the free
+  // list first (reuse a freed block), else carve from the heap. Offsets are
+  // shifted into the group's global logical range by adding logical_base_.
   const chi::u64 size = task->size_;
   if (size == 0) {
     task->blocks_.clear();
     task->return_code_ = 0;
     CLIO_CO_RETURN;
   }
+  if (groups_.empty()) {
+    task->blocks_.clear();
+    task->return_code_ = 1;
+    CLIO_CO_RETURN;
+  }
+  Group &g = CurrentGroup();
   chi::Worker *worker = CLIO_CUR_WORKER;
   const int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId())
                                             : 0;
 
   clio::run::bdev::Block block;
-  bool allocated = block_map_.AllocateBlock(worker_id, size, block);
+  bool allocated = g.block_map_->AllocateBlock(worker_id, size, block);
   if (!allocated) {
     // Heap snaps the size up to a 4096-aligned block_type bucket (like bdev).
     int block_type = 0;
@@ -456,16 +523,21 @@ chi::TaskResume Runtime::AllocateBlocks(
       }
       block_type = 5;
     }
-    allocated = heap_.Allocate(size, block_type, block);
+    allocated = g.heap_->Allocate(size, block_type, block);
+    if (allocated) {
+      // Heap returns a group-local offset; shift into the global logical range.
+      block.offset_ += g.logical_base_;
+    }
   }
   if (!allocated) {
-    HLOG(kError, "safe_bdev AllocateBlocks: out of logical capacity ({} bytes)",
+    HLOG(kError,
+         "safe_bdev AllocateBlocks: current group full ({} bytes requested)",
          size);
     task->blocks_.clear();
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
-  allocated_bytes_.fetch_add(block.size_, std::memory_order_relaxed);
+  g.allocated_bytes_.fetch_add(block.size_, std::memory_order_relaxed);
   task->blocks_.clear();
   task->blocks_.push_back(block);
   task->return_code_ = 0;
@@ -478,15 +550,24 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
-  // Return blocks to the free list (real reclaim). Normalize block_type_ from
-  // the block SIZE so AllocateBlock (which picks the free list by size class)
-  // can find them again — mirrors bdev::FreeBlocks.
+  // Route each block to its OWNING group (by logical offset) and return it to
+  // that group's free list (real reclaim). Normalize block_type_ from the block
+  // SIZE so AllocateBlock (which picks the free list by size class) can find it
+  // again — mirrors bdev::FreeBlocks.
   chi::Worker *worker = CLIO_CUR_WORKER;
   const int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId())
                                             : 0;
   const size_t buckets[] = {4096, 16384, 32768, 65536, 131072, 1048576};
   for (size_t i = 0; i < task->blocks_.size(); ++i) {
     clio::run::bdev::Block b = task->blocks_[i];
+    const int gi = FindGroupByOffset(b.offset_);
+    if (gi < 0) {
+      HLOG(kWarning,
+           "safe_bdev FreeBlocks: block at logical offset {} not owned by any "
+           "group; skipping",
+           b.offset_);
+      continue;
+    }
     int bt = 5;
     for (size_t j = 0; j < 6; ++j) {
       if (buckets[j] >= static_cast<size_t>(b.size_)) {
@@ -495,10 +576,11 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
       }
     }
     b.block_type_ = static_cast<chi::u32>(bt);
-    block_map_.FreeBlock(worker_id, b);
-    const chi::u64 cur = allocated_bytes_.load(std::memory_order_relaxed);
-    allocated_bytes_.store(cur >= b.size_ ? cur - b.size_ : 0,
-                           std::memory_order_relaxed);
+    Group &g = *groups_[static_cast<size_t>(gi)];
+    g.block_map_->FreeBlock(worker_id, b);
+    const chi::u64 cur = g.allocated_bytes_.load(std::memory_order_relaxed);
+    g.allocated_bytes_.store(cur >= b.size_ ? cur - b.size_ : 0,
+                             std::memory_order_relaxed);
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -509,7 +591,7 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
                                chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  if (rs_ == nullptr || task->blocks_.size() == 0) {
+  if (groups_.empty() || task->blocks_.size() == 0) {
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
@@ -518,12 +600,13 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
   ctp::ipc::FullPtr<char> data =
       ipc->ToFullPtr(task->data_).template Cast<char>();
 
-  // The data buffer fills the allocated blocks in order. For each block, walk
-  // its CHUNK-segments: a segment is the block's intersection with one RAID-0
-  // chunk [ci*kChunkLen, (ci+1)*kChunkLen). It maps to DATA member (ci % k) at
-  // physical offset kSuperblockSize + (ci/k)*kChunkLen + (within-chunk start),
-  // length = segment size. Segments across data members are dispatched in
-  // parallel. Parity is deferred (rows marked dirty).
+  // The data buffer fills the allocated blocks in order. For each block, find
+  // its owning group, then walk its CHUNK-segments: a segment is the block's
+  // intersection with one RAID-0 chunk inside that group. It maps (under the
+  // group's k_g) to DATA member data_col at physical offset
+  // kSuperblockSize + global_row*kChunkLen + within. Segments across data
+  // members are dispatched in parallel. Parity is deferred (global rows marked
+  // dirty).
   chi::u64 buf_pos = 0;  // running offset into the host data buffer
   chi::u64 bytes_written = 0;
   std::set<chi::u64> touched_rows;
@@ -533,22 +616,36 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
     const chi::u64 ls = task->blocks_[bi].size_;
     const chi::u64 hi = lo + ls;
 
+    const int gi = FindGroupByOffset(lo);
+    if (gi < 0) {
+      HLOG(kError, "safe_bdev Write: block at logical offset {} not in any "
+           "group", lo);
+      task->bytes_written_ = bytes_written;
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
+    const Group &g = *groups_[static_cast<size_t>(gi)];
+    const chi::u64 kg = static_cast<chi::u64>(g.k_);
+
     std::vector<chi::Future<WriteTask>> futs;
     std::vector<ctp::ipc::FullPtr<char>> bufs;
     bool dispatch_ok = true;
 
     chi::u64 cur = lo;
     while (cur < hi && dispatch_ok) {
-      const chi::u64 ci = cur / kChunkLen;
-      const chi::u64 chunk_end = (ci + 1) * kChunkLen;
+      const chi::u64 local = cur - g.logical_base_;
+      const chi::u64 ci = local / kChunkLen;          // chunk within group
+      const chi::u64 chunk_end =
+          g.logical_base_ + (ci + 1) * kChunkLen;
       const chi::u64 seg_end = std::min(hi, chunk_end);
       const chi::u64 seg_len = seg_end - cur;
-      const int data_col = static_cast<int>(ci % static_cast<chi::u64>(k_));
-      const chi::u64 row = ci / static_cast<chi::u64>(k_);
-      const chi::u64 within = cur % kChunkLen;
-      const chi::u64 phys = ChunkOffset(row) + within;
+      const int data_col = static_cast<int>(ci % kg);
+      const chi::u64 row_in_grp = ci / kg;
+      const chi::u64 global_row = g.first_row_ + row_in_grp;
+      const chi::u64 within = local % kChunkLen;
+      const chi::u64 phys = ChunkOffset(global_row) + within;
 
-      MemberSlot &m = members_[static_cast<size_t>(data_col)];
+      MemberSlot &m = data_members_[static_cast<size_t>(data_col)];
       if (m.state_ == ec::EcState::kActive) {
         ctp::ipc::FullPtr<char> seg = ipc->AllocateBuffer(seg_len);
         if (seg.IsNull()) {
@@ -557,11 +654,11 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
         }
         std::memcpy(seg.ptr_, data.ptr_ + buf_pos, seg_len);
         bufs.push_back(seg);
-        futs.push_back(member_clients_[static_cast<size_t>(data_col)].AsyncWrite(
+        futs.push_back(data_clients_[static_cast<size_t>(data_col)].AsyncWrite(
             MemberQuery(), MemberBlocks(phys, seg_len),
             seg.shm_.template Cast<void>(), seg_len));
       }
-      touched_rows.insert(row);
+      touched_rows.insert(global_row);
       buf_pos += seg_len;
       cur = seg_end;
     }
@@ -584,7 +681,8 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
     bytes_written += ls;
   }
 
-  // Mark all rows the write touched dirty; BuildParity (re)computes parity.
+  // Mark all global rows the write touched dirty; BuildParity (re)computes
+  // parity under each row's owning group's code.
   for (chi::u64 r : touched_rows) {
     MarkRowDirty(r);
   }
@@ -599,7 +697,7 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
                               chi::RunContext &ctx) {
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
-  if (rs_ == nullptr || task->blocks_.size() == 0) {
+  if (groups_.empty() || task->blocks_.size() == 0) {
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
@@ -608,9 +706,10 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
   ctp::ipc::FullPtr<char> data =
       ipc->ToFullPtr(task->data_).template Cast<char>();
 
-  // Symmetric decomposition of Write: walk each block's chunk-segments. If the
-  // segment's DATA member is active, AsyncRead it directly; if faulty,
-  // reconstruct that member's FULL chunk for the row (guarding dirty rows) and
+  // Symmetric decomposition of Write: find each block's group, walk its
+  // chunk-segments under that group's k_g. If the segment's DATA member is
+  // active, AsyncRead it directly; if faulty, reconstruct that member's FULL
+  // chunk for the global row (guarding dirty rows) under the group's code and
   // copy the needed within-slice.
   chi::u64 buf_pos = 0;
   chi::u64 bytes_read = 0;
@@ -620,36 +719,51 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
     const chi::u64 ls = task->blocks_[bi].size_;
     const chi::u64 hi = lo + ls;
 
+    const int gi = FindGroupByOffset(lo);
+    if (gi < 0) {
+      HLOG(kError, "safe_bdev Read: block at logical offset {} not in any "
+           "group", lo);
+      task->bytes_read_ = bytes_read;
+      task->length_ = bytes_read;
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
+    const Group &g = *groups_[static_cast<size_t>(gi)];
+    const chi::u64 kg = static_cast<chi::u64>(g.k_);
+
     chi::u64 cur = lo;
     while (cur < hi) {
-      const chi::u64 ci = cur / kChunkLen;
-      const chi::u64 chunk_end = (ci + 1) * kChunkLen;
+      const chi::u64 local = cur - g.logical_base_;
+      const chi::u64 ci = local / kChunkLen;
+      const chi::u64 chunk_end = g.logical_base_ + (ci + 1) * kChunkLen;
       const chi::u64 seg_end = std::min(hi, chunk_end);
       const chi::u64 seg_len = seg_end - cur;
-      const int data_col = static_cast<int>(ci % static_cast<chi::u64>(k_));
-      const chi::u64 row = ci / static_cast<chi::u64>(k_);
-      const chi::u64 within = cur % kChunkLen;
-      const chi::u64 phys = ChunkOffset(row) + within;
+      const int data_col = static_cast<int>(ci % kg);
+      const chi::u64 row_in_grp = ci / kg;
+      const chi::u64 global_row = g.first_row_ + row_in_grp;
+      const chi::u64 within = local % kChunkLen;
+      const chi::u64 phys = ChunkOffset(global_row) + within;
 
-      const MemberSlot &m = members_[static_cast<size_t>(data_col)];
+      const MemberSlot &m = data_members_[static_cast<size_t>(data_col)];
       bool seg_ok = false;
       if (m.state_ == ec::EcState::kActive) {
-        CLIO_CO_AWAIT(ReadSegment(static_cast<size_t>(data_col), phys,
-                                  reinterpret_cast<uint8_t *>(data.ptr_) +
-                                      buf_pos,
-                                  seg_len, rctx, seg_ok));
-      } else if (IsRowDirty(row)) {
+        CLIO_CO_AWAIT(ReadDataSegment(static_cast<size_t>(data_col), phys,
+                                      reinterpret_cast<uint8_t *>(data.ptr_) +
+                                          buf_pos,
+                                      seg_len, rctx, seg_ok));
+      } else if (IsRowDirty(global_row)) {
         // A data member is down AND this row's parity is not current: it is
         // unprotected, so reconstruction would yield wrong bytes. Fail loudly.
         HLOG(kError,
-             "safe_bdev Read: row {} is dirty (parity not built) and data "
-             "member {} is down — cannot reconstruct",
-             row, data_col);
+             "safe_bdev Read: global row {} is dirty (parity not built) and "
+             "data member {} is down — cannot reconstruct",
+             global_row, data_col);
         seg_ok = false;
       } else {
         std::vector<uint8_t> chunk;
-        CLIO_CO_AWAIT(ReconstructDataChunk(row, data_col, /*exclude=*/-1, rctx,
-                                           chunk, seg_ok));
+        CLIO_CO_AWAIT(ReconstructDataChunk(g, global_row, data_col,
+                                           /*exclude_col=*/-1, rctx, chunk,
+                                           seg_ok));
         if (seg_ok) {
           std::memcpy(data.ptr_ + buf_pos, chunk.data() + within, seg_len);
         }
@@ -678,10 +792,15 @@ chi::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
-  // Usable remaining from the allocator's live set.
-  const chi::u64 used = allocated_bytes_.load(std::memory_order_relaxed);
-  task->remaining_size_ =
-      (logical_capacity_ > used) ? (logical_capacity_ - used) : 0;
+  // Only the current (open) group is allocatable; frozen groups no longer hand
+  // out new blocks, so their leftover space is not counted as usable remaining.
+  chi::u64 remaining = 0;
+  if (!groups_.empty()) {
+    const Group &g = *groups_.back();
+    const chi::u64 used = g.allocated_bytes_.load(std::memory_order_relaxed);
+    remaining = (g.logical_span_ > used) ? (g.logical_span_ - used) : 0;
+  }
+  task->remaining_size_ = remaining;
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -695,14 +814,114 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   const bool as_parity = (task->as_parity_ != 0);
 
   if (!as_parity) {
-    // Adding a DATA member would change the RAID-0 mapping (k changes the
-    // column count and chunk placement of every existing logical offset) and
-    // requires a reshape. Unsupported in this fixed-k RAID-0 model.
-    HLOG(kError,
-         "safe_bdev AddBdev: add-data/reshape not supported in RAID-0 mode "
-         "(member '{}'); TODO #543",
-         task->pool_name_.str());
-    task->return_code_ = 1;
+    // --- Add a DATA member via an append-only RAID-0 group, NO reshuffle. ---
+    // Freeze the current (widest) group at its HIGH-WATER mark — the rows it has
+    // actually bump-allocated — and open a new wider group over the remaining
+    // physical rows. Existing groups + their data + parity are untouched. The
+    // current group's heap bump only advances (frees go to the per-group free
+    // list, not the heap), so logical_span_ - GetRemainingSize() is its
+    // high-water in logical bytes.
+    const Group &cur = CurrentGroup();
+    const chi::u64 remaining_bytes = cur.heap_->GetRemainingSize();
+    const chi::u64 bump_used = (cur.logical_span_ > remaining_bytes)
+                                   ? (cur.logical_span_ - remaining_bytes)
+                                   : 0;
+    const chi::u64 per_row = static_cast<chi::u64>(cur.k_) * kChunkLen;
+    const chi::u64 used_rows = (bump_used + per_row - 1) / per_row;  // ceil
+    const chi::u64 new_first_row = cur.first_row_ + used_rows;
+    if (groups_.size() >= kMaxGroups || new_first_row >= max_phys_rows_) {
+      HLOG(kError,
+           "safe_bdev AddBdev(as_data): no room for a new group (groups={}, "
+           "new_first_row={}, max_phys_rows={}); member '{}' not added",
+           groups_.size(), new_first_row, max_phys_rows_,
+           task->pool_name_.str());
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
+    data_clients_.emplace_back(task->member_pool_id_);
+
+    // Confirm the new member is usable: GetStats, then classify its superblock
+    // (fresh / ours / foreign) exactly like Create does for data members.
+    auto stats = data_clients_.back().AsyncGetStats();
+    CLIO_CO_AWAIT(stats);
+    if (stats->return_code_ != 0) {
+      HLOG(kError, "safe_bdev AddBdev: GetStats failed for data member '{}'",
+           task->pool_name_.str());
+      data_clients_.pop_back();
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
+
+    const int new_col = static_cast<int>(data_members_.size());
+    MemberSlot slot;
+    slot.pool_id_ = task->member_pool_id_;
+    slot.pool_name_ = task->pool_name_.str();
+    slot.node_id_ = task->node_id_;
+    slot.role_ = ec::EcRole::kData;
+    slot.state_ = ec::EcState::kActive;
+    slot.index_ = new_col;
+    data_members_.push_back(slot);
+
+    MemberSuperblock sb;
+    bool present = false;
+    bool sb_ok = false;
+    CLIO_CO_AWAIT(ReadSuperblock(/*is_parity=*/false,
+                                 static_cast<size_t>(new_col), rctx, sb,
+                                 present, sb_ok));
+    if (!sb_ok) {
+      HLOG(kError, "safe_bdev AddBdev: superblock read failed for member '{}'",
+           task->pool_name_.str());
+      data_members_.pop_back();
+      data_clients_.pop_back();
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
+    if (present && (sb.array_major != static_cast<uint64_t>(pool_id_.major_) ||
+                    sb.array_minor != static_cast<uint64_t>(pool_id_.minor_))) {
+      HLOG(kError,
+           "safe_bdev AddBdev: REFUSING data member '{}' — owned by FOREIGN "
+           "array ({},{})",
+           task->pool_name_.str(), sb.array_major, sb.array_minor);
+      data_members_.pop_back();
+      data_clients_.pop_back();
+      task->return_code_ = 2;
+      CLIO_CO_RETURN;
+    }
+    if (!present) {
+      bool wr_ok = false;
+      CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/false,
+                                    static_cast<size_t>(new_col), rctx, wr_ok));
+      if (!wr_ok) {
+        HLOG(kWarning,
+             "safe_bdev AddBdev: superblock write failed for new data member "
+             "'{}' (seated; will be re-stamped on next attach)",
+             task->pool_name_.str());
+      }
+    }
+
+    // Freeze the current group at its high-water (used_rows) so the new group
+    // can take the physical rows above it; every block already allocated in the
+    // current group sits below that cut, so nothing moves.
+    Group &prev = CurrentGroup();
+    prev.num_rows_ = used_rows;
+    prev.logical_span_ = static_cast<chi::u64>(prev.k_) * used_rows * kChunkLen;
+
+    // Open a new group of width (data_members_.size()) over ALL remaining rows
+    // [new_first_row, max_phys_rows_); logical_base continues after the frozen
+    // group's (now shrunk) logical range.
+    const int new_k = static_cast<int>(data_members_.size());
+    const chi::u64 new_num_rows = max_phys_rows_ - new_first_row;
+    const chi::u64 logical_base = prev.LogicalEnd();
+    OpenGroup(new_k, new_first_row, new_num_rows, logical_base);
+
+    HLOG(kInfo,
+         "safe_bdev AddBdev(as_data): froze group {} at {} rows; opened group {} "
+         "(k={}, first_row={}, num_rows={}); existing data untouched (no "
+         "reshuffle)",
+         groups_.size() - 2, used_rows, groups_.size() - 1, new_k, new_first_row,
+         new_num_rows);
+
+    task->return_code_ = 0;
     CLIO_CO_RETURN;
   }
 
@@ -715,12 +934,13 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
     CLIO_CO_RETURN;
   }
 
-  // Append a PARITY member. Its parity row j == parity_level_, global RS shard
-  // index = k + j. Parity computation is deferred: re-dirty every written row
-  // so BuildParity computes the new parity column off the critical path. The
+  // Append a PARITY member. Its parity row j == parity_level_; per global row
+  // it carries that row's group's RS shard index k_g + j. Parity computation is
+  // deferred: re-dirty every written row so BuildParity computes the new parity
+  // column off the critical path (each row uses its own group's rs_g). The
   // incremental RS property means each parity row is an independent function of
   // the data, so existing parity is never read or rewritten.
-  member_clients_.emplace_back(task->member_pool_id_);
+  parity_clients_.emplace_back(task->member_pool_id_);
   MemberSlot slot;
   slot.pool_id_ = task->member_pool_id_;
   slot.pool_name_ = task->pool_name_.str();
@@ -728,8 +948,8 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   slot.role_ = ec::EcRole::kParity;
   slot.state_ = ec::EcState::kActive;
   slot.index_ = static_cast<int>(parity_level_);
-  const size_t new_mi = members_.size();
-  members_.push_back(slot);
+  const size_t new_j = parity_members_.size();
+  parity_members_.push_back(slot);
   ++parity_level_;
 
   {
@@ -746,7 +966,7 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   // Stamp the new member's superblock with this array's identity.
   {
     bool wr_ok = false;
-    CLIO_CO_AWAIT(WriteSuperblock(new_mi, rctx, wr_ok));
+    CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/true, new_j, rctx, wr_ok));
     if (!wr_ok) {
       HLOG(kWarning,
            "safe_bdev AddBdev: superblock write failed for new parity member "
@@ -765,21 +985,30 @@ chi::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
-  for (size_t i = 0; i < members_.size(); ++i) {
-    if (members_[i].pool_id_ == task->target_pool_id_) {
-      if (task->was_faulty_ != 0) {
-        // Mark faulty: excluded from I/O, kept as a recovery candidate.
-        members_[i].state_ = ec::EcState::kFaulty;
-        HLOG(kInfo, "safe_bdev RemoveBdev: member {} marked faulty", i);
-      } else {
-        // Clean removal: mark removed (excluded from I/O like faulty, but not
-        // a recovery candidate). We do NOT erase the slot because data column
-        // / parity row index is positional.
-        members_[i].state_ = ec::EcState::kRemoved;
-        HLOG(kInfo, "safe_bdev RemoveBdev: member {} unlinked (marked removed)",
-             i);
-      }
-      break;
+  // Search data then parity members by pool id; mark faulty (recovery
+  // candidate) or removed (clean unlink). State is positional — we never erase
+  // the slot.
+  const auto apply = [&](MemberSlot &m, const char *kind, size_t idx) {
+    if (task->was_faulty_ != 0) {
+      m.state_ = ec::EcState::kFaulty;
+      HLOG(kInfo, "safe_bdev RemoveBdev: {} member {} marked faulty", kind, idx);
+    } else {
+      m.state_ = ec::EcState::kRemoved;
+      HLOG(kInfo, "safe_bdev RemoveBdev: {} member {} unlinked (marked removed)",
+           kind, idx);
+    }
+  };
+  bool found = false;
+  for (size_t i = 0; i < data_members_.size() && !found; ++i) {
+    if (data_members_[i].pool_id_ == task->target_pool_id_) {
+      apply(data_members_[i], "data", i);
+      found = true;
+    }
+  }
+  for (size_t i = 0; i < parity_members_.size() && !found; ++i) {
+    if (parity_members_[i].pool_id_ == task->target_pool_id_) {
+      apply(parity_members_[i], "parity", i);
+      found = true;
     }
   }
   task->return_code_ = 0;
@@ -792,104 +1021,123 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
   chi::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
 
-  // Locate the failed member by its (old) pool id.
-  int failed = -1;
-  for (size_t i = 0; i < members_.size(); ++i) {
-    if (members_[i].pool_id_ == task->old_bdev_id_) {
-      failed = static_cast<int>(i);
+  // Locate the failed member by its (old) pool id, in data then parity.
+  int failed_col = -1;
+  int failed_par = -1;
+  for (size_t i = 0; i < data_members_.size(); ++i) {
+    if (data_members_[i].pool_id_ == task->old_bdev_id_) {
+      failed_col = static_cast<int>(i);
       break;
     }
   }
-  if (failed < 0) {
+  if (failed_col < 0) {
+    for (size_t i = 0; i < parity_members_.size(); ++i) {
+      if (parity_members_[i].pool_id_ == task->old_bdev_id_) {
+        failed_par = static_cast<int>(i);
+        break;
+      }
+    }
+  }
+  if (failed_col < 0 && failed_par < 0) {
     HLOG(kError, "safe_bdev RecoverBdev: old member {} not found",
          task->old_bdev_id_.ToU64());
     task->return_code_ = 1;
     CLIO_CO_RETURN;
   }
 
-  // Seat the fresh member on its new pool. It stays non-active and is excluded
-  // from reconstruction via `exclude=failed` until recovery completes.
-  member_clients_[static_cast<size_t>(failed)] =
-      clio::run::bdev::Client(task->new_pool_id_);
+  const bool is_data = (failed_col >= 0);
+  const int idx = is_data ? failed_col : failed_par;
+  auto &client = is_data ? data_clients_[static_cast<size_t>(idx)]
+                         : parity_clients_[static_cast<size_t>(idx)];
 
-  const bool is_data = (members_[static_cast<size_t>(failed)].role_ ==
-                        ec::EcRole::kData);
-  const int idx = members_[static_cast<size_t>(failed)].index_;
+  // Seat the fresh member on its new pool. It stays non-active and is excluded
+  // from reconstruction (data: exclude_col=idx) until recovery completes.
+  client = clio::run::bdev::Client(task->new_pool_id_);
   auto *ipc = CLIO_IPC;
 
-  // Rebuild the failed member's chunk for every row. A DATA member's chunk is
-  // reconstructed by decoding the row excluding it (guard dirty rows). A PARITY
-  // member's chunk is re-encoded from the row's k data chunks (no dirty guard
-  // needed: it only reads data + re-encodes).
-  for (chi::u64 r = 0; r < num_rows_; ++r) {
-    if (is_data && IsRowDirty(r)) {
-      HLOG(kError,
-           "safe_bdev RecoverBdev: row {} dirty (parity not built); cannot "
-           "reconstruct failed data member",
-           r);
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
+  // Rebuild the failed member's chunk for every GLOBAL row it participates in.
+  // A DATA member at column d participates in groups with k_g > d; a PARITY
+  // member participates in EVERY group/row. Reconstruct under each row's owning
+  // group's code. Guard dirty rows for data-member recovery.
+  for (size_t gi = 0; gi < groups_.size(); ++gi) {
+    const Group &g = *groups_[gi];
+    if (is_data && idx >= g.k_) {
+      continue;  // this data column does not exist in this (narrower) group
     }
-
-    std::vector<std::vector<uint8_t>> data_chunks;
-    bool rd_ok = false;
-    CLIO_CO_AWAIT(ReconstructRow(r, /*exclude=*/failed, rctx, data_chunks,
-                                 rd_ok));
-    if (!rd_ok) {
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
-    }
-
-    ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
-    if (buf.IsNull()) {
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
-    }
-    if (is_data) {
-      std::memcpy(buf.ptr_, data_chunks[static_cast<size_t>(idx)].data(),
-                  kChunkLen);
-    } else {
-      std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
-      for (int c = 0; c < k_; ++c) {
-        ptrs[static_cast<size_t>(c)] = data_chunks[static_cast<size_t>(c)].data();
+    for (chi::u64 r = g.first_row_; r < g.LastRow(); ++r) {
+      if (is_data && IsRowDirty(r)) {
+        HLOG(kError,
+             "safe_bdev RecoverBdev: global row {} dirty (parity not built); "
+             "cannot reconstruct failed data member",
+             r);
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
       }
-      rs_->EncodeParityShard(idx, ptrs, kChunkLen,
-                             reinterpret_cast<uint8_t *>(buf.ptr_));
-    }
 
-    auto fut = member_clients_[static_cast<size_t>(failed)].AsyncWrite(
-        MemberQuery(), MemberBlocks(ChunkOffset(r), kChunkLen),
-        buf.shm_.template Cast<void>(), kChunkLen);
-    CLIO_CO_AWAIT(fut);
-    const bool ok =
-        (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
-    ipc->FreeBuffer(buf);
-    if (!ok) {
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
+      std::vector<std::vector<uint8_t>> data_chunks;
+      bool rd_ok = false;
+      const int exclude_col = is_data ? idx : -1;
+      CLIO_CO_AWAIT(ReconstructRow(g, r, exclude_col, rctx, data_chunks,
+                                   rd_ok));
+      if (!rd_ok) {
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
+      }
+
+      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
+      if (buf.IsNull()) {
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
+      }
+      if (is_data) {
+        std::memcpy(buf.ptr_, data_chunks[static_cast<size_t>(idx)].data(),
+                    kChunkLen);
+      } else {
+        std::vector<const uint8_t *> ptrs(static_cast<size_t>(g.k_));
+        for (int c = 0; c < g.k_; ++c) {
+          ptrs[static_cast<size_t>(c)] =
+              data_chunks[static_cast<size_t>(c)].data();
+        }
+        g.rs_->EncodeParityShard(idx, ptrs, kChunkLen,
+                                 reinterpret_cast<uint8_t *>(buf.ptr_));
+      }
+
+      auto fut = client.AsyncWrite(MemberQuery(),
+                                   MemberBlocks(ChunkOffset(r), kChunkLen),
+                                   buf.shm_.template Cast<void>(), kChunkLen);
+      CLIO_CO_AWAIT(fut);
+      const bool ok =
+          (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
+      ipc->FreeBuffer(buf);
+      if (!ok) {
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
+      }
     }
   }
 
   // Bring the member back online on the new pool.
-  members_[static_cast<size_t>(failed)].pool_id_ = task->new_pool_id_;
-  members_[static_cast<size_t>(failed)].pool_name_ = task->pool_name_.str();
-  members_[static_cast<size_t>(failed)].node_id_ = task->node_id_;
-  members_[static_cast<size_t>(failed)].state_ = ec::EcState::kActive;
+  MemberSlot &m = is_data ? data_members_[static_cast<size_t>(idx)]
+                          : parity_members_[static_cast<size_t>(idx)];
+  m.pool_id_ = task->new_pool_id_;
+  m.pool_name_ = task->pool_name_.str();
+  m.node_id_ = task->node_id_;
+  m.state_ = ec::EcState::kActive;
 
   // Stamp the fresh recovery member's superblock with this array's identity.
   {
     bool wr_ok = false;
-    CLIO_CO_AWAIT(WriteSuperblock(static_cast<size_t>(failed), rctx, wr_ok));
+    CLIO_CO_AWAIT(WriteSuperblock(!is_data, static_cast<size_t>(idx), rctx,
+                                  wr_ok));
     if (!wr_ok) {
       HLOG(kWarning,
            "safe_bdev RecoverBdev: superblock write failed for recovered "
-           "member {} (data reconstructed; will be re-stamped on next attach)",
-           failed);
+           "member (data reconstructed; will be re-stamped on next attach)");
     }
   }
 
-  HLOG(kInfo, "safe_bdev RecoverBdev: member {} recovered onto '{}'", failed,
-       task->pool_name_.str());
+  HLOG(kInfo, "safe_bdev RecoverBdev: {} member {} recovered onto '{}'",
+       is_data ? "data" : "parity", idx, task->pool_name_.str());
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -907,9 +1155,9 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
     CLIO_CO_RETURN;
   }
 
-  // Snapshot a batch of dirty rows (max_batch_==0 drains all). Rows are erased
-  // only AFTER their parity is durably written, so an observer that sees an
-  // empty dirty set knows every row is protected (single periodic builder,
+  // Snapshot a batch of dirty GLOBAL rows (max_batch_==0 drains all). Rows are
+  // erased only AFTER their parity is durably written, so an observer that sees
+  // an empty dirty set knows every row is protected (single periodic builder,
   // rescheduled only after completion). A row that cannot be built (a data
   // member is down) is left dirty for a later pass.
   std::vector<chi::u64> batch;
@@ -927,20 +1175,32 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
   auto *ipc = CLIO_IPC;
   chi::u32 built = 0;
   for (chi::u64 r : batch) {
-    // Read the k FULL data chunks at this row offset (all data members must be
-    // active to build parity over the full chunks).
+    // Find the group owning this global row; parity is computed under its code.
+    const int gi = FindGroupByRow(r);
+    if (gi < 0) {
+      // Stale dirty mark for a row no longer owned by any group; drop it.
+      std::lock_guard<std::mutex> g(row_mu_);
+      dirty_rows_.erase(r);
+      continue;
+    }
+    const Group &g = *groups_[static_cast<size_t>(gi)];
+    const int kg = g.k_;
+
+    // Read the k_g FULL data chunks at this row offset (all of the group's data
+    // members must be active to build parity over the full chunks).
     std::vector<std::vector<uint8_t>> data_chunks(
-        static_cast<size_t>(k_), std::vector<uint8_t>(kChunkLen, 0));
+        static_cast<size_t>(kg), std::vector<uint8_t>(kChunkLen, 0));
     bool rd_ok = true;
-    for (int c = 0; c < k_; ++c) {
-      if (members_[static_cast<size_t>(c)].state_ != ec::EcState::kActive) {
+    for (int c = 0; c < kg; ++c) {
+      if (data_members_[static_cast<size_t>(c)].state_ !=
+          ec::EcState::kActive) {
         rd_ok = false;
         break;
       }
       bool one = false;
-      CLIO_CO_AWAIT(ReadSegment(static_cast<size_t>(c), ChunkOffset(r),
-                                data_chunks[static_cast<size_t>(c)].data(),
-                                kChunkLen, rctx, one));
+      CLIO_CO_AWAIT(ReadDataSegment(static_cast<size_t>(c), ChunkOffset(r),
+                                    data_chunks[static_cast<size_t>(c)].data(),
+                                    kChunkLen, rctx, one));
       rd_ok = one;
       if (!rd_ok) {
         break;
@@ -950,16 +1210,17 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
       continue;  // leave dirty; retry next pass
     }
 
-    std::vector<const uint8_t *> ptrs(static_cast<size_t>(k_));
-    for (int c = 0; c < k_; ++c) {
+    std::vector<const uint8_t *> ptrs(static_cast<size_t>(kg));
+    for (int c = 0; c < kg; ++c) {
       ptrs[static_cast<size_t>(c)] = data_chunks[static_cast<size_t>(c)].data();
     }
 
-    // (Re)compute and write each active parity member's chunk for this row.
+    // (Re)compute and write each active parity member's chunk for this row,
+    // under this group's code (rs_g over k_g data chunks).
     bool wr_ok = true;
     for (int j = 0; j < static_cast<int>(parity_level_); ++j) {
-      const size_t mi = static_cast<size_t>(k_ + j);
-      if (members_[mi].state_ != ec::EcState::kActive) {
+      if (parity_members_[static_cast<size_t>(j)].state_ !=
+          ec::EcState::kActive) {
         continue;
       }
       ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
@@ -967,13 +1228,14 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
         wr_ok = false;
         break;
       }
-      rs_->EncodeParityShard(j, ptrs, kChunkLen,
-                             reinterpret_cast<uint8_t *>(buf.ptr_));
-      auto fut = member_clients_[mi].AsyncWrite(
+      g.rs_->EncodeParityShard(j, ptrs, kChunkLen,
+                               reinterpret_cast<uint8_t *>(buf.ptr_));
+      auto fut = parity_clients_[static_cast<size_t>(j)].AsyncWrite(
           MemberQuery(), MemberBlocks(ChunkOffset(r), kChunkLen),
           buf.shm_.template Cast<void>(), kChunkLen);
       CLIO_CO_AWAIT(fut);
       wr_ok = (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
+      MaybeFaultParity(static_cast<size_t>(j), fut->io_error_);
       ipc->FreeBuffer(buf);
       if (!wr_ok) {
         break;
@@ -983,7 +1245,7 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
       continue;  // leave dirty; retry next pass
     }
     {
-      std::lock_guard<std::mutex> g(row_mu_);
+      std::lock_guard<std::mutex> g2(row_mu_);
       dirty_rows_.erase(r);
     }
     ++built;
@@ -1008,12 +1270,15 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
     }
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
-    pk.pack_map(7);
+    pk.pack_map(8);
     pk.pack("pool_name");     pk.pack(pool_name_);
     pk.pack("max_failures");  pk.pack(max_failures_);
-    pk.pack("k");             pk.pack(static_cast<chi::u32>(k_));
+    pk.pack("data_count");
+    pk.pack(static_cast<chi::u32>(data_members_.size()));
     pk.pack("parity_level");  pk.pack(parity_level_);
-    pk.pack("num_rows");      pk.pack(num_rows_);
+    pk.pack("num_groups");
+    pk.pack(static_cast<chi::u32>(groups_.size()));
+    pk.pack("total_rows");    pk.pack(total_rows_);
     pk.pack("dirty_rows");    pk.pack(dirty);
     pk.pack("reattached_members"); pk.pack(reattached_members_);
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());

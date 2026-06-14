@@ -55,18 +55,29 @@
  * Runtime container for safe_bdev ChiMod.
  *
  * safe_bdev presents the bdev task interface (AllocateBlocks/FreeBlocks/Write/
- * Read/GetStats) over a fixed array of member bdevs using a RAID-0-data +
- * dedicated-parity layout (single fixed k/m):
+ * Read/GetStats) over a growable array of member bdevs using append-only
+ * RAID-0 stripe GROUPS on top of a dedicated-parity model:
  *
- *   - members_[0 .. k-1]   are DATA members (RAID-0 striped).
- *   - members_[k .. k+m-1] are PARITY members (appended via AddBdev).
+ *   - data_members_   are DATA members (RAID-0 striped). The vector GROWS when
+ *                     a data drive is added via AddBdev(as_data).
+ *   - parity_members_ are the m dedicated PARITY members (appended via
+ *                     AddBdev(as_parity)); they are SHARED across all groups.
  *
- * The logical address space is striped over the k data members in fixed-size
- * kChunkLen units (RAID-0). For each ROW r (a kChunkLen slice on every member),
- * parity member j holds the Reed-Solomon parity shard j computed over the k
- * FULL data chunks of that row. Parity is built off the write path (deferred to
- * a periodic BuildParity task over a dirty-ROW set), and reads reconstruct a
- * down data member's chunk on demand (decode from the row's survivors).
+ * A GROUP g fixes a stripe width k_g = the number of data drives that existed
+ * when the group opened, and owns a contiguous band of physical ROWS
+ * [first_row_g, first_row_g + num_rows_g). Group 0 covers rows [0, R0); group 1
+ * covers [R0, R1); etc. (a "row" is one kChunkLen slot at the same member
+ * offset on every member). Within a group the logical space is striped RAID-0
+ * over that group's k_g data drives in fixed-size kChunkLen units. Because each
+ * group's width is FROZEN at open time, adding a data drive opens a NEW wider
+ * group and never reshuffles or re-encodes existing groups' data/parity.
+ *
+ * For each global ROW r, parity member j holds the Reed-Solomon parity shard j
+ * computed (with that row's owning group's rs_g) over the k_g FULL data chunks
+ * of that row. Parity is built off the write path (deferred to a periodic
+ * BuildParity task over a dirty-ROW set keyed by GLOBAL row), and reads
+ * reconstruct a down data member's chunk on demand (decode from the row's
+ * survivors under the owning group's code).
  */
 
 namespace clio::run::safe_bdev {
@@ -82,9 +93,8 @@ class Runtime : public chi::Container {
   Runtime()
       : max_failures_(1),
         parity_level_(0),
-        k_(0),
-        num_rows_(0),
-        logical_capacity_(0),
+        total_rows_(0),
+        max_phys_rows_(0),
         reattached_members_(0) {}
   ~Runtime() override = default;
 
@@ -101,6 +111,16 @@ class Runtime : public chi::Container {
 
   /** Background parity-builder poll period (microseconds): 50 ms. */
   static constexpr double kBuildParityPeriodUs = 50000.0;
+
+  /**
+   * Sanity bound on the number of append-only stripe groups (one per AddBdev
+   * -as-data, plus the create group). Groups are sized DYNAMICALLY — the current
+   * (widest) group spans all remaining physical rows, and adding a data drive
+   * freezes it at its high-water mark and opens a new group over what's left.
+   * So a single-group array uses the FULL member capacity; capacity is consumed
+   * only as groups actually fill. This cap just bounds metadata growth.
+   */
+  static constexpr chi::u32 kMaxGroups = 64;
 
   /**
    * Get live task statistics for this task instance.
@@ -201,11 +221,12 @@ class Runtime : public chi::Container {
                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
 
  private:
-  // Per-member runtime bookkeeping. role_ (DATA vs PARITY) and index_ (data
-  // column c, or parity row j) are FIXED for the member's lifetime — no
-  // rotation, no generations. members_[0..k-1] are DATA (index_ == column),
-  // members_[k..k+m-1] are PARITY (index_ == parity row j). A member's chunk
-  // for row r lives at absolute offset kSuperblockSize + r*kChunkLen.
+  // Per-member runtime bookkeeping. role_ (DATA vs PARITY) and index_ are FIXED
+  // for the member's lifetime — no rotation. DATA members live in
+  // data_members_ (index_ == data column == position in the vector); PARITY
+  // members live in parity_members_ (index_ == parity row j == position). A
+  // member's chunk for GLOBAL row r lives at absolute offset
+  // kSuperblockSize + r*kChunkLen.
   struct MemberSlot {
     chi::PoolId pool_id_;
     std::string pool_name_;
@@ -215,41 +236,64 @@ class Runtime : public chi::Container {
     int index_ = -1;  // data column c (DATA) or parity row j (PARITY)
   };
 
+  // An append-only RAID-0 stripe group. A group fixes its data-drive width k_g
+  // (the number of data members that existed when it opened) and owns a band of
+  // global rows [first_row_, first_row_ + num_rows_). Its logical address range
+  // is [logical_base_, logical_base_ + k_g*num_rows_*kChunkLen); a per-group
+  // allocator (block_map_ over the free list + heap_ for the bump region) hands
+  // out logical offsets inside that range (the heap returns offsets in
+  // [0, span); we add logical_base_ so global offsets are unique, and subtract
+  // it on free). rs_ is ReedSolomon(k_g, max_failures).
+  struct Group {
+    int k_ = 0;                  // data-drive count frozen at open (k_g)
+    chi::u64 first_row_ = 0;     // first global row owned by this group
+    chi::u64 num_rows_ = 0;      // rows of kChunkLen reserved per member
+    chi::u64 logical_base_ = 0;  // start of this group's logical byte range
+    chi::u64 logical_span_ = 0;  // k_g * num_rows_ * kChunkLen
+    std::unique_ptr<ec::ReedSolomon> rs_;
+    std::unique_ptr<clio::run::bdev::GlobalBlockMap> block_map_;
+    std::unique_ptr<clio::run::bdev::Heap> heap_;
+    std::atomic<chi::u64> allocated_bytes_{0};
+
+    chi::u64 LogicalEnd() const { return logical_base_ + logical_span_; }
+    chi::u64 LastRow() const { return first_row_ + num_rows_; }  // exclusive
+    bool ContainsOffset(chi::u64 off) const {
+      return off >= logical_base_ && off < LogicalEnd();
+    }
+    bool ContainsRow(chi::u64 row) const {
+      return row >= first_row_ && row < LastRow();
+    }
+  };
+
   // Client for making calls back to this ChiMod.
   Client client_;
 
-  // EC / membership state.
-  std::vector<MemberSlot> members_;  // [0,k) data, [k,k+m) parity
-  chi::u32 max_failures_;            // Fault-tolerance target (M == m_max)
-  chi::u32 parity_level_;            // Parity members added so far (m)
-  int k_;                           // Number of DATA members (fixed)
-  chi::u64 num_rows_;               // Rows of kChunkLen reserved per member
-  chi::u64 logical_capacity_;       // Usable logical bytes = k*num_rows*kChunkLen
+  // EC / membership state. DATA and PARITY members are kept in SEPARATE vectors
+  // so a data drive can be appended (growing data_members_) without disturbing
+  // parity column indices. Each member vector is index-aligned with its client
+  // vector. groups_ is append-only: groups_.back() is the CURRENT (widest)
+  // group that new allocations come from.
+  std::vector<MemberSlot> data_members_;    // index_ == data column
+  std::vector<MemberSlot> parity_members_;  // index_ == parity row j
+  std::vector<clio::run::bdev::Client> data_clients_;
+  std::vector<clio::run::bdev::Client> parity_clients_;
+  // Append-only stripe groups, held by pointer so the std::atomic inside each
+  // Group never moves when the vector grows.
+  std::vector<std::unique_ptr<Group>> groups_;
+  chi::u32 max_failures_;           // Fault-tolerance target (M == m_max)
+  chi::u32 parity_level_;           // Parity members added so far (m)
+  chi::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
+  chi::u64 max_phys_rows_;          // Physical rows available per member
   chi::u32 reattached_members_;     // Members recognized as already ours at Create
 
-  // One Reed-Solomon code (k, max_failures). Data column for data member i is
-  // i; parity member j carries global RS shard index k+j.
-  std::unique_ptr<ec::ReedSolomon> rs_;
-
-  // Clients for delegating data-plane I/O to member bdevs. members_ and
-  // member_clients_ are kept index-aligned.
-  std::vector<clio::run::bdev::Client> member_clients_;
-
-  // Real reclaimable allocator over the logical capacity. Reuses bdev's
-  // free-list + heap (allocate-from-free-list-else-heap), so freed blocks are
-  // reused and allocation sizes are uneven exactly like bdev. Offsets returned
-  // are logical-space byte offsets.
-  clio::run::bdev::GlobalBlockMap block_map_;
-  clio::run::bdev::Heap heap_;
-  std::atomic<chi::u64> allocated_bytes_{0};
-
   // Async-parity bookkeeping. Write writes data chunks immediately and records
-  // each touched ROW as dirty (parity not yet current); BuildParity drains the
-  // dirty set and (re)computes all parity rows. written_rows_ tracks every row
-  // that holds data so a parity-level increase (AddBdev as_parity) can re-dirty
-  // exactly those. Guarded by row_mu_ (never held across a co_await). A row is
-  // safe to reconstruct only when NOT dirty — degraded reads / recovery refuse
-  // a dirty (unprotected) row.
+  // each touched GLOBAL ROW as dirty (parity not yet current); BuildParity
+  // drains the dirty set and (re)computes all parity rows under each row's
+  // owning group's code. written_rows_ tracks every row that holds data so a
+  // parity-level increase (AddBdev as_parity) can re-dirty exactly those.
+  // Guarded by row_mu_ (never held across a co_await). A row is safe to
+  // reconstruct only when NOT dirty — degraded reads / recovery refuse a dirty
+  // (unprotected) row.
   std::set<chi::u64> dirty_rows_;
   std::set<chi::u64> written_rows_;
   mutable std::mutex row_mu_;
@@ -267,37 +311,78 @@ class Runtime : public chi::Container {
   }
 
   //==========================================================================
-  // RAID-0 address mapping. A logical byte offset L maps to:
-  //   chunk    = L / kChunkLen;     within = L % kChunkLen
-  //   data_col = chunk % k;         row    = chunk / k
-  // physical offset on DATA member data_col = kSuperblockSize + row*kChunkLen +
-  // within. Parity member j's chunk for row r is at the same physical offset
-  // kSuperblockSize + r*kChunkLen.
+  // Per-group RAID-0 address mapping. A logical byte offset L belongs to the
+  // group g whose logical range contains it (FindGroupByOffset). With
+  // local = L - g.logical_base_:
+  //   chunk     = local / kChunkLen;          within     = local % kChunkLen
+  //   data_col  = chunk % k_g;                row_in_grp = chunk / k_g
+  //   global_row = g.first_row_ + row_in_grp
+  // physical offset on DATA member data_col = kSuperblockSize +
+  // global_row*kChunkLen + within. Parity member j's chunk for the same global
+  // row is at the same physical offset kSuperblockSize + global_row*kChunkLen.
   //==========================================================================
 
-  /** Absolute member-pool offset of row `r`'s chunk start. */
+  /** Absolute member-pool offset of global row `r`'s chunk start. */
   static chi::u64 ChunkOffset(chi::u64 row) {
     return kSuperblockSize + row * kChunkLen;
+  }
+
+  /** The current (widest, last-opened) group new allocations come from. */
+  Group &CurrentGroup() { return *groups_.back(); }
+
+  /** Index of the group whose logical range contains byte offset `off`, or
+   *  -1 if none. */
+  int FindGroupByOffset(chi::u64 off) const {
+    for (size_t i = 0; i < groups_.size(); ++i) {
+      if (groups_[i]->ContainsOffset(off)) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  }
+
+  /** Index of the group that owns global row `row`, or -1 if none. */
+  int FindGroupByRow(chi::u64 row) const {
+    for (size_t i = 0; i < groups_.size(); ++i) {
+      if (groups_[i]->ContainsRow(row)) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
   }
 
   /** Per-member pool query (members are independent local bdev pools). */
   chi::PoolQuery MemberQuery() const { return chi::PoolQuery::Local(); }
 
   /**
-   * Automatic down-detection. Inspect a member-bdev future's io_error_ after a
-   * chunk I/O completes: a fatal device error (DeviceFault / Disconnected)
-   * ejects member `mi` (state_ = kFaulty) so the degraded-read / reconstruct
-   * path takes over. A TRANSIENT error never faults the member.
+   * Automatic down-detection for a DATA member. Inspect a member-bdev future's
+   * io_error_ after a chunk I/O completes: a fatal device error (DeviceFault /
+   * Disconnected) ejects data member `col` (state_ = kFaulty) so the
+   * degraded-read / reconstruct path takes over. A TRANSIENT error never faults
+   * the member.
    */
-  void MaybeFaultMember(size_t mi, chi::u32 io_error) {
+  void MaybeFaultData(size_t col, chi::u32 io_error) {
     const auto e = static_cast<ctp::IoError>(io_error);
-    if (ctp::IsFatalDevice(e) && mi < members_.size() &&
-        members_[mi].state_ == ec::EcState::kActive) {
-      members_[mi].state_ = ec::EcState::kFaulty;
+    if (ctp::IsFatalDevice(e) && col < data_members_.size() &&
+        data_members_[col].state_ == ec::EcState::kActive) {
+      data_members_[col].state_ = ec::EcState::kFaulty;
       HLOG(kWarning,
-           "safe_bdev: member {} auto-faulted on fatal device error '{}' "
+           "safe_bdev: data member {} auto-faulted on fatal device error '{}' "
            "(io_error={})",
-           mi, ctp::IoErrorName(e), io_error);
+           col, ctp::IoErrorName(e), io_error);
+    }
+  }
+
+  /** Automatic down-detection for a PARITY member (parity row j). */
+  void MaybeFaultParity(size_t j, chi::u32 io_error) {
+    const auto e = static_cast<ctp::IoError>(io_error);
+    if (ctp::IsFatalDevice(e) && j < parity_members_.size() &&
+        parity_members_[j].state_ == ec::EcState::kActive) {
+      parity_members_[j].state_ = ec::EcState::kFaulty;
+      HLOG(kWarning,
+           "safe_bdev: parity member {} auto-faulted on fatal device error "
+           "'{}' (io_error={})",
+           j, ctp::IoErrorName(e), io_error);
     }
   }
 
@@ -310,53 +395,68 @@ class Runtime : public chi::Container {
                                                          chi::u64 len) const;
 
   /**
-   * AsyncWrite `len` bytes from host buffer `src` to member `mi` at absolute
-   * member-pool offset `offset`. Auto-faults the member on a fatal io_error.
+   * AsyncWrite `len` bytes from host buffer `src` to DATA member `col` at
+   * absolute member-pool offset `offset`. Auto-faults the member on a fatal
+   * io_error.
    */
-  chi::TaskResume WriteSegment(size_t mi, chi::u64 offset, const uint8_t *src,
-                               chi::u64 len, chi::RunContext &rctx, bool &ok);
+  chi::TaskResume WriteDataSegment(size_t col, chi::u64 offset,
+                                   const uint8_t *src, chi::u64 len,
+                                   chi::RunContext &rctx, bool &ok);
 
   /**
-   * AsyncRead `len` bytes at absolute member-pool offset `offset` from member
-   * `mi` into host buffer `dst`. Auto-faults the member on a fatal io_error.
+   * AsyncRead `len` bytes at absolute member-pool offset `offset` from DATA
+   * member `col` into host buffer `dst`. Auto-faults the member on a fatal
+   * io_error.
    */
-  chi::TaskResume ReadSegment(size_t mi, chi::u64 offset, uint8_t *dst,
-                              chi::u64 len, chi::RunContext &rctx, bool &ok);
+  chi::TaskResume ReadDataSegment(size_t col, chi::u64 offset, uint8_t *dst,
+                                  chi::u64 len, chi::RunContext &rctx, bool &ok);
 
   /**
-   * Reconstruct the FULL kChunkLen chunk of DATA member `data_col` for row
-   * `row` by gathering k survivors among the k data + m parity members'
-   * chunks at that row (excluding faulty / `exclude`), DecodeData. `out`
-   * receives kChunkLen bytes. Returns false if too few survivors.
+   * Reconstruct the FULL kChunkLen chunk of DATA member `data_col` for global
+   * row `row` (owned by group `g`) by gathering k_g survivors among that
+   * group's k_g data + m parity members' chunks at that row (excluding faulty /
+   * `exclude_col` data member), DecodeData under g.rs_. `out` receives
+   * kChunkLen bytes. Returns false if too few survivors.
    */
-  chi::TaskResume ReconstructDataChunk(chi::u64 row, int data_col, int exclude,
+  chi::TaskResume ReconstructDataChunk(const Group &g, chi::u64 row,
+                                       int data_col, int exclude_col,
                                        chi::RunContext &rctx,
                                        std::vector<uint8_t> &out, bool &ok);
 
   /**
-   * Reconstruct ALL k data chunks for row `row` from active survivors
-   * (DecodeData), optionally excluding member id `exclude`. `out` receives k
-   * buffers of kChunkLen bytes. Returns false on too few survivors.
+   * Reconstruct ALL k_g data chunks for global row `row` (owned by group `g`)
+   * from active survivors (DecodeData under g.rs_), optionally excluding data
+   * column `exclude_col`. `out` receives k_g buffers of kChunkLen bytes.
+   * Returns false on too few survivors.
    */
-  chi::TaskResume ReconstructRow(chi::u64 row, int exclude,
+  chi::TaskResume ReconstructRow(const Group &g, chi::u64 row, int exclude_col,
                                  chi::RunContext &rctx,
                                  std::vector<std::vector<uint8_t>> &out,
                                  bool &ok);
 
   /**
-   * Serialize this array's identity for member `mi` into a zero-padded
-   * kSuperblockSize buffer and AsyncWrite it to that member at absolute
-   * offset 0. Returns false on I/O failure.
+   * Serialize this array's identity for a member into a zero-padded
+   * kSuperblockSize buffer and AsyncWrite it to that member at absolute offset
+   * 0. `is_parity` selects parity_members_/parity_clients_ vs data; `idx` is
+   * the position in that vector. Returns false on I/O failure.
    */
-  chi::TaskResume WriteSuperblock(size_t mi, chi::RunContext &rctx, bool &ok);
+  chi::TaskResume WriteSuperblock(bool is_parity, size_t idx,
+                                  chi::RunContext &rctx, bool &ok);
 
   /**
-   * AsyncRead kSuperblockSize bytes at absolute offset 0 from member `mi`,
-   * parse the superblock into `sb`, and set `present` = (magic matches &&
-   * checksum valid). A blank member reads back zeros => present == false.
+   * AsyncRead kSuperblockSize bytes at absolute offset 0 from a member, parse
+   * the superblock into `sb`, and set `present` = (magic matches && checksum
+   * valid). A blank member reads back zeros => present == false. `is_parity`
+   * selects the member vector; `idx` is its position.
    */
-  chi::TaskResume ReadSuperblock(size_t mi, chi::RunContext &rctx,
-                                 MemberSuperblock &sb, bool &present, bool &ok);
+  chi::TaskResume ReadSuperblock(bool is_parity, size_t idx,
+                                 chi::RunContext &rctx, MemberSuperblock &sb,
+                                 bool &present, bool &ok);
+
+  /** Open and initialize a new group with the given width / row band. The
+   *  group's rs_, block_map_ and heap_ are constructed; appended to groups_. */
+  void OpenGroup(int k, chi::u64 first_row, chi::u64 num_rows,
+                 chi::u64 logical_base);
 };
 
 }  // namespace clio::run::safe_bdev

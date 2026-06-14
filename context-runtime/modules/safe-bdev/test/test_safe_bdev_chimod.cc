@@ -532,10 +532,10 @@ TEST_CASE("safe_bdev_partial_chunk", "[safe_bdev][ec][partial]") {
 namespace {
 
 /**
- * Query safe_bdev Monitor("stats") and extract the "reattached_members" field.
- * Returns -1 if the field/blob could not be parsed.
+ * Query safe_bdev Monitor("stats") and extract an unsigned-integer field by
+ * key. Returns -1 if the field/blob could not be parsed.
  */
-long QueryReattachedMembers(clio::run::safe_bdev::Client &safe) {
+long QueryStatField(clio::run::safe_bdev::Client &safe, const char *field) {
   auto mon = safe.AsyncMonitor(chi::PoolQuery::Dynamic(), "stats");
   mon.Wait();
   if (mon->GetReturnCode() != 0) {
@@ -555,14 +555,19 @@ long QueryReattachedMembers(clio::run::safe_bdev::Client &safe) {
       const auto &kv = obj.via.map.ptr[j];
       std::string key;
       kv.key.convert(key);
-      if (key == "reattached_members") {
-        chi::u32 v = 0;
+      if (key == field) {
+        chi::u64 v = 0;
         kv.val.convert(v);
         return static_cast<long>(v);
       }
     }
   }
   return -1;
+}
+
+/** Back-compat shim for the reattach test. */
+long QueryReattachedMembers(clio::run::safe_bdev::Client &safe) {
+  return QueryStatField(safe, "reattached_members");
 }
 
 }  // namespace
@@ -732,6 +737,152 @@ TEST_CASE("safe_bdev_superblock_foreign_refuse",
     REQUIRE(create_task->GetReturnCode() != 0);
   }
   HLOG(kInfo, "safe_bdev superblock foreign-refuse test PASSED");
+}
+
+TEST_CASE("safe_bdev_add_data_no_reshuffle",
+          "[safe_bdev][ec][add_data][groups]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  auto member_name = [&](int idx) {
+    return "ad_member_" + std::to_string(getpid()) + "_" + std::to_string(idx);
+  };
+
+  // --- Group 0: k=2 data + 1 parity (max_failures=1). ---
+  const int k0 = 2;
+  std::vector<chi::PoolId> data_ids;
+  for (int c = 0; c < k0; ++c) {
+    chi::PoolId id(static_cast<chi::u32>(10100 + pidsalt + c), 0);
+    clio::run::bdev::Client client(id);
+    REQUIRE(CreateRamMember(client, member_name(c), id));
+    data_ids.push_back(client.pool_id_);
+  }
+  chi::PoolId parity_id(static_cast<chi::u32>(10160 + pidsalt), 0);
+  clio::run::bdev::Client parity_client(parity_id);
+  REQUIRE(CreateRamMember(parity_client, member_name(50), parity_id));
+  parity_id = parity_client.pool_id_;
+
+  chi::PoolId safe_id(static_cast<chi::u32>(10180 + pidsalt), 0);
+  clio::run::safe_bdev::Client safe(safe_id);
+  std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
+  for (int c = 0; c < k0; ++c) {
+    members.emplace_back(member_name(c), /*node_id=*/0, data_ids[c]);
+  }
+  auto create_task = safe.AsyncCreate(chi::PoolQuery::Dynamic(),
+                                      "safe_bdev_ad_pool", safe_id,
+                                      /*max_failures=*/1, members);
+  create_task.Wait();
+  safe.pool_id_ = create_task->new_pool_id_;
+  REQUIRE(create_task->GetReturnCode() == 0);
+
+  auto add_par = safe.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_name(50),
+                                   /*node_id=*/0, parity_id, /*as_parity=*/1);
+  add_par.Wait();
+  REQUIRE(add_par->GetReturnCode() == 0);
+  REQUIRE(QueryStatField(safe, "num_groups") == 1);
+
+  // Generic alloc+write+flush+read+verify helper. Returns the block so the
+  // caller can re-read it later (to assert it stays unchanged).
+  auto write_pattern = [&](chi::u64 io_len, ctp::u8 seed,
+                           clio::run::bdev::Block &out_block,
+                           std::vector<ctp::u8> &out_pattern) {
+    auto alloc = safe.AsyncAllocateBlocks(chi::PoolQuery::Dynamic(), io_len);
+    alloc.Wait();
+    REQUIRE(alloc->GetReturnCode() == 0);
+    REQUIRE(alloc->blocks_.size() > 0);
+    out_block = alloc->blocks_[0];
+    out_pattern = MakePattern(io_len, seed);
+
+    chi::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
+    wblocks.push_back(clio::run::bdev::Block(out_block.offset_, io_len, 0));
+    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(wbuf.IsNull());
+    memcpy(wbuf.ptr_, out_pattern.data(), io_len);
+    auto wt = safe.AsyncWrite(chi::PoolQuery::Dynamic(), wblocks,
+                              wbuf.shm_.template Cast<void>(), io_len);
+    wt.Wait();
+    REQUIRE(wt->GetReturnCode() == 0);
+    REQUIRE(wt->bytes_written_ == io_len);
+    CLIO_IPC->FreeBuffer(wbuf);
+
+    auto flush = safe.AsyncBuildParity(chi::PoolQuery::Dynamic(), 0);
+    flush.Wait();
+    REQUIRE(flush->GetReturnCode() == 0);
+  };
+
+  auto read_verify = [&](const clio::run::bdev::Block &block, chi::u64 io_len,
+                         const std::vector<ctp::u8> &expect) {
+    chi::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
+    rblocks.push_back(clio::run::bdev::Block(block.offset_, io_len, 0));
+    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
+    REQUIRE_FALSE(rbuf.IsNull());
+    memset(rbuf.ptr_, 0, io_len);
+    auto rt = safe.AsyncRead(chi::PoolQuery::Dynamic(), rblocks,
+                             rbuf.shm_.template Cast<void>(), io_len);
+    rt.Wait();
+    REQUIRE(rt->GetReturnCode() == 0);
+    REQUIRE(rt->bytes_read_ == io_len);
+    std::vector<ctp::u8> got(io_len);
+    memcpy(got.data(), rbuf.ptr_, io_len);
+    REQUIRE(got == expect);
+    CLIO_IPC->FreeBuffer(rbuf);
+  };
+
+  // --- Pattern A in group 0 (k=2): 4 chunks. ---
+  const chi::u64 lenA = 2 * static_cast<chi::u64>(k0) * kChunkLen;  // 4 chunks
+  clio::run::bdev::Block blockA;
+  std::vector<ctp::u8> patternA;
+  write_pattern(lenA, 0xA1, blockA, patternA);
+  read_verify(blockA, lenA, patternA);
+  HLOG(kInfo, "safe_bdev add-data: pattern A written+verified in group 0 "
+              "(offset {}, {} bytes)", blockA.offset_, lenA);
+
+  // --- AddBdev a 3rd DATA member: must succeed (no longer an error) and open
+  //     group 1 (k=3). ---
+  chi::PoolId data3_id(static_cast<chi::u32>(10170 + pidsalt), 0);
+  clio::run::bdev::Client data3_client(data3_id);
+  REQUIRE(CreateRamMember(data3_client, member_name(2), data3_id));
+  data3_id = data3_client.pool_id_;
+  data_ids.push_back(data3_id);
+
+  auto add_data = safe.AsyncAddBdev(chi::PoolQuery::Dynamic(), member_name(2),
+                                    /*node_id=*/0, data3_id, /*as_parity=*/0);
+  add_data.Wait();
+  REQUIRE(add_data->GetReturnCode() == 0);  // <-- the fix: no longer an error
+  REQUIRE(QueryStatField(safe, "num_groups") == 2);
+  REQUIRE(QueryStatField(safe, "data_count") == 3);
+  HLOG(kInfo, "safe_bdev add-data: 3rd data member added, num_groups=2");
+
+  // --- Pattern B in group 1 (k=3): 6 chunks. ---
+  const chi::u64 lenB = 2 * 3 * kChunkLen;  // 6 chunks across 3 data drives
+  clio::run::bdev::Block blockB;
+  std::vector<ctp::u8> patternB;
+  write_pattern(lenB, 0xB2, blockB, patternB);
+  read_verify(blockB, lenB, patternB);
+  // Group 1's logical offsets must lie ABOVE group 0's range.
+  REQUIRE(blockB.offset_ >= lenA);
+  HLOG(kInfo, "safe_bdev add-data: pattern B written+verified in group 1 "
+              "(offset {}, {} bytes)", blockB.offset_, lenB);
+
+  // --- NO RESHUFFLE: re-read pattern A; it must be UNCHANGED. ---
+  read_verify(blockA, lenA, patternA);
+  HLOG(kInfo, "safe_bdev add-data: pattern A UNCHANGED after add (no reshuffle)");
+
+  // --- Fault data member 0 (shared by BOTH groups) and confirm degraded reads
+  //     reconstruct in BOTH groups, each under its own k. ---
+  auto rm = safe.AsyncRemoveBdev(chi::PoolQuery::Dynamic(), data_ids[0],
+                                 /*was_faulty=*/1);
+  rm.Wait();
+  REQUIRE(rm->GetReturnCode() == 0);
+
+  read_verify(blockA, lenA, patternA);  // group 0 (k=2) degraded
+  HLOG(kInfo, "safe_bdev add-data: degraded read of pattern A (group 0, k=2) OK");
+  read_verify(blockB, lenB, patternB);  // group 1 (k=3) degraded
+  HLOG(kInfo, "safe_bdev add-data: degraded read of pattern B (group 1, k=3) OK");
+
+  HLOG(kInfo, "safe_bdev add-data no-reshuffle test PASSED");
 }
 
 SIMPLE_TEST_MAIN()
