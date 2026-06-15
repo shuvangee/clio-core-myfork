@@ -63,6 +63,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
@@ -244,13 +245,26 @@ inline BenchArgs ParseBenchArgs(int argc, char **argv) {
 }
 
 /**
- * Print per-thread + aggregate timing/bandwidth. ops[i] is the number of
- * ops thread i actually completed (matters for --time-limit, where it is
- * not io_count); times[i] is its elapsed microseconds.
+ * Print the full per-thread + aggregate timing/bandwidth/latency report.
+ *
+ * Emits one labelled metric per line so the Jarvis package's _get_stat()
+ * regex can scrape each value into a results.csv column. The exact wording
+ * and units below are part of that contract -- changing them breaks the
+ * parser in jarvis_clio_core/clio_cte_bench/pkg.py.
+ *
+ * @param label   Operation name (Put | Get | PutGet); becomes the CSV
+ *                "operation" namespace.
+ * @param a       Parsed benchmark parameters (uses a.threads, a.io_size).
+ * @param times   Per-thread elapsed time in microseconds. ops[i]/times[i]
+ *                are paired per worker thread.
+ * @param ops     Per-thread completed-op counts (== io_count unless
+ *                --time-limit was used, where each thread does as many ops
+ *                as fit in the wall-clock window).
  */
 inline void PrintResults(const std::string &label, const BenchArgs &a,
                          const std::vector<long long> &times,
                          const std::vector<u64> &ops) {
+  double num_threads = static_cast<double>(a.threads ? a.threads : 1);
   long long min_t = *std::min_element(times.begin(), times.end());
   long long max_t = *std::max_element(times.begin(), times.end());
   long long sum_t = 0;
@@ -259,21 +273,53 @@ inline void PrintResults(const std::string &label, const BenchArgs &a,
     sum_t += times[i];
     total_ops += ops[i];
   }
-  double avg_t = static_cast<double>(sum_t) / static_cast<double>(a.threads);
-  u64 avg_ops = total_ops / a.threads;
+  double avg_t = static_cast<double>(sum_t) / num_threads;        // us
+  double avg_ops = static_cast<double>(total_ops) / num_threads;  // ops/thread
 
-  u64 per_thread_bytes = avg_ops * a.io_size;
+  // Working set: avg per-thread bytes vs. all-threads bytes.
+  u64 per_thread_bytes =
+      static_cast<u64>(a.io_size * avg_ops);
   u64 aggregate_bytes = total_ops * a.io_size;
+
+  // Bandwidth from the min/max/avg thread time; min time -> max bandwidth.
+  double min_bw = CalcBandwidth(per_thread_bytes, static_cast<double>(min_t));
+  double max_bw = CalcBandwidth(per_thread_bytes, static_cast<double>(max_t));
+  double avg_bw = CalcBandwidth(per_thread_bytes, avg_t);
+  double agg_bw = CalcBandwidth(aggregate_bytes, avg_t);
+
+  double avg_t_sec = avg_t / 1000000.0;
+  double agg_ops_per_sec = avg_t_sec > 0.0 ? total_ops / avg_t_sec : 0.0;
+  double ops_per_thread_avg_per_sec =
+      avg_t_sec > 0.0 ? avg_ops / avg_t_sec : 0.0;
+  double avg_latency_per_op = avg_ops > 0.0 ? avg_t / avg_ops : 0.0;  // us
+  double total_data_mb =
+      static_cast<double>(aggregate_bytes) / (1024.0 * 1024.0);
+
+  // Spread of per-thread completion times (us) about their mean.
+  double sum_sq_diff = 0.0;
+  for (long long t : times) {
+    double diff = static_cast<double>(t) - avg_t;
+    sum_sq_diff += diff * diff;
+  }
+  double latency_stddev = std::sqrt(sum_sq_diff / num_threads);
 
   HLOG(kInfo, "");
   HLOG(kInfo, "=== {} Benchmark Results ===", label);
-  HLOG(kInfo, "Ops (total / avg per thread): {} / {}", total_ops, avg_ops);
-  HLOG(kInfo, "Time (min/max/avg): {} / {} / {} ms", min_t / 1000.0,
-       max_t / 1000.0, avg_t / 1000.0);
-  HLOG(kInfo, "Bandwidth per thread (avg): {} MB/s",
-       CalcBandwidth(per_thread_bytes, avg_t));
-  HLOG(kInfo, "Aggregate bandwidth: {} MB/s",
-       CalcBandwidth(aggregate_bytes, avg_t));
+  HLOG(kInfo, "Time (min): {} us ({} ms)", static_cast<double>(min_t),
+       min_t / 1000.0);
+  HLOG(kInfo, "Time (max): {} us ({} ms)", static_cast<double>(max_t),
+       max_t / 1000.0);
+  HLOG(kInfo, "Time (avg): {} us ({} ms)", avg_t, avg_t / 1000.0);
+  HLOG(kInfo, "Bandwidth per thread (min): {} MB/s", min_bw);
+  HLOG(kInfo, "Bandwidth per thread (max): {} MB/s", max_bw);
+  HLOG(kInfo, "Bandwidth per thread (avg): {} MB/s", avg_bw);
+  HLOG(kInfo, "Aggregate bandwidth: {} MB/s", agg_bw);
+  HLOG(kInfo, "Aggregate IOPS: {}", agg_ops_per_sec);
+  HLOG(kInfo, "IOPS per thread (avg): {}", ops_per_thread_avg_per_sec);
+  HLOG(kInfo, "Avg latency per op: {} us", avg_latency_per_op);
+  HLOG(kInfo, "Latency stddev: {} us", latency_stddev);
+  HLOG(kInfo, "Total data: {} MB", total_data_mb);
+  HLOG(kInfo, "Total ops: {}", total_ops);
   HLOG(kInfo, "===========================");
 }
 

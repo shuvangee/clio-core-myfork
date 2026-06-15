@@ -1,6 +1,7 @@
 from jarvis_cd.core.pkg import Application
-from jarvis_cd.shell import Exec, PsshExecInfo
+from jarvis_cd.shell import Exec, PsshExecInfo, LocalExecInfo
 import os
+import re
 
 class ClioCteBench(Application):
     """
@@ -193,7 +194,13 @@ class ClioCteBench(Application):
         """
         Run the CTE benchmark application.
 
-        This method executes the benchmark with MPI support and configured parameters.
+        This method executes the benchmark with MPI support and configured
+        parameters. The benchmark's stdout+stderr (the HLOG results report)
+        is always captured to ``<shared_dir>/bench_output.txt`` so that
+        ``_get_stat`` can parse the metrics afterwards. The sweep runner
+        (jarvis_cd pipeline_test) re-loads a *fresh* package instance before
+        calling ``_get_stat``, so an in-memory buffer would be lost -- the
+        on-disk file is the contract between start() and _get_stat().
         """
         self.log(f"Starting CTE benchmark: {self.config['test_case']}")
 
@@ -216,31 +223,36 @@ class ClioCteBench(Application):
             cmd += ['--max-total-blobs', str(self.config['max_total_blobs'])]
         cmd += ['--query-type', str(self.config['query_type'])]
 
-        self.log(
-            f"Running benchmark via Pssh: {self.config['nprocs']} procs, "
-            f"{self.config['ppn']} per node"
-        )
-        exec_info = PsshExecInfo(
-            env=self.mod_env,
-            hostfile=self.hostfile,
-            nprocs=self.config['nprocs'],
-            ppn=self.config['ppn'],
-        )
-
-        # Execute the benchmark
         cmd_str = ' '.join(cmd)
+        output_path = os.path.join(self.shared_dir, 'bench_output.txt')
 
-        if self.output_file:
-            # Redirect output to file
-            cmd_str += f' > {self.output_file} 2>&1'
-            self.log(f"Executing: {cmd_str}")
-            Exec(cmd_str, exec_info).run()
-            self.log(f"Benchmark completed. Results saved to: {self.output_file}")
+        if self.config['nprocs'] > 1:
+            # Multi-rank: redirect in the shell so every rank's output lands
+            # in the shared file (shared_dir is on a shared FS on Ares).
+            self.log(
+                f"Running benchmark via Pssh: {self.config['nprocs']} procs, "
+                f"{self.config['ppn']} per node"
+            )
+            exec_info = PsshExecInfo(
+                env=self.mod_env,
+                hostfile=self.hostfile,
+                nprocs=self.config['nprocs'],
+                ppn=self.config['ppn'],
+            )
+            cmd_str += f' > {output_path} 2>&1'
         else:
-            # Print to stdout
-            self.log(f"Executing: {cmd_str}")
-            Exec(cmd_str, exec_info).run()
-            self.log("Benchmark completed")
+            # Single-rank: pipe both streams to the file via LocalExecInfo
+            # (matches the proven archived capture path; HLOG -> stderr).
+            self.log("Running benchmark locally (single rank)")
+            exec_info = LocalExecInfo(
+                env=self.mod_env,
+                pipe_stdout=output_path,
+                pipe_stderr=output_path,
+            )
+
+        self.log(f"Executing: {cmd_str}")
+        Exec(cmd_str, exec_info).run()
+        self.log(f"Benchmark completed. Output captured to: {output_path}")
 
     def stop(self):
         """
@@ -258,12 +270,100 @@ class ClioCteBench(Application):
         """
         self.log("Cleaning up CTE benchmark output files...")
 
-        # Clean output file if it exists
-        if self.output_file and os.path.exists(self.output_file):
-            try:
-                os.remove(self.output_file)
-                self.log(f"Removed benchmark output file: {self.output_file}")
-            except Exception as e:
-                self.log(f"Error removing output file: {e}")
+        # The canonical results file parsed by _get_stat.
+        paths = [os.path.join(self.shared_dir, 'bench_output.txt')]
+        # Plus the optional user-facing copy, if one was configured.
+        if self.output_file:
+            paths.append(self.output_file)
+
+        for path in paths:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                    self.log(f"Removed benchmark output file: {path}")
+                except Exception as e:
+                    self.log(f"Error removing output file {path}: {e}")
 
         self.log("CTE benchmark cleanup completed")
+
+    # ------------------------------------------------------------------
+    # Statistics collection
+    # ------------------------------------------------------------------
+
+    def _get_stat(self, stat_dict):
+        """
+        Parse the captured benchmark output and populate ``stat_dict``.
+
+        Called by the jarvis_cd sweep runner after each pipeline run (on a
+        freshly-loaded package instance), which is why the metrics are read
+        back from ``<shared_dir>/bench_output.txt`` rather than from an
+        in-memory buffer. Each extracted metric becomes a results.csv column.
+
+        :param stat_dict: Dict the framework serialises into results.csv;
+                          keys are ``<pkg_id>.<operation>.<metric>``.
+        """
+        output_path = os.path.join(self.shared_dir, 'bench_output.txt')
+        if not os.path.exists(output_path):
+            self.log(f'No output file found at {output_path}')
+            return
+
+        with open(output_path, 'r') as f:
+            output = f.read()
+
+        if not output.strip():
+            self.log(f'Output file is empty: {output_path}')
+            return
+
+        before_count = len(stat_dict)
+        self._parse_output(output, stat_dict)
+        after_count = len(stat_dict)
+        if after_count == before_count:
+            self.log(f'Warning: No metrics extracted from {output_path} '
+                     f'({len(output)} bytes). '
+                     f'Check if benchmark results are present in output.')
+
+    def _parse_output(self, output, stat_dict):
+        """
+        Extract metrics from clio_cte_bench stdout into ``stat_dict``.
+
+        The C++ binary emits its results via HLOG (bench_common.h
+        ``PrintResults``), one labelled metric per line. This regex table is
+        the parsing half of that contract -- the patterns must match the
+        wording/units printed by PrintResults exactly.
+
+        :param output: Raw captured benchmark output (stdout+stderr).
+        :param stat_dict: Dict to populate with ``<pkg_id>.<op>.<metric>``.
+        """
+        # Strip ANSI escape codes from HLOG output.
+        output = re.sub(r'\033\[[0-9;]*m', '', output)
+
+        # Detect which test case header appeared (Put, Get, or PutGet).
+        header_match = re.search(r'=== (\w+) Benchmark Results ===', output)
+        operation = header_match.group(1).lower() if header_match else 'unknown'
+
+        patterns = {
+            'time_min_us': r'Time \(min\):\s+([\d.e+\-]+)\s+us',
+            'time_max_us': r'Time \(max\):\s+([\d.e+\-]+)\s+us',
+            'time_avg_us': r'Time \(avg\):\s+([\d.e+\-]+)\s+us',
+            'bw_per_thread_min_mbps':
+                r'Bandwidth per thread \(min\):\s+([\d.e+\-]+)\s+MB/s',
+            'bw_per_thread_max_mbps':
+                r'Bandwidth per thread \(max\):\s+([\d.e+\-]+)\s+MB/s',
+            'bw_per_thread_avg_mbps':
+                r'Bandwidth per thread \(avg\):\s+([\d.e+\-]+)\s+MB/s',
+            'agg_bw_mbps': r'Aggregate bandwidth:\s+([\d.e+\-]+)\s+MB/s',
+            'agg_ops_per_sec': r'Aggregate IOPS:\s+([\d.e+\-]+)',
+            'ops_per_thread_avg_per_sec':
+                r'IOPS per thread \(avg\):\s+([\d.e+\-]+)',
+            'avg_latency_per_op_us':
+                r'Avg latency per op:\s+([\d.e+\-]+)\s+us',
+            'latency_stddev_us': r'Latency stddev:\s+([\d.e+\-]+)\s+us',
+            'total_data_mb': r'Total data:\s+([\d.e+\-]+)\s+MB',
+            'total_ops': r'Total ops:\s+(\d+)',
+        }
+
+        for metric, pattern in patterns.items():
+            match = re.search(pattern, output)
+            if match:
+                stat_dict[f'{self.pkg_id}.{operation}.{metric}'] = float(
+                    match.group(1))
