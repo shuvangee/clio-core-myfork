@@ -8,28 +8,47 @@
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/worker.h>
 #include <clio_runtime/work_orchestrator.h>
+#include <fcntl.h>
 
 namespace clio::run::bdev {
+
+namespace {
+
+// Open `file_path` through the best AsyncIO backend that actually works at
+// runtime. AsyncIoFactory's kDefault selects the preferred backend at *compile*
+// time (NIXL > io_uring > libaio > POSIX), but a backend can be compiled in yet
+// be unavailable at runtime: under a container's default seccomp profile
+// io_uring_queue_init() fails, returning a negative errno as its return value
+// while leaving the global errno untouched, so IoUringAsyncIO::Open() reports
+// failure (errno=0) even though the file itself opened fine. When the preferred
+// backend cannot open the file, transparently fall back to POSIX AIO, which
+// works in restricted environments (containers/CI). Returns an opened AsyncIO,
+// or nullptr only if even POSIX AIO cannot open the file (a genuine error).
+std::unique_ptr<ctp::AsyncIO> OpenBackingFile(chi::u32 io_depth,
+                                              const std::string &file_path) {
+  auto io = ctp::AsyncIoFactory::Get(io_depth);
+  if (io && io->Open(file_path, O_RDWR | O_CREAT, 0644)) {
+    return io;
+  }
+  // Preferred backend is unusable in this environment. IoUringAsyncIO::Open()
+  // closes any fds it opened before returning false, so it is safe to discard
+  // it and retry with POSIX AIO.
+  io = ctp::AsyncIoFactory::Get(io_depth, ctp::AsyncIoBackend::kPosixAio);
+  if (io && io->Open(file_path, O_RDWR | O_CREAT, 0644)) {
+    return io;
+  }
+  return nullptr;
+}
+
+}  // namespace
 
 bool WorkerIOContext::Init(const std::string &file_path, chi::u32 io_depth,
                            chi::u32 worker_id) {
   if (is_initialized_) return true;
 
-#if defined(__linux__)
-  async_io_ = ctp::AsyncIoFactory::Get(io_depth, ctp::AsyncIoBackend::kNixl);
-#else
-  async_io_ = ctp::AsyncIoFactory::Get(io_depth);
-#endif
-
-  if (!async_io_ || !async_io_->Init()) {
-    HLOG(kError, "Failed to initialize generic AsyncIo for worker {}",
-         worker_id);
-    return false;
-  }
-
-  if (!async_io_->Open(file_path)) {
+  async_io_ = OpenBackingFile(io_depth, file_path);
+  if (!async_io_) {
     HLOG(kError, "Worker {} failed to open file {}", worker_id, file_path);
-    async_io_->Cleanup();
     return false;
   }
 
@@ -41,29 +60,26 @@ void WorkerIOContext::Cleanup() {
   if (is_initialized_) {
     if (async_io_) {
       async_io_->Close();
-      async_io_->Cleanup();
+      async_io_.reset();
     }
     is_initialized_ = false;
   }
 }
 
-bool FsBdevTransport::Init(const CreateParams& params, Runtime* runtime) {
-  file_path_ = params.file_path_;
+bool FsBdevTransport::Init(const CreateParams& params,
+                           const std::string& pool_name, Runtime* runtime) {
+  // The pool name doubles as the backing file path.
+  file_path_ = pool_name;
   io_depth_ = params.io_depth_;
 
-  auto setup_io = ctp::AsyncIoFactory::Get(io_depth_);
-  if (!setup_io->Init()) {
-    HLOG(kError, "Failed to initialize setup AsyncIo for filesystem tier");
-    return false;
-  }
-
-  if (!setup_io->Open(file_path_)) {
+  auto setup_io = OpenBackingFile(io_depth_, file_path_);
+  if (!setup_io) {
     HLOG(kError, "Failed to open bdev file: {}", file_path_);
     return false;
   }
 
   chi::u64 file_size = 0;
-  off_t current_size = setup_io->GetSize();
+  off_t current_size = setup_io->GetFileSize();
   if (current_size < 0) {
     HLOG(kError, "Failed to get file size for: {}", file_path_);
     setup_io->Close();
