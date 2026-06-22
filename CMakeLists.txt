@@ -836,7 +836,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   message(STATUS "GCC detected - enabling coroutines with -fcoroutines")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
   # NVHPC 25.5 crashes (ICE in llc) when compiling GCC 14 libstdc++ coroutines.
-  # CLIO Runtime uses ucontext_t fibers via CHI_CO_AWAIT/CHI_CO_RETURN macros instead.
+  # CLIO Runtime uses ucontext_t fibers via CLIO_CO_AWAIT/CLIO_CO_RETURN macros instead.
   # No __cpp_impl_coroutine needed - we do not include <coroutine> for NVHPC.
   message(STATUS "NVHPC detected - using ucontext_t fiber fallback for C++20 coroutines")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -1055,12 +1055,12 @@ if(CLIO_CORE_ENABLE_TESTS)
     # after every test that requires the fixture, even if those tests fail
     # or crash, ensuring temp files do not persist between runs.
     # -----------------------------------------------------------------------
-    set(_chimaera_cleanup_cmd
+    set(_clio_cleanup_cmd
         "fuser -k 5555/tcp 5558/tcp 9413/tcp 9414/tcp 9416/tcp 2>/dev/null; \
-         rm -f /tmp/chimaera_*.ipc 2>/dev/null; \
-         rm -f /tmp/chimaera_server_timing.log 2>/dev/null; \
-         rm -rf /tmp/chimaera_memfd 2>/dev/null; \
-         rm -rf /tmp/chimaera_${USER} 2>/dev/null; \
+         rm -f /tmp/clio_*.ipc 2>/dev/null; \
+         rm -f /tmp/clio_server_timing.log 2>/dev/null; \
+         rm -rf /tmp/clio_memfd 2>/dev/null; \
+         rm -rf /tmp/clio_${USER} 2>/dev/null; \
          rm -f /dev/shm/sm_segment.* 2>/dev/null; \
          rm -f /dev/shm/test_buddy_bench_* 2>/dev/null; \
          rm -f \"${CMAKE_BINARY_DIR}\"/cte_*.dat* \"${CMAKE_BINARY_DIR}\"/cte_*.yaml \"${CMAKE_BINARY_DIR}\"/*stress*.bin* \"${CMAKE_BINARY_DIR}\"/*reorganize*.bin* \"${CMAKE_BINARY_DIR}\"/*reorganize*.yaml \"${CMAKE_BINARY_DIR}\"/temp_unregister_test.dat 2>/dev/null; \
@@ -1070,20 +1070,20 @@ if(CLIO_CORE_ENABLE_TESTS)
     if(UNIX)
       add_test(
           NAME cr_pre_test_cleanup
-          COMMAND bash -c "${_chimaera_cleanup_cmd}"
+          COMMAND bash -c "${_clio_cleanup_cmd}"
       )
       set_tests_properties(cr_pre_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_SETUP chimaera_test_cleanup_fixture
+          FIXTURES_SETUP clio_test_cleanup_fixture
       )
 
       add_test(
           NAME cr_post_test_cleanup
-          COMMAND bash -c "${_chimaera_cleanup_cmd}"
+          COMMAND bash -c "${_clio_cleanup_cmd}"
       )
       set_tests_properties(cr_post_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_CLEANUP chimaera_test_cleanup_fixture
+          FIXTURES_CLEANUP clio_test_cleanup_fixture
       )
     elseif(WIN32)
       # Windows equivalent: kill any lingering test binaries that might still
@@ -1096,7 +1096,7 @@ if(CLIO_CORE_ENABLE_TESTS)
       # stale rule never fails the whole suite. Build artifacts under
       # ${CMAKE_BINARY_DIR}/bin are scrubbed the same way the POSIX path scrubs
       # ${CMAKE_BINARY_DIR}/cte_*.dat etc.
-      set(_chimaera_cleanup_cmd_win
+      set(_clio_cleanup_cmd_win
           "$ErrorActionPreference='Continue'; \
            Get-Process | Where-Object { $_.Path -and $_.Path -like '${CMAKE_BINARY_DIR}/bin/*' } | Stop-Process -Force -ErrorAction SilentlyContinue; \
            Get-ChildItem '${CMAKE_BINARY_DIR}' -Filter 'cte_*.dat*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; \
@@ -1108,20 +1108,20 @@ if(CLIO_CORE_ENABLE_TESTS)
 
       add_test(
           NAME cr_pre_test_cleanup
-          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_chimaera_cleanup_cmd_win}"
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_clio_cleanup_cmd_win}"
       )
       set_tests_properties(cr_pre_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_SETUP chimaera_test_cleanup_fixture
+          FIXTURES_SETUP clio_test_cleanup_fixture
       )
 
       add_test(
           NAME cr_post_test_cleanup
-          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_chimaera_cleanup_cmd_win}"
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_clio_cleanup_cmd_win}"
       )
       set_tests_properties(cr_post_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_CLEANUP chimaera_test_cleanup_fixture
+          FIXTURES_CLEANUP clio_test_cleanup_fixture
       )
     endif()
 endif()
@@ -1272,12 +1272,12 @@ if(CLIO_CORE_ENABLE_TESTS)
             "detect_leaks=1:halt_on_error=0:print_stacktrace=1:symbolize=1:suppressions=${CMAKE_SOURCE_DIR}/CI/lsan_suppressions.txt")
     endif()
 
-    function(_chimaera_lock_tests_recursive dir lsan_opts)
+    function(_clio_lock_tests_recursive dir lsan_opts)
         get_directory_property(_tests DIRECTORY "${dir}" TESTS)
         if(_tests)
             set_tests_properties(${_tests}
                 DIRECTORY "${dir}"
-                PROPERTIES RESOURCE_LOCK "chimaera_runtime_port")
+                PROPERTIES RESOURCE_LOCK "clio_runtime_port")
             if(lsan_opts)
                 set_tests_properties(${_tests}
                     DIRECTORY "${dir}"
@@ -1287,7 +1287,7 @@ if(CLIO_CORE_ENABLE_TESTS)
         endif()
         get_directory_property(_subdirs DIRECTORY "${dir}" SUBDIRECTORIES)
         foreach(_sub ${_subdirs})
-            _chimaera_lock_tests_recursive("${_sub}" "${lsan_opts}")
+            _clio_lock_tests_recursive("${_sub}" "${lsan_opts}")
         endforeach()
     endfunction()
 
@@ -1300,7 +1300,7 @@ if(CLIO_CORE_ENABLE_TESTS)
         list(GET _pair 0 _component_dir)
         list(GET _pair 1 _component_flag)
         if(${_component_flag} AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}")
-            _chimaera_lock_tests_recursive(
+            _clio_lock_tests_recursive(
                 "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}"
                 "${_lsan_opts}")
         endif()
@@ -1311,18 +1311,18 @@ if(CLIO_CORE_ENABLE_TESTS)
     # cr_post_test_cleanup hook runs after the whole suite, even when
     # individual tests fail. Excludes the cleanup fixtures themselves.
     # -----------------------------------------------------------------------
-    function(_chimaera_require_cleanup_fixture_recursive dir)
+    function(_clio_require_cleanup_fixture_recursive dir)
         get_directory_property(_tests DIRECTORY "${dir}" TESTS)
         foreach(_t ${_tests})
             if(NOT _t STREQUAL "cr_pre_test_cleanup" AND
                NOT _t STREQUAL "cr_post_test_cleanup")
                 set_property(TEST ${_t} DIRECTORY "${dir}" APPEND PROPERTY
-                    FIXTURES_REQUIRED chimaera_test_cleanup_fixture)
+                    FIXTURES_REQUIRED clio_test_cleanup_fixture)
             endif()
         endforeach()
         get_directory_property(_subdirs DIRECTORY "${dir}" SUBDIRECTORIES)
         foreach(_sub ${_subdirs})
-            _chimaera_require_cleanup_fixture_recursive("${_sub}")
+            _clio_require_cleanup_fixture_recursive("${_sub}")
         endforeach()
     endfunction()
 
@@ -1336,7 +1336,7 @@ if(CLIO_CORE_ENABLE_TESTS)
         list(GET _pair 0 _component_dir)
         list(GET _pair 1 _component_flag)
         if(${_component_flag} AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}")
-            _chimaera_require_cleanup_fixture_recursive(
+            _clio_require_cleanup_fixture_recursive(
                 "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}")
         endif()
     endforeach()
@@ -1489,7 +1489,7 @@ message(STATUS "  Package name: iowarp-core (canonical alias: clio-core)")
 message(STATUS "  Install destination: lib/cmake/iowarp-core, lib/cmake/clio-core")
 message(STATUS "  Components included:")
 message(STATUS "    - ClioCtp (context-transport-primitives)")
-message(STATUS "    - Chimaera (runtime)")
+message(STATUS "    - Clio (runtime)")
 message(STATUS "    - Core ChiMods: admin, bdev")
 if(CLIO_CORE_ENABLE_CTE)
     message(STATUS "    - CTE ChiMod: clio_cte_core")
@@ -1551,12 +1551,12 @@ if(TARGET clio_bdev_client)
   list(APPEND PIP_LIB_TARGETS clio_bdev_client clio_bdev_runtime)
 endif()
 # Template chimod (used by clio_run_thrpt_bench's "latency" test case via
-# chimaera::MOD_NAME_client).  Without this the benchmark binary's NEEDED list
-# references libchimaera_MOD_NAME_client.so but the wheel doesn't contain it,
+# clio::run::MOD_NAME_client).  Without this the benchmark binary's NEEDED list
+# references libclio_MOD_NAME_client.so but the wheel doesn't contain it,
 # and the dynamic linker segfaults at load time on glibc/patchelf combinations
 # instead of failing cleanly.  See #429.
-if(TARGET chimaera_MOD_NAME_client)
-  list(APPEND PIP_LIB_TARGETS chimaera_MOD_NAME_client chimaera_MOD_NAME_runtime)
+if(TARGET clio_MOD_NAME_client)
+  list(APPEND PIP_LIB_TARGETS clio_MOD_NAME_client clio_MOD_NAME_runtime)
 endif()
 if(CLIO_CORE_ENABLE_CTE AND TARGET clio_cte_core_client)
   list(APPEND PIP_LIB_TARGETS clio_cte_core_client clio_cte_core_runtime)
@@ -1574,12 +1574,12 @@ if(PIP_LIB_TARGETS)
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
-    PUBLIC_HEADER DESTINATION include/chimaera)
+    PUBLIC_HEADER DESTINATION include/clio_runtime)
   # Mirror the install into the default ("Unspecified") component so the
   # same shared libs ship in the .deb / .rpm built by cpack -G DEB/RPM
   # (those generators filter to CPACK_COMPONENTS_ALL=Unspecified). Without
   # this, libclio_admin_client.so / libclio_admin_runtime.so /
-  # libclio_bdev_*.so / libchimaera_MOD_NAME_*.so are only in the pip
+  # libclio_bdev_*.so / libclio_MOD_NAME_*.so are only in the pip
   # wheel — and the .rpm's clio_run binary then fails to start with
   #   error while loading shared libraries: libclio_admin_client.so
   # because its NEEDED entry (Fedora's ld doesn't strip --as-needed as
@@ -1592,57 +1592,20 @@ if(PIP_LIB_TARGETS)
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
-    PUBLIC_HEADER DESTINATION include/chimaera)
+    PUBLIC_HEADER DESTINATION include/clio_runtime)
 endif()
 
-# CLI binary -> iowarp_core/bin/
-# Install the canonical `clio_run` binary plus a legacy `chimaera` symlink.
-# Matches the parallel install in context-runtime/util/CMakeLists.txt for
-# system installs; this branch handles the pip-wheel COMPONENT pip_package.
+# CLI binary -> iowarp_core/bin/ (pip-wheel COMPONENT pip_package).
 if(TARGET clio_run)
   install(TARGETS clio_run
     COMPONENT pip_package
     RUNTIME DESTINATION bin)
-  install(CODE "
-    if(WIN32)
-      set(_pip_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run.exe\")
-      set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera.exe\")
-    else()
-      set(_pip_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\")
-      set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera\")
-    endif()
-    if(EXISTS \"\${_pip_src}\" AND NOT EXISTS \"\${_pip_dst}\")
-      if(WIN32)
-        file(INSTALL \"\${_pip_src}\"
-             DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\" RENAME chimaera.exe)
-      else()
-        execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink clio_run \"\${_pip_dst}\")
-      endif()
-    endif()
-  " COMPONENT pip_package)
   # Also install to PYTHON_SITE_PACKAGES/iowarp_core/bin/ so that
   # `sudo make install` keeps the binary in sync with the Python package,
-  # matching how chimaera_runtime_ext.so is installed directly to site-packages.
+  # matching how clio_runtime_ext.so is installed directly to site-packages.
   if(CLIO_CORE_ENABLE_PYTHON AND PYTHON_SITE_PACKAGES)
     install(TARGETS clio_run
       RUNTIME DESTINATION "${PYTHON_SITE_PACKAGES}/iowarp_core/bin")
-    install(CODE "
-      if(WIN32)
-        set(_py_src \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run.exe\")
-        set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera.exe\")
-      else()
-        set(_py_src \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run\")
-        set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera\")
-      endif()
-      if(EXISTS \"\${_py_src}\" AND NOT EXISTS \"\${_py_dst}\")
-        if(WIN32)
-          file(INSTALL \"\${_py_src}\"
-               DESTINATION \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin\" RENAME chimaera.exe)
-        else()
-          execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink clio_run \"\${_py_dst}\")
-        endif()
-      endif()
-    ")
   endif()
 endif()
 
@@ -1674,7 +1637,7 @@ endif()
 # context-runtime/benchmark/CMakeLists.txt:17 are functionally identical
 # to the working installs at context-transfer-engine/benchmark and
 # context-assimilation-engine/core, but at v1.9.5 the resulting .deb
-# shipped without clio_run / clio_run_thrpt_bench / chimaera while it
+# shipped without clio_run / clio_run_thrpt_bench / clio_run while it
 # DID ship clio_cte_bench / clio_cae / allocator_benchmark. Exact root
 # cause is unidentified (the per-subdir rules look correct in cmake_install.cmake).
 # Add explicit top-level installs as a safety net so any future drop-out
@@ -1686,7 +1649,7 @@ endif()
 if(TARGET clio_run_thrpt_bench)
   install(TARGETS clio_run_thrpt_bench RUNTIME DESTINATION bin)
 endif()
-# `chimaera` is created as a symlink to `clio_run` by an install(CODE)
+# `clio_run` is created as a symlink to `clio_run` by an install(CODE)
 # in context-runtime/util/CMakeLists.txt — that runs after this point
 # during cmake --install, so the symlink lands in the default
 # component too. No extra rule needed here.
@@ -1711,7 +1674,7 @@ if(CLIO_CORE_ENABLE_PYTHON)
 endif()
 
 # Default config -> iowarp_core/data/
-install(FILES context-runtime/config/chimaera_default.yaml
+install(FILES context-runtime/config/clio_default.yaml
   COMPONENT pip_package
   DESTINATION data)
 

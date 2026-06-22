@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_MANAGERS_CONFIG_MANAGER_H_
+#define CLIO_RUNTIME_INCLUDE_MANAGERS_CONFIG_MANAGER_H_
 
 #include <string>
 #include <unordered_map>
@@ -97,11 +97,11 @@ struct ComposeConfig {
  *
  * Inherits from ctp BaseConfig and manages YAML configuration parsing.
  * Config lookup, first hit wins:
- *   1. CLIO_SERVER_CONF env (or legacy CHI_SERVER_CONF via env_compat)
+ *   1. CLIO_SERVER_CONF env (or legacy CLIO_SERVER_CONF via env_compat)
  *   2. ~/.clio/clio.yaml
- *   3. ~/.clio/chimaera.yaml
- *   4. ~/.chimaera/clio.yaml
- *   5. ~/.chimaera/chimaera.yaml
+ *   3. ~/.clio/clio.yaml
+ *   4. ~/.clio/clio.yaml
+ *   5. ~/.clio/clio.yaml
  *   6. Bare-minimum defaults (no compose)
  * Uses CTP global cross pointer variable singleton pattern.
  */
@@ -138,11 +138,11 @@ class ConfigManager : public ctp::BaseConfig {
   /**
    * Get server configuration file path.
    * Lookup order (first hit wins):
-   *   1. CLIO_SERVER_CONF env var (or legacy CHI_SERVER_CONF via env_compat)
+   *   1. CLIO_SERVER_CONF env var (or legacy CLIO_SERVER_CONF via env_compat)
    *   2. ~/.clio/clio.yaml         (new canonical user config)
-   *   3. ~/.clio/chimaera.yaml     (legacy filename in new dir)
-   *   4. ~/.chimaera/clio.yaml     (new filename in legacy dir)
-   *   5. ~/.chimaera/chimaera.yaml (legacy)
+   *   3. ~/.clio/clio.yaml     (legacy filename in new dir)
+   *   4. ~/.clio/clio.yaml     (new filename in legacy dir)
+   *   5. ~/.clio/clio.yaml (legacy)
    *   6. Empty string (bare-minimum defaults, no compose)
    * Both per-user directories are seeded with identical content by
    * `make install` and by the iowarp_core pip wheel's _setup() hook.
@@ -189,7 +189,7 @@ class ConfigManager : public ctp::BaseConfig {
 
   /**
    * Get server address for client connections
-   * @return Server address (default: "127.0.0.1", overridden by CHI_SERVER_ADDR)
+   * @return Server address (default: "127.0.0.1", overridden by CLIO_SERVER_ADDR)
    */
   std::string GetServerAddr() const;
 
@@ -377,18 +377,17 @@ class ConfigManager : public ctp::BaseConfig {
   ComposeConfig compose_config_;
 
   // Configuration directory for persistent runtime config
-  std::string conf_dir_ = "/tmp/chimaera";
+  std::string conf_dir_ = "/tmp/clio";
 };
 
 }  // namespace clio::run
 
 // Global pointer variable declaration for Configuration manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::ConfigManager, g_config_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::ConfigManager, g_config_manager);
 
 // Macro for accessing the Configuration manager singleton using global pointer variable
-#define CLIO_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ConfigManager, g_config_manager)
+#define CLIO_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::clio::run::ConfigManager, g_config_manager)
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_CONFIG_MANAGER  CLIO_CONFIG_MANAGER
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_MANAGERS_CONFIG_MANAGER_H_

@@ -40,7 +40,7 @@
  * 3. Testing special characters in context names
  *
  * Environment Variables:
- * - INIT_CHIMAERA: If set to "1", initializes CLIO Runtime runtime
+ * - INIT_CLIO: If set to "1", initializes CLIO Runtime runtime
  */
 
 #include <clio_cee/api/context_interface.h>
@@ -113,22 +113,22 @@ int main(int argc, char** argv) {
 
   try {
     // Initialize CLIO Runtime runtime if requested (for unit tests)
-    const char* init_chimaera = std::getenv("INIT_CHIMAERA");
-    if (init_chimaera && std::strcmp(init_chimaera, "1") == 0) {
-      HLOG(kInfo, "Initializing Chimaera (INIT_CHIMAERA=1)...");
-      chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
-      HLOG(kSuccess, "Chimaera initialized");
+    const char* init_clio = std::getenv("INIT_CLIO");
+    if (init_clio && std::strcmp(init_clio, "1") == 0) {
+      HLOG(kInfo, "Initializing Clio (INIT_CLIO=1)...");
+      clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
+      HLOG(kSuccess, "Clio initialized");
     }
 
     // Verify CLIO Runtime IPC is available
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager) {
-      HLOG(kError, "Chimaera IPC not initialized. Is the runtime running?");
-      HLOG(kInfo, "HINT: Set INIT_CHIMAERA=1 to initialize runtime or start runtime externally");
+      HLOG(kError, "Clio IPC not initialized. Is the runtime running?");
+      HLOG(kInfo, "HINT: Set INIT_CLIO=1 to initialize runtime or start runtime externally");
       ctp::SystemInfo::TerminateProcessNow(1);
       return 1;
     }
-    HLOG(kSuccess, "Chimaera IPC verified");
+    HLOG(kSuccess, "Clio IPC verified");
 
     // Run all tests
     test_empty_context_list();

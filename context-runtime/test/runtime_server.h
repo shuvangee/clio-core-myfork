@@ -38,7 +38,7 @@
  * RuntimeServer — cross-platform test helper that launches the canonical
  * `clio_run` runtime daemon as a SEPARATE process and manages its lifetime.
  *
- * This replaces the older `fork()` + in-process `CHIMAERA_INIT(kServer)` +
+ * This replaces the older `fork()` + in-process `CLIO_INIT(kServer)` +
  * `sleep(300)` pattern used by the IPC/transport/external-client tests. That
  * pattern is:
  *   - broken on macOS: the forked child dlopen()s the ChiMod .dylibs and spawns
@@ -75,9 +75,7 @@
 extern char **environ;
 #endif
 
-// NOTE: `chi` is a namespace ALIAS (namespace chi = clio::run), so we must not
-// open `namespace chi { ... }` here. Define in clio::run::test; tests reach it
-// as chi::test::RuntimeServer through the alias.
+// Defined in clio::run::test; tests reach it as clio::run::test::RuntimeServer.
 namespace clio {
 namespace run {
 namespace test {
@@ -121,10 +119,10 @@ class RuntimeServer {
     const std::string exe = RuntimeExe();
     // Point the daemon at the directory holding clio_run for ChiMod (.so/.dylib
     // /.dll) discovery — the modules are built alongside it. Not every test
-    // sets CHI_REPO_PATH in its CTest ENVIRONMENT, so set it unconditionally.
+    // sets CLIO_REPO_PATH in its CTest ENVIRONMENT, so set it unconditionally.
     {
       size_t slash = exe.find_last_of("/\\");
-      if (slash != std::string::npos) SetEnv("CHI_REPO_PATH", exe.substr(0, slash));
+      if (slash != std::string::npos) SetEnv("CLIO_REPO_PATH", exe.substr(0, slash));
     }
     const std::string log = ServerLogPath();
 
@@ -178,7 +176,7 @@ class RuntimeServer {
   /**
    * Poll until the runtime's main shared-memory segment exists, signalling that
    * the daemon has initialized far enough to serve clients. Portable: on POSIX
-   * the segment is a file under /tmp/chimaera_$USER, on Windows a named mapping
+   * the segment is a file under /tmp/clio_$USER, on Windows a named mapping
    * — SystemInfo::OpenSharedMemory abstracts both. Returns false if the timeout
    * elapses or the daemon exits early.
    */
@@ -244,12 +242,12 @@ class RuntimeServer {
 
  private:
   /** Absolute path to the clio_run binary. CMake passes CLIO_RUN_EXE via
-   *  $<TARGET_FILE:clio_run>; fall back to CHI_REPO_PATH/clio_run otherwise. */
+   *  $<TARGET_FILE:clio_run>; fall back to CLIO_REPO_PATH/clio_run otherwise. */
   static std::string RuntimeExe() {
 #ifdef CLIO_RUN_EXE
     return std::string(CLIO_RUN_EXE);
 #else
-    const char *repo = std::getenv("CHI_REPO_PATH");
+    const char *repo = std::getenv("CLIO_REPO_PATH");
     std::string dir = (repo && *repo) ? std::string(repo) : std::string(".");
 #ifdef _WIN32
     return dir + "\\clio_run.exe";

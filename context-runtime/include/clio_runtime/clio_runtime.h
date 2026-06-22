@@ -62,8 +62,7 @@ enum class RuntimeMode {
 };
 
 /// Backward-compat alias for the pre-rename name.  External code that
-/// still uses chi::ChimaeraMode keeps compiling unchanged.
-using ChimaeraMode = RuntimeMode;
+/// still uses clio::run::RuntimeMode keeps compiling unchanged.
 
 /**
  * Global initialization functions
@@ -73,7 +72,7 @@ using ChimaeraMode = RuntimeMode;
  * Initialize CLIO Runtime with specified mode
  *
  * @param mode Initialization mode (kClient or kServer/kRuntime)
- * @param default_with_runtime Default behavior if CHI_WITH_RUNTIME env var not set
+ * @param default_with_runtime Default behavior if CLIO_WITH_RUNTIME env var not set
  *        If true, will start runtime in addition to client initialization
  *        If false, will only initialize client components
  * @param is_restart If true, force restart_=true on compose pools and replay WAL
@@ -83,34 +82,23 @@ using ChimaeraMode = RuntimeMode;
  * Environment variable:
  *   CLIO_WITH_RUNTIME=1 - Start runtime regardless of mode
  *   CLIO_WITH_RUNTIME=0 - Don't start runtime (client only)
- *   (CHI_WITH_RUNTIME is honored as a legacy alias via env::GetCompat.)
+ *   (CLIO_WITH_RUNTIME is honored as a legacy alias via env::GetCompat.)
  *   If not set, uses default_with_runtime parameter
  */
-bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
+bool ClioInitImpl(RuntimeMode mode, bool default_with_runtime,
                   bool is_restart);
 
 /**
  * CLIO_INIT — canonical Clio runtime entry point.  Thin inline wrapper
  * around ClioInitImpl (the heavy lifting lives in clio_runtime.cc because
- * it touches the IpcManager / ChimaeraManager singletons whose
+ * it touches the IpcManager / RuntimeManager singletons whose
  * headers we don't want to drag into clio_runtime.h's transitive
  * include set).  Inline, not a macro, so the call resolves through the
  * normal overload-set + ADL rules.
  */
-inline bool CLIO_INIT(ChimaeraMode mode, bool default_with_runtime = false,
+inline bool CLIO_INIT(RuntimeMode mode, bool default_with_runtime = false,
                        bool is_restart = false) {
   return ClioInitImpl(mode, default_with_runtime, is_restart);
-}
-
-/**
- * CHIMAERA_INIT — legacy name retained as a thin inline wrapper around
- * CLIO_INIT for source-level compat with the chimaera::* era.  Will
- * stay until external callers (coeus-adapter, downstream tests) drop
- * the old spelling.
- */
-inline bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime = false,
-                           bool is_restart = false) {
-  return CLIO_INIT(mode, default_with_runtime, is_restart);
 }
 
 /**
@@ -123,13 +111,10 @@ inline bool CHIMAERA_INIT(ChimaeraMode mode, bool default_with_runtime = false,
  */
 void CLIO_RUNTIME_FINALIZE();
 
-/** Deprecated alias — calls CLIO_RUNTIME_FINALIZE(). */
-inline void CHIMAERA_FINALIZE() { CLIO_RUNTIME_FINALIZE(); }
-
 }  // namespace clio::run
 
 //==============================================================================
-// CLIO_* runtime API surface (rebranding: chimaera -> clio_runtime).
+// CLIO_* runtime API surface (rebranding: clio -> clio_runtime).
 //
 // All CLIO_* singleton / class-body / allocator macros are now defined at
 // their canonical site in the individual subsystem headers (admin.h,
@@ -140,10 +125,5 @@ inline void CHIMAERA_FINALIZE() { CLIO_RUNTIME_FINALIZE(); }
 // CHI_* spelling keeps working unchanged. See rebranding.md for the full
 // migration table.
 //==============================================================================
-
-// --- Module namespace alias (chimaera:: -> clio::run::) ---
-// Pulled in last so the alias is visible to every TU that includes this
-// umbrella, regardless of which module headers come along for the ride.
-#include "clio_runtime/compat/chimaera_namespace.h"
 
 #endif  // CLIO_RUNTIME_INCLUDE_CLIO_RUNTIME_CLIO_RUNTIME_H_

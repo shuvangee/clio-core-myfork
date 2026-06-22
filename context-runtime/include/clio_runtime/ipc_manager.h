@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_IPC_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_IPC_MANAGER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_MANAGERS_IPC_MANAGER_H_
+#define CLIO_RUNTIME_INCLUDE_MANAGERS_IPC_MANAGER_H_
 
 #include <atomic>
 #include <chrono>
@@ -88,8 +88,8 @@ namespace gpu { class IpcManager; }
 // included after CLIO_IPC is defined at the bottom of this header.
 template <typename BufferT> class LocalSaveTaskArchive;
 template <typename BufferT> class LocalLoadTaskArchive;
-using DefaultSaveArchive = LocalSaveTaskArchive<chi::priv::vector<char>>;
-using DefaultLoadArchive = LocalLoadTaskArchive<chi::priv::vector<char>>;
+using DefaultSaveArchive = LocalSaveTaskArchive<clio::run::priv::vector<char>>;
+using DefaultLoadArchive = LocalLoadTaskArchive<clio::run::priv::vector<char>>;
 enum class LocalMsgType : uint8_t;
 
 /**
@@ -127,7 +127,7 @@ using NetQueue = ctp::ipc::multi_mpsc_ring_buffer<Future<Task>, CLIO_QUEUE_ALLOC
 /**
  * Typedef for worker queue type to simplify usage
  */
-using WorkQueue = chi::ipc::mpsc_ring_buffer<ctp::ipc::ShmPtr<TaskLane>>;
+using WorkQueue = clio::run::ipc::mpsc_ring_buffer<ctp::ipc::ShmPtr<TaskLane>>;
 
 /**
  * Metadata for client <-> server communication via lightbeam
@@ -152,7 +152,7 @@ struct ClientTaskMeta {
  * Used for registering client memory with the runtime
  */
 struct ClientShmInfo {
-  std::string shm_name;        // Shared memory name (chimaera_{pid}_{count})
+  std::string shm_name;        // Shared memory name (clio_{pid}_{count})
   pid_t owner_pid;             // PID of the owning process
   u32 shm_index;               // Index within the owner's shm segments
   size_t size;                 // Size of the shared memory segment
@@ -384,7 +384,7 @@ class IpcManager {
 
   // AllocateDeviceData / AllocateGpuBuffer were removed along with the
   // GPU runtime concept. Kernel-side buffer allocation now goes
-  // through chi::gpu::IpcManager::AllocateBuffer (carved out of the
+  // through clio::run::gpu::IpcManager::AllocateBuffer (carved out of the
   // gpu2cpu_copy_backend), and host-side device allocation uses
   // ctp::GpuApi::Malloc directly.
 
@@ -1167,7 +1167,7 @@ class IpcManager {
   /**
    * Get number of GPU→CPU queues (one per GPU device).
    * Forwards to gpu::IpcManager::per_gpu_devices_ — there is no longer a
-   * separate gpu_queues_ vector on chi::IpcManager.
+   * separate gpu_queues_ vector on clio::run::IpcManager.
    */
   size_t GetGpuQueueCount() const {
 #if CTP_IS_HOST && (CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL)
@@ -1213,7 +1213,7 @@ class IpcManager {
   /**
    * Register an existing shared memory segment into the IpcManager
    * Called by worker when encountering an unknown allocator in a FutureShm
-   * Derives shm_name from alloc_id: chimaera_{pid}_{index}
+   * Derives shm_name from alloc_id: clio_{pid}_{index}
    * @param alloc_id Allocator ID (major=pid, minor=index)
    * @return true if successful (or already registered), false on error
    */
@@ -1280,7 +1280,7 @@ class IpcManager {
 #endif
 
   /**
-   * Clear all memfd symlinks from the per-user chimaera directory.
+   * Clear all memfd symlinks from the per-user clio directory.
    *
    * Called during RuntimeInit to clean up leftover memfd symlinks
    * from previous runs or crashed processes. Since the directory is
@@ -1344,7 +1344,7 @@ class IpcManager {
   /**
    * Wait for local server to become available via lightbeam transport
    * Sends a ClientConnectTask and waits for response with timeout
-   * Uses CHI_WAIT_SERVER environment variable for timeout (default 30s)
+   * Uses CLIO_WAIT_SERVER environment variable for timeout (default 30s)
    * @return true if server responded, false on timeout
    */
   bool WaitForLocalServer();
@@ -1435,7 +1435,7 @@ class IpcManager {
   std::mutex transport_shutdown_hooks_mutex_;
   std::vector<std::function<void()>> transport_shutdown_hooks_;
 
-  // IPC transport mode (TCP default, configurable via CHI_IPC_MODE)
+  // IPC transport mode (TCP default, configurable via CLIO_IPC_MODE)
   IpcMode ipc_mode_ = IpcMode::kTcp;
 
   // SHM lightbeam transport (for SendShm / RecvShm)
@@ -1491,16 +1491,16 @@ class IpcManager {
   // Client-side server waiting configuration (from environment variables)
   // Semantics: 0 = fail immediately, -1 = wait forever, >0 = timeout in seconds
   float wait_server_timeout_ =
-      30.0f;  // CHI_WAIT_SERVER: timeout in seconds (default 30)
+      30.0f;  // CLIO_WAIT_SERVER: timeout in seconds (default 30)
   u32 poll_server_interval_ =
-      1;  // CHI_POLL_SERVER: poll interval in seconds (default 1)
+      1;  // CLIO_POLL_SERVER: poll interval in seconds (default 1)
 
   // Client-side retry configuration
   // Semantics: 0 = fail immediately, -1 = wait forever, >0 = timeout in seconds
   u64 client_generation_ = 0;  // Cached server generation at connect time
   float client_retry_timeout_ =
-      60.0f;                        // CHI_CLIENT_RETRY_TIMEOUT (default 60s)
-  int client_try_new_servers_ = 0;  // CHI_CLIENT_TRY_NEW_SERVERS (default 0)
+      60.0f;                        // CLIO_CLIENT_RETRY_TIMEOUT (default 60s)
+  int client_try_new_servers_ = 0;  // CLIO_CLIENT_TRY_NEW_SERVERS (default 0)
   std::atomic<bool> reconnecting_{false};  // Guards against recursive reconnect
 
   // Persistent ZeroMQ transport connection pool
@@ -1549,7 +1549,7 @@ class IpcManager {
    * Reader lock: for normal ToFullPtr lookups and allocation attempts
    * Writer lock: for IpcManager cleanup and memory increase operations
    */
-  chi::CoRwLock allocator_map_lock_;
+  clio::run::CoRwLock allocator_map_lock_;
 
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
@@ -1560,7 +1560,7 @@ class IpcManager {
 #else
   /** Layout placeholder — keeps struct size/offsets identical whether
    *  any GPU backend is enabled or not, preventing ODR violations when test
-   *  binaries link chimaera_cxx without GPU support. */
+   *  binaries link clio_run_cxx without GPU support. */
   void *gpu_ipc_placeholder_ = nullptr;
 #endif
 
@@ -1607,9 +1607,9 @@ class IpcManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for IPC manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::IpcManager, g_ipc_manager);
 
-#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 #define CLIO_CPU_IPC CLIO_IPC
 
 // Backward-compat aliases (clio_run rebrand). External code that still
@@ -1618,11 +1618,9 @@ CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
 // active in the current pass (host / GPU host pass / GPU device pass /
 // SYCL device pass), surviving any later #undef/#define cycle on
 // CLIO_IPC / CLIO_CPU_IPC further down in this file.
-#define CHI_IPC      CLIO_IPC
-#define CHI_CPU_IPC  CLIO_CPU_IPC
 
 // Include local_task_archives after CLIO_IPC is defined, since on GPU
-// CLIO_PRIV_ALLOC expands to chi::GetPrivAllocGpu() (defined below)
+// CLIO_PRIV_ALLOC expands to clio::run::GetPrivAllocGpu() (defined below)
 #include "clio_runtime/local_task_archives.h"
 
 // ================================================================
@@ -1644,7 +1642,7 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 
 // CLIO_IPC needs different expansions in nvcc/hipcc's two passes:
 //   - Device pass (CTP_IS_GPU=1): GetBlockIpcManager() — the per-block
-//     `__shared__` singleton initialized by CHIMAERA_GPU_INIT.
+//     `__shared__` singleton initialized by CLIO_GPU_INIT.
 //   - Host pass (CTP_IS_GPU=0): the global host pointer accessor —
 //     same as the non-GPU-compiler default. Host-only client code
 //     (bdev_client::AsyncCreate, etc.) gets compiled in this pass too
@@ -1652,12 +1650,12 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 //     host IpcManager, not nullptr. Mirrors the SYCL two-form override.
 #undef CLIO_IPC
 #if CTP_IS_GPU
-#define CLIO_IPC (::chi::gpu::GetGpuIpcManager())
+#define CLIO_IPC (::clio::run::gpu::GetGpuIpcManager())
 #else
-#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 #endif
 #undef CLIO_CPU_IPC
-#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 
 namespace clio::run {
 // Producer-only model: kernels do not allocate. The legacy
@@ -1684,7 +1682,7 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
 // and DPC++ rejects function-local static variables in device code. The
 // CUDA path lets CLIO_IPC auto-resolve via a static method; the SYCL path
 // instead binds a kernel-scope local variable named `g_ipc_manager_ptr`
-// in the CHIMAERA_GPU_*_INIT macros (see gpu_ipc_manager.h), and CLIO_IPC
+// in the CLIO_GPU_*_INIT macros (see gpu_ipc_manager.h), and CLIO_IPC
 // is a macro that resolves to that local via plain C++ name lookup.
 //
 // Consequence: CLIO_IPC works inside the kernel body and inside any
@@ -1692,7 +1690,7 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
 // in lexical scope (typically because the function takes it as a
 // parameter or is inlined into the kernel). Free functions that take
 // no parameters and reach for CLIO_IPC will not compile under SYCL —
-// pass the IpcManager pointer through explicitly. The chimaera runtime
+// pass the IpcManager pointer through explicitly. The clio runtime
 // follows this convention: chimod methods are called from the worker's
 // kernel body, where g_ipc_manager_ptr is in scope.
 //
@@ -1711,7 +1709,7 @@ inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() { return nullptr; }
 
 // Global-namespace fallback for `g_ipc_manager_ptr`. Code inside the
 // kernel scope shadows this with a local established by
-// CHIMAERA_GPU_*_INIT and gets the real IpcManager pointer; host-only
+// CLIO_GPU_*_INIT and gets the real IpcManager pointer; host-only
 // methods that get parsed (but never emitted) in the SYCL device pass —
 // e.g. bdev_client's AsyncMonitor — find this nullptr fallback so they
 // parse cleanly. They are never reachable from a kernel, so DPC++ does
@@ -1724,13 +1722,13 @@ inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() { return nullptr; }
 //
 // Declared `inline` so multiple TUs sharing this header don't generate
 // conflicting definitions.
-inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
+inline ::clio::run::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 
 // CLIO_IPC under SYCL needs different expansions in the two compilation
 // passes that DPC++ runs over a SYCL TU:
 //
 //   - Device pass (CTP_IS_SYCL_DEVICE=1): resolve to the kernel-scope
-//     local `g_ipc_manager_ptr` established by CHIMAERA_GPU_*_INIT, picked
+//     local `g_ipc_manager_ptr` established by CLIO_GPU_*_INIT, picked
 //     up via unqualified C++ name lookup from the enclosing function.
 //   - Host pass: keep using the global pointer accessor — host-only
 //     functions (e.g. bdev_client::AsyncMonitor) get compiled in this
@@ -1743,10 +1741,10 @@ inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 #if CTP_IS_SYCL_DEVICE
 #define CLIO_IPC (g_ipc_manager_ptr)
 #else
-#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 #endif
 #undef CLIO_CPU_IPC
-#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 
 #endif  // CTP_IS_SYCL_COMPILER
 
@@ -1953,7 +1951,7 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
 template <typename TaskT, typename AllocT>
 CTP_GPU_FUN bool Future<TaskT, AllocT>::WaitGpu2Gpu(float max_sec,
                                                       bool reuse_task) {
-  // chi::Future should not be used for GPU-to-GPU paths.
+  // clio::run::Future should not be used for GPU-to-GPU paths.
   // Use gpu::Future::WaitGpu2Gpu instead.
   (void)max_sec; (void)reuse_task;
   return true;
@@ -2001,7 +1999,7 @@ template <typename TaskT, typename AllocT>
 CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitGpu2Cpu(float max_sec,
                                                        bool reuse_task) {
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-  // Host-side polling path (test harness): polls chi::FutureShm with
+  // Host-side polling path (test harness): polls clio::run::FutureShm with
   // system-scope atomics. The GPU kernel uses IpcGpu2Cpu::ClientRecv
   // (device-side) which polls gpu::FutureShm instead.
   ctp::ipc::FullPtr<FutureShm> future_full =
@@ -2030,7 +2028,7 @@ CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitGpu2Cpu(float max_sec,
     ctp::lbm::LbmContext ctx;
     ctx.copy_space = future_full->copy_space;
     ctx.shm_info_ = &future_full->output_;
-    chi::priv::vector<char> load_buf(CLIO_PRIV_ALLOC);
+    clio::run::priv::vector<char> load_buf(CLIO_PRIV_ALLOC);
     load_buf.reserve(256);
     DefaultLoadArchive load_ar(load_buf);
     load_ar.SetMsgType(LocalMsgType::kSerializeOut);
@@ -2131,9 +2129,9 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
 #endif
 }
 
-// gpu::Future is fully defined inline in chimaera/gpu/future.h after the
+// gpu::Future is fully defined inline in clio/gpu/future.h after the
 // producer-only redesign — no out-of-line method implementations needed.
-// gpu::Future::Wait() is defined in chimaera/ipc/ipc_gpu2cpu_impl.h
+// gpu::Future::Wait() is defined in clio/ipc/ipc_gpu2cpu_impl.h
 // alongside IpcGpu2Cpu::ClientSend.
 
 }  // namespace clio::run
@@ -2142,4 +2140,4 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
 #include "clio_runtime/ipc/ipc_cpu2cpu_impl.h"
 #include "clio_runtime/ipc/ipc_cpu2cpu_zmq_impl.h"
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_IPC_MANAGER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_MANAGERS_IPC_MANAGER_H_

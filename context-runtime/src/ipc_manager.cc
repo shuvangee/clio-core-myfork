@@ -65,7 +65,7 @@
 #endif
 
 // Global pointer variable definition for IPC manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::IpcManager, g_ipc_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::IpcManager, g_ipc_manager);
 
 namespace clio::run {
 
@@ -94,7 +94,7 @@ namespace {
 // main port) is untouched, so multi-node TCP is unaffected; on Linux/Windows
 // nothing changes. Override the platform default with CLIO_ZMQ_LOCAL_IPC=0/1.
 inline bool UseLocalZmqIpc() {
-  if (const char *env = chi::env::GetCompat("ZMQ_LOCAL_IPC")) {
+  if (const char *env = clio::run::env::GetCompat("ZMQ_LOCAL_IPC")) {
     return *env != '\0' && std::strcmp(env, "0") != 0;
   }
 #ifdef __APPLE__
@@ -105,11 +105,11 @@ inline bool UseLocalZmqIpc() {
 }
 
 // Unix-domain socket path for the local ZMQ ROUTER/DEALER. Distinct from the
-// non-ZMQ SocketTransport endpoint (chimaera_<port>.ipc) so the two local
+// non-ZMQ SocketTransport endpoint (clio_<port>.ipc) so the two local
 // servers never collide.
 inline std::string LocalZmqIpcPath(u32 port) {
   return ctp::SystemInfo::GetMemfdPath(
-      "chimaera_zmq_" + std::to_string(port + 3) + ".ipc");
+      "clio_zmq_" + std::to_string(port + 3) + ".ipc");
 }
 
 }  // namespace
@@ -126,8 +126,8 @@ bool IpcManager::ClientInit() {
     return true;
   }
 
-  // Parse CHI_IPC_MODE environment variable (default: TCP)
-  const char *ipc_mode_env = chi::env::GetCompat("IPC_MODE");
+  // Parse CLIO_IPC_MODE environment variable (default: TCP)
+  const char *ipc_mode_env = clio::run::env::GetCompat("IPC_MODE");
   if (ipc_mode_env != nullptr) {
     std::string mode_str(ipc_mode_env);
     if (mode_str == "SHM" || mode_str == "shm") {
@@ -145,15 +145,15 @@ bool IpcManager::ClientInit() {
 
   // Parse retry timeout environment variable
   // Semantics: 0 = fail immediately, -1 = wait forever, >0 = timeout in seconds
-  const char *retry_env = chi::env::GetCompat("CLIENT_RETRY_TIMEOUT");
+  const char *retry_env = clio::run::env::GetCompat("CLIENT_RETRY_TIMEOUT");
   if (retry_env) {
     client_retry_timeout_ = static_cast<float>(std::atof(retry_env));
   }
   HLOG(kInfo, "IpcManager::ClientInit: retry_timeout = {}s",
        client_retry_timeout_);
 
-  // Parse CHI_CLIENT_TRY_NEW_SERVERS environment variable
-  const char *try_new_env = chi::env::GetCompat("CLIENT_TRY_NEW_SERVERS");
+  // Parse CLIO_CLIENT_TRY_NEW_SERVERS environment variable
+  const char *try_new_env = clio::run::env::GetCompat("CLIENT_TRY_NEW_SERVERS");
   if (try_new_env) {
     client_try_new_servers_ = std::atoi(try_new_env);
   }
@@ -191,7 +191,7 @@ bool IpcManager::ClientInit() {
       // shared-memory data path and the mode assertions still hold.
       ctp::SystemInfo::EnsureMemfdDir();
       std::string ipc_path =
-          ctp::SystemInfo::GetMemfdPath("chimaera_" + std::to_string(port) + ".ipc");
+          ctp::SystemInfo::GetMemfdPath("clio_" + std::to_string(port) + ".ipc");
       try {
         zmq_transport_ = ctp::lbm::TransportFactory::Get(
             ipc_path, ctp::lbm::TransportType::kSocket,
@@ -308,14 +308,14 @@ bool IpcManager::ServerInit() {
     return true;
   }
 
-  // CLIO_FORCE_NET (legacy CHI_FORCE_NET also honored via GetCompat):
+  // CLIO_FORCE_NET (legacy CLIO_FORCE_NET also honored via GetCompat):
   // when set to anything non-empty, every task whose PoolQuery isn't
   // explicitly Local() is routed via the network path even on a
   // single-node deployment. Used by the bench to stress the ZMQ
   // serialize/send/recv loop without needing a real multi-node
   // setup.  Read once here; IsTaskLocal consults force_net_ on the
   // hot path.
-  if (const char *env = chi::env::GetCompat("FORCE_NET")) {
+  if (const char *env = clio::run::env::GetCompat("FORCE_NET")) {
     if (*env != '\0' && std::strcmp(env, "0") != 0) {
       force_net_ = true;
       HLOG(kInfo, "IpcManager: CLIO_FORCE_NET=1 — routing all non-Local "
@@ -366,7 +366,7 @@ bool IpcManager::ServerInit() {
   }
 #elif CTP_ENABLE_SYCL
   // SYCL backend: same shape as the CUDA/HIP path above. Bootstrap
-  // helper lives in chimaera_cxx_gpu (gpu2cpu_init_sycl.cc) — call
+  // helper lives in clio_run_cxx_gpu (gpu2cpu_init_sycl.cc) — call
   // into it via a free function with normal linkage; both libraries
   // see the same IpcManager layout because CTP_ENABLE_SYCL=1 is set
   // on both.
@@ -414,7 +414,7 @@ bool IpcManager::ServerInit() {
       // avoid the Defender Firewall prompt on the ROUTER port even when
       // the main server is on loopback.
       std::string router_bind = "0.0.0.0";
-      if (const char *env = chi::env::GetCompat("BIND_ADDR")) {
+      if (const char *env = clio::run::env::GetCompat("BIND_ADDR")) {
         if (*env) router_bind = env;
       }
       if (UseLocalZmqIpc()) {
@@ -446,7 +446,7 @@ bool IpcManager::ServerInit() {
       // not created by default, so binding the socket would otherwise fail.
       ctp::SystemInfo::EnsureMemfdDir();
       std::string ipc_path =
-          ctp::SystemInfo::GetMemfdPath("chimaera_" + std::to_string(port) + ".ipc");
+          ctp::SystemInfo::GetMemfdPath("clio_" + std::to_string(port) + ".ipc");
       client_ipc_transport_ = ctp::lbm::TransportFactory::Get(
           ipc_path, ctp::lbm::TransportType::kSocket,
           ctp::lbm::TransportMode::kServer, "ipc", 0);
@@ -841,7 +841,7 @@ bool IpcManager::StartLocalServer() {
 bool IpcManager::WaitForLocalServer() {
   // Read environment variables for wait configuration
   // Semantics: 0 = fail immediately, -1 = wait forever, >0 = timeout in seconds
-  const char *wait_env = chi::env::GetCompat("WAIT_SERVER");
+  const char *wait_env = clio::run::env::GetCompat("WAIT_SERVER");
   if (wait_env != nullptr) {
     wait_server_timeout_ = static_cast<float>(std::atof(wait_env));
   }
@@ -851,11 +851,11 @@ bool IpcManager::WaitForLocalServer() {
 
   // 0 = don't wait at all
   if (wait_server_timeout_ == 0) {
-    HLOG(kError, "CHI_WAIT_SERVER=0: not waiting for runtime");
+    HLOG(kError, "CLIO_WAIT_SERVER=0: not waiting for runtime");
     return false;
   }
 
-  // At scale (>=64 chimaera daemons) the daemon's local 9416 ROUTER's I/O
+  // At scale (>=64 clio daemons) the daemon's local 9416 ROUTER's I/O
   // thread is starved by initial cross-node SWIM probes when this DEALER
   // first connects, the ZMTP greeting EPIPE's, and the DEALER ends up in
   // a half-open state ZMQ's auto-reconnect cannot recover from. Sending a
@@ -887,7 +887,7 @@ retry_attempt:
       HLOG(kError, "Timeout waiting for runtime after {} seconds ({} attempts)",
            wait_server_timeout_, attempt_idx);
       HLOG(kError, "This usually means:");
-      HLOG(kError, "1. Chimaera runtime is not running");
+      HLOG(kError, "1. Clio runtime is not running");
       HLOG(kError, "2. Runtime failed to start");
       HLOG(kError, "3. Network connectivity issues");
       return false;
@@ -913,7 +913,7 @@ retry_attempt:
           // SocketTransport (not ZMQ), so recreate it the same way (issue #482).
           ctp::SystemInfo::EnsureMemfdDir();
           std::string ipc_path = ctp::SystemInfo::GetMemfdPath(
-              "chimaera_" + std::to_string(port) + ".ipc");
+              "clio_" + std::to_string(port) + ".ipc");
           zmq_transport_ = ctp::lbm::TransportFactory::Get(
               ipc_path, ctp::lbm::TransportType::kSocket,
               ctp::lbm::TransportMode::kClient, "ipc", 0);
@@ -1045,7 +1045,7 @@ bool IpcManager::LoadHostfile() {
     // 127.0.0.1 so the Defender Firewall doesn't pop "Allow access?"
     // for every new test binary that binds a fresh port.
     std::string bind_addr = "0.0.0.0";
-    if (const char *env = chi::env::GetCompat("BIND_ADDR")) {
+    if (const char *env = clio::run::env::GetCompat("BIND_ADDR")) {
       if (*env) bind_addr = env;
     }
     HLOG(kDebug, "No hostfile configured, binding {} as node 0", bind_addr);
@@ -1411,11 +1411,11 @@ bool IpcManager::IdentifyThisHost() {
   HLOG(kError, "  macOS:   sudo lsof -i :{} -P -n", port);
   HLOG(kError, "           sudo lsof -nP -iTCP:{} | grep LISTEN", port);
   HLOG(kError, "");
-  HLOG(kError, "To stop the Chimaera runtime, run:");
-  HLOG(kError, "  chimaera runtime stop");
+  HLOG(kError, "To stop the Clio runtime, run:");
+  HLOG(kError, "  clio runtime stop");
   HLOG(kError, "");
   HLOG(kError, "Or kill the process directly:");
-  HLOG(kError, "  pkill -9 chimaera");
+  HLOG(kError, "  pkill -9 clio");
   HLOG(kFatal, "  kill -9 <PID>");
   return false;
 }
@@ -1755,9 +1755,9 @@ bool IpcManager::IncreaseClientShm(size_t size) {
   int pid = ctp::SystemInfo::GetPid();
   u32 index = shm_count_.fetch_add(1, std::memory_order_relaxed);
 
-  // Create shared memory name: chimaera_{pid}_{index}
+  // Create shared memory name: clio_{pid}_{index}
   std::string shm_name =
-      "chimaera_" + std::to_string(pid) + "_" + std::to_string(index);
+      "clio_" + std::to_string(pid) + "_" + std::to_string(index);
 
   // Add 32MB metadata overhead
   size_t total_size = size + kShmMetadataOverhead;
@@ -1818,7 +1818,7 @@ bool IpcManager::IncreaseClientShm(size_t size) {
     // Use kAdminPoolId directly (not admin_client->pool_id_) because
     // the admin client may not be initialized yet during ClientInit.
     auto reg_task = NewTask<clio::run::admin::RegisterMemoryTask>(
-        chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(),
+        clio::run::CreateTaskId(), clio::run::kAdminPoolId, clio::run::PoolQuery::Local(),
         alloc_id);
     IpcCpu2CpuZmq::ClientSend(this,reg_task, IpcMode::kTcp).Wait();
 
@@ -1840,11 +1840,11 @@ bool IpcManager::RegisterMemory(const ctp::ipc::AllocatorId &alloc_id) {
   // Acquire writer lock on allocator_map_lock_ during memory registration
   allocator_map_lock_.WriteLock();
 
-  // Derive shm_name from alloc_id: chimaera_{pid}_{index}
+  // Derive shm_name from alloc_id: clio_{pid}_{index}
   int owner_pid = static_cast<int>(alloc_id.major_);
   u32 shm_index = alloc_id.minor_;
   std::string shm_name =
-      "chimaera_" + std::to_string(owner_pid) + "_" + std::to_string(shm_index);
+      "clio_" + std::to_string(owner_pid) + "_" + std::to_string(shm_index);
 
   HLOG(kInfo, "IpcManager::RegisterMemory: Registering {} from pid {}",
        shm_name, owner_pid);
@@ -1914,7 +1914,7 @@ ClientShmInfo IpcManager::GetClientShmInfo(u32 index) const {
 
   int pid = ctp::SystemInfo::GetPid();
   std::string shm_name =
-      "chimaera_" + std::to_string(pid) + "_" + std::to_string(index);
+      "clio_" + std::to_string(pid) + "_" + std::to_string(index);
 
   ctp::ipc::MultiProcessAllocator *allocator = alloc_vector_[index];
   ctp::ipc::AllocatorId alloc_id = allocator->GetId();
@@ -1981,7 +1981,7 @@ size_t IpcManager::WreapDeadIpcs() {
 
     // Get the allocator ID to construct shm_name
     ctp::ipc::AllocatorId alloc_id = allocator->GetId();
-    std::string shm_name = "chimaera_" + std::to_string(alloc_id.major_) + "_" +
+    std::string shm_name = "clio_" + std::to_string(alloc_id.major_) + "_" +
                            std::to_string(alloc_id.minor_);
 
     // Find and destroy the corresponding backend
@@ -2066,7 +2066,7 @@ size_t IpcManager::WreapAllIpcs() {
 
     // Get the allocator ID to construct shm_name
     ctp::ipc::AllocatorId alloc_id = allocator->GetId();
-    std::string shm_name = "chimaera_" + std::to_string(alloc_id.major_) + "_" +
+    std::string shm_name = "clio_" + std::to_string(alloc_id.major_) + "_" +
                            std::to_string(alloc_id.minor_);
 
     // Find and destroy the corresponding backend
@@ -2200,7 +2200,7 @@ bool IpcManager::ReconnectToOriginalHost() {
     for (auto *alloc : alloc_vector_) {
       auto alloc_id = alloc->GetId();
       auto reg_task = NewTask<clio::run::admin::RegisterMemoryTask>(
-          chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(),
+          clio::run::CreateTaskId(), clio::run::kAdminPoolId, clio::run::PoolQuery::Local(),
           alloc_id);
       IpcCpu2CpuZmq::ClientSend(this,reg_task, IpcMode::kTcp).Wait();
     }
@@ -2237,7 +2237,7 @@ bool IpcManager::ReconnectToOriginalHost() {
         // SocketTransport against the restarted daemon's IPC endpoint.
         ctp::SystemInfo::EnsureMemfdDir();
         std::string ipc_path = ctp::SystemInfo::GetMemfdPath(
-            "chimaera_" + std::to_string(port) + ".ipc");
+            "clio_" + std::to_string(port) + ".ipc");
         zmq_transport_ = ctp::lbm::TransportFactory::Get(
             ipc_path, ctp::lbm::TransportType::kSocket,
             ctp::lbm::TransportMode::kClient, "ipc", 0);
@@ -2592,7 +2592,7 @@ ctp::ipc::AllocatorId IpcManager::AllocateAndRegisterGpuBackend(
     std::memcpy(ipc_handle_bytes, &base, sizeof(char *));
 
     auto reg_task = NewTask<clio::run::admin::RegisterMemoryTask>(
-        chi::CreateTaskId(), chi::kAdminPoolId, chi::PoolQuery::Local(),
+        clio::run::CreateTaskId(), clio::run::kAdminPoolId, clio::run::PoolQuery::Local(),
         backend_id, admin_kind, gpu_id, static_cast<u64>(bytes),
         ipc_handle_bytes);
     IpcCpu2CpuZmq::ClientSend(this, reg_task, IpcMode::kTcp).Wait();
@@ -2633,8 +2633,8 @@ void IpcManager::BeginTask(Future<Task> &future, Container *container,
   run_ctx->worker_id_ = worker ? worker->GetId() : 0;
   run_ctx->task_ = task_ptr;        // Store task in RunContext
   run_ctx->is_yielded_ = false;     // Initially not blocked
-  run_ctx->container_ = container;  // Store container for CHI_CUR_CONTAINER
-  run_ctx->lane_ = lane;            // Store lane for CHI_CUR_LANE
+  run_ctx->container_ = container;  // Store container for CLIO_CUR_CONTAINER
+  run_ctx->lane_ = lane;            // Store lane for CLIO_CUR_LANE
   run_ctx->event_queue_ =
       worker ? worker->GetEventQueue() : nullptr;  // Set event queue
   run_ctx->future_ = future;        // Store future in RunContext

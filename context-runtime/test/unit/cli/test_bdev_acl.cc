@@ -66,9 +66,9 @@ int RunCliTimed(const std::vector<std::string>& args, int timeout_sec) {
   }
 }
 
-chi::priv::vector<clio::run::bdev::Block> WrapBlock(
+clio::run::priv::vector<clio::run::bdev::Block> WrapBlock(
     const clio::run::bdev::Block& block) {
-  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
+  clio::run::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
   blocks.push_back(block);
   return blocks;
 }
@@ -116,18 +116,18 @@ TEST_CASE("Bdev - per-RPC access control rejects external private calls",
   REQUIRE(server.WaitForReady());
   REQUIRE(RunCliTimed({"compose", "start", yaml.string()}, 60) == 0);
 
-  REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false));
+  REQUIRE(clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false));
   auto* ipc = CLIO_IPC;
   REQUIRE(ipc != nullptr);
 
-  const auto local = chi::PoolQuery::Local();
-  constexpr chi::u64 kN = 4096;
+  const auto local = clio::run::PoolQuery::Local();
+  constexpr clio::run::u64 kN = 4096;
 
-  clio::run::bdev::Client priv(chi::PoolId(701, 0));
-  clio::run::bdev::Client pub(chi::PoolId(702, 0));
-  clio::run::bdev::Client wronly(chi::PoolId(703, 0));
+  clio::run::bdev::Client priv(clio::run::PoolId(701, 0));
+  clio::run::bdev::Client pub(clio::run::PoolId(702, 0));
+  clio::run::bdev::Client wronly(clio::run::PoolId(703, 0));
 
-  auto write_buf = [&](const chi::priv::vector<clio::run::bdev::Block>& blocks,
+  auto write_buf = [&](const clio::run::priv::vector<clio::run::bdev::Block>& blocks,
                        clio::run::bdev::Client& c) {
     ctp::ipc::FullPtr<char> wb = ipc->AllocateBuffer(kN);
     memset(wb.ptr_, 'z', kN);

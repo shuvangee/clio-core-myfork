@@ -60,11 +60,11 @@ public:
 
   /**
    * Initialize client components
-   * Configuration is now provided via chimaera compose using CHI_SERVER_CONF
+   * Configuration is now provided via clio compose using CLIO_SERVER_CONF
    * @param pool_query Pool query type for CTE container creation
    * @return true if initialization successful, false otherwise
    */
-  bool ClientInit(const chi::PoolQuery &pool_query = chi::PoolQuery::Dynamic());
+  bool ClientInit(const clio::run::PoolQuery &pool_query = clio::run::PoolQuery::Dynamic());
 
   /**
    * Check if CTE is initialized
@@ -90,8 +90,8 @@ public:
    * @return Vector of matching tag names
    */
   std::vector<std::string> TagQuery(const std::string &tag_re,
-                                     chi::u32 max_tags = 0,
-                                     const chi::PoolQuery &pool_query = chi::PoolQuery::Broadcast());
+                                     clio::run::u32 max_tags = 0,
+                                     const clio::run::PoolQuery &pool_query = clio::run::PoolQuery::Broadcast());
 
   /**
    * Query blobs by tag and blob regex patterns
@@ -103,8 +103,8 @@ public:
    */
   std::vector<std::pair<std::string, std::string>> BlobQuery(const std::string &tag_re,
                                       const std::string &blob_re,
-                                      chi::u32 max_blobs = 0,
-                                      const chi::PoolQuery &pool_query = chi::PoolQuery::Broadcast());
+                                      clio::run::u32 max_blobs = 0,
+                                      const clio::run::PoolQuery &pool_query = clio::run::PoolQuery::Broadcast());
 
 private:
   bool is_initializing_;  /**< True during initialization process */

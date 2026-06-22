@@ -83,7 +83,7 @@ using namespace std::chrono_literals;
 // Storage configuration
 const std::string kTestStoragePath =
     (fs::temp_directory_path() / "cae_error_test_storage.dat").string();
-const chi::u64 kTestTargetSize = 100 * 1024 * 1024;  // 100MB
+const clio::run::u64 kTestTargetSize = 100 * 1024 * 1024;  // 100MB
 
 // Test configuration
 const std::string kTestFileName =
@@ -120,8 +120,8 @@ bool TestErrorCase(clio::cae::core::Client& cae_client,
   auto parse_task = cae_client.AsyncParseOmni(contexts);
   parse_task.Wait();
   // Use result_code_ (operation result) not GetReturnCode() (task completion status)
-  chi::u32 result_code = parse_task->result_code_;
-  chi::u32 num_tasks_scheduled = parse_task->num_tasks_scheduled_;
+  clio::run::u32 result_code = parse_task->result_code_;
+  clio::run::u32 num_tasks_scheduled = parse_task->num_tasks_scheduled_;
 
   HLOG(kInfo, "ParseOmni result: result_code={}, num_tasks={}", result_code, num_tasks_scheduled);
 
@@ -166,22 +166,22 @@ int main(int argc, char* argv[]) {
   int tests_total = 0;
 
   try {
-    // Initialize CLIO Runtime runtime (CHI_WITH_RUNTIME controls behavior)
-    HLOG(kInfo, "Initializing Chimaera...");
-    bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+    // Initialize CLIO Runtime runtime (CLIO_WITH_RUNTIME controls behavior)
+    HLOG(kInfo, "Initializing Clio...");
+    bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
     if (!success) {
-      HLOG(kError, "Failed to initialize Chimaera");
+      HLOG(kError, "Failed to initialize Clio");
       return 1;
     }
-    HLOG(kSuccess, "Chimaera initialized successfully");
+    HLOG(kSuccess, "Clio initialized successfully");
 
     // Verify CLIO Runtime IPC
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager) {
-      HLOG(kError, "Chimaera IPC not initialized");
+      HLOG(kError, "Clio IPC not initialized");
       return 1;
     }
-    HLOG(kSuccess, "Chimaera IPC verified");
+    HLOG(kSuccess, "Clio IPC verified");
 
     // Generate test file (1MB)
     HLOG(kInfo, "[SETUP] Generating test file...");
@@ -204,9 +204,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Create bdev storage target
-    chi::PoolId bdev_pool_id(200, 0);
+    clio::run::PoolId bdev_pool_id(200, 0);
     clio::run::bdev::Client bdev_client(bdev_pool_id);
-    auto bdev_create_task = bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), kTestStoragePath,
+    auto bdev_create_task = bdev_client.AsyncCreate(clio::run::PoolQuery::Dynamic(), kTestStoragePath,
                                                      bdev_pool_id, clio::run::bdev::BdevType::kFile);
     bdev_create_task.Wait();
     std::this_thread::sleep_for(100ms);
@@ -215,7 +215,7 @@ int main(int argc, char* argv[]) {
     auto *cte_client = CLIO_CTE_CLIENT;
     auto reg_task = cte_client->AsyncRegisterTarget(kTestStoragePath,
                                                      clio::run::bdev::BdevType::kFile,
-                                                     kTestTargetSize, chi::PoolQuery::Local(), bdev_pool_id);
+                                                     kTestTargetSize, clio::run::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     std::this_thread::sleep_for(100ms);
     HLOG(kSuccess, "Storage target registered: {}", kTestStoragePath);
@@ -230,7 +230,7 @@ int main(int argc, char* argv[]) {
     clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
-        chi::PoolQuery::Local(),
+        clio::run::PoolQuery::Local(),
         "test_cae_error_pool",
         clio::cae::core::kCaePoolId,
         params);

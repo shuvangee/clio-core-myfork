@@ -21,8 +21,8 @@ vcpkg_cmake_configure(
         -DWRP_CORE_ENABLE_ASAN=OFF
         -DHSHM_ENABLE_TESTS=OFF
         -DHSHM_ENABLE_BENCHMARKS=OFF
-        -DCHIMAERA_ENABLE_TESTS=OFF
-        -DCHIMAERA_ENABLE_BENCHMARKS=OFF
+        -DCLIO_CORE_ENABLE_TESTS=OFF
+        -DCLIO_CORE_ENABLE_BENCHMARKS=OFF
 )
 
 # Build
@@ -31,9 +31,9 @@ vcpkg_cmake_install()
 # Fix CMake config paths
 vcpkg_cmake_config_fixup(PACKAGE_NAME iowarp-core CONFIG_PATH lib/cmake/iowarp-core)
 vcpkg_cmake_config_fixup(PACKAGE_NAME ClioCtp CONFIG_PATH lib/cmake/ClioCtp)
-vcpkg_cmake_config_fixup(PACKAGE_NAME chimaera CONFIG_PATH lib/cmake/chimaera)
-vcpkg_cmake_config_fixup(PACKAGE_NAME chimaera_admin CONFIG_PATH lib/cmake/chimaera_admin)
-vcpkg_cmake_config_fixup(PACKAGE_NAME chimaera_bdev CONFIG_PATH lib/cmake/chimaera_bdev)
+vcpkg_cmake_config_fixup(PACKAGE_NAME clio_run CONFIG_PATH lib/cmake/clio_run)
+vcpkg_cmake_config_fixup(PACKAGE_NAME clio_run_admin CONFIG_PATH lib/cmake/clio_run_admin)
+vcpkg_cmake_config_fixup(PACKAGE_NAME clio_run_bdev CONFIG_PATH lib/cmake/clio_run_bdev)
 
 # Handle optional ChiMod packages
 if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/cmake/clio_cte_core")

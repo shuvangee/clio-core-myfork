@@ -26,7 +26,7 @@ function(add_cee_api_unit_test TEST_NAME TEST_SOURCE)
 
   # Set test environment variables
   set_tests_properties(${TEST_NAME} PROPERTIES
-    ENVIRONMENT "INIT_CHIMAERA=1;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    ENVIRONMENT "INIT_CLIO=1;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     TIMEOUT 300  # 5 minute timeout
   )
 endfunction()
@@ -84,8 +84,8 @@ set_tests_properties(
   PROPERTIES
     TIMEOUT 180
     LABELS "cee;comprehensive;coverage;msan_skip"
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
-    RESOURCE_LOCK "chimaera_runtime"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    RESOURCE_LOCK "clio_runtime"
 )
 
 #------------------------------------------------------------------------------
@@ -159,7 +159,7 @@ if(TARGET clio_cee)
   )
 
   # Self-contained: the test starts an in-process runtime via
-  # clio_cte_core_ext.chimaera_init(kClient, True), so it no longer needs an
+  # clio_cte_core_ext.clio_init(kClient, True), so it no longer needs an
   # externally running IOWarp daemon and is enabled by default.
   set_tests_properties(cee_python_retrieve_roundtrip PROPERTIES
     LABELS "cee;api;python;retrieve;regression;msan_skip"
@@ -179,7 +179,7 @@ endif()
 #------------------------------------------------------------------------------
 # Test labels for selective execution
 #------------------------------------------------------------------------------
-# Skip under MSan: CEE tests use uninstrumented chimaera runtime (ZMQ, shared
+# Skip under MSan: CEE tests use uninstrumented clio_run runtime (ZMQ, shared
 # memory, forked processes) that produce false-positive MSan reports.
 set_tests_properties(test_context_bundle PROPERTIES LABELS "cee;api;bundle;msan_skip")
 set_tests_properties(test_context_query PROPERTIES LABELS "cee;api;query;msan_skip")

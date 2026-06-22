@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_FUTURE_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_FUTURE_H_
+#ifndef CLIO_RUNTIME_INCLUDE_FUTURE_H_
+#define CLIO_RUNTIME_INCLUDE_FUTURE_H_
 
 #include <coroutine>
 
@@ -135,7 +135,7 @@ struct FutureShm {
   ctp::abitfield32_t flags_;
 
   /**
-   * Opaque pointer to the parent's GPU RunContext (chi::gpu::RunContext*).
+   * Opaque pointer to the parent's GPU RunContext (clio::run::gpu::RunContext*).
    * Set by Future::await_suspend on GPU so that the worker completing
    * this sub-task can directly resume the parent coroutine (same thread,
    * no event queue needed). Null for top-level (client-originated) tasks.
@@ -770,4 +770,4 @@ class Future {
 
 }  // namespace clio::run
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_FUTURE_H_
+#endif  // CLIO_RUNTIME_INCLUDE_FUTURE_H_

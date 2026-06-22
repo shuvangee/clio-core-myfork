@@ -49,7 +49,7 @@
  * - Tests integration with CTE (tag creation, blob storage)
  *
  * Environment Variables:
- * - INIT_CHIMAERA: If set to "1", initializes CLIO Runtime runtime
+ * - INIT_CLIO: If set to "1", initializes CLIO Runtime runtime
  * - TEST_HDF5_FILE: Override default test file path
  */
 
@@ -307,7 +307,7 @@ bool VerifyDatasetData(const std::string& file_path,
     // Get blob size
     auto blob_size_task = cte_client->AsyncGetBlobSize(tag_id, blob_name);
     blob_size_task.Wait();
-    chi::u64 blob_size = blob_size_task->size_;
+    clio::run::u64 blob_size = blob_size_task->size_;
     HLOG(kInfo, "Reading blob '{}' (size: {} bytes)", blob_name, blob_size);
 
     if (bytes_read + blob_size > total_size) {
@@ -476,22 +476,22 @@ int main(int argc, char* argv[]) {
   int exit_code = 0;
 
   try {
-    // Initialize CLIO Runtime runtime (CHI_WITH_RUNTIME controls behavior)
-    HLOG(kInfo, "Initializing Chimaera...");
-    bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+    // Initialize CLIO Runtime runtime (CLIO_WITH_RUNTIME controls behavior)
+    HLOG(kInfo, "Initializing Clio...");
+    bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
     if (!success) {
-      HLOG(kError, "Failed to initialize Chimaera");
+      HLOG(kError, "Failed to initialize Clio");
       return 1;
     }
-    HLOG(kSuccess, "Chimaera initialized successfully");
+    HLOG(kSuccess, "Clio initialized successfully");
 
     // Verify CLIO Runtime IPC is available
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager) {
-      HLOG(kError, "Chimaera IPC not initialized");
+      HLOG(kError, "Clio IPC not initialized");
       return 1;
     }
-    HLOG(kSuccess, "Chimaera IPC verified");
+    HLOG(kSuccess, "Clio IPC verified");
 
     // Step 1: Generate test HDF5 file
     HLOG(kInfo, "[STEP 1] Generating test HDF5 file...");
@@ -515,7 +515,7 @@ int main(int argc, char* argv[]) {
     clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
-        chi::PoolQuery::Local(),
+        clio::run::PoolQuery::Local(),
         "test_cae_pool",
         clio::cae::core::kCaePoolId,
         params);
@@ -543,8 +543,8 @@ int main(int argc, char* argv[]) {
     std::vector<clio::cae::core::AssimilationCtx> contexts = {ctx};
     auto parse_task = cae_client.AsyncParseOmni(contexts);
     parse_task.Wait();
-    chi::u32 result_code = parse_task->GetReturnCode();
-    chi::u32 num_tasks_scheduled = parse_task->num_tasks_scheduled_;
+    clio::run::u32 result_code = parse_task->GetReturnCode();
+    clio::run::u32 num_tasks_scheduled = parse_task->num_tasks_scheduled_;
 
     HLOG(kInfo, "ParseOmni completed:");
     HLOG(kInfo, "  result_code: {}", result_code);

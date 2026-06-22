@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_CONTAINER_H_
+#define CLIO_RUNTIME_INCLUDE_CONTAINER_H_
 
 #include <cmath>
 #include <clio_ctp/data_structures/serialization/global_serialize.h>
@@ -349,7 +349,7 @@ class Container {
                          RunContext& rctx) = 0;
 
   /**
-   * Fix up POD bytewise-copied tasks (chi::priv::string SSO data_
+   * Fix up POD bytewise-copied tasks (clio::run::priv::string SSO data_
    * pointers, etc.) before dispatching Run. Called by the GPU2CPU pop
    * path when the kernel's task was in kDeviceMem and the worker had
    * to D2H-copy the POD bytes into a host scratch buffer — at that
@@ -677,11 +677,11 @@ class ContainerClient {
 
 extern "C" {
 // Required ChiMod entry points
-typedef chi::Container* (*alloc_chimod_t)();
-typedef chi::Container* (*new_chimod_t)(const chi::PoolId* pool_id,
+typedef clio::run::Container* (*alloc_chimod_t)();
+typedef clio::run::Container* (*new_chimod_t)(const clio::run::PoolId* pool_id,
                                         const char* pool_name);
 typedef const char* (*get_chimod_name_t)(void);
-typedef void (*destroy_chimod_t)(chi::Container* container);
+typedef void (*destroy_chimod_t)(clio::run::Container* container);
 }
 
 /**
@@ -692,29 +692,28 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
  */
 #define CLIO_CHIMOD_CC(CONTAINER_CLASS, MOD_NAME)                    \
   extern "C" {                                                       \
-  chi::Container* alloc_chimod() {                                   \
-    return reinterpret_cast<chi::Container*>(new CONTAINER_CLASS()); \
+  clio::run::Container* alloc_chimod() {                                   \
+    return reinterpret_cast<clio::run::Container*>(new CONTAINER_CLASS()); \
   }                                                                  \
                                                                      \
-  chi::Container* new_chimod(const chi::PoolId* pool_id,             \
+  clio::run::Container* new_chimod(const clio::run::PoolId* pool_id,             \
                              const char* pool_name) {                \
-    chi::Container* container =                                      \
-        reinterpret_cast<chi::Container*>(new CONTAINER_CLASS());    \
+    clio::run::Container* container =                                      \
+        reinterpret_cast<clio::run::Container*>(new CONTAINER_CLASS());    \
     /* Initialization is handled by the container's Create method */ \
     return container;                                                \
   }                                                                  \
                                                                      \
   const char* get_chimod_name() { return MOD_NAME; }                 \
                                                                      \
-  void destroy_chimod(chi::Container* container) {                   \
+  void destroy_chimod(clio::run::Container* container) {                   \
     delete reinterpret_cast<CONTAINER_CLASS*>(container);            \
   }                                                                  \
                                                                      \
-  static bool is_chimaera_chimod_ = true;                            \
+  static bool is_clio_chimod_ = true;                            \
   }
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_CHIMOD_CC  CLIO_CHIMOD_CC
 
 /**
  * Macro to define ChiMod entry points for task-based modules
@@ -726,29 +725,28 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
  */
 #define CLIO_TASK_CC(CONTAINER_CLASS)                                \
   extern "C" {                                                       \
-  chi::Container* alloc_chimod() {                                   \
-    return reinterpret_cast<chi::Container*>(new CONTAINER_CLASS()); \
+  clio::run::Container* alloc_chimod() {                                   \
+    return reinterpret_cast<clio::run::Container*>(new CONTAINER_CLASS()); \
   }                                                                  \
                                                                      \
-  chi::Container* new_chimod(const chi::PoolId* pool_id,             \
+  clio::run::Container* new_chimod(const clio::run::PoolId* pool_id,             \
                              const char* pool_name) {                \
     auto* container = new CONTAINER_CLASS();                         \
     /* Initialization is handled by the container's Create method */ \
-    return reinterpret_cast<chi::Container*>(container);             \
+    return reinterpret_cast<clio::run::Container*>(container);             \
   }                                                                  \
                                                                      \
   const char* get_chimod_name() {                                    \
     return CONTAINER_CLASS::CreateParams::chimod_lib_name;           \
   }                                                                  \
                                                                      \
-  void destroy_chimod(chi::Container* container) {                   \
+  void destroy_chimod(clio::run::Container* container) {                   \
     delete reinterpret_cast<CONTAINER_CLASS*>(container);            \
   }                                                                  \
                                                                      \
-  static bool is_chimaera_chimod_ = true;                            \
+  static bool is_clio_chimod_ = true;                            \
   }
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_TASK_CC  CLIO_TASK_CC
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_CONTAINER_H_

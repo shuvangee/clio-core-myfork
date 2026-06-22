@@ -205,7 +205,7 @@
 #endif
 
 // Pull <sycl/sycl.hpp> in whenever the SYCL backend is enabled, not only
-// when this TU is being compiled with -fsycl. Host TUs in chimaera_cxx
+// when this TU is being compiled with -fsycl. Host TUs in clio_run_cxx
 // (compiled by dpcpp without -fsycl) still need sycl::malloc_host /
 // sycl::queue / sycl::free declarations because gpu_api.h's sycl::
 // branches activate on CTP_ENABLE_SYCL=1. The header is plain C++ —
@@ -328,7 +328,7 @@
 /** Mark a function whose address is taken on the device.
  *
  *  Use on every function that gets stored in a function-pointer table the
- *  device side dispatches through (for example chi::gpu::Container::run_,
+ *  device side dispatches through (for example clio::run::gpu::Container::run_,
  *  alloc_task_, save_task_, ...).
  *
  *  - On CUDA/ROCm: expands to nothing; nvcc/hipcc allow taking the address

@@ -42,7 +42,7 @@
 #include <filesystem>
 
 // Global pointer variable definition for Configuration manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::ConfigManager, g_config_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::ConfigManager, g_config_manager);
 
 namespace clio::run {
 
@@ -67,8 +67,8 @@ bool ConfigManager::ClientInit() {
   }
 
   // Check CLIO_PORT env var (overrides YAML and default).
-  // GetCompat reads CLIO_PORT first, falls back to CHI_PORT for old deployments.
-  if (const char *env = chi::env::GetCompat("PORT")) {
+  // GetCompat reads CLIO_PORT first, falls back to CLIO_PORT for old deployments.
+  if (const char *env = clio::run::env::GetCompat("PORT")) {
     std::string port_env(env);
     if (!port_env.empty()) {
       port_ = std::stoul(port_env);
@@ -76,8 +76,8 @@ bool ConfigManager::ClientInit() {
   }
 
   // Check CLIO_SERVER_ADDR env var (overrides default 127.0.0.1).
-  // GetCompat reads CLIO_SERVER_ADDR first, falls back to CHI_SERVER_ADDR.
-  if (const char *env = chi::env::GetCompat("SERVER_ADDR")) {
+  // GetCompat reads CLIO_SERVER_ADDR first, falls back to CLIO_SERVER_ADDR.
+  if (const char *env = clio::run::env::GetCompat("SERVER_ADDR")) {
     std::string addr_env(env);
     if (!addr_env.empty()) {
       server_addr_ = addr_env;
@@ -104,24 +104,24 @@ bool ConfigManager::LoadYaml(const std::string &config_path) {
 }
 
 std::string ConfigManager::GetServerConfigPath() const {
-  // Check env var first: CLIO_SERVER_CONF preferred, CHI_SERVER_CONF legacy.
-  const char *env_path = chi::env::GetCompat("SERVER_CONF");
+  // Check env var first: CLIO_SERVER_CONF preferred, CLIO_SERVER_CONF legacy.
+  const char *env_path = clio::run::env::GetCompat("SERVER_CONF");
   if (env_path) {
     return std::string(env_path);
   }
 
   // Fall back to a per-user config file. Lookup order, first hit wins:
   //   1. ~/.clio/clio.yaml      (new canonical name)
-  //   2. ~/.clio/chimaera.yaml  (legacy filename in the new dir)
-  //   3. ~/.chimaera/clio.yaml  (new filename in the legacy dir)
-  //   4. ~/.chimaera/chimaera.yaml  (legacy)
-  // All four are supported; installers seed both ~/.clio/ AND ~/.chimaera/
+  //   2. ~/.clio/clio.yaml  (legacy filename in the new dir)
+  //   3. ~/.clio/clio.yaml  (new filename in the legacy dir)
+  //   4. ~/.clio/clio.yaml  (legacy)
+  // All four are supported; installers seed both ~/.clio/ AND ~/.clio/
   // with identical content so either layout works in the wild.
   const char *kCandidates[] = {
       "${HOME}/.clio/clio.yaml",
-      "${HOME}/.clio/chimaera.yaml",
-      "${HOME}/.chimaera/clio.yaml",
-      "${HOME}/.chimaera/chimaera.yaml",
+      "${HOME}/.clio/clio.yaml",
+      "${HOME}/.clio/clio.yaml",
+      "${HOME}/.clio/clio.yaml",
   };
   for (const char *tmpl : kCandidates) {
     std::string path = ctp::ConfigParse::ExpandPath(tmpl);
@@ -270,11 +270,11 @@ void ConfigManager::ParseYAML(YAML::Node &yaml_conf) {
   }
   // Environment variable overrides for GPU config (higher priority than YAML).
   // Allows benchmarks to set the partition count dynamically from their
-  // thread parameters before CHIMAERA_INIT().
-  if (const char *env = chi::env::GetCompat("GPU_BLOCKS")) {
+  // thread parameters before CLIO_INIT().
+  if (const char *env = clio::run::env::GetCompat("GPU_BLOCKS")) {
     gpu_blocks_ = static_cast<u32>(std::stoul(env));
   }
-  if (const char *env = chi::env::GetCompat("GPU_THREADS")) {
+  if (const char *env = clio::run::env::GetCompat("GPU_THREADS")) {
     gpu_threads_per_block_ = static_cast<u32>(std::stoul(env));
   }
 
