@@ -241,12 +241,7 @@ void Runtime::FixupAfterCopy(clio::run::u32 method,
 }
 
 clio::run::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
-                                clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   // Initialize unordered_map_ll instances with appropriately sized bucket
   // counts. Tag/blob maps are large to avoid excessive collisions at scale.
@@ -509,12 +504,7 @@ Runtime::~Runtime() {
 }
 
 clio::run::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
-                                 clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                 clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Close WAL files before clearing data structures
@@ -628,12 +618,7 @@ clio::run::PoolQuery Runtime::ScheduleTask(const ctp::ipc::FullPtr<clio::run::Ta
 }
 
 clio::run::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> task,
-                                        clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                        clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::string target_name = task->target_name_.str();
@@ -782,12 +767,7 @@ clio::run::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTa
 }
 
 clio::run::TaskResume Runtime::UnregisterTarget(
-    ctp::ipc::FullPtr<UnregisterTargetTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<UnregisterTargetTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::string target_name = task->target_name_.str();
@@ -837,12 +817,7 @@ clio::run::TaskResume Runtime::UnregisterTarget(
 }
 
 clio::run::TaskResume Runtime::ListTargets(ctp::ipc::FullPtr<ListTargetsTask> task,
-                                     clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                     clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Clear the output vector and populate with current target names
@@ -866,12 +841,7 @@ clio::run::TaskResume Runtime::ListTargets(ctp::ipc::FullPtr<ListTargetsTask> ta
 }
 
 clio::run::TaskResume Runtime::StatTargets(ctp::ipc::FullPtr<StatTargetsTask> task,
-                                     clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                     clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Collect all target IDs under read lock (can't co_await inside lambda)
@@ -958,12 +928,7 @@ clio::run::TaskResume Runtime::StatTargets(ctp::ipc::FullPtr<StatTargetsTask> ta
 template <typename CreateParamsT>
 clio::run::TaskResume Runtime::GetOrCreateTag(
     ctp::ipc::FullPtr<GetOrCreateTagTask<CreateParamsT>> task,
-    clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::string tag_name = task->tag_name_.str();
@@ -1018,12 +983,7 @@ clio::run::TaskResume Runtime::GetOrCreateTag(
 }
 
 clio::run::TaskResume Runtime::GetTargetInfo(ctp::ipc::FullPtr<GetTargetInfoTask> task,
-                                       clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                       clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::string target_name = task->target_name_.str();
@@ -1063,12 +1023,7 @@ clio::run::TaskResume Runtime::GetTargetInfo(ctp::ipc::FullPtr<GetTargetInfoTask
 }
 
 clio::run::TaskResume Runtime::PutBlob(ctp::ipc::FullPtr<PutBlobTask> task,
-                                 clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                 clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   // Per-PutBlob diagnostic logging — disabled in perf builds. Was burning
   // an atomic fetch_add + clock_gettime + branch on every 64 KB chunk plus
@@ -1332,12 +1287,7 @@ clio::run::TaskResume Runtime::PutBlob(ctp::ipc::FullPtr<PutBlobTask> task,
 }
 
 clio::run::TaskResume Runtime::GetBlob(ctp::ipc::FullPtr<GetBlobTask> task,
-                                 clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                 clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -1407,12 +1357,7 @@ clio::run::TaskResume Runtime::GetBlob(ctp::ipc::FullPtr<GetBlobTask> task,
 }
 
 clio::run::TaskResume Runtime::ReorganizeBlob(ctp::ipc::FullPtr<ReorganizeBlobTask> task,
-                                        clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                        clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -1527,12 +1472,7 @@ clio::run::TaskResume Runtime::ReorganizeBlob(ctp::ipc::FullPtr<ReorganizeBlobTa
 }
 
 clio::run::TaskResume Runtime::DelBlob(ctp::ipc::FullPtr<DelBlobTask> task,
-                                 clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                 clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -1618,12 +1558,7 @@ clio::run::TaskResume Runtime::DelBlob(ctp::ipc::FullPtr<DelBlobTask> task,
 }
 
 clio::run::TaskResume Runtime::TruncateBlob(ctp::ipc::FullPtr<TruncateBlobTask> task,
-                                      clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                      clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     TagId tag_id = task->tag_id_;
@@ -1702,12 +1637,7 @@ clio::run::TaskResume Runtime::TruncateBlob(ctp::ipc::FullPtr<TruncateBlobTask> 
 }
 
 clio::run::TaskResume Runtime::RenameTag(ctp::ipc::FullPtr<RenameTagTask> task,
-                                   clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                   clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     TagId tag_id = task->tag_id_;
@@ -1839,12 +1769,7 @@ clio::run::TaskResume Runtime::RenameTag(ctp::ipc::FullPtr<RenameTagTask> task,
 }
 
 clio::run::TaskResume Runtime::GetOrCreateTagAlias(
-    ctp::ipc::FullPtr<GetOrCreateTagAliasTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<GetOrCreateTagAliasTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     TagId tag_id = task->tag_id_;
@@ -1935,12 +1860,7 @@ clio::run::TaskResume Runtime::GetOrCreateTagAlias(
 }
 
 clio::run::TaskResume Runtime::DelTag(ctp::ipc::FullPtr<DelTagTask> task,
-                                clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     TagId tag_id = task->tag_id_;
@@ -2285,12 +2205,7 @@ clio::run::TaskResume Runtime::DelTag(ctp::ipc::FullPtr<DelTagTask> task,
 }
 
 clio::run::TaskResume Runtime::GetTagName(ctp::ipc::FullPtr<GetTagNameTask> task,
-                                    clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                    clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     TagId tag_id = task->tag_id_;
@@ -2321,12 +2236,7 @@ clio::run::TaskResume Runtime::GetTagName(ctp::ipc::FullPtr<GetTagNameTask> task
 }
 
 clio::run::TaskResume Runtime::GetTagSize(ctp::ipc::FullPtr<GetTagSizeTask> task,
-                                    clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                    clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     TagId tag_id = task->tag_id_;
@@ -2364,12 +2274,7 @@ clio::run::TaskResume Runtime::GetTagSize(ctp::ipc::FullPtr<GetTagSizeTask> task
 }
 
 clio::run::TaskResume Runtime::GetCapacity(
-    ctp::ipc::FullPtr<GetCapacityTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext &rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<GetCapacityTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   // Sum the total and remaining capacity of every target registered on this
   // node. A Local query returns this node's capacity; the task's AggregateOut
@@ -2398,12 +2303,7 @@ clio::run::TaskResume Runtime::GetCapacity(
 }
 
 clio::run::TaskResume Runtime::GetNumAliases(
-    ctp::ipc::FullPtr<GetNumAliasesTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext &rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<GetNumAliasesTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     task->num_aliases_ = 0;
@@ -2630,12 +2530,7 @@ TagId Runtime::GetOrCreateTagChain(const std::string &name,
 }
 
 clio::run::TaskResume Runtime::FlushMetadata(ctp::ipc::FullPtr<FlushMetadataTask> task,
-                                       clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                       clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   task->entries_flushed_ = 0;
 
@@ -2763,12 +2658,7 @@ clio::run::TaskResume Runtime::FlushMetadata(ctp::ipc::FullPtr<FlushMetadataTask
 }
 
 clio::run::TaskResume Runtime::FlushData(ctp::ipc::FullPtr<FlushDataTask> task,
-                                   clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                   clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   task->bytes_flushed_ = 0;
   task->blobs_flushed_ = 0;
@@ -3330,7 +3220,7 @@ TagId Runtime::GenerateNewTagId() {
 
 // Explicit template instantiations for required template methods
 template clio::run::TaskResume Runtime::GetOrCreateTag<CreateParams>(
-    ctp::ipc::FullPtr<GetOrCreateTagTask<CreateParams>> task, clio::run::RunContext &ctx);
+    ctp::ipc::FullPtr<GetOrCreateTagTask<CreateParams>> task, clio::run::RunContext &rctx);
 
 // Blob management helper functions
 BlobInfo *Runtime::CheckBlobExists(const std::string &blob_name,
@@ -3401,11 +3291,10 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
                                     clio::run::u64 size, float blob_score,
                                     clio::run::u32 &error_code,
                                     int min_persistence_level) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   // Calculate required additional space
   clio::run::u64 current_blob_size = blob_info.GetTotalSize();
   clio::run::u64 required_size = offset + size;
@@ -3535,16 +3424,16 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
 
   error_code = 0;  // Success
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 clio::run::TaskResume Runtime::ResizeBlob(BlobInfo &blob_info, clio::run::u64 new_size,
                                     float blob_score, clio::run::u32 &error_code,
                                     int min_persistence_level) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   error_code = 0;
   clio::run::u64 current_size = blob_info.GetTotalSize();
   if (new_size == current_size) {
@@ -3644,16 +3533,16 @@ clio::run::TaskResume Runtime::ResizeBlob(BlobInfo &blob_info, clio::run::u64 ne
   }
   error_code = 0;
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 clio::run::TaskResume Runtime::ModifyExistingData(
     const clio::run::priv::vector<BlobBlock> &blocks, ctp::ipc::ShmPtr<> data, size_t data_size,
     size_t data_offset_in_blob, clio::run::u32 &error_code) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   HLOG(kDebug,
        "ModifyExistingData: blocks={}, data_size={}, data_offset_in_blob={}",
        blocks.size(), data_size, data_offset_in_blob);
@@ -3763,17 +3652,17 @@ clio::run::TaskResume Runtime::ModifyExistingData(
 
   error_code = 0;  // Success
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 clio::run::TaskResume Runtime::ReadData(const clio::run::priv::vector<BlobBlock> &blocks,
                                   ctp::ipc::ShmPtr<> data, size_t data_size,
                                   size_t data_offset_in_blob,
                                   clio::run::u32 &error_code) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "ReadData: blocks={}, data_size={}, data_offset_in_blob={}",
        blocks.size(), data_size, data_offset_in_blob);
 
@@ -3872,7 +3761,7 @@ clio::run::TaskResume Runtime::ReadData(const clio::run::priv::vector<BlobBlock>
       // Wait for all remaining in-flight tasks before returning to avoid
       // use-after-free when buffers are freed by the caller.
       for (size_t j = task_idx + 1; j < read_tasks.size(); ++j) {
-        co_await read_tasks[j];
+        CLIO_CO_AWAIT(read_tasks[j]);
       }
       error_code = 1;
       CLIO_CO_RETURN;
@@ -3882,6 +3771,7 @@ clio::run::TaskResume Runtime::ReadData(const clio::run::priv::vector<BlobBlock>
   HLOG(kDebug, "ReadData: All read tasks completed successfully");
   error_code = 0;  // Success
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 // Block management helper functions
@@ -3890,11 +3780,10 @@ clio::run::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
                                             clio::run::u64 size,
                                             clio::run::u64 &allocated_offset,
                                             bool &success) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   HLOG(kDebug,
        "AllocateFromTarget: ENTER - target_name={}, "
        "bdev_client_.pool_id_=({},{}), size={}, remaining_space={}",
@@ -3964,16 +3853,16 @@ clio::run::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
     success = false;
     CLIO_CO_RETURN;
   }
+  CLIO_TASK_BODY_END
 }
 
 clio::run::TaskResume Runtime::ClearBlob(BlobInfo &blob_info, float blob_score,
                                    clio::run::u64 offset, clio::run::u64 size,
                                    bool &cleared) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   cleared = false;
   // Score must be in [0, 1]
   if (blob_score < 0.0f || blob_score > 1.0f) {
@@ -3991,15 +3880,15 @@ clio::run::TaskResume Runtime::ClearBlob(BlobInfo &blob_info, float blob_score,
     cleared = true;
   }
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 clio::run::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
                                            clio::run::u32 &error_code) {
-#ifdef __NVCOMPILER
-  thread_local clio::run::RunContext _fb_rctx;
-  clio::run::RunContext* _fp = clio::run::GetCurrentRunContextFromWorker();
-  clio::run::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::RunContext& rctx = *clio::run::GetCurrentRunContextFromWorker();
 #endif
+  CLIO_TASK_BODY_BEGIN
   // Map: PoolId -> (target_query, vector<Block>)
   std::unordered_map<clio::run::PoolId, std::pair<clio::run::PoolQuery,
                                             std::vector<clio::run::bdev::Block>>>
@@ -4065,6 +3954,7 @@ clio::run::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
   blob_info.blocks_.clear();
   error_code = 0;
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 void Runtime::LogTelemetry(CteOp op, size_t off, size_t size,
@@ -4118,12 +4008,7 @@ size_t Runtime::GetTelemetryEntries(std::vector<CteTelemetry> &entries,
 }
 
 clio::run::TaskResume Runtime::PollTelemetryLog(
-    ctp::ipc::FullPtr<PollTelemetryLogTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<PollTelemetryLogTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::uint64_t minimum_logical_time = task->minimum_logical_time_;
@@ -4156,12 +4041,7 @@ clio::run::TaskResume Runtime::PollTelemetryLog(
 }
 
 clio::run::TaskResume Runtime::GetBlobScore(ctp::ipc::FullPtr<GetBlobScoreTask> task,
-                                      clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                      clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -4207,12 +4087,7 @@ clio::run::TaskResume Runtime::GetBlobScore(ctp::ipc::FullPtr<GetBlobScoreTask> 
 }
 
 clio::run::TaskResume Runtime::GetBlobSize(ctp::ipc::FullPtr<GetBlobSizeTask> task,
-                                     clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                     clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -4257,12 +4132,7 @@ clio::run::TaskResume Runtime::GetBlobSize(ctp::ipc::FullPtr<GetBlobSizeTask> ta
 }
 
 clio::run::TaskResume Runtime::GetBlobInfo(ctp::ipc::FullPtr<GetBlobInfoTask> task,
-                                     clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                     clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -4316,12 +4186,7 @@ clio::run::TaskResume Runtime::GetBlobInfo(ctp::ipc::FullPtr<GetBlobInfoTask> ta
 }
 
 clio::run::TaskResume Runtime::GetContainedBlobs(
-    ctp::ipc::FullPtr<GetContainedBlobsTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<GetContainedBlobsTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     // Extract input parameters
@@ -4373,12 +4238,7 @@ clio::run::TaskResume Runtime::GetContainedBlobs(
 }
 
 clio::run::TaskResume Runtime::TagQuery(ctp::ipc::FullPtr<TagQueryTask> task,
-                                  clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                  clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::string tag_regex = task->tag_regex_.str();
@@ -4427,12 +4287,7 @@ clio::run::TaskResume Runtime::TagQuery(ctp::ipc::FullPtr<TagQueryTask> task,
 }
 
 clio::run::TaskResume Runtime::BlobQuery(ctp::ipc::FullPtr<BlobQueryTask> task,
-                                   clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext& rctx = ctx;
-#else
-  (void)ctx;
-#endif
+                                   clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   try {
     std::string tag_regex = task->tag_regex_.str();
@@ -4540,12 +4395,7 @@ struct SemSearchDoc {
 }  // namespace
 
 clio::run::TaskResume Runtime::SemanticSearch(
-    ctp::ipc::FullPtr<SemanticSearchTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext &rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<SemanticSearchTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   task->results_.clear();
   task->return_code_ = 0;
@@ -4712,12 +4562,7 @@ clio::run::TaskResume Runtime::SemanticSearch(
 // ==============================================================================
 
 clio::run::TaskResume Runtime::TemporalSearch(
-    ctp::ipc::FullPtr<TemporalSearchTask> task, clio::run::RunContext &ctx) {
-#ifdef __NVCOMPILER
-  clio::run::RunContext &rctx = ctx;
-#else
-  (void)ctx;
-#endif
+    ctp::ipc::FullPtr<TemporalSearchTask> task, clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   task->results_.clear();
   task->return_code_ = 0;
@@ -4809,9 +4654,11 @@ clio::run::PoolQuery Runtime::HashBlobToContainer(const TagId &tag_id,
 
 clio::run::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
                                  clio::run::RunContext &rctx) {
+  CLIO_TASK_BODY_BEGIN
   task->SetReturnCode(0);
   (void)rctx;
   CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 // =====================================================================

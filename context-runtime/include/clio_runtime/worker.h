@@ -35,7 +35,9 @@
 #define CLIO_RUNTIME_INCLUDE_WORKERS_WORKER_H_
 
 #include <chrono>
-#ifndef __NVCOMPILER
+// <coroutine> only for the C++20 stackless backend, not the Boost stackful one.
+// (task.h, included below, derives CLIO_ENABLE_BOOST_COROUTINES from this.)
+#if !defined(CLIO_ENABLE_BOOST_COROUTINES)
 #include <coroutine>
 #endif
 #include <functional>
@@ -425,6 +427,33 @@ class Worker {
    */
   void StartCoroutine(const FullPtr<Task> &task_ptr, RunContext *run_ctx);
 
+#if defined(CLIO_ENABLE_BOOST_COROUTINES)
+ public:
+  /**
+   * Create the Boost.Context fiber for a task and record this worker as the one
+   * responsible for its fiber state (run_ctx->fiber_state_). Only the fiber
+   * stack is allocated (and that is pooled — see AllocateStack).
+   * @param run_ctx RunContext whose task the fiber will run
+   * @return Handle to the created fiber
+   */
+  clio::run::detail::FiberHandle make_task_fiber(RunContext *run_ctx);
+
+  /**
+   * Allocate a Boost fiber stack, reusing one from this worker's free pool if
+   * available (else allocating fresh). The worker that creates a task's fiber is
+   * the one that finishes/frees it, so the pool is single-thread (SPSC).
+   */
+  boost::context::stack_context AllocateStack();
+
+  /**
+   * Return a fiber stack to this worker's free pool for reuse (frees it outright
+   * if the pool is full).
+   */
+  void FreeStack(boost::context::stack_context &sctx);
+
+ private:
+#endif
+
   /**
    * Resume coroutine execution for a yielded/blocked task
    * @param task_ptr Full pointer to task to resume
@@ -468,11 +497,26 @@ class Worker {
   //   - If container is available: execute locally
   std::queue<RunContext *> retry_queue_;
 
-  // Event queue for completing subtask futures on the parent worker's thread
-  // Stores Future<Task> objects to set FUTURE_COMPLETE, avoiding stale RunContext* pointers
-  // Allocated from malloc allocator (temporary runtime data, not IPC)
-  static constexpr u32 EVENT_QUEUE_DEPTH = 1024;
+  // Event queue for completing subtask futures on the parent worker's thread.
+  // Stores Future<Task> objects to set FUTURE_COMPLETE, avoiding stale
+  // RunContext* pointers. Allocated from malloc allocator (temporary runtime
+  // data, not IPC), sized in Init() to EVENT_QUEUE_DEPTH_MULTIPLIER x the
+  // configured per-worker task-queue depth (GetQueueDepth()): a parent fills at
+  // most ~queue_depth subtask slots in its lane, so giving the completion ring
+  // 2x that headroom keeps the WAIT_FOR_SPACE Emplace from ever blocking on a
+  // single parent's fan-out (which otherwise self-deadlocks the worker, #620).
+  static constexpr u32 EVENT_QUEUE_DEPTH_MULTIPLIER = 2;
   ctp::ipc::mpsc_ring_buffer<Future<Task, CLIO_QUEUE_ALLOC_T>, ctp::ipc::MallocAllocator> *event_queue_;
+
+#if defined(CLIO_ENABLE_BOOST_COROUTINES)
+  // Per-worker pool of freed Boost fiber stacks, reused by AllocateStack to
+  // avoid malloc/free of the (256 KiB) stack on every task. Extensible SPSC:
+  // only this worker pushes/pops it (the worker that creates a fiber finishes
+  // it). Allocated in Init, drained + freed in Finalize.
+  static constexpr u32 STACK_POOL_DEPTH = 1024;
+  ctp::ipc::ext_ring_buffer<boost::context::stack_context, ctp::ipc::MallocAllocator>
+      *free_stacks_ = nullptr;
+#endif
 
   // Cross-runtime subtasks this worker punted to the main runtime and is
   // awaiting in-place completion of (see IpcRun2Fallback::PuntCopyIn). Owned by

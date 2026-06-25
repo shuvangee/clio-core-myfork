@@ -41,7 +41,10 @@
 #include "clio_runtime/worker.h"
 #include "clio_runtime/ipc/ipc_run2fallback.h"
 
-#ifndef __NVCOMPILER
+// <coroutine> only for the C++20 stackless backend, not the Boost stackful one.
+// (CLIO_ENABLE_BOOST_COROUTINES is defined by task.h, included below, in terms of
+// CLIO_ENABLE_BOOST_COROUTINES.)
+#if !defined(CLIO_ENABLE_BOOST_COROUTINES)
 #include <coroutine>
 #endif
 #include <cerrno>
@@ -74,7 +77,7 @@ namespace clio::run {
 // using FiberHandle::done().
 namespace {
 inline bool CoroCompleted(const RunContext *run_ctx) {
-#ifndef __NVCOMPILER
+#ifndef CLIO_ENABLE_BOOST_COROUTINES
   return run_ctx->coro_completed_.load(std::memory_order_acquire);
 #else
   return run_ctx->coro_handle_ && run_ctx->coro_handle_.done();
@@ -124,13 +127,30 @@ bool Worker::Init() {
 
   // Allocate and initialize event queue from malloc allocator (temporary
   // runtime data). Stores Future<Task> objects to avoid stale RunContext*
-  // pointers.
+  // pointers. Sized to 2x the configured per-worker task-queue depth so a
+  // single parent's completion fan-out can never fill this WAIT_FOR_SPACE ring
+  // and block the worker inside its own completion Emplace (issue #620).
+  u32 task_queue_depth = CLIO_CONFIG_MANAGER->GetQueueDepth();
+  if (task_queue_depth == 0) {
+    task_queue_depth = 1024;  // fallback if config is unset
+  }
+  u32 event_queue_depth = EVENT_QUEUE_DEPTH_MULTIPLIER * task_queue_depth;
   event_queue_ =
       CTP_MALLOC
           ->template NewObj<ctp::ipc::mpsc_ring_buffer<
               Future<Task, CLIO_QUEUE_ALLOC_T>, ctp::ipc::MallocAllocator>>(
-              CTP_MALLOC, EVENT_QUEUE_DEPTH)
+              CTP_MALLOC, event_queue_depth)
           .ptr_;
+
+#if defined(CLIO_ENABLE_BOOST_COROUTINES)
+  // Per-worker freed-fiber-stack pool (see AllocateStack/FreeStack).
+  free_stacks_ =
+      CTP_MALLOC
+          ->template NewObj<ctp::ipc::ext_ring_buffer<
+              boost::context::stack_context, ctp::ipc::MallocAllocator>>(
+              CTP_MALLOC, STACK_POOL_DEPTH)
+          .ptr_;
+#endif
 
   // Get scheduler from IpcManager (IpcManager is the single owner)
   scheduler_ = CLIO_IPC->GetScheduler();
@@ -225,6 +245,17 @@ void Worker::Finalize() {
   while (!retry_queue_.empty()) {
     retry_queue_.pop();
   }
+
+#if defined(CLIO_ENABLE_BOOST_COROUTINES)
+  // Free every pooled fiber stack (raw mallocs from boost::fixedsize_stack).
+  if (free_stacks_) {
+    boost::context::stack_context sctx;
+    while (free_stacks_->Pop(sctx)) {
+      boost::context::fixedsize_stack(clio::run::detail::boost_stack_size())
+          .deallocate(sctx);
+    }
+  }
+#endif
 
   // Clear assigned lane reference (don't delete - it's in shared memory)
   assigned_lane_ = nullptr;
@@ -810,6 +841,71 @@ void Worker::ClearCurrentWorker() {
                             static_cast<class Worker *>(nullptr));
 }
 
+#if defined(CLIO_ENABLE_BOOST_COROUTINES)
+boost::context::stack_context Worker::AllocateStack() {
+  boost::context::stack_context sctx;
+  if (free_stacks_ && free_stacks_->Pop(sctx)) {
+    return sctx;  // reuse a freed stack
+  }
+  return boost::context::fixedsize_stack(clio::run::detail::boost_stack_size())
+      .allocate();
+}
+
+void Worker::FreeStack(boost::context::stack_context &sctx) {
+  // Cache for reuse; if the pool is full (ext_ring_buffer reports no space),
+  // free the stack outright.
+  if (!free_stacks_ || !free_stacks_->Emplace(sctx)) {
+    boost::context::fixedsize_stack(clio::run::detail::boost_stack_size())
+        .deallocate(sctx);
+  }
+}
+
+namespace {
+// Boost StackAllocator backed by the owning worker's stack pool. allocate()
+// always runs on the creating worker (make_task_fiber), so it draws from that
+// worker's pool. deallocate() returns the stack to that same pool only when run
+// on the owner's thread (the common case — the creating worker finishes the
+// task); off-thread reclaims free directly, keeping each pool single-threaded.
+struct WorkerStackAllocator {
+  Worker *worker_;
+  boost::context::stack_context allocate() { return worker_->AllocateStack(); }
+  void deallocate(boost::context::stack_context &sctx) noexcept {
+    if (CLIO_CUR_WORKER == worker_) {
+      worker_->FreeStack(sctx);
+    } else {
+      boost::context::fixedsize_stack(clio::run::detail::boost_stack_size())
+          .deallocate(sctx);
+    }
+  }
+};
+}  // namespace
+
+// Set up the task's RunContext to run on a fresh Boost.Context fiber, recording
+// `this` worker as the one responsible for the fiber state. The fiber state
+// lives in rctx->fiber_state_, and the fiber stack comes from this worker's
+// pool (WorkerStackAllocator), so a reused stack costs no malloc. The entry
+// captures the typed RunContext* (no callable type erasure) and runs the
+// container directly off it. Lazy: the body runs on first resume().
+clio::run::detail::FiberHandle Worker::make_task_fiber(RunContext *rctx) {
+  rctx->fiber_state_.done = false;
+  rctx->fiber_state_.worker_ = this;
+  rctx->fiber_state_.task_ = boost::context::fiber{
+      std::allocator_arg, WorkerStackAllocator{this},
+      [rctx](boost::context::fiber &&caller) -> boost::context::fiber {
+        rctx->fiber_state_.caller_ = std::move(caller);
+        // Must not let an exception escape the fiber entry (Boost.Context calls
+        // std::terminate if one does).
+        try {
+          rctx->container_->Run(rctx->task_->method_, rctx->task_, *rctx);
+        } catch (...) {
+        }
+        rctx->fiber_state_.done = true;
+        return std::move(rctx->fiber_state_.caller_);
+      }};
+  return clio::run::detail::FiberHandle(&rctx->fiber_state_);
+}
+#endif  // CLIO_ENABLE_BOOST_COROUTINES
+
 void Worker::StartCoroutine(const FullPtr<Task> &task_ptr,
                             RunContext *run_ctx) {
   // Set current run context
@@ -831,10 +927,29 @@ void Worker::StartCoroutine(const FullPtr<Task> &task_ptr,
 
   // Call the container's Run function which returns a TaskResume coroutine/fiber
   try {
+#if defined(CLIO_ENABLE_BOOST_COROUTINES)
+    // Boost.Context path (issue #620): the worker owns one fiber per task whose
+    // entry runs Container::Run natively on the fiber stack. The whole task —
+    // including nested helper coroutines, which run inline — executes as
+    // ordinary C++, so reference parameters and locals behave exactly as in the
+    // C++20 stackless backend. The fiber state lives in run_ctx->fiber_state_
+    // (only the stack is heap-allocated); make_task_fiber's entry dispatches
+    // container->Run() directly off the RunContext.
+    {
+      run_ctx->coro_completed_.store(false, std::memory_order_relaxed);
+      run_ctx->coro_handle_ = make_task_fiber(run_ctx);
+      if (run_ctx->coro_handle_) {
+        run_ctx->coro_handle_.resume();
+        if (run_ctx->coro_handle_.done()) {
+          run_ctx->coro_handle_.destroy();
+          run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};
+        }
+      }
+    }
+#else
     TaskResume task_resume =
         container->Run(task_ptr->method_, task_ptr, *run_ctx);
 
-#ifndef __NVCOMPILER
     // Standard C++20 coroutine path
     auto handle = task_resume.release();
     run_ctx->coro_handle_ = handle;
@@ -870,27 +985,13 @@ void Worker::StartCoroutine(const FullPtr<Task> &task_ptr,
         run_ctx->coro_handle_ = nullptr;
       }
     }
-#else // __NVCOMPILER - ucontext_t fiber path
-    auto fhandle = task_resume.release();
-    run_ctx->coro_handle_ = fhandle;
-
-    if (fhandle) {
-      // Resume the fiber to run until first suspension point or completion
-      run_ctx->coro_handle_.resume();
-
-      // Check if fiber completed
-      if (run_ctx->coro_handle_.done()) {
-        run_ctx->coro_handle_.destroy();
-        run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};
-      }
-    }
-#endif // __NVCOMPILER
+#endif // CLIO_ENABLE_BOOST_COROUTINES vs C++20 stackless
   } catch (const std::exception &e) {
     HLOG(kError, "Task execution failed: {}", e.what());
     // Clean up handle on exception
     if (run_ctx->coro_handle_) {
       run_ctx->coro_handle_.destroy();
-#ifndef __NVCOMPILER
+#ifndef CLIO_ENABLE_BOOST_COROUTINES
       run_ctx->coro_handle_ = nullptr;
 #else
       run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};
@@ -901,7 +1002,7 @@ void Worker::StartCoroutine(const FullPtr<Task> &task_ptr,
     // Clean up handle on exception
     if (run_ctx->coro_handle_) {
       run_ctx->coro_handle_.destroy();
-#ifndef __NVCOMPILER
+#ifndef CLIO_ENABLE_BOOST_COROUTINES
       run_ctx->coro_handle_ = nullptr;
 #else
       run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};
@@ -943,7 +1044,7 @@ void Worker::ResumeCoroutine(const FullPtr<Task> &task_ptr,
     if (CoroCompleted(run_ctx)) {
       // Completed - clean up
       run_ctx->coro_handle_.destroy();
-#ifndef __NVCOMPILER
+#ifndef CLIO_ENABLE_BOOST_COROUTINES
       run_ctx->coro_handle_ = nullptr;
 #else
       run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};
@@ -954,7 +1055,7 @@ void Worker::ResumeCoroutine(const FullPtr<Task> &task_ptr,
     // Clean up handle on exception
     if (run_ctx->coro_handle_) {
       run_ctx->coro_handle_.destroy();
-#ifndef __NVCOMPILER
+#ifndef CLIO_ENABLE_BOOST_COROUTINES
       run_ctx->coro_handle_ = nullptr;
 #else
       run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};
@@ -965,7 +1066,7 @@ void Worker::ResumeCoroutine(const FullPtr<Task> &task_ptr,
     // Clean up handle on exception
     if (run_ctx->coro_handle_) {
       run_ctx->coro_handle_.destroy();
-#ifndef __NVCOMPILER
+#ifndef CLIO_ENABLE_BOOST_COROUTINES
       run_ctx->coro_handle_ = nullptr;
 #else
       run_ctx->coro_handle_ = clio::run::detail::FiberHandle{};

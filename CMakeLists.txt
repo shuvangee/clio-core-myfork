@@ -127,6 +127,7 @@ option(CLIO_CORE_ENABLE_CEREAL "Enable serialization using cereal" ON)
 option(CLIO_CTE_ENABLE_COMPRESS "Enable compression support (builds compressor chimod and tests)" OFF)
 option(CLIO_CORE_ENABLE_ENCRYPT "Enable encryption" OFF)
 option(CLIO_CORE_ENABLE_IO_URING "Enable io_uring async I/O backend (Linux 5.1+, requires liburing)" OFF)
+option(CLIO_CORE_ENABLE_BOOST_COROUTINES "Use Boost.Context stackful coroutines for task execution instead of C++20 stackless coroutines (issue #620). Opt-in; reuses fiber stacks to avoid the per-task heap frame the stackless backend allocates." OFF)
 
 # Set internal compression flags from CLIO_CTE_ENABLE_COMPRESS
 if(CLIO_CTE_ENABLE_COMPRESS)
@@ -835,10 +836,14 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options(-fcoroutines)
   message(STATUS "GCC detected - enabling coroutines with -fcoroutines")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
-  # NVHPC 25.5 crashes (ICE in llc) when compiling GCC 14 libstdc++ coroutines.
-  # CLIO Runtime uses ucontext_t fibers via CLIO_CO_AWAIT/CLIO_CO_RETURN macros instead.
-  # No __cpp_impl_coroutine needed - we do not include <coroutine> for NVHPC.
-  message(STATUS "NVHPC detected - using ucontext_t fiber fallback for C++20 coroutines")
+  # NVHPC 25.5 crashes (ICE in llc) when compiling GCC 14 libstdc++ coroutines,
+  # so it cannot use the C++20 stackless backend. Force the Boost.Context
+  # stackful backend instead (issue #620). The C++ carries no NVHPC-specific
+  # coroutine path anymore: the compiler decision is made here, in the build,
+  # and the runtime never includes <coroutine> when the Boost backend is on.
+  set(CLIO_CORE_ENABLE_BOOST_COROUTINES ON CACHE BOOL
+      "Forced ON: NVHPC cannot compile C++20 coroutines (issue #620)" FORCE)
+  message(STATUS "NVHPC detected - C++20 coroutines unsupported; forcing Boost.Context stackful backend")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # Clang 16+ enables C++20 coroutines natively (no flags needed for CXX).
   # NVCC host compilation uses GCC which needs -fcoroutines for the builtins.
@@ -849,6 +854,20 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   else()
     message(STATUS "Clang ${CMAKE_CXX_COMPILER_VERSION} detected - C++20 coroutines enabled natively")
   endif()
+endif()
+
+# Boost.Context stackful coroutine backend (issue #620). Opt-in alternative to
+# the C++20 stackless coroutines above. Selected globally (the coroutine return
+# type / macros are header-driven, so the whole program must agree) and links
+# Boost::context into every target via the runtime's public interface.
+if(CLIO_CORE_ENABLE_BOOST_COROUTINES)
+  find_package(Boost REQUIRED COMPONENTS context)
+  add_compile_definitions(CLIO_ENABLE_BOOST_COROUTINES=1)
+  # make_task_fiber() (boost::context::fiber) is header-instantiated in every
+  # module's task methods, so every target must link Boost::context. This block
+  # runs before any add_subdirectory(), so link_libraries() reaches them all.
+  link_libraries(Boost::context)
+  message(STATUS "Boost stackful coroutine backend ENABLED (Boost::context ${Boost_VERSION})")
 endif()
 
 # Export compile commands for IDE integration - Applied to all subdirectories
