@@ -65,9 +65,9 @@ set_tests_properties(
     fuse_cte_cross_page
     fuse_integration
     PROPERTIES
-        TIMEOUT 300
+        TIMEOUT 60
         LABELS "unit;adapter;fuse"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=19413"
 )
 
 # ------------------------------------------------------------------------------
@@ -106,9 +106,9 @@ add_test(NAME fuse_copy_workspace
 set_tests_properties(
     fuse_copy_workspace
     PROPERTIES
-        TIMEOUT 600
+        TIMEOUT 120
         LABELS "unit;adapter;fuse;copy_workspace"
-        ENVIRONMENT "CHI_WITH_RUNTIME=1;CTP_LOG_LEVEL=error;CHI_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/cte_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=19413"
         RESOURCE_LOCK "chimaera_runtime"
 )
 

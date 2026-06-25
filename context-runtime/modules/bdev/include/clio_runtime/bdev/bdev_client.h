@@ -204,11 +204,12 @@ class Client : public chi::ContainerClient {
   /**
    * Get performance statistics - asynchronous
    */
-  chi::Future<clio::run::bdev::GetStatsTask> AsyncGetStats() {
+  chi::Future<clio::run::bdev::GetStatsTask> AsyncGetStats(
+      const chi::PoolQuery& pool_query = chi::PoolQuery::Local()) {
     auto* ipc_manager = CLIO_CPU_IPC;
 
     auto task = ipc_manager->NewTask<clio::run::bdev::GetStatsTask>(
-        chi::CreateTaskId(), pool_id_, chi::PoolQuery());
+        chi::CreateTaskId(), pool_id_, pool_query);
 
     return ipc_manager->Send(task);
   }

@@ -32,6 +32,7 @@
  */
 
 #include <clio_runtime/admin/admin_client.h>
+#include <clio_runtime/pool_manager.h>
 #include <clio_cte/core/core_config.h>
 #include <clio_cte/core/core_dpe.h>
 #include <clio_cte/core/core_runtime.h>
@@ -140,7 +141,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
-  (void)ctx;
+  chi::RunContext& rctx = ctx;
 #endif
   CLIO_TASK_BODY_BEGIN
   // Initialize unordered_map_ll instances with appropriately sized bucket
@@ -335,7 +336,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
 
   // Start periodic StatTargets task to keep target stats updated
   chi::u32 stat_period_ms = config_.performance_.stat_targets_period_ms_;
-  if (stat_period_ms > 0) {
+  if (stat_period_ms > 0 && !storage_devices_.empty()) {
     HLOG(kInfo, "Starting periodic StatTargets task with period {} ms",
          stat_period_ms);
     client_.AsyncStatTargets(chi::PoolQuery::Local(), stat_period_ms);
@@ -377,7 +378,7 @@ chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
-  (void)ctx;
+  chi::RunContext& rctx = ctx;
 #endif
   CLIO_TASK_BODY_BEGIN
   try {
@@ -496,7 +497,7 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
 #ifdef __NVCOMPILER
   chi::RunContext& rctx = ctx;
 #else
-  (void)ctx;
+  chi::RunContext& rctx = ctx;
 #endif
   CLIO_TASK_BODY_BEGIN
   try {
@@ -517,14 +518,23 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
          bdev_pool_id.major_, bdev_pool_id.minor_);
 
     // Create the bdev container using the client
-    chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
+    chi::PoolQuery pool_query = chi::PoolQuery::Local();
     HLOG(kDebug,
          "RegisterTarget: Creating bdev with custom_pool_id=({},{}), "
          "target_name={}",
          bdev_pool_id.major_, bdev_pool_id.minor_, target_name);
-    auto create_task = bdev_client.AsyncCreate(
-        pool_query, target_name, bdev_pool_id, bdev_type, total_size);
-    CLIO_CO_AWAIT(create_task);
+    auto *ipc_manager = CLIO_CPU_IPC;
+    auto create_task = ipc_manager->NewTask<clio::run::bdev::CreateTask>(
+        chi::CreateTaskId(), chi::kAdminPoolId, pool_query,
+        clio::run::bdev::CreateParams::chimod_lib_name, target_name,
+        bdev_pool_id, &bdev_client, bdev_type, total_size,
+        /*io_depth=*/32, /*alignment=*/4096,
+        /*perf_metrics=*/nullptr);
+    CLIO_CO_AWAIT(CLIO_POOL_MANAGER->CreatePool(
+        create_task.template Cast<chi::Task>(), &rctx));
+    HLOG(kDebug,
+         "RegisterTarget: bdev create completed for '{}' with return_code={}",
+         target_name, create_task->return_code_.load());
     HLOG(kDebug,
          "RegisterTarget: After create, create_task->new_pool_id_=({},{}), "
          "create_task->return_code_={}",
@@ -532,6 +542,7 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
          create_task->return_code_.load());
     bdev_client.pool_id_ = create_task->new_pool_id_;
     bdev_client.return_code_ = create_task->return_code_;
+    ipc_manager->DelTask(create_task);
     HLOG(kDebug,
          "RegisterTarget: After assignment, bdev_client.pool_id_=({},{})",
          bdev_client.pool_id_.major_, bdev_client.pool_id_.minor_);
@@ -556,12 +567,12 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
       }
     }
 
-    // Get actual statistics from bdev using AsyncGetStats method
-    chi::u64 remaining_size;
-    auto stats_task = bdev_client.AsyncGetStats();
-    CLIO_CO_AWAIT(stats_task);
-    clio::run::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
-    remaining_size = stats_task->remaining_size_;
+    // Avoid a nested stats request during registration. The target has just
+    // been created and no user data has been placed yet, so the configured
+    // size is the initial remaining capacity and the default metrics are
+    // sufficient until the periodic stats path refreshes them.
+    chi::u64 remaining_size = total_size;
+    clio::run::bdev::PerfMetrics perf_metrics;
 
     // Create target info with bdev client and performance stats
     TargetInfo target_info(target_name, bdev_pool_name);
@@ -621,6 +632,7 @@ chi::TaskResume Runtime::RegisterTarget(ctp::ipc::FullPtr<RegisterTargetTask> ta
     }
 
     task->return_code_ = 0;  // Success
+    HLOG(kDebug, "RegisterTarget: '{}' fully registered", target_name);
     HLOG(kDebug,
          "Target '{}' registered with ID (major={}, minor={}) - bdev pool: {} "
          "(type={}, path={}, "
@@ -1501,40 +1513,27 @@ chi::TaskResume Runtime::DelTag(ctp::ipc::FullPtr<DelTagTask> task,
           });
     }
 
-    // Process blobs in batches to limit concurrent async tasks
-    constexpr size_t kMaxConcurrentDelBlobTasks = 32;
-    std::vector<chi::Future<DelBlobTask>> async_tasks;
     size_t processed_blobs = 0;
 
-    for (size_t i = 0; i < blob_names_to_delete.size();
-         i += kMaxConcurrentDelBlobTasks) {
-      // Create a batch of async tasks (up to kMaxConcurrentDelBlobTasks)
-      async_tasks.clear();
-      size_t batch_end =
-          std::min(i + kMaxConcurrentDelBlobTasks, blob_names_to_delete.size());
-
-      for (size_t j = i; j < batch_end; ++j) {
-        const std::string &blob_name = blob_names_to_delete[j];
-
-        // Call AsyncDelBlob from client
-        auto async_task = client_.AsyncDelBlob(tag_id, blob_name);
-        async_tasks.push_back(async_task);
+    for (const std::string &blob_name : blob_names_to_delete) {
+      BlobInfo *blob_info_ptr = nullptr;
+      {
+        chi::ScopedCoRwReadLock lock(blob_map_lock_);
+        blob_info_ptr = tag_blob_name_to_info_.find(tag_prefix + blob_name);
+      }
+      if (blob_info_ptr == nullptr) {
+        HLOG(kWarning,
+             "Blob missing during tag deletion, continuing: {}", blob_name);
+        continue;
       }
 
-      // Wait for all async DelBlob operations in this batch to complete
-      for (auto task : async_tasks) {
-        CLIO_CO_AWAIT(task);
-
-        // Check if DelBlob succeeded
-        if (task->return_code_ != 0) {
-          HLOG(kWarning,
-               "DelBlob failed for blob during tag deletion, continuing");
-          // Continue with other blobs even if one fails
-        }
-
-        // Clean up the task
-        ++processed_blobs;
+      chi::u32 free_result = 0;
+      CLIO_CO_AWAIT(FreeAllBlobBlocks(*blob_info_ptr, free_result));
+      if (free_result != 0) {
+        HLOG(kWarning,
+             "Failed to free blocks for blob during tag deletion, continuing");
       }
+      ++processed_blobs;
     }
 
     // Step 4: Remove all blob name mappings for this tag
@@ -2647,6 +2646,14 @@ chi::TaskResume Runtime::ModifyExistingData(
   thread_local chi::RunContext _fb_rctx;
   chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
   chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#else
+  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
+  if (_fp == nullptr) {
+    HLOG(kError, "ModifyExistingData: no current RunContext available");
+    error_code = 1;
+    CLIO_CO_RETURN;
+  }
+  chi::RunContext& rctx = *_fp;
 #endif
   HLOG(kDebug,
        "ModifyExistingData: blocks={}, data_size={}, data_offset_in_blob={}",
@@ -2659,10 +2666,6 @@ chi::TaskResume Runtime::ModifyExistingData(
 
   // Step 1: Initially store the remaining_size equal to data_size
   size_t remaining_size = data_size;
-
-  // Vector to store async write tasks for later waiting
-  std::vector<chi::Future<clio::run::bdev::WriteTask>> write_tasks;
-  std::vector<size_t> expected_write_sizes;
 
   // Step 2: Store the offset of the block in the blob. The first block is
   // offset 0
@@ -2705,7 +2708,7 @@ chi::TaskResume Runtime::ModifyExistingData(
       t_setup_ms += timer.GetMsec();
       timer.Reset();
 
-      // Wrap single block in chi::priv::vector for AsyncWrite
+      // Wrap single block in chi::priv::vector for the bdev write task
       timer.Resume();
       chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
       blocks.push_back(bdev_block);
@@ -2713,13 +2716,35 @@ chi::TaskResume Runtime::ModifyExistingData(
       t_vec_alloc_ms += timer.GetMsec();
       timer.Reset();
 
-      // Create and send the async write task
+      // Run the local bdev write directly. This avoids a nested async send from
+      // inside the CTE runtime worker, which can otherwise wait forever when
+      // the target bdev is local to the same process.
       timer.Resume();
-      clio::run::bdev::Client cte_clientcopy = block.bdev_client_;
-      auto write_task = cte_clientcopy.AsyncWrite(block.target_query_, blocks,
-                                                  data_ptr, write_size);
-      write_tasks.push_back(std::move(write_task));
-      expected_write_sizes.push_back(write_size);
+      auto *ipc_manager = CLIO_CPU_IPC;
+      auto write_task = ipc_manager->NewTask<clio::run::bdev::WriteTask>(
+          chi::CreateTaskId(), block.bdev_client_.pool_id_, block.target_query_,
+          blocks, data_ptr, write_size);
+      bool is_plugged = false;
+      chi::Container *container = CLIO_POOL_MANAGER->GetContainer(
+          block.bdev_client_.pool_id_, chi::kInvalidContainerId, is_plugged);
+      if (container == nullptr || is_plugged) {
+        HLOG(kError, "ModifyExistingData: bdev container unavailable for {}",
+             block.bdev_client_.pool_id_);
+        ipc_manager->DelTask(write_task);
+        error_code = 1;
+        CLIO_CO_RETURN;
+      }
+      CLIO_CO_AWAIT(container->Run(
+          write_task->method_, write_task.template Cast<chi::Task>(), rctx));
+      if (write_task->bytes_written_ != write_size) {
+        HLOG(kError,
+             "ModifyExistingData: wrote {} bytes, expected {}",
+             write_task->bytes_written_, write_size);
+        ipc_manager->DelTask(write_task);
+        error_code = 1;
+        CLIO_CO_RETURN;
+      }
+      ipc_manager->DelTask(write_task);
       timer.Pause();
       t_async_send_ms += timer.GetMsec();
       timer.Reset();
@@ -2730,21 +2755,6 @@ chi::TaskResume Runtime::ModifyExistingData(
     // Update block offset for next iteration
     block_offset_in_blob += block.size_;
   }
-
-  // Step 7: Wait for all Async write operations to complete
-  timer.Resume();
-  for (size_t task_idx = 0; task_idx < write_tasks.size(); ++task_idx) {
-    auto &task = write_tasks[task_idx];
-    size_t expected_size = expected_write_sizes[task_idx];
-    CLIO_CO_AWAIT(task);
-    if (task->bytes_written_ != expected_size) {
-      error_code = 1;
-      CLIO_CO_RETURN;
-    }
-  }
-  timer.Pause();
-  t_co_await_ms += timer.GetMsec();
-  timer.Reset();
 
   ++mod_count;
   if (mod_count % 100 == 0) {
@@ -2767,16 +2777,20 @@ chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
   thread_local chi::RunContext _fb_rctx;
   chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
   chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#else
+  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
+  if (_fp == nullptr) {
+    HLOG(kError, "ReadData: no current RunContext available");
+    error_code = 1;
+    CLIO_CO_RETURN;
+  }
+  chi::RunContext& rctx = *_fp;
 #endif
   HLOG(kDebug, "ReadData: blocks={}, data_size={}, data_offset_in_blob={}",
        blocks.size(), data_size, data_offset_in_blob);
 
   // Step 1: Initially store the remaining_size equal to data_size
   size_t remaining_size = data_size;
-
-  // Vector to store async read tasks for later waiting
-  std::vector<chi::Future<clio::run::bdev::ReadTask>> read_tasks;
-  std::vector<size_t> expected_read_sizes;
 
   // Step 2: Store the offset of the block in the blob. The first block is
   // offset 0
@@ -2820,21 +2834,39 @@ chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
            "read_start_in_block={}, data_buffer_offset={}",
            block_idx, read_size, read_start_in_block, data_buffer_offset);
 
-      // Step 5: Perform async read on the range
+      // Step 5: Perform read on the range
       clio::run::bdev::Block bdev_block(
           block.target_offset_ + read_start_in_block, read_size, 0);
       ctp::ipc::ShmPtr<> data_ptr = data + data_buffer_offset;
 
-      // Wrap single block in chi::priv::vector for AsyncRead
+      // Wrap single block in chi::priv::vector for the bdev read task
       chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
       blocks.push_back(bdev_block);
 
-      clio::run::bdev::Client cte_clientcopy = block.bdev_client_;
-      auto read_task = cte_clientcopy.AsyncRead(block.target_query_, blocks,
-                                                data_ptr, read_size);
-
-      read_tasks.push_back(std::move(read_task));
-      expected_read_sizes.push_back(read_size);
+      auto *ipc_manager = CLIO_CPU_IPC;
+      auto read_task = ipc_manager->NewTask<clio::run::bdev::ReadTask>(
+          chi::CreateTaskId(), block.bdev_client_.pool_id_, block.target_query_,
+          blocks, data_ptr, read_size);
+      bool is_plugged = false;
+      chi::Container *container = CLIO_POOL_MANAGER->GetContainer(
+          block.bdev_client_.pool_id_, chi::kInvalidContainerId, is_plugged);
+      if (container == nullptr || is_plugged) {
+        HLOG(kError, "ReadData: bdev container unavailable for {}",
+             block.bdev_client_.pool_id_);
+        ipc_manager->DelTask(read_task);
+        error_code = 1;
+        CLIO_CO_RETURN;
+      }
+      CLIO_CO_AWAIT(container->Run(
+          read_task->method_, read_task.template Cast<chi::Task>(), rctx));
+      if (read_task->bytes_read_ != read_size) {
+        HLOG(kError, "ReadData: read {} bytes, expected {}",
+             read_task->bytes_read_, read_size);
+        ipc_manager->DelTask(read_task);
+        error_code = 1;
+        CLIO_CO_RETURN;
+      }
+      ipc_manager->DelTask(read_task);
 
       // Step 6: Subtract the amount of data we have read from the
       // remaining_size
@@ -2843,34 +2875,6 @@ chi::TaskResume Runtime::ReadData(const chi::priv::vector<BlobBlock> &blocks,
 
     // Update block offset for next iteration
     block_offset_in_blob += block.size_;
-  }
-
-  // Step 7: Wait for all Async read operations to complete
-  HLOG(kDebug, "ReadData: Waiting for {} async read tasks to complete",
-       read_tasks.size());
-  for (size_t task_idx = 0; task_idx < read_tasks.size(); ++task_idx) {
-    auto &task = read_tasks[task_idx];
-    size_t expected_size = expected_read_sizes[task_idx];
-
-    CLIO_CO_AWAIT(task);
-
-    HLOG(kDebug,
-         "ReadData: task[{}] completed - bytes_read={}, expected={}, status={}",
-         task_idx, task->bytes_read_, expected_size,
-         (task->bytes_read_ == expected_size ? "SUCCESS" : "FAILED"));
-
-    if (task->bytes_read_ != expected_size) {
-      HLOG(kError,
-           "ReadData: READ FAILED - task[{}] read {} bytes, expected {}",
-           task_idx, task->bytes_read_, expected_size);
-      // Wait for all remaining in-flight tasks before returning to avoid
-      // use-after-free when buffers are freed by the caller.
-      for (size_t j = task_idx + 1; j < read_tasks.size(); ++j) {
-        co_await read_tasks[j];
-      }
-      error_code = 1;
-      CLIO_CO_RETURN;
-    }
   }
 
   HLOG(kDebug, "ReadData: All read tasks completed successfully");
@@ -2888,6 +2892,14 @@ chi::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
   thread_local chi::RunContext _fb_rctx;
   chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
   chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#else
+  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
+  if (_fp == nullptr) {
+    HLOG(kError, "AllocateFromTarget: no current RunContext available");
+    success = false;
+    CLIO_CO_RETURN;
+  }
+  chi::RunContext& rctx = *_fp;
 #endif
   HLOG(kDebug,
        "AllocateFromTarget: ENTER - target_name={}, "
@@ -2906,22 +2918,25 @@ chi::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
   }
 
   try {
-    HLOG(
-        kDebug,
-        "AllocateFromTarget: Calling AsyncAllocateBlocks with pool_id_=({},{})",
-        target_info.bdev_client_.pool_id_.major_,
-        target_info.bdev_client_.pool_id_.minor_);
-
-    // Use bdev client AsyncAllocateBlocks method to get actual offset
-    auto alloc_task = target_info.bdev_client_.AsyncAllocateBlocks(
+    auto *ipc_manager = CLIO_CPU_IPC;
+    auto alloc_task = ipc_manager->NewTask<clio::run::bdev::AllocateBlocksTask>(
+        chi::CreateTaskId(), target_info.bdev_client_.pool_id_,
         target_info.target_query_, size);
+    bool is_plugged = false;
+    chi::Container *container = CLIO_POOL_MANAGER->GetContainer(
+        target_info.bdev_client_.pool_id_, chi::kInvalidContainerId,
+        is_plugged);
+    if (container == nullptr || is_plugged) {
+      HLOG(kError, "AllocateFromTarget: bdev container unavailable for {}",
+           target_info.bdev_client_.pool_id_);
+      ipc_manager->DelTask(alloc_task);
+      success = false;
+      CLIO_CO_RETURN;
+    }
 
-    HLOG(kDebug,
-         "AllocateFromTarget: AsyncAllocateBlocks returned, IsComplete()={}, "
-         "co_awaiting...",
-         alloc_task.IsComplete() ? "true" : "false");
-
-    CLIO_CO_AWAIT(alloc_task);
+    HLOG(kDebug, "AllocateFromTarget: running bdev AllocateBlocks directly");
+    CLIO_CO_AWAIT(container->Run(
+        alloc_task->method_, alloc_task.template Cast<chi::Task>(), rctx));
 
     HLOG(kDebug,
          "AllocateFromTarget: co_await complete, "
@@ -2932,6 +2947,7 @@ chi::TaskResume Runtime::AllocateFromTarget(TargetInfo &target_info,
     for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
       allocated_blocks.push_back(alloc_task->blocks_[i]);
     }
+    ipc_manager->DelTask(alloc_task);
 
     // Check if we got any blocks
     if (allocated_blocks.empty()) {
@@ -2993,6 +3009,14 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
   thread_local chi::RunContext _fb_rctx;
   chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
   chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#else
+  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
+  if (_fp == nullptr) {
+    HLOG(kError, "FreeAllBlobBlocks: no current RunContext available");
+    error_code = 1;
+    CLIO_CO_RETURN;
+  }
+  chi::RunContext& rctx = *_fp;
 #endif
   // Map: PoolId -> (target_query, vector<Block>)
   std::unordered_map<chi::PoolId, std::pair<chi::PoolQuery,
@@ -3030,11 +3054,23 @@ chi::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
       bytes_freed += block.size_;
     }
 
-    // Get bdev client for this pool from first blob block
-    clio::run::bdev::Client bdev_client(pool_id);
-    auto free_task = bdev_client.AsyncFreeBlocks(target_query, blocks);
-    CLIO_CO_AWAIT(free_task);
+    auto *ipc_manager = CLIO_CPU_IPC;
+    auto free_task = ipc_manager->NewTask<clio::run::bdev::FreeBlocksTask>(
+        chi::CreateTaskId(), pool_id, target_query, blocks);
+    bool is_plugged = false;
+    chi::Container *container = CLIO_POOL_MANAGER->GetContainer(
+        pool_id, chi::kInvalidContainerId, is_plugged);
+    if (container == nullptr || is_plugged) {
+      HLOG(kError, "FreeAllBlobBlocks: bdev container unavailable for {}",
+           pool_id);
+      ipc_manager->DelTask(free_task);
+      error_code = 1;
+      CLIO_CO_RETURN;
+    }
+    CLIO_CO_AWAIT(container->Run(
+        free_task->method_, free_task.template Cast<chi::Task>(), rctx));
     chi::u32 free_result = free_task->GetReturnCode();
+    ipc_manager->DelTask(free_task);
     if (free_result != 0) {
       HLOG(kWarning, "Failed to free blocks from pool {}", pool_id.major_);
     } else {

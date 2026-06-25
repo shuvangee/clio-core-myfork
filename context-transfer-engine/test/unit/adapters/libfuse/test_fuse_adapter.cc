@@ -67,22 +67,17 @@ class FuseAdapterTestFixture {
  public:
   static constexpr chi::u64 kTestTargetSize = 1024 * 1024 * 10;  // 10MB
 
-  std::string test_storage_path_;
+  std::string test_target_name_;
   static inline bool g_initialized = false;
   bool target_initialized_ = false;
 
   FuseAdapterTestFixture() {
-    std::string home_dir = ctp::SystemInfo::GetHomeDir();
-    REQUIRE(!home_dir.empty());
-    test_storage_path_ = home_dir + "/cte_fuse_test.dat";
-
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
-    }
+    test_target_name_ = "cte_fuse_test_ram";
 
     if (!g_initialized) {
       bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
       REQUIRE(success);
+      SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -94,6 +89,7 @@ class FuseAdapterTestFixture {
       cte_client->Init(clio::cte::core::kCtePoolId);
 
       clio::cte::core::CreateParams params;
+      params.config_.performance_.stat_targets_period_ms_ = 0;
       auto create_task = cte_client->AsyncCreate(
           chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
           clio::cte::core::kCtePoolId, params);
@@ -106,9 +102,6 @@ class FuseAdapterTestFixture {
   }
 
   ~FuseAdapterTestFixture() {
-    if (fs::exists(test_storage_path_)) {
-      fs::remove(test_storage_path_);
-    }
   }
 
   void SetupTarget() {
@@ -119,17 +112,9 @@ class FuseAdapterTestFixture {
     auto *cte_client = CLIO_CTE_CLIENT;
 
     chi::PoolId bdev_pool_id(950, 0);
-    clio::run::bdev::Client bdev_client(bdev_pool_id);
-    auto create_task =
-        bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), test_storage_path_,
-                                bdev_pool_id, clio::run::bdev::BdevType::kFile);
-    create_task.Wait();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
     auto reg_task = cte_client->AsyncRegisterTarget(
-        test_storage_path_, clio::run::bdev::BdevType::kFile, kTestTargetSize,
-        chi::PoolQuery::Local(), bdev_pool_id);
+        test_target_name_, clio::run::bdev::BdevType::kRam, kTestTargetSize,
+        chi::PoolQuery::DirectHash(0), bdev_pool_id);
     reg_task.Wait();
     REQUIRE(reg_task->GetReturnCode() == 0);
 
@@ -168,7 +153,6 @@ class FuseAdapterTestFixture {
 
 TEST_CASE("FUSE CTE - Tag create and exists", "[fuse][cte]") {
   auto *fixture = ctp::Singleton<FuseAdapterTestFixture>::GetInstance();
-  fixture->SetupTarget();
 
   std::string tag_name = "/fuse_test/tag_exists";
 
@@ -188,7 +172,6 @@ TEST_CASE("FUSE CTE - Tag create and exists", "[fuse][cte]") {
 
 TEST_CASE("FUSE CTE - Tag deletion", "[fuse][cte]") {
   auto *fixture = ctp::Singleton<FuseAdapterTestFixture>::GetInstance();
-  fixture->SetupTarget();
 
   std::string tag_name = "/fuse_test/tag_delete";
 
@@ -209,7 +192,6 @@ TEST_CASE("FUSE CTE - Tag deletion", "[fuse][cte]") {
 
 TEST_CASE("FUSE CTE - CteDirExists for implicit directories", "[fuse][cte]") {
   auto *fixture = ctp::Singleton<FuseAdapterTestFixture>::GetInstance();
-  fixture->SetupTarget();
 
   // Create tags that imply directory structure
   std::string file1 = "/fuse_dir_test/a/b/file1.txt";
@@ -241,7 +223,6 @@ TEST_CASE("FUSE CTE - CteDirExists for implicit directories", "[fuse][cte]") {
 
 TEST_CASE("FUSE CTE - CteListDirectChildren", "[fuse][cte]") {
   auto *fixture = ctp::Singleton<FuseAdapterTestFixture>::GetInstance();
-  fixture->SetupTarget();
 
   std::string f1 = "/fuse_list_test/alpha.txt";
   std::string f2 = "/fuse_list_test/beta.txt";
@@ -269,7 +250,6 @@ TEST_CASE("FUSE CTE - CteListDirectChildren", "[fuse][cte]") {
 
 TEST_CASE("FUSE CTE - CteListSubdirs", "[fuse][cte]") {
   auto *fixture = ctp::Singleton<FuseAdapterTestFixture>::GetInstance();
-  fixture->SetupTarget();
 
   std::string f1 = "/fuse_subdir_test/x/file1.txt";
   std::string f2 = "/fuse_subdir_test/x/file2.txt";
@@ -303,16 +283,20 @@ TEST_CASE("FUSE CTE - Small write and read round-trip", "[fuse][cte]") {
   fixture->SetupTarget();
 
   std::string tag_name = "/fuse_io_test/small_rw";
+  INFO("Creating tag for small write/read test");
   auto tag_id = CteGetOrCreateTag(tag_name);
   REQUIRE(!tag_id.IsNull());
 
   const size_t data_size = 128;
   auto write_data = fixture->CreateTestData(data_size, 'S');
 
+  INFO("Writing small blob");
   REQUIRE(CtePutBlob(tag_id, "0", write_data.data(), data_size, 0));
 
   std::vector<char> read_data(data_size);
+  INFO("Reading small blob");
   REQUIRE(CteGetBlob(tag_id, "0", read_data.data(), data_size, 0));
+  INFO("Verifying small blob");
   REQUIRE(fixture->VerifyTestData(read_data, 'S'));
 
   INFO("Small write/read round-trip verified: " << data_size << " bytes");
