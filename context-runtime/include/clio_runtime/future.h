@@ -119,21 +119,34 @@ struct FutureShm {
   /** Client PID for per-client response routing */
   u32 client_pid_;
 
+  /** PID + TID of the thread blocked in Recv waiting for this task to
+   *  complete. The completer (SendOut) passes these to the transport via
+   *  LbmContext and, after a brief busy-wait, calls EventManager::Signal to
+   *  wake the waiter — replacing the busy-poll on FUTURE_COMPLETE. For an
+   *  external client this is the client thread; for a runtime self-send it is
+   *  the awaiting worker. 0 = no waiter registered (busy-poll fallback). */
+  u32 waiter_pid_;
+  u32 waiter_tid_;
+
   /** SHM transfer info for input direction (client -> worker) */
   ctp::lbm::ShmTransferInfo input_;
 
   /** SHM transfer info for output direction (worker -> client) */
   ctp::lbm::ShmTransferInfo output_;
 
-  /** Transport to use for sending response back to client */
+  /**
+   * Dedicated dial-back transport for returning this task's response to the
+   * originating client. Built (or fetched from the IpcManager connection
+   * cache) at RecvIn time from the sender's transport identity + the
+   * archive's client_port_, then used verbatim by SendOut. Replaces the old
+   * response_identity_ blob: once the connection exists, the transport itself
+   * is the route, so no per-response identity frame is needed. Non-owning —
+   * lifetime is held by IpcManager's client connection cache.
+   */
   ctp::lbm::Transport* response_transport_;
 
   /** Socket fd for routing response (IPC mode) */
   int response_fd_;
-
-  /** ZMQ identity for routing response back to client (TCP mode) */
-  char response_identity_[64];
-  u32 response_identity_len_;
 
   /** Atomic bitfield for completion and data availability flags */
   ctp::abitfield32_t flags_;
@@ -190,9 +203,10 @@ struct FutureShm {
     origin_ = FUTURE_CLIENT_SHM;
     client_task_vaddr_ = 0;
     client_pid_ = 0;
+    waiter_pid_ = 0;
+    waiter_tid_ = 0;
     response_transport_ = nullptr;
     response_fd_ = -1;
-    response_identity_len_ = 0;
     parent_gpu_rctx_ = nullptr;
     completion_counter_.store(0);
     total_warps_ = 1;

@@ -200,6 +200,26 @@ inline std::atomic<long long> &RuntimeTaskAllocBytes() {
 }
 #endif
 
+/**
+ * Per-thread state for IpcManager, stored via CTP_THREAD_MODEL TLS and created
+ * lazily by IpcManager::GetTls() on first use per thread. Holds an EventManager
+ * whose AddSignalEvent() registers a named per-(pid,tid) signal event, so a
+ * task completer can wake this thread with EventManager::Signal(pid, tid)
+ * instead of the thread busy-polling FUTURE_COMPLETE.
+ */
+class IpcManagerTls {
+ public:
+  ctp::lbm::EventManager event_manager_;
+
+  IpcManagerTls() {
+    // Register the named signal event for the CURRENT thread's (pid, tid) so a
+    // remote completer can target it. Construction therefore must happen on the
+    // owning thread (it does — GetTls creates it on first call from that
+    // thread).
+    event_manager_.AddSignalEvent();
+  }
+};
+
 class IpcManager {
   friend struct IpcCpu2Self;
   friend struct IpcCpu2Cpu;
@@ -215,6 +235,15 @@ class IpcManager {
    * @return Pointer to the IpcManagerRun2Run instance owned by this IpcManager.
    */
   IpcManagerRun2Run *GetRun2Run() { return &run2run_; }
+
+  /**
+   * Get this thread's IpcManagerTls (its EventManager), creating it on first
+   * call from the thread. The EventManager registers a named signal event for
+   * the calling thread's (pid, tid), so a completer can wake it via
+   * EventManager::Signal. Pointer is owned by TLS and stays valid for the
+   * thread's lifetime.
+   */
+  IpcManagerTls *GetTls();
 
   /**
    * Initialize client components
@@ -1108,6 +1137,25 @@ class IpcManager {
   ctp::lbm::Transport *GetOrCreateClient(const std::string &addr, int port);
 
   /**
+   * Get or create a dial-back connection for returning a response to a client.
+   * The (key_id, port) pair forms the cache key (hash(key_id + ":" + port)); a
+   * cache miss opens a new ZeroMQ DEALER to dial_addr:port via GetOrCreateClient
+   * (which owns it) and records the raw pointer in client_conn_cache_. Used at
+   * RecvIn to populate FutureShm::response_transport_.
+   * @param key_id Routing identity of the requesting client (e.g. ZMQ identity
+   *               or peer address) used together with port as the cache key.
+   * @param dial_addr Host/IP to connect the dial-back DEALER to.
+   * @param port Client's ephemeral response port (SaveTaskArchive::client_port_).
+   * @return Non-owning transport pointer, or nullptr on failure.
+   */
+  ctp::lbm::Transport *GetOrCreateClientByIdentity(const std::string &key_id,
+                                                   const std::string &dial_addr,
+                                                   int port);
+
+  /** Port of this process's client-side response listener (0 if none). */
+  int GetClientResponsePort() const { return client_response_port_; }
+
+  /**
    * Clear all cached client connections
    * Should be called during shutdown
    */
@@ -1488,6 +1536,13 @@ class IpcManager {
   ctp::lbm::TransportPtr shm_send_transport_;
   ctp::lbm::TransportPtr shm_recv_transport_;
 
+  // Per-thread IpcManagerTls (EventManager) accessed via GetTls(). The key is
+  // created once (guarded by ipc_tls_key_mutex_); each thread lazily allocates
+  // its own IpcManagerTls value on first GetTls() call.
+  ctp::ThreadLocalKey ipc_tls_key_;
+  bool ipc_tls_key_created_ = false;
+  std::mutex ipc_tls_key_mutex_;
+
   // Client-side: DEALER transport for sending tasks and receiving responses
   ctp::lbm::TransportPtr zmq_transport_;
   std::mutex zmq_client_send_mutex_;
@@ -1553,6 +1608,31 @@ class IpcManager {
   // Key format: "ip_address:port"
   std::unordered_map<std::string, ctp::lbm::TransportPtr> client_pool_;
   mutable std::mutex client_pool_mutex_;  // Mutex for thread-safe pool access
+
+  // Dial-back connection cache for returning responses to clients.
+  // Keyed by hash(response-identity + client_port); value is a NON-owning raw
+  // Transport* (ownership stays in client_pool_, keyed by "addr:port"). Built
+  // at RecvIn from the requesting peer's transport identity and the archive's
+  // client_port_, then stashed in FutureShm::response_transport_ so SendOut
+  // routes the response over a dedicated connection instead of the inbound
+  // socket. Self-locking (per-bucket RwLocks), so no external mutex needed.
+  // Host-only: the single-bucket-count unordered_map_ll constructor lives under
+  // CTP_IS_HOST (it pulls the global CTP_MALLOC), so nvcc's device pass has no
+  // matching constructor for this in-class initializer. The dial-back cache is
+  // host networking state used only from the host .cc, so guard the whole
+  // member out of the device pass.
+#if CTP_IS_HOST
+  static constexpr size_t kConnCacheBuckets = 1024;
+  ctp::priv::unordered_map_ll<size_t, ctp::lbm::Transport *> client_conn_cache_{
+      kConnCacheBuckets};
+#endif
+
+  // Client-side ephemeral ROUTER on which this process receives task responses.
+  // Bound to an OS-assigned port at client init; that port is advertised to the
+  // runtime via SaveTaskArchive::client_port_ so the runtime can dial back. The
+  // client recv thread reads completed responses from this listener.
+  ctp::lbm::TransportPtr client_response_listener_;
+  int client_response_port_ = 0;
 
   // Scheduler for task routing
   std::unique_ptr<Scheduler> scheduler_;
