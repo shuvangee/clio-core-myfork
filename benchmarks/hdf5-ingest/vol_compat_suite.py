@@ -23,8 +23,12 @@ import json
 import os
 import subprocess
 import sys
+import time
 
-BIN = "/workspace/build/bin"
+BIN = os.environ.get("CLIO_VOL_BIN", "/workspace/build/bin")
+CLIO_HOME = os.environ.get("CLIO_HOME_DIR", "/home/iowarp")
+RUNTIME_LOG = "/tmp/clio_run_volcompat.log"
+RUNTIME_READY = "All 3 pools created successfully"
 TMP = "/tmp/volcompat"
 
 # ---------------------------------------------------------------- write fixtures
@@ -93,6 +97,60 @@ def w_hyperslab_src(path):
         f.create_dataset("g", data=np.arange(100 * 100, dtype="f4").reshape(100, 100),
                          chunks=(25, 100))
 
+def w_uint_types(path):
+    import h5py, numpy as np
+    with h5py.File(path, "w") as f:
+        f.create_dataset("u8", data=np.arange(256, dtype="u1"))
+        f.create_dataset("u16", data=np.arange(4096, dtype="u2"))
+        f.create_dataset("u32", data=(np.arange(1024, dtype="u4") * 100003))
+
+def w_enum(path):
+    import h5py, numpy as np
+    dt = h5py.enum_dtype({"RED": 0, "GREEN": 1, "BLUE": 2}, basetype="i4")
+    with h5py.File(path, "w") as f:
+        f.create_dataset("e", data=np.array([0, 1, 2, 1, 0, 2, 2], dtype="i4"), dtype=dt)
+
+def w_array_dtype(path):
+    import h5py, numpy as np
+    dt = np.dtype(("f8", (3,)))
+    with h5py.File(path, "w") as f:
+        f.create_dataset("arr", data=np.arange(50 * 3, dtype="f8").reshape(50, 3), dtype=dt)
+
+def w_scalar(path):
+    import h5py, numpy as np
+    with h5py.File(path, "w") as f:
+        f.create_dataset("sc", data=np.float64(3.14159265358979))
+
+def w_extendible_append(path):
+    import h5py, numpy as np
+    with h5py.File(path, "w") as f:
+        d = f.create_dataset("ext", shape=(4,), maxshape=(None,), chunks=(4,), dtype="i4")
+        d[:] = np.arange(4, dtype="i4")
+    with h5py.File(path, "r+") as f:            # reopen and grow
+        d = f["ext"]
+        d.resize((8,))
+        d[4:8] = np.arange(4, 8, dtype="i4")
+
+def w_fletcher32(path):
+    import h5py, numpy as np
+    with h5py.File(path, "w") as f:
+        f.create_dataset("fl", data=np.arange(4096, dtype="i4").reshape(64, 64),
+                         chunks=(16, 16), fletcher32=True)
+
+def w_point_src(path):
+    import h5py, numpy as np
+    with h5py.File(path, "w") as f:
+        f.create_dataset("p", data=np.arange(1000, dtype="f8"))
+
+def read_point(path):
+    import h5py
+    h = hashlib.sha256()
+    with h5py.File(path, "r") as f:
+        sub = f["p"][[0, 10, 33, 100, 777, 999]]   # scattered point/fancy selection
+        h.update(("%s|%s" % (sub.dtype, sub.shape)).encode())
+        h.update(sub.tobytes())
+    return h.hexdigest()
+
 # ---------------------------------------------------------------- readers/digests
 def digest_by_spec(path, paths, attrs):
     """sha256 over declared dataset paths (dtype/shape/bytes) + declared attrs.
@@ -148,6 +206,13 @@ CASES = {
                           "paths": ["outer/inner/leaf", "hardlink", "softlink"]},
     "chunked_shuffle":   {"write": w_chunked_shuffle, "paths": ["s"]},
     "hyperslab_read":    {"write": w_hyperslab_src, "read": read_hyperslab},
+    "uint_types":        {"write": w_uint_types, "paths": ["u8", "u16", "u32"]},
+    "enum":              {"write": w_enum, "paths": ["e"]},
+    "array_dtype":       {"write": w_array_dtype, "paths": ["arr"]},
+    "scalar":            {"write": w_scalar, "paths": ["sc"]},
+    "extendible_append": {"write": w_extendible_append, "paths": ["ext"]},
+    "fletcher32":        {"write": w_fletcher32, "paths": ["fl"]},
+    "point_selection":   {"write": w_point_src, "read": read_point},
     "iteration":         {"write": w_groups_links, "read": read_iteration},
 }
 
@@ -200,10 +265,34 @@ def _tool_ok(path):
             return False
     return True
 
+def restart_runtime():
+    """Kill any clio_run, wipe shm, start fresh from BIN, wait until ready."""
+    subprocess.run(["pkill", "-f", "clio_run"], check=False)
+    time.sleep(2)
+    for f in os.listdir("/dev/shm"):
+        if f.startswith("chimaera") or f.startswith("clio"):
+            try:
+                os.remove(os.path.join("/dev/shm", f))
+            except OSError:
+                pass
+    env = dict(os.environ, HOME=CLIO_HOME)
+    with open(RUNTIME_LOG, "w") as log:
+        subprocess.Popen([os.path.join(BIN, "clio_run"), "start"], stdout=log,
+                         stderr=log, cwd=os.path.dirname(BIN) or "/", env=env)
+    for _ in range(60):
+        try:
+            with open(RUNTIME_LOG) as fh:
+                if RUNTIME_READY in fh.read():
+                    time.sleep(1)
+                    return True
+        except FileNotFoundError:
+            pass
+        time.sleep(1)
+    return False
+
+
 def driver(args):
-    sys.path.insert(0, "/workspace/benchmarks/hdf5-ingest")
-    import bench_concurrent as B
-    assert B.restart_runtime(), "clio_run did not become ready"
+    assert restart_runtime(), "clio_run did not become ready"
     os.makedirs(TMP, exist_ok=True)
     results, n_fail = {}, 0
     for case in CASES:
@@ -234,8 +323,18 @@ def driver(args):
     with open(args.out, "w") as f:
         json.dump(results, f, indent=2)
     total = len(CASES)
-    print(f"\n{total - n_fail}/{total} cases fully pass. wrote {args.out}")
-    return 1 if n_fail else 0
+    expect_fail = {x for x in (args.expect_fail or "").split(",") if x}
+    failed = {c for c, p in results.items() if not all(p.values())}
+    regressions = sorted(failed - expect_fail)     # green case broke -> CI red
+    fixed = sorted(expect_fail - failed)           # known gap now passes -> shrink baseline
+    print(f"\n{total - len(failed)}/{total} cases fully pass. wrote {args.out}")
+    if expect_fail:
+        print(f"expected gaps still failing: {sorted(failed & expect_fail)}")
+    if fixed:
+        print(f"NOTE: previously-failing cases now PASS (remove from --expect-fail): {fixed}")
+    if regressions:
+        print(f"REGRESSION — these should pass but FAILED: {regressions}")
+    return 1 if regressions else 0
 
 def main():
     ap = argparse.ArgumentParser()
@@ -244,7 +343,15 @@ def main():
     ap.add_argument("--action", choices=["write", "read"])
     ap.add_argument("--file")
     ap.add_argument("--out", default="vol_compat_results.json")
+    ap.add_argument("--bin", help="dir with libiowarp_hdf5_vol.so + clio_run "
+                    "(default $CLIO_VOL_BIN or /workspace/build/bin)")
+    ap.add_argument("--expect-fail", default="",
+                    help="comma-separated cases allowed to fail (known gaps); "
+                    "exit is nonzero only on a REGRESSION outside this set")
     a = ap.parse_args()
+    if a.bin:
+        global BIN
+        BIN = a.bin
     if a.worker:
         worker(a.case, a.action, a.file)
         return 0

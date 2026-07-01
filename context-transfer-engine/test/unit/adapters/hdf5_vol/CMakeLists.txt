@@ -117,3 +117,34 @@ install(
     TARGETS test_hdf5_vol_adapter test_hdf5_vol_io
     RUNTIME DESTINATION bin
 )
+
+# ---------------------------------------------------------------------------
+# Differential VOL compatibility suite (Python). Native VOL is the oracle;
+# each feature case is written/read through the iowarp VOL and compared to
+# native, plus h5diff/h5dump. Unlike the C++ unit tests above, this exercises
+# real data round-trips end to end and REQUIRES a running clio_run — the suite
+# starts/stops its own (pkill + start), so it must run alone (RUN_SERIAL).
+#
+# Regression gate: the four known compat gaps (strings/attrs/groups_links/
+# iteration, see benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md) are allowed via
+# --expect-fail, so this is GREEN today; it fails only if a currently-passing
+# case regresses. As Phase 2 closes a gap, drop it from --expect-fail.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    add_test(NAME cte_hdf5_vol_compat_suite
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/benchmarks/hdf5-ingest/vol_compat_suite.py
+            --bin $<TARGET_FILE_DIR:iowarp_hdf5_vol>
+            --out ${CMAKE_CURRENT_BINARY_DIR}/vol_compat_results.json
+            --expect-fail strings,attrs,groups_links,iteration
+    )
+    set_tests_properties(cte_hdf5_vol_compat_suite PROPERTIES
+        TIMEOUT 900
+        RUN_SERIAL TRUE
+        RESOURCE_LOCK "clio_runtime"
+        LABELS "integration;adapter;hdf5_vol;compat;cte"
+        ENVIRONMENT "CLIO_HOME_DIR=$ENV{HOME};LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    )
+else()
+    message(STATUS "hdf5_vol: Python3 not found — skipping VOL compat suite test")
+endif()
