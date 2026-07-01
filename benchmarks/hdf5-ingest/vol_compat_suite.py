@@ -213,7 +213,15 @@ CASES = {
     "extendible_append": {"write": w_extendible_append, "paths": ["ext"]},
     "fletcher32":        {"write": w_fletcher32, "paths": ["fl"]},
     "point_selection":   {"write": w_point_src, "read": read_point},
-    "iteration":         {"write": w_groups_links, "read": read_iteration},
+    # "iteration" is DISABLED here on purpose. h5py has poor VOL support: its
+    # visititems()/keys() call the DEPRECATED H5Ovisit_by_name1 / H5Literate_by_name1,
+    # which HDF5 hard-restricts to the native VOL connector, so they fail through ANY
+    # non-native VOL (the reference H5VLpassthru included) — before our callbacks are
+    # even reached. The iowarp VOL's iteration is actually correct: a C client using
+    # the modern H5Ovisit3 / H5Literate2 traverses fine. That is verified by the
+    # isolated C test `vol_c_iteration_test.c` (run via _run_c_tests below), which is
+    # the accurate way to test VOL iteration. Do not re-add an h5py iteration case.
+    # "iteration":       {"write": w_groups_links, "read": read_iteration},
 }
 
 # ---------------------------------------------------------------- worker
@@ -291,6 +299,34 @@ def restart_runtime():
     return False
 
 
+def _run_c_tests():
+    """Compile + run the isolated C tests through the VOL. Returns
+    {name: {"pass": bool}}; each C program exits 0 on pass. These cover ops h5py
+    cannot exercise via a non-native VOL (modern-API iteration)."""
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    tests = {"c_iteration": "vol_c_iteration_test.c"}
+    out = {}
+    for name, src in tests.items():
+        binp = os.path.join(TMP, name)
+        srcp = os.path.join(src_dir, src)
+        comp = subprocess.run(["h5cc", "-o", binp, srcp], capture_output=True,
+                              text=True, env=_env(False))
+        if comp.returncode != 0:
+            comp = subprocess.run(["gcc", "-o", binp, srcp, "-I/usr/local/include",
+                                   "-L/usr/local/lib", "-lhdf5"],
+                                  capture_output=True, text=True, env=_env(False))
+        if comp.returncode != 0:
+            print(f"  {name:<20} COMPILE-FAIL  {comp.stderr.strip()[-120:]}")
+            out[name] = {"pass": False}
+            continue
+        r = subprocess.run([binp], capture_output=True, text=True,
+                           env=_env(True), timeout=120)
+        ok = (r.returncode == 0)
+        out[name] = {"pass": ok}
+        print(f"  {name:<20} {'PASS' if ok else 'FAIL'}  ({r.stdout.strip()[-70:]})")
+    return out
+
+
 def driver(args):
     assert restart_runtime(), "clio_run did not become ready"
     os.makedirs(TMP, exist_ok=True)
@@ -320,9 +356,15 @@ def driver(args):
             n_fail += 1
         mark = lambda b: "PASS" if b else "FAIL"
         print(f"  {case:<20} " + " ".join(f"{k}={mark(v)}" for k, v in props.items()))
+
+    # C-API tests: features h5py cannot exercise through a non-native VOL
+    # (modern-API iteration). Accurate way to test the VOL as C/C++/NetCDF apps use it.
+    print("\n-- C tests (VOL-aware APIs h5py can't exercise) --")
+    results.update(_run_c_tests())
+
     with open(args.out, "w") as f:
         json.dump(results, f, indent=2)
-    total = len(CASES)
+    total = len(results)
     expect_fail = {x for x in (args.expect_fail or "").split(",") if x}
     failed = {c for c, p in results.items() if not all(p.values())}
     unexpected = sorted(failed - expect_fail)      # honest failures (or regressions)
