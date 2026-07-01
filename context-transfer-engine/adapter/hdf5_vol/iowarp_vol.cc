@@ -824,6 +824,22 @@ static herr_t iowarp_link_create(H5VL_link_create_args_t *args,
                                  hid_t lcpl_id, hid_t lapl_id,
                                  hid_t dxpl_id, void **req) {
   auto *o = static_cast<iowarp_obj_t *>(obj);
+
+  /* For a HARD link the target object carried in args is an iowarp-wrapped
+     pointer. The native VOL must receive the native under-object, or it links
+     against a foreign pointer and the resulting structure diverges from native
+     (h5diff dirty). Shallow-copy the args and unwrap the target before
+     delegating; mirrors the reference H5VLpassthru. Soft/UD links carry a path
+     or user data, not a wrapped object, so they pass through unchanged. */
+  H5VL_link_create_args_t under_args;
+  if (args && args->op_type == H5VL_LINK_CREATE_HARD &&
+      args->args.hard.curr_obj) {
+    under_args = *args;
+    under_args.args.hard.curr_obj =
+        static_cast<iowarp_obj_t *>(args->args.hard.curr_obj)->under_object;
+    args = &under_args;
+  }
+
   return H5VLlink_create(args, o ? o->under_object : nullptr, loc_params,
                           o ? o->under_vol_id : H5VL_NATIVE,
                           lcpl_id, lapl_id, dxpl_id, req);
