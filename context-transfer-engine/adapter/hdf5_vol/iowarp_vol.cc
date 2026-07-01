@@ -387,6 +387,40 @@ static bool iowarp_is_collective(hid_t dxpl_id) {
   return false;
 }
 
+/**
+ * Helper: true when the datatype's in-memory representation is a flat, fixed-size
+ * byte layout that can be safely linear-copied into the CTE chunk cache.
+ * Variable-length strings, variable-length sequences (hvl_t), and references hold
+ * POINTERS in the transfer buffer, not the data itself — a raw memcpy into a CTE
+ * blob would cache pointer values, not content, and corrupt the round-trip. Such
+ * transfers are delegated to the native VOL only (the native file still holds the
+ * real data; it is simply not mirrored into CTE). Recurses into compound/array
+ * member types so a vlen/reference nested inside a compound also bypasses.
+ */
+static bool iowarp_type_is_flat(hid_t type_id) {
+  if (type_id < 0) return false;
+  if (H5Tis_variable_str(type_id) > 0) return false;
+  H5T_class_t cls = H5Tget_class(type_id);
+  if (cls == H5T_VLEN || cls == H5T_REFERENCE) return false;
+  if (cls == H5T_COMPOUND) {
+    int n = H5Tget_nmembers(type_id);
+    for (int i = 0; i < n; ++i) {
+      hid_t mt = H5Tget_member_type(type_id, i);
+      bool flat = iowarp_type_is_flat(mt);
+      H5Tclose(mt);
+      if (!flat) return false;
+    }
+    return true;
+  }
+  if (cls == H5T_ARRAY) {
+    hid_t bt = H5Tget_super(type_id);
+    bool flat = iowarp_type_is_flat(bt);
+    H5Tclose(bt);
+    return flat;
+  }
+  return true;  /* integer, float, fixed-length string, enum, bitfield, opaque */
+}
+
 static void *iowarp_dataset_create(void *obj,
                                    const H5VL_loc_params_t *loc_params,
                                    const char *name, hid_t lcpl_id,
@@ -444,6 +478,7 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
        write under a whole-dataset key would poison a later whole read. */
     if (!dataset->file || !dataset->cacheable ||
         !iowarp_is_whole_read(mem_space_id[d], file_space_id[d]) ||
+        !iowarp_type_is_flat(mem_type_id[d]) ||
         iowarp_is_collective(dxpl_id)) {
       H5VLdataset_write(1, &dataset->obj.under_object,
                          dataset->obj.under_vol_id,
@@ -532,6 +567,7 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
        correct data; only the whole/independent case is cacheable. */
     if (!dataset->file || !dataset->cacheable ||
         !iowarp_is_whole_read(mem_space_id[d], file_space_id[d]) ||
+        !iowarp_type_is_flat(mem_type_id[d]) ||
         iowarp_is_collective(dxpl_id)) {
       H5VLdataset_read(1, &dataset->obj.under_object,
                         dataset->obj.under_vol_id,
@@ -970,6 +1006,40 @@ static herr_t iowarp_introspect_opt_query(void *obj, H5VL_subclass_t cls,
   return 0;
 }
 
+/* ------------------------------------------------------------------------
+ * Blob callbacks — pass-through. HDF5 stores variable-length data (vlen
+ * strings, vlen sequences) and references in the file's global heap via the
+ * VOL "blob" interface. A pass-through connector MUST forward these to the
+ * under-VOL; leaving them null makes any vlen/reference dataset crash at
+ * create time (H5T__vlen_set_loc dereferences the missing handler). The blob
+ * `obj` is a file object — iowarp_obj_t is its first member, so the cast
+ * yields the native under-object. Blob data lives in the native file's heap;
+ * it is not mirrored into CTE (consistent with the vlen cache bypass).
+ * ------------------------------------------------------------------------ */
+static herr_t iowarp_blob_put(void *obj, const void *buf, size_t size,
+                              void *blob_id, void *ctx) {
+  auto *o = static_cast<iowarp_obj_t *>(obj);
+  return H5VLblob_put(o->under_object, o->under_vol_id, buf, size, blob_id, ctx);
+}
+
+static herr_t iowarp_blob_get(void *obj, const void *blob_id, void *buf,
+                              size_t size, void *ctx) {
+  auto *o = static_cast<iowarp_obj_t *>(obj);
+  return H5VLblob_get(o->under_object, o->under_vol_id, blob_id, buf, size, ctx);
+}
+
+static herr_t iowarp_blob_specific(void *obj, void *blob_id,
+                                   H5VL_blob_specific_args_t *args) {
+  auto *o = static_cast<iowarp_obj_t *>(obj);
+  return H5VLblob_specific(o->under_object, o->under_vol_id, blob_id, args);
+}
+
+static herr_t iowarp_blob_optional(void *obj, void *blob_id,
+                                   H5VL_optional_args_t *args) {
+  auto *o = static_cast<iowarp_obj_t *>(obj);
+  return H5VLblob_optional(o->under_object, o->under_vol_id, blob_id, args);
+}
+
 /* ========================================================================
  * VOL connector class definition
  * ======================================================================== */
@@ -1079,7 +1149,7 @@ const H5VL_class_t H5VL_iowarp_cls = {
     },
 
     /* blob_cls */ {
-        nullptr, nullptr, nullptr, nullptr,
+        iowarp_blob_put, iowarp_blob_get, iowarp_blob_specific, iowarp_blob_optional,
     },
 
     /* token_cls */ {
