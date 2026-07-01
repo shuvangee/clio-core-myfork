@@ -156,14 +156,25 @@ def digest_by_spec(path, paths, attrs):
     """sha256 over declared dataset paths (dtype/shape/bytes) + declared attrs.
     Accesses objects BY NAME only — no visititems/H5Ovisit (the VOL does not
     support link iteration; that is tested separately by the 'iteration' case)."""
-    import h5py
+    import h5py, numpy as np
     h = hashlib.sha256()
     with h5py.File(path, "r") as f:
         for p in paths:
             o = f[p]
             d = o[()]
             h.update(("D|%s|%s|%s" % (p, o.dtype, o.shape)).encode())
-            h.update(d.tobytes() if hasattr(d, "tobytes") else repr(d).encode())
+            # Variable-length datatypes (vlen strings) come back as object arrays;
+            # .tobytes() would hash the element POINTERS (nondeterministic), not the
+            # string content. Hash the decoded content element-by-element instead.
+            if getattr(d, "dtype", None) is not None and d.dtype == object:
+                for el in np.ravel(np.asarray(d, dtype=object)):
+                    h.update(el if isinstance(el, bytes)
+                             else el.encode() if isinstance(el, str)
+                             else repr(el).encode())
+            elif isinstance(d, (bytes, str)):
+                h.update(d if isinstance(d, bytes) else d.encode())
+            else:
+                h.update(d.tobytes() if hasattr(d, "tobytes") else repr(d).encode())
         for (op, an) in attrs:
             obj = f if op == "/" else f[op]
             v = obj.attrs[an]

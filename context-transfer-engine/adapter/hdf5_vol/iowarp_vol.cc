@@ -325,6 +325,19 @@ static herr_t iowarp_file_specific(void *obj,
                            args, dxpl_id, req);
 }
 
+/* Pass-through file "optional" — MUST forward to the under-VOL. HDF5 finalizes
+   every file open/create by invoking the native-specific optional op
+   H5VL_NATIVE_FILE_POST_OPEN, which runs H5F__post_open() to populate the file's
+   VOL object (H5F_VOL_OBJ). With this callback left null the op never reached
+   native, so H5F_VOL_OBJ stayed NULL and any variable-length datatype crashed at
+   create time in H5T__vlen_set_loc -> H5VL_file_get(NULL). Mirrors H5VLpassthru. */
+static herr_t iowarp_file_optional(void *obj, H5VL_optional_args_t *args,
+                                   hid_t dxpl_id, void **req) {
+  auto *file = static_cast<iowarp_file_t *>(obj);
+  return H5VLfile_optional(file->obj.under_object, file->obj.under_vol_id,
+                           args, dxpl_id, req);
+}
+
 static herr_t iowarp_file_close(void *obj, hid_t dxpl_id, void **req) {
   auto *file = static_cast<iowarp_file_t *>(obj);
   herr_t ret = H5VLfile_close(file->obj.under_object, file->obj.under_vol_id,
@@ -1017,9 +1030,15 @@ static herr_t iowarp_introspect_get_cap_flags(const void *info,
 
 static herr_t iowarp_introspect_opt_query(void *obj, H5VL_subclass_t cls,
                                           int opt_type, uint64_t *flags) {
-  (void)obj; (void)cls; (void)opt_type;
-  *flags = 0;
-  return 0;
+  /* Forward to the under-VOL so native-specific optional ops are reported as
+     supported (mirrors H5VLpassthru). Critically, HDF5 only issues the
+     H5VL_NATIVE_FILE_POST_OPEN op — which sets the file's VOL object, required by
+     variable-length datatypes — when this query reports it supported. Hardcoding
+     *flags=0 suppressed post-open, leaving H5F_VOL_OBJ NULL and crashing vlen. */
+  auto *o = static_cast<iowarp_obj_t *>(obj);
+  if (!o) { *flags = 0; return 0; }
+  return H5VLintrospect_opt_query(o->under_object, o->under_vol_id, cls,
+                                  opt_type, flags);
 }
 
 /* ------------------------------------------------------------------------
@@ -1123,7 +1142,7 @@ const H5VL_class_t H5VL_iowarp_cls = {
         /* open     */ iowarp_file_open,
         /* get      */ iowarp_file_get,
         /* specific */ iowarp_file_specific,
-        /* optional */ nullptr,
+        /* optional */ iowarp_file_optional,
         /* close    */ iowarp_file_close,
     },
 
