@@ -325,16 +325,20 @@ def driver(args):
     total = len(CASES)
     expect_fail = {x for x in (args.expect_fail or "").split(",") if x}
     failed = {c for c, p in results.items() if not all(p.values())}
-    regressions = sorted(failed - expect_fail)     # green case broke -> CI red
-    fixed = sorted(expect_fail - failed)           # known gap now passes -> shrink baseline
+    unexpected = sorted(failed - expect_fail)      # honest failures (or regressions)
+    fixed = sorted(expect_fail - failed)           # known gap now passes
     print(f"\n{total - len(failed)}/{total} cases fully pass. wrote {args.out}")
     if expect_fail:
+        # regression-gate mode: only unexpected failures are fatal
         print(f"expected gaps still failing: {sorted(failed & expect_fail)}")
-    if fixed:
-        print(f"NOTE: previously-failing cases now PASS (remove from --expect-fail): {fixed}")
-    if regressions:
-        print(f"REGRESSION — these should pass but FAILED: {regressions}")
-    return 1 if regressions else 0
+        if fixed:
+            print(f"NOTE: previously-failing cases now PASS (drop from --expect-fail): {fixed}")
+        if unexpected:
+            print(f"REGRESSION — these should pass but FAILED: {unexpected}")
+    elif failed:
+        # honest mode (default): every failure is reported and fatal
+        print(f"FAILING — VOL not yet compatible for: {sorted(failed)}")
+    return 1 if unexpected else 0
 
 def main():
     ap = argparse.ArgumentParser()

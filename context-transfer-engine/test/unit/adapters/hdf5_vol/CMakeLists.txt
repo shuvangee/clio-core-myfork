@@ -125,10 +125,12 @@ install(
 # real data round-trips end to end and REQUIRES a running clio_run — the suite
 # starts/stops its own (pkill + start), so it must run alone (RUN_SERIAL).
 #
-# Regression gate: the four known compat gaps (strings/attrs/groups_links/
-# iteration, see benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md) are allowed via
-# --expect-fail, so this is GREEN today; it fails only if a currently-passing
-# case regresses. As Phase 2 closes a gap, drop it from --expect-fail.
+# This test HONESTLY FAILS today: it reports the VOL's real compatibility state,
+# so it is RED while the four known gaps (strings/attrs/groups_links/iteration,
+# see benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md) remain. The suite supports an
+# --expect-fail allowlist for a green regression-gate mode, but we deliberately do
+# NOT use it here — the failing test IS the honest signal that Phase 2 is not done.
+# It turns green on its own as Phase 2 closes each gap.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_FOUND)
     add_test(NAME cte_hdf5_vol_compat_suite
@@ -136,7 +138,6 @@ if(Python3_FOUND)
             ${CMAKE_SOURCE_DIR}/benchmarks/hdf5-ingest/vol_compat_suite.py
             --bin $<TARGET_FILE_DIR:iowarp_hdf5_vol>
             --out ${CMAKE_CURRENT_BINARY_DIR}/vol_compat_results.json
-            --expect-fail strings,attrs,groups_links,iteration
     )
     set_tests_properties(cte_hdf5_vol_compat_suite PROPERTIES
         TIMEOUT 900
