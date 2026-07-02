@@ -916,12 +916,16 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
   std::this_thread::sleep_for(100ms);
 
   const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  // Use the platform temp dir (not a hardcoded /tmp, which does not exist on
+  // Windows) so the file-backed members + on-disk WAL work cross-platform.
+  const std::filesystem::path tmp_dir = std::filesystem::temp_directory_path();
   auto member_file = [&](int idx) {
-    return std::string("/tmp/safe_alog_member_") + std::to_string(getpid()) +
-           "_" + std::to_string(idx) + ".bin";
+    return (tmp_dir / ("safe_alog_member_" + std::to_string(getpid()) + "_" +
+                       std::to_string(idx) + ".bin"))
+        .string();
   };
   const std::string log_path =
-      std::string("/tmp/safe_alog_") + std::to_string(getpid()) + ".alog";
+      (tmp_dir / ("safe_alog_" + std::to_string(getpid()) + ".alog")).string();
 
   // Fresh start: remove any stale member files + alloc log.
   for (int i = 0; i < 4; ++i) {
