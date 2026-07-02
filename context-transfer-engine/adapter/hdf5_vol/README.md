@@ -54,13 +54,19 @@ zero overhead). Only the VOL sees HDF5 semantics — dataset paths, selection sh
 datatypes — that the blob layer cannot, so it captures them here. Per file, two
 artifacts are written to `<dir>`:
 
-- `<file>.access.jsonl` — one JSON record per `H5Dread`/`H5Dwrite`: dataset, op,
-  datatype, selection kind + a bounds signature (for repeat detection), element
-  count, bytes, how it was served (`cache` / `native` / `uncacheable`), and duration.
-- `<file>.access.json` — an aggregated summary written at file close: per dataset
-  and overall, the read **cache hit rate**, selection-shape histogram, read bytes
-  from tier vs native, write mirroring, transfer-size min/max/mean, and the count
-  of distinct vs maximally-repeated read selections (the cache/prefetch signal).
+- `<file>.<pid>.access.jsonl` — one JSON record per `H5Dread`/`H5Dwrite`: dataset,
+  op, datatype, selection kind + a bounds signature (for repeat detection), element
+  count, bytes, how it was served (`cache` / `native` / `uncacheable`), whether the
+  dataset is chunked and if the access is chunk-aligned, and duration.
+- `<file>.<pid>.access.json` — an aggregated summary written at file close: per
+  dataset and overall, the read **cache hit rate**, selection-shape histogram, read
+  bytes from tier vs native, write mirroring, storage **layout** (chunked? chunk
+  dims, aligned vs misaligned read counts — the rechunk signal), **read latency**
+  split cache-vs-native, transfer-size min/max/mean, and the count of distinct vs
+  maximally-repeated read selections (the cache/prefetch signal).
+
+Filenames carry the pid so concurrent processes (e.g. MPI ranks) don't clobber
+each other's output.
 
 This is the data a CLIO-using agent reads to advise tuning (hot datasets, whether
 caching is helping, which selections repeat, small-read/per-object-cost patterns).

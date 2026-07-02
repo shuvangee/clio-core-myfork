@@ -380,9 +380,16 @@ def _run_trace_check():
             s = json.load(open(summaries[0]))
             d = s["datasets"]["m"]
             hr = d["cache_hit_rate"]
+            lay = d["layout"]
             fields_ok = (d["reads"] > 0 and d["writes"] > 0 and 0.0 <= hr <= 1.0
                          and d["read_served"]["cache"] > 0 and d["ndims"] == 2
-                         and d["dtype"] == "integer")
+                         and d["dtype"] == "integer"
+                         # chunk-alignment probe: dataset is chunked {4,3}; case D
+                         # is aligned, cases A/B are misaligned.
+                         and lay["chunked"] is True and lay["chunk_dims"] == "[4,3]"
+                         and lay["read_aligned"] >= 1 and lay["read_misaligned"] >= 1
+                         # latency split is present and non-negative
+                         and d["read_latency_us"]["cache_mean"] >= 0.0)
             repeat_ok = d["max_repeated_selection"] >= 2  # A and B read the same hyperslab
         except Exception:
             pass

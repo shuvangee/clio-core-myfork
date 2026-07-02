@@ -35,8 +35,15 @@ int main(void) {
   hid_t f = H5Fcreate(path, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
   hsize_t dims[2] = {R, C};
   hid_t fs = H5Screate_simple(2, dims, NULL);
-  hid_t d = H5Dcreate2(f, "m", H5T_NATIVE_INT, fs, H5P_DEFAULT, H5P_DEFAULT,
+  /* Chunked {4,3} so the telemetry chunk-alignment probe has something to report:
+     case D reads one whole chunk (aligned); cases A/B straddle chunk edges
+     (misaligned). */
+  hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+  hsize_t chunk[2] = {4, 3};
+  H5Pset_chunk(dcpl, 2, chunk);
+  hid_t d = H5Dcreate2(f, "m", H5T_NATIVE_INT, fs, H5P_DEFAULT, dcpl,
                        H5P_DEFAULT);
+  H5Pclose(dcpl);
   if (H5Dwrite(d, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, whole) < 0)
     return !fail("whole write");
   /* Drain async puts so the linear cache is populated for the reads below. */
@@ -94,6 +101,21 @@ int main(void) {
     H5Sclose(sp);
   }
 
+  /* --- D. aligned hyperslab rows[0..3] cols[0..2] (exactly one chunk) --- */
+  {
+    hid_t sp = H5Dget_space(d);
+    hsize_t start[2] = {0, 0}, count[2] = {4, 3};
+    H5Sselect_hyperslab(sp, H5S_SELECT_SET, start, NULL, count, NULL);
+    int got[12];
+    if (H5Dread(d, H5T_NATIVE_INT, H5S_ALL, sp, H5P_DEFAULT, got) < 0)
+      ok = fail("D read");
+    int k = 0;
+    for (int r = 0; r < 4 && ok; ++r)
+      for (int c = 0; c < 3; ++c, ++k)
+        if (got[k] != VAL(r, c)) ok = fail("D value");
+    H5Sclose(sp);
+  }
+
   /* --- Coherence: partial write row 0 = 900+c, then whole read must reflect it
      (the partial write invalidates the stale linear cache). --- */
   {
@@ -120,6 +142,6 @@ int main(void) {
   H5Dclose(d);
   H5Sclose(fs);
   H5Fclose(f);
-  printf("selection A/B/C + coherence: %s\n", ok ? "PASS" : "FAIL");
+  printf("selection A/B/C/D + coherence: %s\n", ok ? "PASS" : "FAIL");
   return ok ? 0 : 1;
 }

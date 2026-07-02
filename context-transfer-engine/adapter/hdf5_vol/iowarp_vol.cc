@@ -88,6 +88,12 @@ struct iowarp_dataset_t {
   /* Pending async writes flushed on close */
   std::vector<clio::run::Future<clio::cte::core::PutBlobTask>> pending_puts;
   std::vector<ctp::ipc::FullPtr<char>> pending_buffers;
+  /* Telemetry-only storage-layout probe, filled lazily on first traced access
+     (never touched unless IOWARP_VOL_TRACE is set). */
+  int layout_probed = 0;         /* 0 = not yet probed, 1 = probed */
+  bool chunked = false;
+  int chunk_rank = 0;
+  hsize_t chunk_dims[H5S_MAX_RANK];
 };
 
 /* Build a dataset wrapper. Centralised so every code path that can produce a
@@ -558,6 +564,53 @@ static long long iowarp_sel_nelem(iowarp_dataset_t *dataset, hid_t mem_space,
   return n;
 }
 
+/* Probe the dataset's storage layout once (chunked? chunk dims), caching the
+   result on the dataset. Only reached when telemetry is enabled. */
+static void iowarp_probe_layout(iowarp_dataset_t *dataset, hid_t dxpl_id) {
+  if (dataset->layout_probed) return;
+  dataset->layout_probed = 1;
+  H5VL_dataset_get_args_t ga;
+  ga.op_type = H5VL_DATASET_GET_DCPL;
+  ga.args.get_dcpl.dcpl_id = H5I_INVALID_HID;
+  if (H5VLdataset_get(dataset->obj.under_object, dataset->obj.under_vol_id, &ga,
+                      dxpl_id, nullptr) < 0)
+    return;
+  hid_t dcpl = ga.args.get_dcpl.dcpl_id;
+  if (dcpl < 0) return;
+  if (H5Pget_layout(dcpl) == H5D_CHUNKED) {
+    int r = H5Pget_chunk(dcpl, H5S_MAX_RANK, dataset->chunk_dims);
+    if (r > 0) { dataset->chunked = true; dataset->chunk_rank = r; }
+  }
+  H5Pclose(dcpl);
+}
+
+/* Classify a file-space selection's alignment to the chunk grid: 1 aligned,
+   0 misaligned, -1 n/a (contiguous dataset, or a non-hyperslab selection).
+   Whole reads of a chunked dataset are aligned by definition. For a hyperslab,
+   the bounding box must snap to chunk boundaries (start on a chunk edge and end
+   on a chunk edge or the dataset extent) — misalignment is the read-amplification
+   / rechunk signal. */
+static int iowarp_chunk_alignment(iowarp_dataset_t *dataset, hid_t file_space_id) {
+  if (!dataset->chunked) return -1;
+  if (file_space_id == H5S_ALL) return 1;
+  H5S_sel_type st = H5Sget_select_type(file_space_id);
+  if (st == H5S_SEL_ALL) return 1;
+  if (st != H5S_SEL_HYPERSLABS) return -1;  /* points: alignment not meaningful */
+  int rank = H5Sget_simple_extent_ndims(file_space_id);
+  if (rank <= 0 || rank > H5S_MAX_RANK || rank != dataset->chunk_rank) return -1;
+  hsize_t start[H5S_MAX_RANK], end[H5S_MAX_RANK], ext[H5S_MAX_RANK];
+  if (H5Sget_select_bounds(file_space_id, start, end) < 0) return -1;
+  if (H5Sget_simple_extent_dims(file_space_id, ext, nullptr) < 0) return -1;
+  for (int i = 0; i < rank; ++i) {
+    hsize_t c = dataset->chunk_dims[i];
+    if (c == 0) return -1;
+    if (start[i] % c != 0) return 0;                 /* start not on a chunk edge */
+    hsize_t past = end[i] + 1;                        /* one past the last element */
+    if (past % c != 0 && past != ext[i]) return 0;    /* end not on a chunk/extent edge */
+  }
+  return 1;
+}
+
 /* Record one read/write access. No-op unless the file has telemetry enabled. */
 static void iowarp_trace_access(iowarp_dataset_t *dataset, iowarp::trace::Op op,
                                 hid_t mem_type_id, hid_t mem_space_id,
@@ -577,6 +630,15 @@ static void iowarp_trace_access(iowarp_dataset_t *dataset, iowarp::trace::Op op,
   a.nelem_sel = n;
   a.bytes = (n > 0) ? static_cast<size_t>(n) * a.elem_size : 0;
   a.dur_us = dur_us;
+  iowarp_probe_layout(dataset, dxpl_id);
+  a.chunked = dataset->chunked;
+  a.chunk_aligned = iowarp_chunk_alignment(dataset, file_space_id);
+  if (dataset->chunked) {
+    a.chunk_dims = "[";
+    for (int i = 0; i < dataset->chunk_rank; ++i)
+      a.chunk_dims += (i ? "," : "") + std::to_string(dataset->chunk_dims[i]);
+    a.chunk_dims += "]";
+  }
   iowarp::trace::record(dataset->file->trace, a);
 }
 

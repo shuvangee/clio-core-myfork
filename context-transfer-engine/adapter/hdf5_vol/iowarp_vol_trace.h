@@ -29,6 +29,8 @@
 
 #include <hdf5.h>
 
+#include <unistd.h>  /* getpid — per-process trace filenames */
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -61,6 +63,9 @@ struct Access {
   size_t bytes = 0;
   double dur_us = 0.0;
   uint64_t sel_sig = 0;    /* selection-bounds signature for repeat detection */
+  bool chunked = false;    /* dataset storage layout is chunked */
+  int chunk_aligned = -1;  /* -1 = n/a (contiguous/point), 0 = misaligned, 1 = aligned */
+  std::string chunk_dims;  /* e.g. "[4,3]" for chunked datasets */
 };
 
 /* Per-dataset rollup. Read serving and write mirroring are tracked separately so
@@ -73,6 +78,8 @@ struct DsetStat {
   /* reads: how each was served */
   uint64_t read_cache = 0, read_native = 0, read_uncacheable = 0;
   uint64_t read_bytes_cache = 0, read_bytes_native = 0;
+  /* read latency split by how it was served (tier vs native) */
+  double read_cache_us = 0, read_native_us = 0;
   /* writes: mirrored to the tier vs native-only (uncacheable) */
   uint64_t write_cache = 0, write_uncacheable = 0;
   size_t min_bytes = SIZE_MAX, max_bytes = 0;
@@ -82,6 +89,10 @@ struct DsetStat {
   std::string dtype;
   size_t elem_size = 0;
   int ndims = 0;
+  /* storage layout + chunk-alignment of reads (rechunk / read-amplification signal) */
+  bool chunked = false;
+  std::string chunk_dims;
+  uint64_t read_aligned = 0, read_misaligned = 0;
   std::unordered_map<uint64_t, uint32_t> sel_counts;  /* signature -> count */
 };
 
@@ -162,12 +173,18 @@ inline void record(FileTrace *ft, const Access &a) {
   DsetStat &s = ft->dsets[a.dataset];
   if (s.dtype.empty()) { s.dtype = a.dtype; s.elem_size = a.elem_size; }
   if (a.ndims > s.ndims) s.ndims = a.ndims;  /* whole ops report 0; keep true rank */
+  if (a.chunked) { s.chunked = true; if (s.chunk_dims.empty()) s.chunk_dims = a.chunk_dims; }
   if (a.op == Op::kRead) {
     s.reads++; s.bytes_read += a.bytes; s.read_us += a.dur_us;
+    if (a.chunk_aligned == 1) s.read_aligned++;
+    else if (a.chunk_aligned == 0) s.read_misaligned++;
     switch (a.served) {
-      case Served::kCache: s.read_cache++; s.read_bytes_cache += a.bytes; break;
-      case Served::kNative: s.read_native++; s.read_bytes_native += a.bytes; break;
-      default: s.read_uncacheable++; s.read_bytes_native += a.bytes; break;
+      case Served::kCache:
+        s.read_cache++; s.read_bytes_cache += a.bytes; s.read_cache_us += a.dur_us; break;
+      case Served::kNative:
+        s.read_native++; s.read_bytes_native += a.bytes; s.read_native_us += a.dur_us; break;
+      default:
+        s.read_uncacheable++; s.read_bytes_native += a.bytes; s.read_native_us += a.dur_us; break;
     }
   } else {
     s.writes++; s.bytes_written += a.bytes; s.write_us += a.dur_us;
@@ -195,7 +212,9 @@ inline void record(FileTrace *ft, const Access &a) {
               << ",\"ndims\":" << a.ndims << ",\"sel\":\"" << sel_str(a.sel)
               << "\",\"sel_sig\":" << a.sel_sig << ",\"nelem\":" << a.nelem_sel
               << ",\"bytes\":" << a.bytes << ",\"served\":\"" << served_str(a.served)
-              << "\",\"dur_us\":" << a.dur_us << "}\n";
+              << "\",\"chunked\":" << (a.chunked ? "true" : "false")
+              << ",\"chunk_aligned\":" << a.chunk_aligned
+              << ",\"dur_us\":" << a.dur_us << "}\n";
   }
 }
 
@@ -212,7 +231,9 @@ inline std::string safe_base(const std::string &path) {
 inline FileTrace *open_file(const std::string &file_name) {
   if (!enabled()) return nullptr;
   auto *ft = new FileTrace();
-  ft->file_name = safe_base(file_name);
+  /* Suffix with the pid so concurrent processes (e.g. MPI ranks) opening the same
+     file path do not clobber each other's trace output. */
+  ft->file_name = safe_base(file_name) + "." + std::to_string(getpid());
   ft->jsonl.open(trace_dir() + "/" + ft->file_name + ".access.jsonl",
                  std::ios::out | std::ios::trunc);
   return ft;
@@ -242,6 +263,9 @@ inline void close_file(FileTrace *ft) {
       uint32_t max_repeat = 0;
       for (auto &c : s.sel_counts) max_repeat = c.second > max_repeat ? c.second : max_repeat;
       double mean_bytes = s.n_sized ? s.sum_bytes / (double)s.n_sized : 0.0;
+      uint64_t read_nc = s.read_native + s.read_uncacheable;  /* non-cache reads */
+      double cache_lat = s.read_cache ? s.read_cache_us / (double)s.read_cache : 0.0;
+      double native_lat = read_nc ? s.read_native_us / (double)read_nc : 0.0;
       if (!first) o << ",\n";
       first = false;
       o << "    \"" << kv.first << "\": {"
@@ -259,6 +283,11 @@ inline void close_file(FileTrace *ft) {
         << ", \"read_bytes_from_native\": " << s.read_bytes_native
         << ", \"write_served\": {\"mirrored\": " << s.write_cache
         << ", \"native_only\": " << s.write_uncacheable << "}"
+        << ", \"layout\": {\"chunked\": " << (s.chunked ? "true" : "false")
+        << ", \"chunk_dims\": \"" << s.chunk_dims << "\", \"read_aligned\": "
+        << s.read_aligned << ", \"read_misaligned\": " << s.read_misaligned << "}"
+        << ", \"read_latency_us\": {\"cache_mean\": " << cache_lat
+        << ", \"native_mean\": " << native_lat << "}"
         << ", \"xfer_bytes\": {\"min\": " << (s.n_sized ? s.min_bytes : 0)
         << ", \"max\": " << s.max_bytes << ", \"mean\": " << mean_bytes << "}"
         << ", \"distinct_read_selections\": " << s.sel_counts.size()
