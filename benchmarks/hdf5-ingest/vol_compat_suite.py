@@ -18,6 +18,7 @@ up and spawns each arm as a subprocess with the VOL env toggled.
   python3 vol_compat_suite.py --out vol_compat_results.json
 """
 import argparse
+import glob
 import hashlib
 import json
 import os
@@ -347,6 +348,52 @@ def _run_c_tests():
     return out
 
 
+def _run_trace_check():
+    """Verify access telemetry (Part B). Runs the c_selection workload with
+    IOWARP_VOL_TRACE set and asserts the summary JSON + per-access JSONL are
+    produced with sane, self-consistent fields — including read cache-hit rate in
+    [0,1] and repeated-selection detection (the workload reads one hyperslab
+    twice). Observe-only: does not change data-path behavior."""
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    binp = os.path.join(TMP, "c_selection")  # reuse the c_selection binary
+    srcp = os.path.join(src_dir, "vol_c_selection_test.c")
+    if not os.path.exists(binp):
+        comp = subprocess.run(["h5cc", "-o", binp, srcp], capture_output=True,
+                              text=True, env=_env(False))
+        if comp.returncode != 0:
+            print(f"  {'telemetry':<20} COMPILE-FAIL")
+            return {"telemetry": {"pass": False}}
+    tdir = os.path.join(TMP, "trace")
+    os.makedirs(tdir, exist_ok=True)
+    for f in glob.glob(tdir + "/*"):
+        os.remove(f)
+    env = dict(_env(True), IOWARP_VOL_TRACE=tdir)
+    r = subprocess.run([binp], capture_output=True, text=True, env=env, timeout=120)
+    checks = {"workload_ok": r.returncode == 0}
+    summaries = glob.glob(tdir + "/*.access.json")
+    jsonls = glob.glob(tdir + "/*.access.jsonl")
+    checks["summary_written"] = len(summaries) == 1
+    checks["jsonl_written"] = len(jsonls) == 1 and os.path.getsize(jsonls[0]) > 0 if jsonls else False
+    fields_ok = repeat_ok = False
+    if summaries:
+        try:
+            s = json.load(open(summaries[0]))
+            d = s["datasets"]["m"]
+            hr = d["cache_hit_rate"]
+            fields_ok = (d["reads"] > 0 and d["writes"] > 0 and 0.0 <= hr <= 1.0
+                         and d["read_served"]["cache"] > 0 and d["ndims"] == 2
+                         and d["dtype"] == "integer")
+            repeat_ok = d["max_repeated_selection"] >= 2  # A and B read the same hyperslab
+        except Exception:
+            pass
+    checks["fields_sane"] = fields_ok
+    checks["repeat_detected"] = repeat_ok
+    ok = all(checks.values())
+    print(f"  {'telemetry':<20} {'PASS' if ok else 'FAIL'}  "
+          f"(summary+jsonl, hit_rate/repeat sane)")
+    return {"telemetry": checks}
+
+
 def driver(args):
     assert restart_runtime(), "clio_run did not become ready"
     os.makedirs(TMP, exist_ok=True)
@@ -381,6 +428,10 @@ def driver(args):
     # (modern-API iteration). Accurate way to test the VOL as C/C++/NetCDF apps use it.
     print("\n-- C tests (VOL-aware APIs h5py can't exercise) --")
     results.update(_run_c_tests())
+
+    # Access telemetry (Part B observability): summary + JSONL, fields sane.
+    print("\n-- telemetry (access observability) --")
+    results.update(_run_trace_check())
 
     with open(args.out, "w") as f:
         json.dump(results, f, indent=2)

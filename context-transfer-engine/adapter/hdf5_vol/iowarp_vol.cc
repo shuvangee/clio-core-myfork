@@ -27,6 +27,9 @@
 #include <memory>
 #include <mutex>
 #include <unordered_set>
+#include <chrono>
+
+#include "iowarp_vol_trace.h"
 
 #include <clio_runtime/clio_runtime.h>
 /* transport_factory_impl.h provides the inline definitions of
@@ -68,6 +71,9 @@ struct iowarp_file_t {
      stays authoritative; this keeps the CTE cache coherent with it). */
   std::mutex ds_mtx;
   std::unordered_set<iowarp_dataset_t *> open_datasets;
+  /* Access telemetry (observe-only); non-null only when IOWARP_VOL_TRACE is set.
+     Finalized to a summary JSON at file close. */
+  iowarp::trace::FileTrace *trace = nullptr;
 };
 
 struct iowarp_dataset_t {
@@ -298,6 +304,7 @@ static void *iowarp_file_create(const char *name, unsigned flags,
   file->tag_id = tag_task->tag_id_;
   file->file_name = name;
   file->chunk_size = chunk_size;
+  file->trace = iowarp::trace::open_file(name);
 
   return file;
 }
@@ -330,6 +337,7 @@ static void *iowarp_file_open(const char *name, unsigned flags,
   file->tag_id = tag_task->tag_id_;
   file->file_name = name;
   file->chunk_size = chunk_size;
+  file->trace = iowarp::trace::open_file(name);
 
   return file;
 }
@@ -385,6 +393,7 @@ static herr_t iowarp_file_close(void *obj, hid_t dxpl_id, void **req) {
   }
   herr_t ret = H5VLfile_close(file->obj.under_object, file->obj.under_vol_id,
                                dxpl_id, req);
+  iowarp::trace::close_file(file->trace);  /* writes the summary; no-op if null */
   delete file;
   return ret;
 }
@@ -509,6 +518,73 @@ static void *iowarp_dataset_open(void *obj,
                               find_parent_file(obj), name);
 }
 
+/* ---- Access telemetry helpers (observe-only; active only under IOWARP_VOL_TRACE) */
+
+static const char *iowarp_dtype_class_name(hid_t t) {
+  if (t < 0) return "unknown";
+  if (H5Tis_variable_str(t) > 0) return "vlen_string";
+  switch (H5Tget_class(t)) {
+    case H5T_INTEGER: return "integer";
+    case H5T_FLOAT: return "float";
+    case H5T_STRING: return "string";
+    case H5T_COMPOUND: return "compound";
+    case H5T_ARRAY: return "array";
+    case H5T_ENUM: return "enum";
+    case H5T_VLEN: return "vlen";
+    case H5T_REFERENCE: return "reference";
+    case H5T_BITFIELD: return "bitfield";
+    case H5T_OPAQUE: return "opaque";
+    default: return "other";
+  }
+}
+
+/* Element count a transfer touches: the file-space selection if given, else the
+   mem-space selection, else the whole dataset (needs one GET_SPACE). Only called
+   when telemetry is enabled. */
+static long long iowarp_sel_nelem(iowarp_dataset_t *dataset, hid_t mem_space,
+                                  hid_t file_space, hid_t dxpl) {
+  if (file_space != H5S_ALL) return H5Sget_select_npoints(file_space);
+  if (mem_space != H5S_ALL) return H5Sget_select_npoints(mem_space);
+  H5VL_dataset_get_args_t ga;
+  ga.op_type = H5VL_DATASET_GET_SPACE;
+  ga.args.get_space.space_id = H5I_INVALID_HID;
+  if (H5VLdataset_get(dataset->obj.under_object, dataset->obj.under_vol_id, &ga,
+                      dxpl, nullptr) < 0)
+    return -1;
+  hid_t sp = ga.args.get_space.space_id;
+  if (sp < 0) return -1;
+  hssize_t n = H5Sget_simple_extent_npoints(sp);
+  H5Sclose(sp);
+  return n;
+}
+
+/* Record one read/write access. No-op unless the file has telemetry enabled. */
+static void iowarp_trace_access(iowarp_dataset_t *dataset, iowarp::trace::Op op,
+                                hid_t mem_type_id, hid_t mem_space_id,
+                                hid_t file_space_id, hid_t dxpl_id,
+                                iowarp::trace::Served served, double dur_us) {
+  if (!dataset || !dataset->file || !dataset->file->trace) return;
+  iowarp::trace::Access a;
+  a.op = op;
+  a.served = served;
+  a.dataset = dataset->dataset_path;
+  a.sel = iowarp::trace::classify(file_space_id, &a.sel_sig);
+  a.dtype = iowarp_dtype_class_name(mem_type_id);
+  a.elem_size = (mem_type_id >= 0) ? H5Tget_size(mem_type_id) : 0;
+  a.ndims = (file_space_id != H5S_ALL)
+                ? H5Sget_simple_extent_ndims(file_space_id) : 0;
+  long long n = iowarp_sel_nelem(dataset, mem_space_id, file_space_id, dxpl_id);
+  a.nelem_sel = n;
+  a.bytes = (n > 0) ? static_cast<size_t>(n) * a.elem_size : 0;
+  a.dur_us = dur_us;
+  iowarp::trace::record(dataset->file->trace, a);
+}
+
+static inline double iowarp_since_us(std::chrono::steady_clock::time_point s) {
+  return std::chrono::duration<double, std::micro>(
+             std::chrono::steady_clock::now() - s).count();
+}
+
 /**
  * Dataset write: chunk data into async PutBlob calls.
  *
@@ -523,9 +599,11 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
                                    void **req) {
   auto *cte_client = get_cte_client();
 
+  const bool tracing = iowarp::trace::enabled();
   for (size_t d = 0; d < count; ++d) {
     auto *dataset = static_cast<iowarp_dataset_t *>(dset[d]);
     if (!dataset || !buf[d]) continue;
+    auto t0 = std::chrono::steady_clock::now();
 
     /* Only whole-dataset, independent writes can be represented in the linear
        CTE chunk cache. For no-file-reference, partial (hyperslab), or
@@ -548,6 +626,11 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
             dataset->file->tag_id, dataset->dataset_path + "/chunk_0");
         del.Wait();
       }
+      if (tracing)
+        iowarp_trace_access(dataset, iowarp::trace::Op::kWrite, mem_type_id[d],
+                            mem_space_id[d], file_space_id[d], dxpl_id,
+                            iowarp::trace::Served::kUncacheable,
+                            iowarp_since_us(t0));
       continue;
     }
 
@@ -597,6 +680,10 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
                        dataset->obj.under_vol_id,
                        &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                        dxpl_id, &buf[d], req);
+    if (tracing)
+      iowarp_trace_access(dataset, iowarp::trace::Op::kWrite, mem_type_id[d],
+                          mem_space_id[d], file_space_id[d], dxpl_id,
+                          iowarp::trace::Served::kCache, iowarp_since_us(t0));
   }
 
   return 0;
@@ -739,10 +826,12 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
                                   hid_t dxpl_id, void *buf[],
                                   void **req) {
   auto *cte_client = get_cte_client();
+  const bool tracing = iowarp::trace::enabled();
 
   for (size_t d = 0; d < count; ++d) {
     auto *dataset = static_cast<iowarp_dataset_t *>(dset[d]);
     if (!dataset || !buf[d]) continue;
+    auto t0 = std::chrono::steady_clock::now();
 
     /* Native passthrough when there is no file reference, the type is not flat,
        or the read is collective. The native VOL always produces correct data. */
@@ -754,6 +843,11 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
                         dataset->obj.under_vol_id,
                         &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                         dxpl_id, &buf[d], req);
+      if (tracing)
+        iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+                            mem_space_id[d], file_space_id[d], dxpl_id,
+                            iowarp::trace::Served::kUncacheable,
+                            iowarp_since_us(t0));
       continue;
     }
 
@@ -761,14 +855,21 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
        linear cache is already populated (serve-only). On a miss, fall back to
        native (unchanged). */
     if (!iowarp_is_whole_read(mem_space_id[d], file_space_id[d])) {
-      if (iowarp_serve_selection(dataset, mem_type_id[d], mem_space_id[d],
-                                 file_space_id[d], dxpl_id, buf[d])) {
-        continue;
+      bool served = iowarp_serve_selection(dataset, mem_type_id[d],
+                                           mem_space_id[d], file_space_id[d],
+                                           dxpl_id, buf[d]);
+      if (!served) {
+        H5VLdataset_read(1, &dataset->obj.under_object,
+                          dataset->obj.under_vol_id,
+                          &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
+                          dxpl_id, &buf[d], req);
       }
-      H5VLdataset_read(1, &dataset->obj.under_object,
-                        dataset->obj.under_vol_id,
-                        &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
-                        dxpl_id, &buf[d], req);
+      if (tracing)
+        iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+                            mem_space_id[d], file_space_id[d], dxpl_id,
+                            served ? iowarp::trace::Served::kCache
+                                   : iowarp::trace::Served::kNative,
+                            iowarp_since_us(t0));
       continue;
     }
 
@@ -787,6 +888,10 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
                         dataset->obj.under_vol_id,
                         &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                         dxpl_id, &buf[d], req);
+      if (tracing)
+        iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+                            mem_space_id[d], file_space_id[d], dxpl_id,
+                            iowarp::trace::Served::kNative, iowarp_since_us(t0));
       continue;
     }
 
@@ -830,6 +935,12 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
       /* HIT — serve the whole image from the CTE tier. */
       if (!iowarp_read_cached_image(dataset, total_size, dst)) return -1;
     }
+    if (tracing)
+      iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+                          mem_space_id[d], file_space_id[d], dxpl_id,
+                          cached == 0 ? iowarp::trace::Served::kNative
+                                      : iowarp::trace::Served::kCache,
+                          iowarp_since_us(t0));
   }
 
   return 0;

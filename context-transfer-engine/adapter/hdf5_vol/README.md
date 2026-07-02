@@ -46,6 +46,25 @@ export HDF5_VOL_CONNECTOR=iowarp        # under-VOL defaults to native
 Any HDF5 application (h5py, C, tools) then routes through the connector. Files it
 writes are valid native HDF5 files readable by standard tools.
 
+## Access telemetry (observability)
+
+Set `IOWARP_VOL_TRACE=<dir>` to record per-access observability (observe-only; it
+never changes the data path, and when unset it is a single cached bool check with
+zero overhead). Only the VOL sees HDF5 semantics — dataset paths, selection shapes,
+datatypes — that the blob layer cannot, so it captures them here. Per file, two
+artifacts are written to `<dir>`:
+
+- `<file>.access.jsonl` — one JSON record per `H5Dread`/`H5Dwrite`: dataset, op,
+  datatype, selection kind + a bounds signature (for repeat detection), element
+  count, bytes, how it was served (`cache` / `native` / `uncacheable`), and duration.
+- `<file>.access.json` — an aggregated summary written at file close: per dataset
+  and overall, the read **cache hit rate**, selection-shape histogram, read bytes
+  from tier vs native, write mirroring, transfer-size min/max/mean, and the count
+  of distinct vs maximally-repeated read selections (the cache/prefetch signal).
+
+This is the data a CLIO-using agent reads to advise tuning (hot datasets, whether
+caching is helping, which selections repeat, small-read/per-object-cost patterns).
+
 ## Testing and current status
 
 Compatibility is verified by a differential suite (native VOL as the oracle):
@@ -64,17 +83,19 @@ The test runs in **honest mode** (no `--expect-fail` allowlist): it reports the
 connector's real compatibility state rather than masking gaps, so any future
 regression fails the test. For the authoritative, always-current status run the
 test; do not rely on numbers copied into prose. As of this writing it is **green
-(19/19)** — compatible for dataset I/O (signed/unsigned int, float, compound, enum,
+(20/20)** — compatible for dataset I/O (signed/unsigned int, float, compound, enum,
 array-element, scalar, and variable-length string datatypes; contiguous and
 chunked; shuffle/fletcher32 filters; whole-dataset, hyperslab, and point
 selections; extendible datasets with reopen+append), attributes, group/link
 structure, modern-API iteration (C `H5Ovisit3`/`H5Literate2`), selection-aware read
-caching, and Safe-mode `H5Fflush` durability.
+caching, Safe-mode `H5Fflush` durability, and access telemetry.
 
-Three feature areas are exercised only through the C API (h5py has poor non-native
-VOL support): iteration (`vol_c_iteration_test.c`), Safe-mode flush
-(`vol_c_safeflush_test.c`), and selection caching + partial-write invalidation
-(`vol_c_selection_test.c`), all run automatically by the suite.
+Feature areas the h5py cases can't reach (h5py has poor non-native VOL support) run
+through the C API / a telemetry check, all automated by the suite: iteration
+(`vol_c_iteration_test.c`), Safe-mode flush (`vol_c_safeflush_test.c`), selection
+caching + partial-write invalidation (`vol_c_selection_test.c`), and access
+telemetry (`telemetry` case — runs a workload under `IOWARP_VOL_TRACE` and checks
+the summary).
 
 See `benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md` for the detailed matrix,
 method, and the vlen/Safe-mode implementation notes.
