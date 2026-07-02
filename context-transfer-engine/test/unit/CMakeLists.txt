@@ -916,6 +916,8 @@ set_tests_properties(
 # Links the safe-bdev runtime+client so the safe_bdev chimod is available
 # in-process (mirrors how the other CTE tests link bdev_runtime/bdev_client).
 # ------------------------------------------------------------------------------
+# Requires the safe-bdev module (WIP, see context-runtime/modules/CMakeLists.txt).
+if(TARGET clio_safe_bdev_runtime)
 add_executable(test_cte_existing_pool
     test_cte_existing_pool.cc
 )
@@ -923,10 +925,10 @@ add_executable(test_cte_existing_pool
 target_link_libraries(test_cte_existing_pool
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (member bdev)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (member bdev)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     clio_safe_bdev_runtime       # safe-bdev runtime (existing pool target)
     clio_safe_bdev_client        # safe-bdev client (compose the pool)
     ctp::cxx                    # ClioCtp library
@@ -951,3 +953,4 @@ install(TARGETS test_cte_existing_pool
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
 )
+endif()  # TARGET clio_safe_bdev_runtime

@@ -46,14 +46,14 @@ namespace clio::run::safe_bdev {
 // Helpers
 //===========================================================================
 
-chi::TaskStat Runtime::GetTaskStats(const chi::Task *task) const {
+clio::run::TaskStat Runtime::GetTaskStats(const clio::run::Task *task) const {
   if (task == nullptr) {
-    return chi::TaskStat();
+    return clio::run::TaskStat();
   }
   switch (task->method_) {
     case Method::kWrite: {
       const auto *wt = static_cast<const WriteTask *>(task);
-      chi::TaskStat stat;
+      clio::run::TaskStat stat;
       stat.io_size_ = wt->length_;
       const size_t aligned = ((stat.io_size_ + 4095) / 4096) * 4096;
       stat.wall_time_ = static_cast<float>(aligned) / 500.0F;
@@ -61,35 +61,35 @@ chi::TaskStat Runtime::GetTaskStats(const chi::Task *task) const {
     }
     case Method::kRead: {
       const auto *rt = static_cast<const ReadTask *>(task);
-      chi::TaskStat stat;
+      clio::run::TaskStat stat;
       stat.io_size_ = rt->length_;
       const size_t aligned = ((stat.io_size_ + 4095) / 4096) * 4096;
       stat.wall_time_ = static_cast<float>(aligned) / 500.0F;
       return stat;
     }
     default:
-      return chi::TaskStat();
+      return clio::run::TaskStat();
   }
 }
 
-chi::priv::vector<clio::run::bdev::Block> Runtime::MemberBlocks(
-    chi::u64 offset, chi::u64 len) const {
-  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
+clio::run::priv::vector<clio::run::bdev::Block> Runtime::MemberBlocks(
+    clio::run::u64 offset, clio::run::u64 len) const {
+  clio::run::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
   blocks.push_back(clio::run::bdev::Block(offset, len, 0));
   return blocks;
 }
 
-void Runtime::OpenGroup(int k, chi::u64 first_row, chi::u64 num_rows,
-                        chi::u64 logical_base) {
+void Runtime::OpenGroup(int k, clio::run::u64 first_row, clio::run::u64 num_rows,
+                        clio::run::u64 logical_base) {
   auto g = std::make_unique<Group>();
   g->k_ = k;
   g->first_row_ = first_row;
   g->num_rows_ = num_rows;
   g->logical_base_ = logical_base;
-  g->logical_span_ = static_cast<chi::u64>(k) * num_rows * kChunkLen;
+  g->logical_span_ = static_cast<clio::run::u64>(k) * num_rows * kChunkLen;
   g->rs_ = std::make_unique<ec::ReedSolomon>(k, static_cast<int>(max_failures_));
 
-  chi::WorkOrchestrator *wo = CLIO_WORK_ORCHESTRATOR;
+  clio::run::WorkOrchestrator *wo = CLIO_WORK_ORCHESTRATOR;
   const size_t num_workers = (wo != nullptr) ? wo->GetWorkerCount() : 16;
   g->block_map_ = std::make_unique<clio::run::bdev::GlobalBlockMap>();
   g->block_map_->Init(num_workers);
@@ -114,7 +114,7 @@ void Runtime::SeedGroupAllocatorFromLive(
 
   std::vector<clio::run::bdev::LiveBlock> local;
   local.reserve(live.size());
-  chi::u64 live_bytes = 0;
+  clio::run::u64 live_bytes = 0;
   for (const auto &b : live) {
     clio::run::bdev::LiveBlock lb = b;
     lb.offset = (b.offset >= g.logical_base_) ? (b.offset - g.logical_base_) : 0;
@@ -129,12 +129,12 @@ void Runtime::SeedGroupAllocatorFromLive(
                const clio::run::bdev::LiveBlock &b) {
               return a.offset < b.offset;
             });
-  chi::u64 cursor = 0;
+  clio::run::u64 cursor = 0;
   for (const auto &b : local) {
     if (b.offset > cursor) {
       g.block_map_->SeedFreeRange(cursor, b.offset - cursor);
     }
-    const chi::u64 end = b.offset + b.size;
+    const clio::run::u64 end = b.offset + b.size;
     if (end > cursor) {
       cursor = end;
     }
@@ -151,10 +151,10 @@ void Runtime::SeedGroupAllocatorFromLive(
 // Segment I/O helpers (run inside task fibers; co_await member bdev I/O)
 //===========================================================================
 
-chi::TaskResume Runtime::WriteDataSegment(size_t col, chi::u64 offset,
-                                          const uint8_t *src, chi::u64 len,
-                                          chi::RunContext &ctx, bool &ok) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::WriteDataSegment(size_t col, clio::run::u64 offset,
+                                          const uint8_t *src, clio::run::u64 len,
+                                          clio::run::RunContext &ctx, bool &ok) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
@@ -174,10 +174,10 @@ chi::TaskResume Runtime::WriteDataSegment(size_t col, chi::u64 offset,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReadDataSegment(size_t col, chi::u64 offset,
-                                         uint8_t *dst, chi::u64 len,
-                                         chi::RunContext &ctx, bool &ok) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::ReadDataSegment(size_t col, clio::run::u64 offset,
+                                         uint8_t *dst, clio::run::u64 len,
+                                         clio::run::RunContext &ctx, bool &ok) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
@@ -203,9 +203,9 @@ chi::TaskResume Runtime::ReadDataSegment(size_t col, chi::u64 offset,
 // Member superblock helpers
 //===========================================================================
 
-chi::TaskResume Runtime::WriteSuperblock(bool is_parity, size_t idx,
-                                         chi::RunContext &ctx, bool &ok) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::WriteSuperblock(bool is_parity, size_t idx,
+                                         clio::run::RunContext &ctx, bool &ok) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
@@ -249,11 +249,11 @@ chi::TaskResume Runtime::WriteSuperblock(bool is_parity, size_t idx,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReadSuperblock(bool is_parity, size_t idx,
-                                        chi::RunContext &ctx,
+clio::run::TaskResume Runtime::ReadSuperblock(bool is_parity, size_t idx,
+                                        clio::run::RunContext &ctx,
                                         MemberSuperblock &sb, bool &present,
                                         bool &ok) {
-  chi::RunContext &rctx = ctx;
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   present = false;
@@ -281,14 +281,14 @@ chi::TaskResume Runtime::ReadSuperblock(bool is_parity, size_t idx,
 // Row reconstruction (decode a group's k_g data chunks from survivors)
 //===========================================================================
 
-chi::TaskResume Runtime::ReconstructRow(
-    const Group &g, chi::u64 row, int exclude_col, chi::RunContext &ctx,
+clio::run::TaskResume Runtime::ReconstructRow(
+    const Group &g, clio::run::u64 row, int exclude_col, clio::run::RunContext &ctx,
     std::vector<std::vector<uint8_t>> &out, bool &ok) {
-  chi::RunContext &rctx = ctx;
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   const int kg = g.k_;
-  const chi::u64 off = ChunkOffset(row);
+  const clio::run::u64 off = ChunkOffset(row);
 
   // Gather up to k_g active survivors among the group's k_g data + m parity
   // members at this row offset, excluding `exclude_col` (a data column) and any
@@ -364,12 +364,12 @@ chi::TaskResume Runtime::ReconstructRow(
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::ReconstructDataChunk(const Group &g, chi::u64 row,
+clio::run::TaskResume Runtime::ReconstructDataChunk(const Group &g, clio::run::u64 row,
                                               int data_col, int exclude_col,
-                                              chi::RunContext &ctx,
+                                              clio::run::RunContext &ctx,
                                               std::vector<uint8_t> &out,
                                               bool &ok) {
-  chi::RunContext &rctx = ctx;
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   std::vector<std::vector<uint8_t>> data_chunks;
@@ -388,9 +388,9 @@ chi::TaskResume Runtime::ReconstructDataChunk(const Group &g, chi::u64 row,
 // Method handlers
 //===========================================================================
 
-chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
-                                chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
+                                clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
 
   // Get the creation parameters.
@@ -425,7 +425,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   // is that many chunks. Group 0 spans ALL of these rows, so a never-grown array
   // uses the full member capacity; an added data drive later freezes the current
   // group at its high-water mark and the new group takes the remaining rows.
-  chi::u64 min_remaining = ~static_cast<chi::u64>(0);
+  clio::run::u64 min_remaining = ~static_cast<clio::run::u64>(0);
   for (const auto &desc : params.members_) {
     data_clients_.emplace_back(desc.pool_id_);
     auto stats = data_clients_.back().AsyncGetStats();
@@ -440,9 +440,9 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
       min_remaining = stats->remaining_size_;
     }
   }
-  const chi::u64 avail =
+  const clio::run::u64 avail =
       (min_remaining > kSuperblockSize) ? (min_remaining - kSuperblockSize) : 0;
-  const chi::u64 usable_per_member = (avail / kChunkLen) * kChunkLen;
+  const clio::run::u64 usable_per_member = (avail / kChunkLen) * kChunkLen;
   max_phys_rows_ = usable_per_member / kChunkLen;
   if (max_phys_rows_ == 0) {
     HLOG(kError, "safe_bdev Create: member too small for even one stripe row");
@@ -451,7 +451,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   }
   // Group 0 spans ALL physical rows (full capacity); later add-data groups carve
   // from whatever the current group hasn't filled.
-  const chi::u64 num_rows0 = max_phys_rows_;
+  const clio::run::u64 num_rows0 = max_phys_rows_;
 
   // Open the persistent allocator-state log (WAL). Empty path => disabled (no
   // file created). On recover, replay it so we can reconstruct the append-only
@@ -546,7 +546,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
                 gr.logical_base);
       const size_t gi = groups_.size() - 1;
       const std::vector<clio::run::bdev::LiveBlock> &live =
-          alloc_log_.live(static_cast<chi::u32>(gr.group_id));
+          alloc_log_.live(static_cast<clio::run::u32>(gr.group_id));
       SeedGroupAllocatorFromLive(gi, live);
     }
     HLOG(kInfo,
@@ -560,7 +560,7 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     // group-open so a later restart can recover the geometry.
     OpenGroup(k0, /*first_row=*/0, num_rows0, /*logical_base=*/0);
     total_rows_ = num_rows0;
-    alloc_log_.LogGroupOpen(/*group_id=*/0, static_cast<chi::u32>(k0),
+    alloc_log_.LogGroupOpen(/*group_id=*/0, static_cast<clio::run::u32>(k0),
                             /*first_row=*/0, num_rows0, /*logical_base=*/0);
 
     HLOG(kInfo,
@@ -586,14 +586,14 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::AllocateBlocks(
-    ctp::ipc::FullPtr<AllocateBlocksTask> task, chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::AllocateBlocks(
+    ctp::ipc::FullPtr<AllocateBlocksTask> task, clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   // Real reclaimable allocation from the CURRENT (widest) group: try the free
   // list first (reuse a freed block), else carve from the heap. Offsets are
   // shifted into the group's global logical range by adding logical_base_.
-  const chi::u64 size = task->size_;
+  const clio::run::u64 size = task->size_;
   if (size == 0) {
     task->blocks_.clear();
     task->return_code_ = 0;
@@ -605,7 +605,7 @@ chi::TaskResume Runtime::AllocateBlocks(
     CLIO_CO_RETURN;
   }
   Group &g = CurrentGroup();
-  chi::Worker *worker = CLIO_CUR_WORKER;
+  clio::run::Worker *worker = CLIO_CUR_WORKER;
   const int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId())
                                             : 0;
 
@@ -640,7 +640,7 @@ chi::TaskResume Runtime::AllocateBlocks(
   g.allocated_bytes_.fetch_add(block.size_, std::memory_order_relaxed);
   // Persist the allocation under the CURRENT group's id (== its index in
   // groups_). block.offset_ is the GLOBAL logical offset.
-  const chi::u32 gi = static_cast<chi::u32>(groups_.size() - 1);
+  const clio::run::u32 gi = static_cast<clio::run::u32>(groups_.size() - 1);
   alloc_log_.LogAlloc(gi, block.offset_, block.size_, block.block_type_);
   task->blocks_.clear();
   task->blocks_.push_back(block);
@@ -649,16 +649,16 @@ chi::TaskResume Runtime::AllocateBlocks(
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
-                                    chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
+                                    clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   // Route each block to its OWNING group (by logical offset) and return it to
   // that group's free list (real reclaim). Normalize block_type_ from the block
   // SIZE so AllocateBlock (which picks the free list by size class) can find it
   // again — mirrors bdev::FreeBlocks.
-  chi::Worker *worker = CLIO_CUR_WORKER;
+  clio::run::Worker *worker = CLIO_CUR_WORKER;
   const int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId())
                                             : 0;
   const size_t buckets[] = {4096, 16384, 32768, 65536, 131072, 1048576};
@@ -679,16 +679,16 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
         break;
       }
     }
-    b.block_type_ = static_cast<chi::u32>(bt);
+    b.block_type_ = static_cast<clio::run::u32>(bt);
     Group &g = *groups_[static_cast<size_t>(gi)];
     g.block_map_->FreeBlock(worker_id, b);
-    const chi::u64 cur = g.allocated_bytes_.load(std::memory_order_relaxed);
+    const clio::run::u64 cur = g.allocated_bytes_.load(std::memory_order_relaxed);
     g.allocated_bytes_.store(cur >= b.size_ ? cur - b.size_ : 0,
                              std::memory_order_relaxed);
     // Persist the free under the owning group's id (== its index in groups_).
     // b.offset_ is the GLOBAL logical offset; the WAL drops the matching live
     // alloc by (group_id, offset) on recovery.
-    alloc_log_.LogFree(static_cast<chi::u32>(gi), b.offset_, b.size_,
+    alloc_log_.LogFree(static_cast<clio::run::u32>(gi), b.offset_, b.size_,
                        b.block_type_);
   }
   task->return_code_ = 0;
@@ -696,9 +696,9 @@ chi::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
-                               chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
+                               clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   if (groups_.empty() || task->blocks_.size() == 0) {
     task->return_code_ = 1;
@@ -716,14 +716,14 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
   // kSuperblockSize + global_row*kChunkLen + within. Segments across data
   // members are dispatched in parallel. Parity is deferred (global rows marked
   // dirty).
-  chi::u64 buf_pos = 0;  // running offset into the host data buffer
-  chi::u64 bytes_written = 0;
-  std::set<chi::u64> touched_rows;
+  clio::run::u64 buf_pos = 0;  // running offset into the host data buffer
+  clio::run::u64 bytes_written = 0;
+  std::set<clio::run::u64> touched_rows;
 
   for (size_t bi = 0; bi < task->blocks_.size(); ++bi) {
-    const chi::u64 lo = task->blocks_[bi].offset_;
-    const chi::u64 ls = task->blocks_[bi].size_;
-    const chi::u64 hi = lo + ls;
+    const clio::run::u64 lo = task->blocks_[bi].offset_;
+    const clio::run::u64 ls = task->blocks_[bi].size_;
+    const clio::run::u64 hi = lo + ls;
 
     const int gi = FindGroupByOffset(lo);
     if (gi < 0) {
@@ -734,25 +734,25 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
       CLIO_CO_RETURN;
     }
     const Group &g = *groups_[static_cast<size_t>(gi)];
-    const chi::u64 kg = static_cast<chi::u64>(g.k_);
+    const clio::run::u64 kg = static_cast<clio::run::u64>(g.k_);
 
-    std::vector<chi::Future<WriteTask>> futs;
+    std::vector<clio::run::Future<WriteTask>> futs;
     std::vector<ctp::ipc::FullPtr<char>> bufs;
     bool dispatch_ok = true;
 
-    chi::u64 cur = lo;
+    clio::run::u64 cur = lo;
     while (cur < hi && dispatch_ok) {
-      const chi::u64 local = cur - g.logical_base_;
-      const chi::u64 ci = local / kChunkLen;          // chunk within group
-      const chi::u64 chunk_end =
+      const clio::run::u64 local = cur - g.logical_base_;
+      const clio::run::u64 ci = local / kChunkLen;          // chunk within group
+      const clio::run::u64 chunk_end =
           g.logical_base_ + (ci + 1) * kChunkLen;
-      const chi::u64 seg_end = std::min(hi, chunk_end);
-      const chi::u64 seg_len = seg_end - cur;
+      const clio::run::u64 seg_end = std::min(hi, chunk_end);
+      const clio::run::u64 seg_len = seg_end - cur;
       const int data_col = static_cast<int>(ci % kg);
-      const chi::u64 row_in_grp = ci / kg;
-      const chi::u64 global_row = g.first_row_ + row_in_grp;
-      const chi::u64 within = local % kChunkLen;
-      const chi::u64 phys = ChunkOffset(global_row) + within;
+      const clio::run::u64 row_in_grp = ci / kg;
+      const clio::run::u64 global_row = g.first_row_ + row_in_grp;
+      const clio::run::u64 within = local % kChunkLen;
+      const clio::run::u64 phys = ChunkOffset(global_row) + within;
 
       MemberSlot &m = data_members_[static_cast<size_t>(data_col)];
       if (m.state_ == ec::EcState::kActive) {
@@ -792,7 +792,7 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
 
   // Mark all global rows the write touched dirty; BuildParity (re)computes
   // parity under each row's owning group's code.
-  for (chi::u64 r : touched_rows) {
+  for (clio::run::u64 r : touched_rows) {
     MarkRowDirty(r);
   }
 
@@ -802,9 +802,9 @@ chi::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
-                              chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
+                              clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   if (groups_.empty() || task->blocks_.size() == 0) {
     task->return_code_ = 1;
@@ -820,13 +820,13 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
   // active, AsyncRead it directly; if faulty, reconstruct that member's FULL
   // chunk for the global row (guarding dirty rows) under the group's code and
   // copy the needed within-slice.
-  chi::u64 buf_pos = 0;
-  chi::u64 bytes_read = 0;
+  clio::run::u64 buf_pos = 0;
+  clio::run::u64 bytes_read = 0;
 
   for (size_t bi = 0; bi < task->blocks_.size(); ++bi) {
-    const chi::u64 lo = task->blocks_[bi].offset_;
-    const chi::u64 ls = task->blocks_[bi].size_;
-    const chi::u64 hi = lo + ls;
+    const clio::run::u64 lo = task->blocks_[bi].offset_;
+    const clio::run::u64 ls = task->blocks_[bi].size_;
+    const clio::run::u64 hi = lo + ls;
 
     const int gi = FindGroupByOffset(lo);
     if (gi < 0) {
@@ -838,20 +838,20 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
       CLIO_CO_RETURN;
     }
     const Group &g = *groups_[static_cast<size_t>(gi)];
-    const chi::u64 kg = static_cast<chi::u64>(g.k_);
+    const clio::run::u64 kg = static_cast<clio::run::u64>(g.k_);
 
-    chi::u64 cur = lo;
+    clio::run::u64 cur = lo;
     while (cur < hi) {
-      const chi::u64 local = cur - g.logical_base_;
-      const chi::u64 ci = local / kChunkLen;
-      const chi::u64 chunk_end = g.logical_base_ + (ci + 1) * kChunkLen;
-      const chi::u64 seg_end = std::min(hi, chunk_end);
-      const chi::u64 seg_len = seg_end - cur;
+      const clio::run::u64 local = cur - g.logical_base_;
+      const clio::run::u64 ci = local / kChunkLen;
+      const clio::run::u64 chunk_end = g.logical_base_ + (ci + 1) * kChunkLen;
+      const clio::run::u64 seg_end = std::min(hi, chunk_end);
+      const clio::run::u64 seg_len = seg_end - cur;
       const int data_col = static_cast<int>(ci % kg);
-      const chi::u64 row_in_grp = ci / kg;
-      const chi::u64 global_row = g.first_row_ + row_in_grp;
-      const chi::u64 within = local % kChunkLen;
-      const chi::u64 phys = ChunkOffset(global_row) + within;
+      const clio::run::u64 row_in_grp = ci / kg;
+      const clio::run::u64 global_row = g.first_row_ + row_in_grp;
+      const clio::run::u64 within = local % kChunkLen;
+      const clio::run::u64 phys = ChunkOffset(global_row) + within;
 
       const MemberSlot &m = data_members_[static_cast<size_t>(data_col)];
       bool seg_ok = false;
@@ -896,17 +896,17 @@ chi::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
-                                  chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
+                                  clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   // Only the current (open) group is allocatable; frozen groups no longer hand
   // out new blocks, so their leftover space is not counted as usable remaining.
-  chi::u64 remaining = 0;
+  clio::run::u64 remaining = 0;
   if (!groups_.empty()) {
     const Group &g = *groups_.back();
-    const chi::u64 used = g.allocated_bytes_.load(std::memory_order_relaxed);
+    const clio::run::u64 used = g.allocated_bytes_.load(std::memory_order_relaxed);
     remaining = (g.logical_span_ > used) ? (g.logical_span_ - used) : 0;
   }
   task->remaining_size_ = remaining;
@@ -915,9 +915,9 @@ chi::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
-                                 chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
+                                 clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
 
   const bool as_parity = (task->as_parity_ != 0);
@@ -931,13 +931,13 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
     // list, not the heap), so logical_span_ - GetRemainingSize() is its
     // high-water in logical bytes.
     const Group &cur = CurrentGroup();
-    const chi::u64 remaining_bytes = cur.heap_->GetRemainingSize();
-    const chi::u64 bump_used = (cur.logical_span_ > remaining_bytes)
+    const clio::run::u64 remaining_bytes = cur.heap_->GetRemainingSize();
+    const clio::run::u64 bump_used = (cur.logical_span_ > remaining_bytes)
                                    ? (cur.logical_span_ - remaining_bytes)
                                    : 0;
-    const chi::u64 per_row = static_cast<chi::u64>(cur.k_) * kChunkLen;
-    const chi::u64 used_rows = (bump_used + per_row - 1) / per_row;  // ceil
-    const chi::u64 new_first_row = cur.first_row_ + used_rows;
+    const clio::run::u64 per_row = static_cast<clio::run::u64>(cur.k_) * kChunkLen;
+    const clio::run::u64 used_rows = (bump_used + per_row - 1) / per_row;  // ceil
+    const clio::run::u64 new_first_row = cur.first_row_ + used_rows;
     if (groups_.size() >= kMaxGroups || new_first_row >= max_phys_rows_) {
       HLOG(kError,
            "safe_bdev AddBdev(as_data): no room for a new group (groups={}, "
@@ -1013,24 +1013,24 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
     // current group sits below that cut, so nothing moves.
     Group &prev = CurrentGroup();
     prev.num_rows_ = used_rows;
-    prev.logical_span_ = static_cast<chi::u64>(prev.k_) * used_rows * kChunkLen;
+    prev.logical_span_ = static_cast<clio::run::u64>(prev.k_) * used_rows * kChunkLen;
 
     // Open a new group of width (data_members_.size()) over ALL remaining rows
     // [new_first_row, max_phys_rows_); logical_base continues after the frozen
     // group's (now shrunk) logical range.
     const int new_k = static_cast<int>(data_members_.size());
-    const chi::u64 new_num_rows = max_phys_rows_ - new_first_row;
-    const chi::u64 logical_base = prev.LogicalEnd();
+    const clio::run::u64 new_num_rows = max_phys_rows_ - new_first_row;
+    const clio::run::u64 logical_base = prev.LogicalEnd();
 
     // Persist the group transition: freeze the previous group at its high-water
     // (used_rows) and open the new wider group. group_id == group INDEX in
     // groups_. The freeze records the previous group's index (size()-1 BEFORE
     // the new group is pushed); the open records the new group's index.
-    const chi::u32 prev_gi = static_cast<chi::u32>(groups_.size() - 1);
+    const clio::run::u32 prev_gi = static_cast<clio::run::u32>(groups_.size() - 1);
     alloc_log_.LogGroupFreeze(prev_gi, used_rows);
     OpenGroup(new_k, new_first_row, new_num_rows, logical_base);
-    const chi::u32 new_gi = static_cast<chi::u32>(groups_.size() - 1);
-    alloc_log_.LogGroupOpen(new_gi, static_cast<chi::u32>(new_k), new_first_row,
+    const clio::run::u32 new_gi = static_cast<clio::run::u32>(groups_.size() - 1);
+    alloc_log_.LogGroupOpen(new_gi, static_cast<clio::run::u32>(new_k), new_first_row,
                             new_num_rows, logical_base);
 
     HLOG(kInfo,
@@ -1073,7 +1073,7 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
 
   {
     std::lock_guard<std::mutex> g(row_mu_);
-    for (chi::u64 r : written_rows_) {
+    for (clio::run::u64 r : written_rows_) {
       dirty_rows_.insert(r);
     }
   }
@@ -1099,9 +1099,9 @@ chi::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
-                                    chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
+                                    clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   // Search data then parity members by pool id; mark faulty (recovery
@@ -1135,9 +1135,9 @@ chi::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
-                                     chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
+                                     clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
 
   // Locate the failed member by its (old) pool id, in data then parity.
@@ -1183,7 +1183,7 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
     if (is_data && idx >= g.k_) {
       continue;  // this data column does not exist in this (narrower) group
     }
-    for (chi::u64 r = g.first_row_; r < g.LastRow(); ++r) {
+    for (clio::run::u64 r = g.first_row_; r < g.LastRow(); ++r) {
       if (is_data && IsRowDirty(r)) {
         HLOG(kError,
              "safe_bdev RecoverBdev: global row {} dirty (parity not built); "
@@ -1262,9 +1262,9 @@ chi::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
-                                     chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
+                                     clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   if (parity_level_ == 0) {
     // No parity configured: nothing to protect. Drop pending marks.
@@ -1279,10 +1279,10 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
   // an empty dirty set knows every row is protected (single periodic builder,
   // rescheduled only after completion). A row that cannot be built (a data
   // member is down) is left dirty for a later pass.
-  std::vector<chi::u64> batch;
+  std::vector<clio::run::u64> batch;
   {
     std::lock_guard<std::mutex> g(row_mu_);
-    for (chi::u64 r : dirty_rows_) {
+    for (clio::run::u64 r : dirty_rows_) {
       batch.push_back(r);
       if (task->max_batch_ != 0 &&
           batch.size() >= static_cast<size_t>(task->max_batch_)) {
@@ -1292,8 +1292,8 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
   }
 
   auto *ipc = CLIO_IPC;
-  chi::u32 built = 0;
-  for (chi::u64 r : batch) {
+  clio::run::u32 built = 0;
+  for (clio::run::u64 r : batch) {
     // Find the group owning this global row; parity is computed under its code.
     const int gi = FindGroupByRow(r);
     if (gi < 0) {
@@ -1377,9 +1377,9 @@ chi::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::FlushAllocLog(
-    ctp::ipc::FullPtr<FlushAllocLogTask> task, chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::FlushAllocLog(
+    ctp::ipc::FullPtr<FlushAllocLogTask> task, clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   // Append buffered records to disk (also folds them into the in-memory
@@ -1389,10 +1389,10 @@ chi::TaskResume Runtime::FlushAllocLog(
   // max(kMinCompactRecords, live * kCompactGrowthFactor). Compaction rewrites
   // the log down to one group-open per group + one record per live block,
   // bounding the file size. Mirrors bdev's FlushAllocLog.
-  const chi::u64 live = alloc_log_.live_block_count();
-  const chi::u64 on_disk = alloc_log_.records_on_disk();
-  const chi::u64 threshold =
-      std::max<chi::u64>(kMinCompactRecords, live * kCompactGrowthFactor);
+  const clio::run::u64 live = alloc_log_.live_block_count();
+  const clio::run::u64 on_disk = alloc_log_.records_on_disk();
+  const clio::run::u64 threshold =
+      std::max<clio::run::u64>(kMinCompactRecords, live * kCompactGrowthFactor);
   if (on_disk > threshold) {
     alloc_log_.Compact();
   }
@@ -1401,15 +1401,15 @@ chi::TaskResume Runtime::FlushAllocLog(
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
-                                 chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
+                                 clio::run::RunContext &rctx) {
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   if (task->query_ == "stats") {
-    chi::u32 dirty = 0;
+    clio::run::u32 dirty = 0;
     {
       std::lock_guard<std::mutex> g(row_mu_);
-      dirty = static_cast<chi::u32>(dirty_rows_.size());
+      dirty = static_cast<clio::run::u32>(dirty_rows_.size());
     }
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
@@ -1417,15 +1417,15 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
     pk.pack("pool_name");     pk.pack(pool_name_);
     pk.pack("max_failures");  pk.pack(max_failures_);
     pk.pack("data_count");
-    pk.pack(static_cast<chi::u32>(data_members_.size()));
+    pk.pack(static_cast<clio::run::u32>(data_members_.size()));
     pk.pack("parity_level");  pk.pack(parity_level_);
     pk.pack("num_groups");
-    pk.pack(static_cast<chi::u32>(groups_.size()));
+    pk.pack(static_cast<clio::run::u32>(groups_.size()));
     pk.pack("total_rows");    pk.pack(total_rows_);
     pk.pack("dirty_rows");    pk.pack(dirty);
     pk.pack("reattached_members"); pk.pack(reattached_members_);
     pk.pack("alloc_log_records");
-    pk.pack(static_cast<chi::u64>(alloc_log_.records_on_disk()));
+    pk.pack(static_cast<clio::run::u64>(alloc_log_.records_on_disk()));
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }
   task->SetReturnCode(0);
@@ -1433,9 +1433,9 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
-                                 chi::RunContext &ctx) {
-  chi::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
+                                 clio::run::RunContext &ctx) {
+  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   (void)rctx;
   // Persist any buffered allocator-state records before teardown so a clean
@@ -1447,7 +1447,7 @@ chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::u64 Runtime::GetWorkRemaining() const { return 0; }
+clio::run::u64 Runtime::GetWorkRemaining() const { return 0; }
 
 }  // namespace clio::run::safe_bdev
 

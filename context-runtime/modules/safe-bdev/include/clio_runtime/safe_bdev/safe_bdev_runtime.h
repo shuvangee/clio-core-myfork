@@ -37,7 +37,7 @@
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/comutex.h>
 #include <clio_runtime/bdev/bdev_client.h>
-#include <clio_runtime/bdev/bdev_runtime.h>  // bdev::Heap, bdev::GlobalBlockMap
+#include <clio_runtime/bdev/transports/block_allocator.h>  // bdev::Heap, bdev::GlobalBlockMap
 #include <clio_runtime/bdev/bdev_alloc_log.h>  // bdev::AllocatorLog (reused WAL)
 
 #include <memory>
@@ -86,7 +86,7 @@ namespace clio::run::safe_bdev {
 /**
  * Runtime container for safe_bdev operations.
  */
-class Runtime : public chi::Container {
+class Runtime : public clio::run::Container {
  public:
   // Required typedef for CLIO_TASK_CC macro and autogen dispatcher.
   using CreateParams = clio::run::safe_bdev::CreateParams;
@@ -100,7 +100,7 @@ class Runtime : public chi::Container {
   ~Runtime() override = default;
 
   /** RAID-0 stripe unit (data shard / parity chunk length) in bytes. */
-  static constexpr chi::u64 kChunkLen = 65536;
+  static constexpr clio::run::u64 kChunkLen = 65536;
 
   /**
    * Reserved superblock area at the front of every member bdev (absolute
@@ -108,7 +108,7 @@ class Runtime : public chi::Container {
    * member's chunk for row r is at absolute offset kSuperblockSize +
    * r*kChunkLen.
    */
-  static constexpr chi::u64 kSuperblockSize = 65536;
+  static constexpr clio::run::u64 kSuperblockSize = 65536;
 
   /** Background parity-builder poll period (microseconds): 50 ms. */
   static constexpr double kBuildParityPeriodUs = 50000.0;
@@ -118,8 +118,8 @@ class Runtime : public chi::Container {
 
   /** Compaction policy: rewrite the WAL once on-disk records exceed
    *  max(kMinCompactRecords, live * kCompactGrowthFactor). Mirrors bdev. */
-  static constexpr chi::u64 kMinCompactRecords = 1024;
-  static constexpr chi::u64 kCompactGrowthFactor = 4;
+  static constexpr clio::run::u64 kMinCompactRecords = 1024;
+  static constexpr clio::run::u64 kCompactGrowthFactor = 4;
 
   /**
    * Sanity bound on the number of append-only stripe groups (one per AddBdev
@@ -129,109 +129,109 @@ class Runtime : public chi::Container {
    * So a single-group array uses the FULL member capacity; capacity is consumed
    * only as groups actually fill. This cap just bounds metadata growth.
    */
-  static constexpr chi::u32 kMaxGroups = 64;
+  static constexpr clio::run::u32 kMaxGroups = 64;
 
   /**
    * Get live task statistics for this task instance.
    */
-  chi::TaskStat GetTaskStats(const chi::Task *task) const override;
+  clio::run::TaskStat GetTaskStats(const clio::run::Task *task) const override;
 
   //==========================================================================
   // Method handlers
   //==========================================================================
 
   /** Create the container (Method::kCreate). */
-  chi::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task,
-                         chi::RunContext &ctx);
+  clio::run::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task,
+                         clio::run::RunContext &ctx);
 
   /** Allocate multiple blocks (Method::kAllocateBlocks). */
-  chi::TaskResume AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> task,
-                                 chi::RunContext &ctx);
+  clio::run::TaskResume AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> task,
+                                 clio::run::RunContext &ctx);
 
   /** Free data blocks (Method::kFreeBlocks). */
-  chi::TaskResume FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
-                             chi::RunContext &ctx);
+  clio::run::TaskResume FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
+                             clio::run::RunContext &ctx);
 
   /** Write data (Method::kWrite). */
-  chi::TaskResume Write(ctp::ipc::FullPtr<WriteTask> task,
-                        chi::RunContext &ctx);
+  clio::run::TaskResume Write(ctp::ipc::FullPtr<WriteTask> task,
+                        clio::run::RunContext &ctx);
 
   /** Read data (Method::kRead). */
-  chi::TaskResume Read(ctp::ipc::FullPtr<ReadTask> task, chi::RunContext &ctx);
+  clio::run::TaskResume Read(ctp::ipc::FullPtr<ReadTask> task, clio::run::RunContext &ctx);
 
   /** Get performance statistics (Method::kGetStats). */
-  chi::TaskResume GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
-                           chi::RunContext &ctx);
+  clio::run::TaskResume GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
+                           clio::run::RunContext &ctx);
 
   /** Add a member bdev (Method::kAddBdev). */
-  chi::TaskResume AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
-                          chi::RunContext &ctx);
+  clio::run::TaskResume AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
+                          clio::run::RunContext &ctx);
 
   /** Remove a member bdev (Method::kRemoveBdev). */
-  chi::TaskResume RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
-                             chi::RunContext &ctx);
+  clio::run::TaskResume RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
+                             clio::run::RunContext &ctx);
 
   /** Recover a failed member bdev (Method::kRecoverBdev). */
-  chi::TaskResume RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
-                              chi::RunContext &ctx);
+  clio::run::TaskResume RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
+                              clio::run::RunContext &ctx);
 
   /** Build/raise parity for dirty rows (Method::kBuildParity). */
-  chi::TaskResume BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
-                              chi::RunContext &ctx);
+  clio::run::TaskResume BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
+                              clio::run::RunContext &ctx);
 
   /** Flush/compact the persistent allocator log (Method::kFlushAllocLog). */
-  chi::TaskResume FlushAllocLog(ctp::ipc::FullPtr<FlushAllocLogTask> task,
-                                chi::RunContext &ctx);
+  clio::run::TaskResume FlushAllocLog(ctp::ipc::FullPtr<FlushAllocLogTask> task,
+                                clio::run::RunContext &ctx);
 
   /** Monitor container state (Method::kMonitor). */
-  chi::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task,
-                          chi::RunContext &rctx);
+  clio::run::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task,
+                          clio::run::RunContext &rctx);
 
   /** Destroy the container (Method::kDestroy). */
-  chi::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task,
-                          chi::RunContext &ctx);
+  clio::run::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task,
+                          clio::run::RunContext &ctx);
 
   //==========================================================================
-  // Required virtual methods from chi::Container
+  // Required virtual methods from clio::run::Container
   //==========================================================================
 
-  void Init(const chi::PoolId &pool_id, const std::string &pool_name,
-            chi::u32 container_id = 0) override;
+  void Init(const clio::run::PoolId &pool_id, const std::string &pool_name,
+            clio::run::u32 container_id = 0) override;
 
-  chi::TaskResume Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr,
-                      chi::RunContext &rctx) override;
+  clio::run::TaskResume Run(clio::run::u32 method, ctp::ipc::FullPtr<clio::run::Task> task_ptr,
+                      clio::run::RunContext &rctx) override;
 
-  chi::u64 GetWorkRemaining() const override;
+  clio::run::u64 GetWorkRemaining() const override;
 
-  void SaveTask(chi::u32 method, chi::SaveTaskArchive &archive,
-                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  void SaveTask(clio::run::u32 method, clio::run::SaveTaskArchive &archive,
+                ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
 
-  void LoadTask(chi::u32 method, chi::LoadTaskArchive &archive,
-                ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  void LoadTask(clio::run::u32 method, clio::run::LoadTaskArchive &archive,
+                ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
 
-  ctp::ipc::FullPtr<chi::Task> AllocLoadTask(
-      chi::u32 method, chi::LoadTaskArchive &archive) override;
+  ctp::ipc::FullPtr<clio::run::Task> AllocLoadTask(
+      clio::run::u32 method, clio::run::LoadTaskArchive &archive) override;
 
-  void LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive &archive,
-                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  void LocalLoadTask(clio::run::u32 method, clio::run::DefaultLoadArchive &archive,
+                     ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
 
-  ctp::ipc::FullPtr<chi::Task> LocalAllocLoadTask(
-      chi::u32 method, chi::DefaultLoadArchive &archive) override;
+  ctp::ipc::FullPtr<clio::run::Task> LocalAllocLoadTask(
+      clio::run::u32 method, clio::run::DefaultLoadArchive &archive) override;
 
-  void LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive &archive,
-                     ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  void LocalSaveTask(clio::run::u32 method, clio::run::DefaultSaveArchive &archive,
+                     ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
 
-  ctp::ipc::FullPtr<chi::Task> NewCopyTask(
-      chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr,
+  ctp::ipc::FullPtr<clio::run::Task> NewCopyTask(
+      clio::run::u32 method, ctp::ipc::FullPtr<clio::run::Task> orig_task_ptr,
       bool deep) override;
 
-  ctp::ipc::FullPtr<chi::Task> NewTask(chi::u32 method) override;
+  ctp::ipc::FullPtr<clio::run::Task> NewTask(clio::run::u32 method) override;
 
-  void Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
-                 const ctp::ipc::FullPtr<chi::Task> &replica_task) override;
+  void AggregateOut(clio::run::u32 method, ctp::ipc::FullPtr<clio::run::Task> orig_task,
+                 const ctp::ipc::FullPtr<clio::run::Task> &replica_task) override;
 
-  void DelTask(chi::u32 method,
-               ctp::ipc::FullPtr<chi::Task> task_ptr) override;
+  void DelTask(clio::run::u32 method,
+               ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
 
  private:
   // Per-member runtime bookkeeping. role_ (DATA vs PARITY) and index_ are FIXED
@@ -241,9 +241,9 @@ class Runtime : public chi::Container {
   // member's chunk for GLOBAL row r lives at absolute offset
   // kSuperblockSize + r*kChunkLen.
   struct MemberSlot {
-    chi::PoolId pool_id_;
+    clio::run::PoolId pool_id_;
     std::string pool_name_;
-    chi::u32 node_id_ = 0;
+    clio::run::u32 node_id_ = 0;
     ec::EcRole role_ = ec::EcRole::kData;
     ec::EcState state_ = ec::EcState::kActive;
     int index_ = -1;  // data column c (DATA) or parity row j (PARITY)
@@ -259,21 +259,21 @@ class Runtime : public chi::Container {
   // it on free). rs_ is ReedSolomon(k_g, max_failures).
   struct Group {
     int k_ = 0;                  // data-drive count frozen at open (k_g)
-    chi::u64 first_row_ = 0;     // first global row owned by this group
-    chi::u64 num_rows_ = 0;      // rows of kChunkLen reserved per member
-    chi::u64 logical_base_ = 0;  // start of this group's logical byte range
-    chi::u64 logical_span_ = 0;  // k_g * num_rows_ * kChunkLen
+    clio::run::u64 first_row_ = 0;     // first global row owned by this group
+    clio::run::u64 num_rows_ = 0;      // rows of kChunkLen reserved per member
+    clio::run::u64 logical_base_ = 0;  // start of this group's logical byte range
+    clio::run::u64 logical_span_ = 0;  // k_g * num_rows_ * kChunkLen
     std::unique_ptr<ec::ReedSolomon> rs_;
     std::unique_ptr<clio::run::bdev::GlobalBlockMap> block_map_;
     std::unique_ptr<clio::run::bdev::Heap> heap_;
-    std::atomic<chi::u64> allocated_bytes_{0};
+    std::atomic<clio::run::u64> allocated_bytes_{0};
 
-    chi::u64 LogicalEnd() const { return logical_base_ + logical_span_; }
-    chi::u64 LastRow() const { return first_row_ + num_rows_; }  // exclusive
-    bool ContainsOffset(chi::u64 off) const {
+    clio::run::u64 LogicalEnd() const { return logical_base_ + logical_span_; }
+    clio::run::u64 LastRow() const { return first_row_ + num_rows_; }  // exclusive
+    bool ContainsOffset(clio::run::u64 off) const {
       return off >= logical_base_ && off < LogicalEnd();
     }
-    bool ContainsRow(chi::u64 row) const {
+    bool ContainsRow(clio::run::u64 row) const {
       return row >= first_row_ && row < LastRow();
     }
   };
@@ -300,11 +300,11 @@ class Runtime : public chi::Container {
   // LogGroupFreeze. Empty path => disabled (every API is a no-op), so the
   // pre-WAL behaviour is preserved unchanged.
   clio::run::bdev::AllocatorLog alloc_log_;
-  chi::u32 max_failures_;           // Fault-tolerance target (M == m_max)
-  chi::u32 parity_level_;           // Parity members added so far (m)
-  chi::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
-  chi::u64 max_phys_rows_;          // Physical rows available per member
-  chi::u32 reattached_members_;     // Members recognized as already ours at Create
+  clio::run::u32 max_failures_;           // Fault-tolerance target (M == m_max)
+  clio::run::u32 parity_level_;           // Parity members added so far (m)
+  clio::run::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
+  clio::run::u64 max_phys_rows_;          // Physical rows available per member
+  clio::run::u32 reattached_members_;     // Members recognized as already ours at Create
 
   // Async-parity bookkeeping. Write writes data chunks immediately and records
   // each touched GLOBAL ROW as dirty (parity not yet current); BuildParity
@@ -314,18 +314,18 @@ class Runtime : public chi::Container {
   // Guarded by row_mu_ (never held across a co_await). A row is safe to
   // reconstruct only when NOT dirty — degraded reads / recovery refuse a dirty
   // (unprotected) row.
-  std::set<chi::u64> dirty_rows_;
-  std::set<chi::u64> written_rows_;
+  std::set<clio::run::u64> dirty_rows_;
+  std::set<clio::run::u64> written_rows_;
   mutable std::mutex row_mu_;
 
   /** Mark a row as holding data and needing (re)parity. */
-  void MarkRowDirty(chi::u64 row) {
+  void MarkRowDirty(clio::run::u64 row) {
     std::lock_guard<std::mutex> g(row_mu_);
     written_rows_.insert(row);
     dirty_rows_.insert(row);
   }
   /** True if the row's parity is not yet current (unprotected). */
-  bool IsRowDirty(chi::u64 row) const {
+  bool IsRowDirty(clio::run::u64 row) const {
     std::lock_guard<std::mutex> g(row_mu_);
     return dirty_rows_.count(row) != 0;
   }
@@ -343,7 +343,7 @@ class Runtime : public chi::Container {
   //==========================================================================
 
   /** Absolute member-pool offset of global row `r`'s chunk start. */
-  static chi::u64 ChunkOffset(chi::u64 row) {
+  static clio::run::u64 ChunkOffset(clio::run::u64 row) {
     return kSuperblockSize + row * kChunkLen;
   }
 
@@ -352,7 +352,7 @@ class Runtime : public chi::Container {
 
   /** Index of the group whose logical range contains byte offset `off`, or
    *  -1 if none. */
-  int FindGroupByOffset(chi::u64 off) const {
+  int FindGroupByOffset(clio::run::u64 off) const {
     for (size_t i = 0; i < groups_.size(); ++i) {
       if (groups_[i]->ContainsOffset(off)) {
         return static_cast<int>(i);
@@ -362,7 +362,7 @@ class Runtime : public chi::Container {
   }
 
   /** Index of the group that owns global row `row`, or -1 if none. */
-  int FindGroupByRow(chi::u64 row) const {
+  int FindGroupByRow(clio::run::u64 row) const {
     for (size_t i = 0; i < groups_.size(); ++i) {
       if (groups_[i]->ContainsRow(row)) {
         return static_cast<int>(i);
@@ -372,7 +372,7 @@ class Runtime : public chi::Container {
   }
 
   /** Per-member pool query (members are independent local bdev pools). */
-  chi::PoolQuery MemberQuery() const { return chi::PoolQuery::Local(); }
+  clio::run::PoolQuery MemberQuery() const { return clio::run::PoolQuery::Local(); }
 
   /**
    * Automatic down-detection for a DATA member. Inspect a member-bdev future's
@@ -381,7 +381,7 @@ class Runtime : public chi::Container {
    * degraded-read / reconstruct path takes over. A TRANSIENT error never faults
    * the member.
    */
-  void MaybeFaultData(size_t col, chi::u32 io_error) {
+  void MaybeFaultData(size_t col, clio::run::u32 io_error) {
     const auto e = static_cast<ctp::IoError>(io_error);
     if (ctp::IsFatalDevice(e) && col < data_members_.size() &&
         data_members_[col].state_ == ec::EcState::kActive) {
@@ -394,7 +394,7 @@ class Runtime : public chi::Container {
   }
 
   /** Automatic down-detection for a PARITY member (parity row j). */
-  void MaybeFaultParity(size_t j, chi::u32 io_error) {
+  void MaybeFaultParity(size_t j, clio::run::u32 io_error) {
     const auto e = static_cast<ctp::IoError>(io_error);
     if (ctp::IsFatalDevice(e) && j < parity_members_.size() &&
         parity_members_[j].state_ == ec::EcState::kActive) {
@@ -411,25 +411,25 @@ class Runtime : public chi::Container {
   //==========================================================================
 
   /** Block list addressing [offset, offset+len) on a member pool. */
-  chi::priv::vector<clio::run::bdev::Block> MemberBlocks(chi::u64 offset,
-                                                         chi::u64 len) const;
+  clio::run::priv::vector<clio::run::bdev::Block> MemberBlocks(clio::run::u64 offset,
+                                                         clio::run::u64 len) const;
 
   /**
    * AsyncWrite `len` bytes from host buffer `src` to DATA member `col` at
    * absolute member-pool offset `offset`. Auto-faults the member on a fatal
    * io_error.
    */
-  chi::TaskResume WriteDataSegment(size_t col, chi::u64 offset,
-                                   const uint8_t *src, chi::u64 len,
-                                   chi::RunContext &rctx, bool &ok);
+  clio::run::TaskResume WriteDataSegment(size_t col, clio::run::u64 offset,
+                                   const uint8_t *src, clio::run::u64 len,
+                                   clio::run::RunContext &rctx, bool &ok);
 
   /**
    * AsyncRead `len` bytes at absolute member-pool offset `offset` from DATA
    * member `col` into host buffer `dst`. Auto-faults the member on a fatal
    * io_error.
    */
-  chi::TaskResume ReadDataSegment(size_t col, chi::u64 offset, uint8_t *dst,
-                                  chi::u64 len, chi::RunContext &rctx, bool &ok);
+  clio::run::TaskResume ReadDataSegment(size_t col, clio::run::u64 offset, uint8_t *dst,
+                                  clio::run::u64 len, clio::run::RunContext &rctx, bool &ok);
 
   /**
    * Reconstruct the FULL kChunkLen chunk of DATA member `data_col` for global
@@ -438,9 +438,9 @@ class Runtime : public chi::Container {
    * `exclude_col` data member), DecodeData under g.rs_. `out` receives
    * kChunkLen bytes. Returns false if too few survivors.
    */
-  chi::TaskResume ReconstructDataChunk(const Group &g, chi::u64 row,
+  clio::run::TaskResume ReconstructDataChunk(const Group &g, clio::run::u64 row,
                                        int data_col, int exclude_col,
-                                       chi::RunContext &rctx,
+                                       clio::run::RunContext &rctx,
                                        std::vector<uint8_t> &out, bool &ok);
 
   /**
@@ -449,8 +449,8 @@ class Runtime : public chi::Container {
    * column `exclude_col`. `out` receives k_g buffers of kChunkLen bytes.
    * Returns false on too few survivors.
    */
-  chi::TaskResume ReconstructRow(const Group &g, chi::u64 row, int exclude_col,
-                                 chi::RunContext &rctx,
+  clio::run::TaskResume ReconstructRow(const Group &g, clio::run::u64 row, int exclude_col,
+                                 clio::run::RunContext &rctx,
                                  std::vector<std::vector<uint8_t>> &out,
                                  bool &ok);
 
@@ -460,8 +460,8 @@ class Runtime : public chi::Container {
    * 0. `is_parity` selects parity_members_/parity_clients_ vs data; `idx` is
    * the position in that vector. Returns false on I/O failure.
    */
-  chi::TaskResume WriteSuperblock(bool is_parity, size_t idx,
-                                  chi::RunContext &rctx, bool &ok);
+  clio::run::TaskResume WriteSuperblock(bool is_parity, size_t idx,
+                                  clio::run::RunContext &rctx, bool &ok);
 
   /**
    * AsyncRead kSuperblockSize bytes at absolute offset 0 from a member, parse
@@ -469,14 +469,14 @@ class Runtime : public chi::Container {
    * valid). A blank member reads back zeros => present == false. `is_parity`
    * selects the member vector; `idx` is its position.
    */
-  chi::TaskResume ReadSuperblock(bool is_parity, size_t idx,
-                                 chi::RunContext &rctx, MemberSuperblock &sb,
+  clio::run::TaskResume ReadSuperblock(bool is_parity, size_t idx,
+                                 clio::run::RunContext &rctx, MemberSuperblock &sb,
                                  bool &present, bool &ok);
 
   /** Open and initialize a new group with the given width / row band. The
    *  group's rs_, block_map_ and heap_ are constructed; appended to groups_. */
-  void OpenGroup(int k, chi::u64 first_row, chi::u64 num_rows,
-                 chi::u64 logical_base);
+  void OpenGroup(int k, clio::run::u64 first_row, clio::run::u64 num_rows,
+                 clio::run::u64 logical_base);
 
   /**
    * Rebuild group `gi`'s per-group allocator (heap bump + free list) from a

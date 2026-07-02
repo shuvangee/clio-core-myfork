@@ -196,12 +196,6 @@ clio::run::TaskResume Runtime::Run(clio::run::u32 method, clio::run::shared_ptr<
       CLIO_CO_AWAIT(ListContainers(typed_task));
       break;
     }
-    case Method::kListContainers: {
-      // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<ListContainersTask> typed_task = task_ptr.template Cast<ListContainersTask>();
-      co_await ListContainers(typed_task, rctx);
-      break;
-    }
     default: {
       // Unknown method - do nothing
       break;
@@ -349,11 +343,6 @@ void Runtime::SaveTask(clio::run::u32 method, clio::run::SaveTaskArchive& archiv
       archive << *typed_task;
       break;
     }
-    case Method::kListContainers: {
-      auto typed_task = task_ptr.template Cast<ListContainersTask>();
-      archive << *typed_task.ptr_;
-      break;
-    }
     default: {
       // Unknown method - do nothing
       break;
@@ -497,11 +486,6 @@ void Runtime::LoadTask(clio::run::u32 method, clio::run::LoadTaskArchive& archiv
     case Method::kListContainers: {
       auto& typed_task = task_ptr.template Cast<ListContainersTask>();
       archive >> *typed_task;
-      break;
-    }
-    case Method::kListContainers: {
-      auto typed_task = task_ptr.template Cast<ListContainersTask>();
-      archive >> *typed_task.ptr_;
       break;
     }
     default: {
@@ -684,12 +668,6 @@ void Runtime::LocalLoadTask(clio::run::u32 method, clio::run::DefaultLoadArchive
       archive >> *typed_task;
       break;
     }
-    case Method::kListContainers: {
-      auto typed_task = task_ptr.template Cast<ListContainersTask>();
-      // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
-      break;
-    }
     default: {
       // Unknown method - do nothing
       break;
@@ -868,12 +846,6 @@ void Runtime::LocalSaveTask(clio::run::u32 method, clio::run::DefaultSaveArchive
       auto& typed_task = task_ptr.template Cast<ListContainersTask>();
       // Use archive operator which respects msg_type
       archive << *typed_task;
-      break;
-    }
-    case Method::kListContainers: {
-      auto typed_task = task_ptr.template Cast<ListContainersTask>();
-      // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
       break;
     }
     default: {
@@ -1187,17 +1159,6 @@ clio::run::shared_ptr<clio::run::Task> Runtime::NewCopyTask(clio::run::u32 metho
       }
       break;
     }
-    case Method::kListContainers: {
-      // Allocate new task
-      auto new_task_ptr = ipc_manager->NewTask<ListContainersTask>();
-      if (!new_task_ptr.IsNull()) {
-        // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<ListContainersTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
-      }
-      break;
-    }
     default: {
       // For unknown methods, create base Task copy
       auto new_task_ptr = ipc_manager->NewTask<clio::run::Task>();
@@ -1327,10 +1288,6 @@ clio::run::shared_ptr<clio::run::Task> Runtime::NewTask(clio::run::u32 method) {
     case Method::kListContainers: {
       auto new_task_ptr = ipc_manager->NewTask<ListContainersTask>();
       return new_task_ptr.template Cast<clio::run::Task>();
-    }
-    case Method::kListContainers: {
-      auto new_task_ptr = ipc_manager->NewTask<ListContainersTask>();
-      return new_task_ptr.template Cast<chi::Task>();
     }
     default: {
       // For unknown methods, return null pointer
@@ -1475,11 +1432,6 @@ void Runtime::AggregateOut(clio::run::u32 method, clio::run::shared_ptr<clio::ru
     case Method::kListContainers: {
       auto& typed_task = orig_task.template Cast<ListContainersTask>();
       typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
-      break;
-    }
-    case Method::kListContainers: {
-      auto typed_task = orig_task.template Cast<ListContainersTask>();
-      typed_task->Aggregate(replica_task);
       break;
     }
     default: {

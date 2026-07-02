@@ -85,16 +85,16 @@ namespace {
 bool g_initialized = false;
 
 // 4 MiB RAM member comfortably holds the safe-bdev reserved EC region.
-constexpr chi::u64 kMemberRamSize = 4ULL * 1024ULL * 1024ULL;
+constexpr clio::run::u64 kMemberRamSize = 4ULL * 1024ULL * 1024ULL;
 
 /** Initialize Chimaera + CTE client once for the suite. */
 void EnsureInit() {
   if (g_initialized) {
     return;
   }
-  bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+  bool success = clio::run::CHIMAERA_INIT(clio::run::ChimaeraMode::kClient, true);
   REQUIRE(success);
-  SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+  SimpleTest::g_test_finalize = clio::run::CHIMAERA_FINALIZE;
   std::this_thread::sleep_for(500ms);
 
   success = clio::cte::core::CLIO_CTE_CLIENT_INIT();
@@ -149,10 +149,10 @@ TEST_CASE("CTE binds existing safe-bdev pool and round-trips a blob",
   };
 
   // --- (1) Compose a RAM member bdev. ---
-  chi::PoolId member_id(static_cast<chi::u32>(7100 + salt), 0);
+  clio::run::PoolId member_id(static_cast<clio::run::u32>(7100 + salt), 0);
   clio::run::bdev::Client member_client(member_id);
   {
-    auto t = member_client.AsyncCreate(chi::PoolQuery::Dynamic(),
+    auto t = member_client.AsyncCreate(clio::run::PoolQuery::Dynamic(),
                                        uniq("cte_safe_member", 0), member_id,
                                        clio::run::bdev::BdevType::kRam,
                                        kMemberRamSize);
@@ -163,12 +163,12 @@ TEST_CASE("CTE binds existing safe-bdev pool and round-trips a blob",
   }
 
   // --- (2) Compose a safe-bdev pool OVER that member. ---
-  chi::PoolId safe_id(static_cast<chi::u32>(7300 + salt), 0);
+  clio::run::PoolId safe_id(static_cast<clio::run::u32>(7300 + salt), 0);
   clio::run::safe_bdev::Client safe(safe_id);
   {
     std::vector<clio::run::safe_bdev::MemberBdevDesc> members;
     members.emplace_back(uniq("cte_safe_member", 0), /*node_id=*/0, member_id);
-    auto t = safe.AsyncCreate(chi::PoolQuery::Dynamic(),
+    auto t = safe.AsyncCreate(clio::run::PoolQuery::Dynamic(),
                               uniq("cte_safe0", 0), safe_id,
                               /*max_failures=*/1, members);
     t.Wait();
@@ -181,11 +181,11 @@ TEST_CASE("CTE binds existing safe-bdev pool and round-trips a blob",
 
   // --- (3) Create a CTE pool and BIND its target to the existing safe-bdev
   //         pool (attach_existing=1) — no CTE-owned bdev is created. ---
-  chi::PoolId cte_id(static_cast<chi::u32>(7500 + salt), 0);
+  clio::run::PoolId cte_id(static_cast<clio::run::u32>(7500 + salt), 0);
   clio::cte::core::Client cte(cte_id);
   {
     clio::cte::core::CreateParams params;
-    auto t = cte.AsyncCreate(chi::PoolQuery::Dynamic(), uniq("cte_existing", 0),
+    auto t = cte.AsyncCreate(clio::run::PoolQuery::Dynamic(), uniq("cte_existing", 0),
                              cte_id, params);
     t.Wait();
     REQUIRE(t->GetReturnCode() == 0);
@@ -196,7 +196,7 @@ TEST_CASE("CTE binds existing safe-bdev pool and round-trips a blob",
     // capacity 0 -> the handler uses the pool's GetStats remaining space.
     auto t = cte.AsyncRegisterTarget(
         uniq("safe0", 0), clio::run::bdev::BdevType::kFile, /*total_size=*/0,
-        chi::PoolQuery::Local(), safe_id, chi::PoolQuery::Dynamic(),
+        clio::run::PoolQuery::Local(), safe_id, clio::run::PoolQuery::Dynamic(),
         /*attach_existing=*/1);
     t.Wait();
     REQUIRE(t->GetReturnCode() == 0);
@@ -215,7 +215,7 @@ TEST_CASE("CTE binds existing safe-bdev pool and round-trips a blob",
     tag_id = t->tag_id_;
   }
 
-  const chi::u64 kBlobSize = 256ULL * 1024ULL;  // 256 KiB (multi-chunk stripe)
+  const clio::run::u64 kBlobSize = 256ULL * 1024ULL;  // 256 KiB (multi-chunk stripe)
   std::vector<char> expected(kBlobSize);
   for (size_t i = 0; i < kBlobSize; ++i) {
     expected[i] = static_cast<char>((i * 31 + 7) & 0xFF);

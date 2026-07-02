@@ -77,7 +77,7 @@ using DestroyTask = clio::run::admin::DestroyTask;
 /**
  * Role of a member bdev within the declustered stripe layout.
  */
-enum class MemberRole : chi::u32 {
+enum class MemberRole : clio::run::u32 {
   kData = 0,    // Holds data shards
   kParity = 1,  // Holds parity shards
   kSpare = 2    // Idle spare, available for recovery targets
@@ -86,7 +86,7 @@ enum class MemberRole : chi::u32 {
 /**
  * State of a member bdev.
  */
-enum class MemberState : chi::u32 {
+enum class MemberState : clio::run::u32 {
   kActive = 0,      // Healthy and serving I/O
   kFaulty = 1,      // Failed / unreachable
   kRecovering = 2   // Being reconstructed onto a spare
@@ -101,21 +101,21 @@ enum class MemberState : chi::u32 {
  * through the SHM Task path directly.
  */
 struct MemberBdev {
-  chi::PoolId pool_id_;             // Pool id of the member bdev
+  clio::run::PoolId pool_id_;             // Pool id of the member bdev
   std::string pool_name_;           // Human/file name of the member bdev
-  chi::u32 node_id_;                // Node hosting the member (for remote members)
-  chi::u32 role_;                   // MemberRole (0=data,1=parity,2=spare)
-  chi::u32 state_;                  // MemberState (0=active,1=faulty,2=recovering)
+  clio::run::u32 node_id_;                // Node hosting the member (for remote members)
+  clio::run::u32 role_;                   // MemberRole (0=data,1=parity,2=spare)
+  clio::run::u32 state_;                  // MemberState (0=active,1=faulty,2=recovering)
 
   MemberBdev()
       : pool_id_(),
         pool_name_(),
         node_id_(0),
-        role_(static_cast<chi::u32>(MemberRole::kData)),
-        state_(static_cast<chi::u32>(MemberState::kActive)) {}
+        role_(static_cast<clio::run::u32>(MemberRole::kData)),
+        state_(static_cast<clio::run::u32>(MemberState::kActive)) {}
 
-  MemberBdev(const chi::PoolId &pool_id, const std::string &pool_name,
-             chi::u32 node_id, chi::u32 role, chi::u32 state)
+  MemberBdev(const clio::run::PoolId &pool_id, const std::string &pool_name,
+             clio::run::u32 node_id, clio::run::u32 role, clio::run::u32 state)
       : pool_id_(pool_id),
         pool_name_(pool_name),
         node_id_(node_id),
@@ -135,14 +135,14 @@ struct MemberBdev {
  */
 struct MemberBdevDesc {
   std::string pool_name_;  // Name/path of the member bdev pool
-  chi::u32 node_id_;       // Node id hosting the member (0 = local)
-  chi::PoolId pool_id_;    // Pool id of the member bdev (caller created it)
+  clio::run::u32 node_id_;       // Node id hosting the member (0 = local)
+  clio::run::PoolId pool_id_;    // Pool id of the member bdev (caller created it)
 
   MemberBdevDesc() : pool_name_(), node_id_(0), pool_id_() {}
-  MemberBdevDesc(const std::string &pool_name, chi::u32 node_id)
+  MemberBdevDesc(const std::string &pool_name, clio::run::u32 node_id)
       : pool_name_(pool_name), node_id_(node_id), pool_id_() {}
-  MemberBdevDesc(const std::string &pool_name, chi::u32 node_id,
-                 const chi::PoolId &pool_id)
+  MemberBdevDesc(const std::string &pool_name, clio::run::u32 node_id,
+                 const clio::run::PoolId &pool_id)
       : pool_name_(pool_name), node_id_(node_id), pool_id_(pool_id) {}
 
   template <class Archive>
@@ -158,7 +158,7 @@ struct MemberBdevDesc {
  * (lives in chimod_params_), so std::vector / std::string are fine here.
  */
 struct CreateParams {
-  chi::u32 max_failures_;                  // Max simultaneous member failures to tolerate
+  clio::run::u32 max_failures_;                  // Max simultaneous member failures to tolerate
   std::vector<MemberBdevDesc> members_;    // Initial member bdev descriptors
   // Path to the persistent allocator-state log (WAL). Empty => logging disabled
   // (no file created, no behavior change). When set, the per-group allocators
@@ -171,7 +171,7 @@ struct CreateParams {
 
   CreateParams() : max_failures_(1), members_(), alloc_log_path_() {}
 
-  CreateParams(chi::u32 max_failures,
+  CreateParams(clio::run::u32 max_failures,
                const std::vector<MemberBdevDesc> &members,
                const std::string &alloc_log_path = "")
       : max_failures_(max_failures),
@@ -189,11 +189,11 @@ struct CreateParams {
    * Mirrors bdev's LoadConfig style; parses `max_failures` and a `members`
    * YAML sequence of {pool_name, node_id}.
    */
-  void LoadConfig(const chi::PoolConfig &pool_config) {
+  void LoadConfig(const clio::run::PoolConfig &pool_config) {
     YAML::Node config = YAML::Load(pool_config.config_);
 
     if (config["max_failures"]) {
-      max_failures_ = config["max_failures"].as<chi::u32>();
+      max_failures_ = config["max_failures"].as<clio::run::u32>();
     }
 
     if (config["alloc_log"]) {
@@ -208,12 +208,12 @@ struct CreateParams {
           desc.pool_name_ = m["pool_name"].as<std::string>();
         }
         if (m["node_id"]) {
-          desc.node_id_ = m["node_id"].as<chi::u32>();
+          desc.node_id_ = m["node_id"].as<clio::run::u32>();
         }
         if (m["pool_id_major"]) {
-          desc.pool_id_ = chi::PoolId(
-              m["pool_id_major"].as<chi::u32>(),
-              m["pool_id_minor"] ? m["pool_id_minor"].as<chi::u32>() : 0);
+          desc.pool_id_ = clio::run::PoolId(
+              m["pool_id_major"].as<clio::run::u32>(),
+              m["pool_id_minor"] ? m["pool_id_minor"].as<clio::run::u32>() : 0);
         }
         members_.push_back(desc);
       }
@@ -230,26 +230,26 @@ using CreateTask = clio::run::admin::GetOrCreatePoolTask<CreateParams>;
 /**
  * AddBdevTask - Add a new member bdev to the device (Method::kAddBdev).
  */
-struct AddBdevTask : public chi::Task {
-  IN chi::priv::string pool_name_;  // Name/path of the member bdev to add
-  IN chi::u32 node_id_;             // Node id hosting the member (0 = local)
-  IN chi::PoolId member_pool_id_;   // Pool id of the member bdev to add
-  IN chi::u32 as_parity_;           // Non-zero => add as a parity drive
+struct AddBdevTask : public clio::run::Task {
+  IN clio::run::priv::string pool_name_;  // Name/path of the member bdev to add
+  IN clio::run::u32 node_id_;             // Node id hosting the member (0 = local)
+  IN clio::run::PoolId member_pool_id_;   // Pool id of the member bdev to add
+  IN clio::run::u32 as_parity_;           // Non-zero => add as a parity drive
 
   /** SHM default constructor */
   CTP_CROSS_FUN AddBdevTask()
-      : chi::Task(),
+      : clio::run::Task(),
         pool_name_(CLIO_PRIV_ALLOC),
         node_id_(0),
         member_pool_id_(),
         as_parity_(0) {}
 
   /** Emplace constructor */
-  explicit AddBdevTask(const chi::TaskId &task_node, const chi::PoolId &pool_id,
-                       const chi::PoolQuery &pool_query,
-                       const std::string &pool_name, chi::u32 node_id,
-                       const chi::PoolId &member_pool_id, chi::u32 as_parity)
-      : chi::Task(task_node, pool_id, pool_query, Method::kAddBdev),
+  explicit AddBdevTask(const clio::run::TaskId &task_node, const clio::run::PoolId &pool_id,
+                       const clio::run::PoolQuery &pool_query,
+                       const std::string &pool_name, clio::run::u32 node_id,
+                       const clio::run::PoolId &member_pool_id, clio::run::u32 as_parity)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kAddBdev),
         pool_name_(CLIO_PRIV_ALLOC, pool_name),
         node_id_(node_id),
         member_pool_id_(member_pool_id),
@@ -278,8 +278,8 @@ struct AddBdevTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<AddBdevTask>());
   }
 };
@@ -287,21 +287,21 @@ struct AddBdevTask : public chi::Task {
 /**
  * RemoveBdevTask - Remove a member bdev (Method::kRemoveBdev).
  */
-struct RemoveBdevTask : public chi::Task {
-  IN chi::PoolId target_pool_id_;  // Member pool to remove
-  IN chi::u32 was_faulty_;         // Non-zero if the member failed (vs. clean removal)
+struct RemoveBdevTask : public clio::run::Task {
+  IN clio::run::PoolId target_pool_id_;  // Member pool to remove
+  IN clio::run::u32 was_faulty_;         // Non-zero if the member failed (vs. clean removal)
 
   /** SHM default constructor */
   CTP_CROSS_FUN RemoveBdevTask()
-      : chi::Task(), target_pool_id_(), was_faulty_(0) {}
+      : clio::run::Task(), target_pool_id_(), was_faulty_(0) {}
 
   /** Emplace constructor */
-  explicit RemoveBdevTask(const chi::TaskId &task_node,
-                          const chi::PoolId &pool_id,
-                          const chi::PoolQuery &pool_query,
-                          const chi::PoolId &target_pool_id,
-                          chi::u32 was_faulty)
-      : chi::Task(task_node, pool_id, pool_query, Method::kRemoveBdev),
+  explicit RemoveBdevTask(const clio::run::TaskId &task_node,
+                          const clio::run::PoolId &pool_id,
+                          const clio::run::PoolQuery &pool_query,
+                          const clio::run::PoolId &target_pool_id,
+                          clio::run::u32 was_faulty)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kRemoveBdev),
         target_pool_id_(target_pool_id),
         was_faulty_(was_faulty) {}
 
@@ -326,8 +326,8 @@ struct RemoveBdevTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<RemoveBdevTask>());
   }
 };
@@ -336,28 +336,28 @@ struct RemoveBdevTask : public chi::Task {
  * RecoverBdevTask - Reconstruct a failed member onto a new member
  * (Method::kRecoverBdev).
  */
-struct RecoverBdevTask : public chi::Task {
-  IN chi::PoolId old_bdev_id_;      // Failed member to reconstruct
-  IN chi::priv::string pool_name_;  // New member bdev name/path
-  IN chi::u32 node_id_;             // Node id hosting the new member
-  IN chi::PoolId new_pool_id_;      // Pool id of the fresh member bdev
+struct RecoverBdevTask : public clio::run::Task {
+  IN clio::run::PoolId old_bdev_id_;      // Failed member to reconstruct
+  IN clio::run::priv::string pool_name_;  // New member bdev name/path
+  IN clio::run::u32 node_id_;             // Node id hosting the new member
+  IN clio::run::PoolId new_pool_id_;      // Pool id of the fresh member bdev
 
   /** SHM default constructor */
   CTP_CROSS_FUN RecoverBdevTask()
-      : chi::Task(),
+      : clio::run::Task(),
         old_bdev_id_(),
         pool_name_(CLIO_PRIV_ALLOC),
         node_id_(0),
         new_pool_id_() {}
 
   /** Emplace constructor */
-  explicit RecoverBdevTask(const chi::TaskId &task_node,
-                           const chi::PoolId &pool_id,
-                           const chi::PoolQuery &pool_query,
-                           const chi::PoolId &old_bdev_id,
-                           const std::string &pool_name, chi::u32 node_id,
-                           const chi::PoolId &new_pool_id)
-      : chi::Task(task_node, pool_id, pool_query, Method::kRecoverBdev),
+  explicit RecoverBdevTask(const clio::run::TaskId &task_node,
+                           const clio::run::PoolId &pool_id,
+                           const clio::run::PoolQuery &pool_query,
+                           const clio::run::PoolId &old_bdev_id,
+                           const std::string &pool_name, clio::run::u32 node_id,
+                           const clio::run::PoolId &new_pool_id)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kRecoverBdev),
         old_bdev_id_(old_bdev_id),
         pool_name_(CLIO_PRIV_ALLOC, pool_name),
         node_id_(node_id),
@@ -386,8 +386,8 @@ struct RecoverBdevTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<RecoverBdevTask>());
   }
 };
@@ -397,18 +397,18 @@ struct RecoverBdevTask : public chi::Task {
  * and raises stripes to the current target parity level (Method::kBuildParity).
  * Submitted with SetPeriod + TASK_PERIODIC.
  */
-struct BuildParityTask : public chi::Task {
-  IN chi::u32 max_batch_;  // Max number of stripes to (re)build per pass
+struct BuildParityTask : public clio::run::Task {
+  IN clio::run::u32 max_batch_;  // Max number of stripes to (re)build per pass
 
   /** SHM default constructor */
-  CTP_CROSS_FUN BuildParityTask() : chi::Task(), max_batch_(0) {}
+  CTP_CROSS_FUN BuildParityTask() : clio::run::Task(), max_batch_(0) {}
 
   /** Emplace constructor */
-  explicit BuildParityTask(const chi::TaskId &task_node,
-                           const chi::PoolId &pool_id,
-                           const chi::PoolQuery &pool_query,
-                           chi::u32 max_batch = 0)
-      : chi::Task(task_node, pool_id, pool_query, Method::kBuildParity),
+  explicit BuildParityTask(const clio::run::TaskId &task_node,
+                           const clio::run::PoolId &pool_id,
+                           const clio::run::PoolQuery &pool_query,
+                           clio::run::u32 max_batch = 0)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kBuildParity),
         max_batch_(max_batch) {}
 
   /** Serialize IN and INOUT parameters */
@@ -431,8 +431,8 @@ struct BuildParityTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<BuildParityTask>());
   }
 };
@@ -443,15 +443,15 @@ struct BuildParityTask : public chi::Task {
  * alloc_log_path is configured. Carries no I/O parameters. Mirrors bdev's
  * FlushAllocLogTask.
  */
-struct FlushAllocLogTask : public chi::Task {
+struct FlushAllocLogTask : public clio::run::Task {
   /** SHM default constructor */
-  CTP_CROSS_FUN FlushAllocLogTask() : chi::Task() {}
+  CTP_CROSS_FUN FlushAllocLogTask() : clio::run::Task() {}
 
   /** Emplace constructor */
-  CTP_CROSS_FUN explicit FlushAllocLogTask(const chi::TaskId &task_node,
-                                           const chi::PoolId &pool_id,
-                                           const chi::PoolQuery &pool_query)
-      : chi::Task(task_node, pool_id, pool_query, Method::kFlushAllocLog) {
+  CTP_CROSS_FUN explicit FlushAllocLogTask(const clio::run::TaskId &task_node,
+                                           const clio::run::PoolId &pool_id,
+                                           const clio::run::PoolQuery &pool_query)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kFlushAllocLog) {
     task_id_ = task_node;
     pool_id_ = pool_id;
     method_ = Method::kFlushAllocLog;
@@ -477,8 +477,8 @@ struct FlushAllocLogTask : public chi::Task {
   }
 
   /** Aggregate replica results into this task */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<FlushAllocLogTask>());
   }
 };

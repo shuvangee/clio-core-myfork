@@ -15,7 +15,15 @@ add_subdirectory(admin)
 add_subdirectory(bdev)
 
 # Add safe-bdev module (declustered, erasure-coded block device)
-add_subdirectory(safe-bdev)
+# TEMPORARILY DISABLED (PR #663 WIP): the safe-bdev Runtime + autogen still use
+# the pre-migration Container task API (FullPtr<Task>+RunContext) and must be
+# ported to dev's shared_ptr<Task> API (Run/SaveTask/LoadTask/NewTask/…, DelTask
+# removed) + autogen regeneration before it will build. All other 543 work is
+# integrated and compiles; re-enable once the runtime port lands.
+option(CLIO_ENABLE_SAFE_BDEV "Build the safe-bdev EC module (WIP: needs Container-API port)" OFF)
+if(CLIO_ENABLE_SAFE_BDEV)
+  add_subdirectory(safe-bdev)
+endif()
 
 # Additional modules can be added here as they are developed
 # add_subdirectory(other_module_name)

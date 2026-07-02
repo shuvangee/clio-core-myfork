@@ -731,9 +731,9 @@ struct FlushAllocLogTask : public clio::run::Task {
     Task::Copy(other.template Cast<Task>());
   }
 
-  /** Aggregate replica results into this task */
-  void Aggregate(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
-    Task::Aggregate(other_base);
+  /** AggregateOut replica results into this task */
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<FlushAllocLogTask>());
   }
 };

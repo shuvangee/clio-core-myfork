@@ -51,10 +51,10 @@
 
 namespace clio::run::safe_bdev {
 
-class Client : public chi::ContainerClient {
+class Client : public clio::run::ContainerClient {
  public:
   CTP_CROSS_FUN Client() = default;
-  CTP_CROSS_FUN explicit Client(const chi::PoolId &pool_id) { Init(pool_id); }
+  CTP_CROSS_FUN explicit Client(const clio::run::PoolId &pool_id) { Init(pool_id); }
 
   /**
    * Create safe_bdev container - asynchronous.
@@ -64,17 +64,17 @@ class Client : public chi::ContainerClient {
    * @param max_failures Number of simultaneous member failures to tolerate
    * @param members Initial member bdev descriptors
    */
-  chi::Future<clio::run::safe_bdev::CreateTask> AsyncCreate(
-      const chi::PoolQuery &pool_query, const std::string &pool_name,
-      const chi::PoolId &custom_pool_id, chi::u32 max_failures,
+  clio::run::Future<clio::run::safe_bdev::CreateTask> AsyncCreate(
+      const clio::run::PoolQuery &pool_query, const std::string &pool_name,
+      const clio::run::PoolId &custom_pool_id, clio::run::u32 max_failures,
       const std::vector<MemberBdevDesc> &members,
       const std::string &alloc_log_path = "") {
     auto *ipc_manager = CLIO_CPU_IPC;
 
     // CreateTask must always go through the admin pool, never pool_id_.
     auto task = ipc_manager->NewTask<clio::run::safe_bdev::CreateTask>(
-        chi::CreateTaskId(),
-        chi::kAdminPoolId,  // Send to admin pool for GetOrCreatePool processing
+        clio::run::CreateTaskId(),
+        clio::run::kAdminPoolId,  // Send to admin pool for GetOrCreatePool processing
         pool_query,
         CreateParams::chimod_lib_name,  // chimod name from CreateParams
         pool_name,                      // user-provided pool name
@@ -89,93 +89,93 @@ class Client : public chi::ContainerClient {
   /**
    * Allocate data blocks - asynchronous.
    */
-  chi::Future<AllocateBlocksTask> AsyncAllocateBlocks(
-      const chi::PoolQuery &pool_query, chi::u64 size) {
+  clio::run::Future<AllocateBlocksTask> AsyncAllocateBlocks(
+      const clio::run::PoolQuery &pool_query, clio::run::u64 size) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<AllocateBlocksTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, size);
+        clio::run::CreateTaskId(), pool_id_, pool_query, size);
     return ipc_manager->Send(task);
   }
 
   /**
    * Free multiple blocks - asynchronous (host, std::vector).
    */
-  chi::Future<FreeBlocksTask> AsyncFreeBlocks(
-      const chi::PoolQuery &pool_query, const std::vector<Block> &blocks) {
+  clio::run::Future<FreeBlocksTask> AsyncFreeBlocks(
+      const clio::run::PoolQuery &pool_query, const std::vector<Block> &blocks) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<FreeBlocksTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, blocks);
+        clio::run::CreateTaskId(), pool_id_, pool_query, blocks);
     return ipc_manager->Send(task);
   }
 
   /**
    * Free multiple blocks - asynchronous (priv::vector).
    */
-  chi::Future<FreeBlocksTask> AsyncFreeBlocks(
-      const chi::PoolQuery &pool_query,
-      const chi::priv::vector<Block> &blocks) {
+  clio::run::Future<FreeBlocksTask> AsyncFreeBlocks(
+      const clio::run::PoolQuery &pool_query,
+      const clio::run::priv::vector<Block> &blocks) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<FreeBlocksTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, blocks);
+        clio::run::CreateTaskId(), pool_id_, pool_query, blocks);
     return ipc_manager->Send(task);
   }
 
   /**
    * Write data to blocks - asynchronous.
    */
-  chi::Future<WriteTask> AsyncWrite(const chi::PoolQuery &pool_query,
-                                    const chi::priv::vector<Block> &blocks,
+  clio::run::Future<WriteTask> AsyncWrite(const clio::run::PoolQuery &pool_query,
+                                    const clio::run::priv::vector<Block> &blocks,
                                     ctp::ipc::ShmPtr<> data, size_t length) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<WriteTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, blocks, data, length);
+        clio::run::CreateTaskId(), pool_id_, pool_query, blocks, data, length);
     return ipc_manager->Send(task);
   }
 
   /**
    * Read data from blocks - asynchronous.
    */
-  chi::Future<ReadTask> AsyncRead(const chi::PoolQuery &pool_query,
-                                  const chi::priv::vector<Block> &blocks,
+  clio::run::Future<ReadTask> AsyncRead(const clio::run::PoolQuery &pool_query,
+                                  const clio::run::priv::vector<Block> &blocks,
                                   ctp::ipc::ShmPtr<> data, size_t buffer_size) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<ReadTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, blocks, data, buffer_size);
+        clio::run::CreateTaskId(), pool_id_, pool_query, blocks, data, buffer_size);
     return ipc_manager->Send(task);
   }
 
   /**
    * Get performance statistics - asynchronous.
    */
-  chi::Future<GetStatsTask> AsyncGetStats() {
+  clio::run::Future<GetStatsTask> AsyncGetStats() {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<GetStatsTask>(
-        chi::CreateTaskId(), pool_id_, chi::PoolQuery());
+        clio::run::CreateTaskId(), pool_id_, clio::run::PoolQuery());
     return ipc_manager->Send(task);
   }
 
   /**
    * Monitor container state - asynchronous.
    */
-  chi::Future<MonitorTask> AsyncMonitor(const chi::PoolQuery &pool_query,
+  clio::run::Future<MonitorTask> AsyncMonitor(const clio::run::PoolQuery &pool_query,
                                         const std::string &query) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<MonitorTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, query);
+        clio::run::CreateTaskId(), pool_id_, pool_query, query);
     return ipc_manager->Send(task);
   }
 
   /**
    * Add a member bdev - asynchronous.
    */
-  chi::Future<AddBdevTask> AsyncAddBdev(const chi::PoolQuery &pool_query,
+  clio::run::Future<AddBdevTask> AsyncAddBdev(const clio::run::PoolQuery &pool_query,
                                         const std::string &pool_name,
-                                        chi::u32 node_id,
-                                        const chi::PoolId &member_pool_id,
-                                        chi::u32 as_parity = 0) {
+                                        clio::run::u32 node_id,
+                                        const clio::run::PoolId &member_pool_id,
+                                        clio::run::u32 as_parity = 0) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<AddBdevTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, pool_name, node_id,
+        clio::run::CreateTaskId(), pool_id_, pool_query, pool_name, node_id,
         member_pool_id, as_parity);
     return ipc_manager->Send(task);
   }
@@ -183,25 +183,25 @@ class Client : public chi::ContainerClient {
   /**
    * Remove a member bdev - asynchronous.
    */
-  chi::Future<RemoveBdevTask> AsyncRemoveBdev(const chi::PoolQuery &pool_query,
-                                              const chi::PoolId &target_pool_id,
-                                              chi::u32 was_faulty) {
+  clio::run::Future<RemoveBdevTask> AsyncRemoveBdev(const clio::run::PoolQuery &pool_query,
+                                              const clio::run::PoolId &target_pool_id,
+                                              clio::run::u32 was_faulty) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<RemoveBdevTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, target_pool_id, was_faulty);
+        clio::run::CreateTaskId(), pool_id_, pool_query, target_pool_id, was_faulty);
     return ipc_manager->Send(task);
   }
 
   /**
    * Recover a failed member bdev onto a new member - asynchronous.
    */
-  chi::Future<RecoverBdevTask> AsyncRecoverBdev(
-      const chi::PoolQuery &pool_query, const chi::PoolId &old_bdev_id,
-      const std::string &pool_name, chi::u32 node_id,
-      const chi::PoolId &new_pool_id) {
+  clio::run::Future<RecoverBdevTask> AsyncRecoverBdev(
+      const clio::run::PoolQuery &pool_query, const clio::run::PoolId &old_bdev_id,
+      const std::string &pool_name, clio::run::u32 node_id,
+      const clio::run::PoolId &new_pool_id) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<RecoverBdevTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, old_bdev_id, pool_name,
+        clio::run::CreateTaskId(), pool_id_, pool_query, old_bdev_id, pool_name,
         node_id, new_pool_id);
     return ipc_manager->Send(task);
   }
@@ -211,14 +211,14 @@ class Client : public chi::ContainerClient {
    * @param max_batch  max stripes to (re)build this pass; 0 = drain all.
    * @param period_us  if > 0, register as a periodic background task.
    */
-  chi::Future<BuildParityTask> AsyncBuildParity(const chi::PoolQuery &pool_query,
-                                                chi::u32 max_batch = 0,
+  clio::run::Future<BuildParityTask> AsyncBuildParity(const clio::run::PoolQuery &pool_query,
+                                                clio::run::u32 max_batch = 0,
                                                 double period_us = 0) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<BuildParityTask>(
-        chi::CreateTaskId(), pool_id_, pool_query, max_batch);
+        clio::run::CreateTaskId(), pool_id_, pool_query, max_batch);
     if (period_us > 0) {
-      task->SetPeriod(period_us, chi::kMicro);
+      task->SetPeriod(period_us, clio::run::kMicro);
       task->SetFlags(TASK_PERIODIC);
     }
     return ipc_manager->Send(task);
@@ -233,13 +233,13 @@ class Client : public chi::ContainerClient {
    * @param pool_query Pool query for routing
    * @param period_us Period in microseconds (0 = one-shot)
    */
-  chi::Future<FlushAllocLogTask> AsyncFlushAllocLog(
-      const chi::PoolQuery &pool_query, double period_us = 0) {
+  clio::run::Future<FlushAllocLogTask> AsyncFlushAllocLog(
+      const clio::run::PoolQuery &pool_query, double period_us = 0) {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<FlushAllocLogTask>(
-        chi::CreateTaskId(), pool_id_, pool_query);
+        clio::run::CreateTaskId(), pool_id_, pool_query);
     if (period_us > 0) {
-      task->SetPeriod(period_us, chi::kMicro);
+      task->SetPeriod(period_us, clio::run::kMicro);
       task->SetFlags(TASK_PERIODIC);
     }
     return ipc_manager->Send(task);

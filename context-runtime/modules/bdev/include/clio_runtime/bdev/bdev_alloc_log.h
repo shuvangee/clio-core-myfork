@@ -61,7 +61,7 @@
 namespace clio::run::bdev {
 
 /** Record types for the allocator WAL */
-enum class AllocLogType : chi::u32 {
+enum class AllocLogType : clio::run::u32 {
   kAlloc = 1,       /**< A block was allocated */
   kFree = 2,        /**< A block was freed */
   kGroupOpen = 3,   /**< A group/stripe was opened */
@@ -78,31 +78,31 @@ enum class AllocLogType : chi::u32 {
  *  - kGroupFreeze:     group_id, size = num_rows.
  */
 struct AllocLogRecord {
-  chi::u32 type;        /**< AllocLogType */
-  chi::u32 group_id;    /**< Allocator/group namespace (0 = plain bdev) */
-  chi::u32 block_type;  /**< Block size category, or k for kGroupOpen */
-  chi::u32 reserved;    /**< Padding / reserved for future use */
-  chi::u64 offset;      /**< Block offset, or logical_base for kGroupOpen */
-  chi::u64 size;        /**< Block size, or num_rows for group records */
-  chi::u64 row;         /**< first_row for kGroupOpen */
+  clio::run::u32 type;        /**< AllocLogType */
+  clio::run::u32 group_id;    /**< Allocator/group namespace (0 = plain bdev) */
+  clio::run::u32 block_type;  /**< Block size category, or k for kGroupOpen */
+  clio::run::u32 reserved;    /**< Padding / reserved for future use */
+  clio::run::u64 offset;      /**< Block offset, or logical_base for kGroupOpen */
+  clio::run::u64 size;        /**< Block size, or num_rows for group records */
+  clio::run::u64 row;         /**< first_row for kGroupOpen */
 };
 static_assert(sizeof(AllocLogRecord) == 40,
               "AllocLogRecord must be exactly 40 bytes");
 
 /** A recovered live block within a group. */
 struct LiveBlock {
-  chi::u64 offset;
-  chi::u64 size;
-  chi::u32 block_type;
+  clio::run::u64 offset;
+  clio::run::u64 size;
+  clio::run::u32 block_type;
 };
 
 /** A recovered group record. */
 struct GroupRec {
-  chi::u32 group_id;
-  chi::u32 k;
-  chi::u64 first_row;
-  chi::u64 num_rows;
-  chi::u64 logical_base;
+  clio::run::u32 group_id;
+  clio::run::u32 k;
+  clio::run::u64 first_row;
+  clio::run::u64 num_rows;
+  clio::run::u64 logical_base;
 };
 
 /**
@@ -155,12 +155,12 @@ class AllocatorLog {
   }
 
   /** Append an allocation record to the in-memory buffer. */
-  void LogAlloc(chi::u32 group_id, chi::u64 offset, chi::u64 size,
-                chi::u32 block_type) {
+  void LogAlloc(clio::run::u32 group_id, clio::run::u64 offset, clio::run::u64 size,
+                clio::run::u32 block_type) {
     std::lock_guard<std::mutex> lock(mu_);
     if (!enabled_) return;
     AllocLogRecord rec{};
-    rec.type = static_cast<chi::u32>(AllocLogType::kAlloc);
+    rec.type = static_cast<clio::run::u32>(AllocLogType::kAlloc);
     rec.group_id = group_id;
     rec.block_type = block_type;
     rec.offset = offset;
@@ -169,12 +169,12 @@ class AllocatorLog {
   }
 
   /** Append a free record to the in-memory buffer. */
-  void LogFree(chi::u32 group_id, chi::u64 offset, chi::u64 size,
-               chi::u32 block_type) {
+  void LogFree(clio::run::u32 group_id, clio::run::u64 offset, clio::run::u64 size,
+               clio::run::u32 block_type) {
     std::lock_guard<std::mutex> lock(mu_);
     if (!enabled_) return;
     AllocLogRecord rec{};
-    rec.type = static_cast<chi::u32>(AllocLogType::kFree);
+    rec.type = static_cast<clio::run::u32>(AllocLogType::kFree);
     rec.group_id = group_id;
     rec.block_type = block_type;
     rec.offset = offset;
@@ -183,12 +183,12 @@ class AllocatorLog {
   }
 
   /** Append a group-open record (used by safe-bdev). */
-  void LogGroupOpen(chi::u32 group_id, chi::u32 k, chi::u64 first_row,
-                    chi::u64 num_rows, chi::u64 logical_base) {
+  void LogGroupOpen(clio::run::u32 group_id, clio::run::u32 k, clio::run::u64 first_row,
+                    clio::run::u64 num_rows, clio::run::u64 logical_base) {
     std::lock_guard<std::mutex> lock(mu_);
     if (!enabled_) return;
     AllocLogRecord rec{};
-    rec.type = static_cast<chi::u32>(AllocLogType::kGroupOpen);
+    rec.type = static_cast<clio::run::u32>(AllocLogType::kGroupOpen);
     rec.group_id = group_id;
     rec.block_type = k;
     rec.offset = logical_base;
@@ -198,11 +198,11 @@ class AllocatorLog {
   }
 
   /** Append a group-freeze record (used by safe-bdev). */
-  void LogGroupFreeze(chi::u32 group_id, chi::u64 num_rows) {
+  void LogGroupFreeze(clio::run::u32 group_id, clio::run::u64 num_rows) {
     std::lock_guard<std::mutex> lock(mu_);
     if (!enabled_) return;
     AllocLogRecord rec{};
-    rec.type = static_cast<chi::u32>(AllocLogType::kGroupFreeze);
+    rec.type = static_cast<clio::run::u32>(AllocLogType::kGroupFreeze);
     rec.group_id = group_id;
     rec.size = num_rows;
     buffer_.push_back(rec);
@@ -257,12 +257,12 @@ class AllocatorLog {
     std::FILE *f = std::fopen(tmp.c_str(), "wb");
     if (f == nullptr) return;
 
-    chi::u64 written = 0;
+    clio::run::u64 written = 0;
     // One kGroupOpen per live group.
     for (const auto &kv : groups_) {
       const GroupRec &g = kv.second;
       AllocLogRecord rec{};
-      rec.type = static_cast<chi::u32>(AllocLogType::kGroupOpen);
+      rec.type = static_cast<clio::run::u32>(AllocLogType::kGroupOpen);
       rec.group_id = g.group_id;
       rec.block_type = g.k;
       rec.offset = g.logical_base;
@@ -273,11 +273,11 @@ class AllocatorLog {
     }
     // One kAlloc per live block (no frees).
     for (const auto &gkv : live_) {
-      chi::u32 group_id = gkv.first;
+      clio::run::u32 group_id = gkv.first;
       for (const auto &bkv : gkv.second) {
         const LiveBlock &b = bkv.second;
         AllocLogRecord rec{};
-        rec.type = static_cast<chi::u32>(AllocLogType::kAlloc);
+        rec.type = static_cast<clio::run::u32>(AllocLogType::kAlloc);
         rec.group_id = group_id;
         rec.block_type = b.block_type;
         rec.offset = b.offset;
@@ -321,7 +321,7 @@ class AllocatorLog {
    * Recovered live blocks for a group (after replaying alloc/free; a free
    * removes the matching live alloc by (group_id, offset)).
    */
-  const std::vector<LiveBlock> &live(chi::u32 group_id) {
+  const std::vector<LiveBlock> &live(clio::run::u32 group_id) {
     std::lock_guard<std::mutex> lock(mu_);
     RebuildLiveCacheLocked();
     auto it = live_cache_.find(group_id);
@@ -332,15 +332,15 @@ class AllocatorLog {
   }
 
   /** Number of fixed-size records currently on disk. */
-  chi::u64 records_on_disk() {
+  clio::run::u64 records_on_disk() {
     std::lock_guard<std::mutex> lock(mu_);
     return records_on_disk_;
   }
 
   /** Current live-block count across all groups (recovered model). */
-  chi::u64 live_block_count() {
+  clio::run::u64 live_block_count() {
     std::lock_guard<std::mutex> lock(mu_);
-    chi::u64 n = 0;
+    clio::run::u64 n = 0;
     for (const auto &gkv : live_) {
       n += gkv.second.size();
     }
@@ -354,29 +354,29 @@ class AllocatorLog {
   }
 
   /** On-disk file size in bytes (for tests). */
-  chi::u64 file_size() {
+  clio::run::u64 file_size() {
     std::lock_guard<std::mutex> lock(mu_);
     namespace fs = std::filesystem;
     std::error_code ec;
     if (!fs::exists(path_, ec)) return 0;
-    return static_cast<chi::u64>(fs::file_size(path_, ec));
+    return static_cast<clio::run::u64>(fs::file_size(path_, ec));
   }
 
  private:
   std::string path_;
   std::vector<AllocLogRecord> buffer_;
   bool enabled_ = false;
-  chi::u64 records_on_disk_ = 0;
+  clio::run::u64 records_on_disk_ = 0;
   std::mutex mu_;
 
   // Recovered in-memory model. live_[group_id][offset] = LiveBlock.
-  std::map<chi::u32, std::map<chi::u64, LiveBlock>> live_;
-  std::map<chi::u32, GroupRec> groups_;
+  std::map<clio::run::u32, std::map<clio::run::u64, LiveBlock>> live_;
+  std::map<clio::run::u32, GroupRec> groups_;
 
   // Lazily-rebuilt flat caches for the accessors (so we can hand out
   // stable references). Invalidated whenever the model changes.
   bool live_cache_valid_ = false;
-  std::map<chi::u32, std::vector<LiveBlock>> live_cache_;
+  std::map<clio::run::u32, std::vector<LiveBlock>> live_cache_;
   std::vector<GroupRec> group_cache_;
   std::vector<LiveBlock> empty_live_;
 
@@ -428,7 +428,7 @@ class AllocatorLog {
     std::FILE *f = std::fopen(path_.c_str(), "rb");
     if (f == nullptr) return;
     AllocLogRecord rec{};
-    chi::u64 count = 0;
+    clio::run::u64 count = 0;
     while (std::fread(&rec, sizeof(rec), 1, f) == 1) {
       ApplyRecordLocked(rec);
       ++count;

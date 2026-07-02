@@ -113,7 +113,7 @@ struct StorageDeviceConfig {
   // create its own bdev. The pool must implement the bdev task interface
   // (AllocateBlocks/FreeBlocks/Write/Read/GetStats). When attaching, path_,
   // bdev_type_, and capacity_limit_ become optional; score_ still applies.
-  chi::PoolId existing_pool_id_;
+  clio::run::PoolId existing_pool_id_;
   // Optional module name of the existing pool, for logging/validation only
   // (e.g. "clio_safe_bdev"). Not used to route — routing is purely by pool id.
   std::string existing_pool_module_;
@@ -122,7 +122,7 @@ struct StorageDeviceConfig {
       : capacity_limit_(0),
         score_(-1.0f),
         persistence_level_("volatile"),
-        existing_pool_id_(chi::PoolId::GetNull()) {}
+        existing_pool_id_(clio::run::PoolId::GetNull()) {}
   StorageDeviceConfig(const std::string &path, const std::string &bdev_type,
                       clio::run::u64 capacity, float score = -1.0f,
                       const std::string &persistence_level = "volatile")
@@ -131,7 +131,7 @@ struct StorageDeviceConfig {
         capacity_limit_(capacity),
         score_(score),
         persistence_level_(persistence_level),
-        existing_pool_id_(chi::PoolId::GetNull()) {}
+        existing_pool_id_(clio::run::PoolId::GetNull()) {}
 
   // True when this target should bind to an existing pool rather than create
   // its own bdev. Pool-id major 0 is reserved for "not set" (CTE/admin pools

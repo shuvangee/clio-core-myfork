@@ -450,7 +450,7 @@ bool Config::ParseStorageConfig(const YAML::Node &node) {
     // capacity_limit become OPTIONAL.
     if (device_node["existing_pool_id"]) {
       std::string pool_id_str = device_node["existing_pool_id"].as<std::string>();
-      device_config.existing_pool_id_ = chi::PoolId::FromString(pool_id_str);
+      device_config.existing_pool_id_ = clio::run::PoolId::FromString(pool_id_str);
       if (!device_config.HasExistingPool()) {
         HLOG(kError,
              "Config error: Invalid existing_pool_id '{}' (expected "
