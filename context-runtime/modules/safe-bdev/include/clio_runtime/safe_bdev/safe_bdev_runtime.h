@@ -141,55 +141,43 @@ class Runtime : public clio::run::Container {
   //==========================================================================
 
   /** Create the container (Method::kCreate). */
-  clio::run::TaskResume Create(ctp::ipc::FullPtr<CreateTask> task,
-                         clio::run::RunContext &ctx);
+  clio::run::TaskResume Create(clio::run::shared_ptr<CreateTask> &task);
 
   /** Allocate multiple blocks (Method::kAllocateBlocks). */
-  clio::run::TaskResume AllocateBlocks(ctp::ipc::FullPtr<AllocateBlocksTask> task,
-                                 clio::run::RunContext &ctx);
+  clio::run::TaskResume AllocateBlocks(clio::run::shared_ptr<AllocateBlocksTask> &task);
 
   /** Free data blocks (Method::kFreeBlocks). */
-  clio::run::TaskResume FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
-                             clio::run::RunContext &ctx);
+  clio::run::TaskResume FreeBlocks(clio::run::shared_ptr<FreeBlocksTask> &task);
 
   /** Write data (Method::kWrite). */
-  clio::run::TaskResume Write(ctp::ipc::FullPtr<WriteTask> task,
-                        clio::run::RunContext &ctx);
+  clio::run::TaskResume Write(clio::run::shared_ptr<WriteTask> &task);
 
   /** Read data (Method::kRead). */
-  clio::run::TaskResume Read(ctp::ipc::FullPtr<ReadTask> task, clio::run::RunContext &ctx);
+  clio::run::TaskResume Read(clio::run::shared_ptr<ReadTask> &task);
 
   /** Get performance statistics (Method::kGetStats). */
-  clio::run::TaskResume GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
-                           clio::run::RunContext &ctx);
+  clio::run::TaskResume GetStats(clio::run::shared_ptr<GetStatsTask> &task);
 
   /** Add a member bdev (Method::kAddBdev). */
-  clio::run::TaskResume AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
-                          clio::run::RunContext &ctx);
+  clio::run::TaskResume AddBdev(clio::run::shared_ptr<AddBdevTask> &task);
 
   /** Remove a member bdev (Method::kRemoveBdev). */
-  clio::run::TaskResume RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
-                             clio::run::RunContext &ctx);
+  clio::run::TaskResume RemoveBdev(clio::run::shared_ptr<RemoveBdevTask> &task);
 
   /** Recover a failed member bdev (Method::kRecoverBdev). */
-  clio::run::TaskResume RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
-                              clio::run::RunContext &ctx);
+  clio::run::TaskResume RecoverBdev(clio::run::shared_ptr<RecoverBdevTask> &task);
 
   /** Build/raise parity for dirty rows (Method::kBuildParity). */
-  clio::run::TaskResume BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
-                              clio::run::RunContext &ctx);
+  clio::run::TaskResume BuildParity(clio::run::shared_ptr<BuildParityTask> &task);
 
   /** Flush/compact the persistent allocator log (Method::kFlushAllocLog). */
-  clio::run::TaskResume FlushAllocLog(ctp::ipc::FullPtr<FlushAllocLogTask> task,
-                                clio::run::RunContext &ctx);
+  clio::run::TaskResume FlushAllocLog(clio::run::shared_ptr<FlushAllocLogTask> &task);
 
   /** Monitor container state (Method::kMonitor). */
-  clio::run::TaskResume Monitor(ctp::ipc::FullPtr<MonitorTask> task,
-                          clio::run::RunContext &rctx);
+  clio::run::TaskResume Monitor(clio::run::shared_ptr<MonitorTask> &task);
 
   /** Destroy the container (Method::kDestroy). */
-  clio::run::TaskResume Destroy(ctp::ipc::FullPtr<DestroyTask> task,
-                          clio::run::RunContext &ctx);
+  clio::run::TaskResume Destroy(clio::run::shared_ptr<DestroyTask> &task);
 
   //==========================================================================
   // Required virtual methods from clio::run::Container
@@ -198,40 +186,37 @@ class Runtime : public clio::run::Container {
   void Init(const clio::run::PoolId &pool_id, const std::string &pool_name,
             clio::run::u32 container_id = 0) override;
 
-  clio::run::TaskResume Run(clio::run::u32 method, ctp::ipc::FullPtr<clio::run::Task> task_ptr,
-                      clio::run::RunContext &rctx) override;
+  clio::run::TaskResume Run(clio::run::u32 method,
+                      clio::run::shared_ptr<clio::run::Task> task_ptr) override;
 
   clio::run::u64 GetWorkRemaining() const override;
 
   void SaveTask(clio::run::u32 method, clio::run::SaveTaskArchive &archive,
-                ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
+                clio::run::shared_ptr<clio::run::Task> &task_ptr) override;
 
   void LoadTask(clio::run::u32 method, clio::run::LoadTaskArchive &archive,
-                ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
+                clio::run::shared_ptr<clio::run::Task> &task_ptr) override;
 
-  ctp::ipc::FullPtr<clio::run::Task> AllocLoadTask(
+  clio::run::shared_ptr<clio::run::Task> AllocLoadTask(
       clio::run::u32 method, clio::run::LoadTaskArchive &archive) override;
 
   void LocalLoadTask(clio::run::u32 method, clio::run::DefaultLoadArchive &archive,
-                     ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
+                     clio::run::shared_ptr<clio::run::Task> &task_ptr) override;
 
-  ctp::ipc::FullPtr<clio::run::Task> LocalAllocLoadTask(
+  clio::run::shared_ptr<clio::run::Task> LocalAllocLoadTask(
       clio::run::u32 method, clio::run::DefaultLoadArchive &archive) override;
 
   void LocalSaveTask(clio::run::u32 method, clio::run::DefaultSaveArchive &archive,
-                     ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
+                     clio::run::shared_ptr<clio::run::Task> &task_ptr) override;
 
-  ctp::ipc::FullPtr<clio::run::Task> NewCopyTask(
-      clio::run::u32 method, ctp::ipc::FullPtr<clio::run::Task> orig_task_ptr,
+  clio::run::shared_ptr<clio::run::Task> NewCopyTask(
+      clio::run::u32 method, clio::run::shared_ptr<clio::run::Task> &orig_task_ptr,
       bool deep) override;
 
-  ctp::ipc::FullPtr<clio::run::Task> NewTask(clio::run::u32 method) override;
+  clio::run::shared_ptr<clio::run::Task> NewTask(clio::run::u32 method) override;
 
-  void AggregateOut(clio::run::u32 method, ctp::ipc::FullPtr<clio::run::Task> orig_task,
-                 const ctp::ipc::FullPtr<clio::run::Task> &replica_task) override;
-
-  void DelTask(clio::run::u32 method,
-               ctp::ipc::FullPtr<clio::run::Task> task_ptr) override;
+  void AggregateOut(clio::run::u32 method, clio::run::shared_ptr<clio::run::Task> &orig_task,
+                 const clio::run::shared_ptr<clio::run::Task> &replica_task) override;
 
  private:
   // Per-member runtime bookkeeping. role_ (DATA vs PARITY) and index_ are FIXED
@@ -421,7 +406,7 @@ class Runtime : public clio::run::Container {
    */
   clio::run::TaskResume WriteDataSegment(size_t col, clio::run::u64 offset,
                                    const uint8_t *src, clio::run::u64 len,
-                                   clio::run::RunContext &rctx, bool &ok);
+                                   bool &ok);
 
   /**
    * AsyncRead `len` bytes at absolute member-pool offset `offset` from DATA
@@ -429,7 +414,7 @@ class Runtime : public clio::run::Container {
    * io_error.
    */
   clio::run::TaskResume ReadDataSegment(size_t col, clio::run::u64 offset, uint8_t *dst,
-                                  clio::run::u64 len, clio::run::RunContext &rctx, bool &ok);
+                                  clio::run::u64 len, bool &ok);
 
   /**
    * Reconstruct the FULL kChunkLen chunk of DATA member `data_col` for global
@@ -440,7 +425,6 @@ class Runtime : public clio::run::Container {
    */
   clio::run::TaskResume ReconstructDataChunk(const Group &g, clio::run::u64 row,
                                        int data_col, int exclude_col,
-                                       clio::run::RunContext &rctx,
                                        std::vector<uint8_t> &out, bool &ok);
 
   /**
@@ -450,7 +434,6 @@ class Runtime : public clio::run::Container {
    * Returns false on too few survivors.
    */
   clio::run::TaskResume ReconstructRow(const Group &g, clio::run::u64 row, int exclude_col,
-                                 clio::run::RunContext &rctx,
                                  std::vector<std::vector<uint8_t>> &out,
                                  bool &ok);
 
@@ -460,8 +443,7 @@ class Runtime : public clio::run::Container {
    * 0. `is_parity` selects parity_members_/parity_clients_ vs data; `idx` is
    * the position in that vector. Returns false on I/O failure.
    */
-  clio::run::TaskResume WriteSuperblock(bool is_parity, size_t idx,
-                                  clio::run::RunContext &rctx, bool &ok);
+  clio::run::TaskResume WriteSuperblock(bool is_parity, size_t idx, bool &ok);
 
   /**
    * AsyncRead kSuperblockSize bytes at absolute offset 0 from a member, parse
@@ -470,7 +452,7 @@ class Runtime : public clio::run::Container {
    * selects the member vector; `idx` is its position.
    */
   clio::run::TaskResume ReadSuperblock(bool is_parity, size_t idx,
-                                 clio::run::RunContext &rctx, MemberSuperblock &sb,
+                                 MemberSuperblock &sb,
                                  bool &present, bool &ok);
 
   /** Open and initialize a new group with the given width / row band. The

@@ -98,10 +98,10 @@ constexpr clio::run::u64 kSuperblockSize = 65536;  // mirrors Runtime::kSuperblo
 void EnsureInit() {
   if (!g_initialized) {
     HLOG(kInfo, "Initializing Chimaera (safe_bdev test)...");
-    bool success = clio::run::CHIMAERA_INIT(clio::run::ChimaeraMode::kClient, true);
+    bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
     if (success) {
       g_initialized = true;
-      SimpleTest::g_test_finalize = clio::run::CHIMAERA_FINALIZE;
+      SimpleTest::g_test_finalize = clio::run::CLIO_RUNTIME_FINALIZE;
       std::this_thread::sleep_for(500ms);
       HLOG(kInfo, "Chimaera initialization successful");
     } else {

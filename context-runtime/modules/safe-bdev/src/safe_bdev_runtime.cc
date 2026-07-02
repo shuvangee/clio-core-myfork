@@ -102,49 +102,52 @@ void Runtime::OpenGroup(int k, clio::run::u64 first_row, clio::run::u64 num_rows
 
 void Runtime::SeedGroupAllocatorFromLive(
     size_t gi, const std::vector<clio::run::bdev::LiveBlock> &live) {
-  // Rebuild group `gi`'s allocator to a state equivalent to one that had
-  // allocated exactly `live`. The recovered offsets are GLOBAL logical offsets;
-  // the group's heap_/block_map_ operate in the GROUP-LOCAL space [0, span), so
-  // convert each: local = global - logical_base_. Then mirror bdev:
-  //   1. Heap::InitFromLive over the LOCAL live blocks -> bump = max(off+size)
-  //      so the heap never re-hands a live offset.
-  //   2. SeedFreeRange over the gaps in [0, bump) not covered by any live block
-  //      so freed gaps stay reusable.
+  // Rebuild group `gi`'s allocator to a state that never re-hands a still-live
+  // logical offset. The recovered offsets are GLOBAL logical offsets; the
+  // group's heap_/block_map_ operate in the GROUP-LOCAL space [0, span), so
+  // convert each: local = global - logical_base_.
+  //
+  // dev's bdev allocator (Heap/GlobalBlockMap) is a plain bump allocator with a
+  // per-worker free list and no live-set seeding hooks, so we reconstruct the
+  // one invariant that matters for correctness using only its public API:
+  // advance the heap bump past the HIGHEST live end (max local offset + size)
+  // via a single throwaway Allocate. After this, Heap::Allocate only ever hands
+  // offsets above every live block, and the free list starts empty, so no live
+  // offset can be re-handed. Freed gaps that sat BELOW the high-water mark at
+  // recovery time are not re-seeded into the free list (a bounded, recovery-only
+  // space regression); space from live blocks is reclaimed normally once they
+  // are freed via FreeBlocks -> GlobalBlockMap::FreeBlock.
   Group &g = *groups_[gi];
 
-  std::vector<clio::run::bdev::LiveBlock> local;
-  local.reserve(live.size());
   clio::run::u64 live_bytes = 0;
+  clio::run::u64 max_local_end = 0;
   for (const auto &b : live) {
-    clio::run::bdev::LiveBlock lb = b;
-    lb.offset = (b.offset >= g.logical_base_) ? (b.offset - g.logical_base_) : 0;
-    local.push_back(lb);
+    const clio::run::u64 local_off =
+        (b.offset >= g.logical_base_) ? (b.offset - g.logical_base_) : 0;
+    const clio::run::u64 end = local_off + b.size;
+    if (end > max_local_end) {
+      max_local_end = end;
+    }
     live_bytes += b.size;
   }
 
-  g.heap_->InitFromLive(local, g.logical_span_, /*alignment=*/4096);
-
-  std::sort(local.begin(), local.end(),
-            [](const clio::run::bdev::LiveBlock &a,
-               const clio::run::bdev::LiveBlock &b) {
-              return a.offset < b.offset;
-            });
-  clio::run::u64 cursor = 0;
-  for (const auto &b : local) {
-    if (b.offset > cursor) {
-      g.block_map_->SeedFreeRange(cursor, b.offset - cursor);
-    }
-    const clio::run::u64 end = b.offset + b.size;
-    if (end > cursor) {
-      cursor = end;
-    }
+  // Advance the (freshly Init'd) heap bump past every live block with one
+  // throwaway carve. The Heap aligns the size up internally, so the resulting
+  // bump lands at or above max_local_end; the block is intentionally discarded
+  // (never freed) so its span stays reserved.
+  if (max_local_end > 0) {
+    clio::run::bdev::Block throwaway;
+    const int block_type =
+        clio::run::bdev::GlobalBlockMap::FindBlockType(max_local_end);
+    g.heap_->Allocate(max_local_end,
+                      (block_type >= 0) ? block_type : 0, throwaway);
   }
 
   g.allocated_bytes_.store(live_bytes, std::memory_order_relaxed);
   HLOG(kInfo,
        "safe_bdev: recovered group {} allocator from {} live blocks "
-       "(local heap bump at {}, {} live bytes, logical_base={})",
-       gi, live.size(), cursor, live_bytes, g.logical_base_);
+       "(local heap bump past {}, {} live bytes, logical_base={})",
+       gi, live.size(), max_local_end, live_bytes, g.logical_base_);
 }
 
 //===========================================================================
@@ -153,8 +156,7 @@ void Runtime::SeedGroupAllocatorFromLive(
 
 clio::run::TaskResume Runtime::WriteDataSegment(size_t col, clio::run::u64 offset,
                                           const uint8_t *src, clio::run::u64 len,
-                                          clio::run::RunContext &ctx, bool &ok) {
-  clio::run::RunContext &rctx = ctx;
+                                          bool &ok) {
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
@@ -176,8 +178,7 @@ clio::run::TaskResume Runtime::WriteDataSegment(size_t col, clio::run::u64 offse
 
 clio::run::TaskResume Runtime::ReadDataSegment(size_t col, clio::run::u64 offset,
                                          uint8_t *dst, clio::run::u64 len,
-                                         clio::run::RunContext &ctx, bool &ok) {
-  clio::run::RunContext &rctx = ctx;
+                                         bool &ok) {
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
@@ -204,8 +205,7 @@ clio::run::TaskResume Runtime::ReadDataSegment(size_t col, clio::run::u64 offset
 //===========================================================================
 
 clio::run::TaskResume Runtime::WriteSuperblock(bool is_parity, size_t idx,
-                                         clio::run::RunContext &ctx, bool &ok) {
-  clio::run::RunContext &rctx = ctx;
+                                         bool &ok) {
   CLIO_TASK_BODY_BEGIN
   ok = false;
   auto *ipc = CLIO_IPC;
@@ -250,10 +250,8 @@ clio::run::TaskResume Runtime::WriteSuperblock(bool is_parity, size_t idx,
 }
 
 clio::run::TaskResume Runtime::ReadSuperblock(bool is_parity, size_t idx,
-                                        clio::run::RunContext &ctx,
                                         MemberSuperblock &sb, bool &present,
                                         bool &ok) {
-  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   present = false;
@@ -282,9 +280,8 @@ clio::run::TaskResume Runtime::ReadSuperblock(bool is_parity, size_t idx,
 //===========================================================================
 
 clio::run::TaskResume Runtime::ReconstructRow(
-    const Group &g, clio::run::u64 row, int exclude_col, clio::run::RunContext &ctx,
+    const Group &g, clio::run::u64 row, int exclude_col,
     std::vector<std::vector<uint8_t>> &out, bool &ok) {
-  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   const int kg = g.k_;
@@ -309,7 +306,7 @@ clio::run::TaskResume Runtime::ReconstructRow(
     std::vector<uint8_t> buf(kChunkLen, 0);
     bool rd_ok = false;
     CLIO_CO_AWAIT(ReadDataSegment(static_cast<size_t>(col), off, buf.data(),
-                                  kChunkLen, rctx, rd_ok));
+                                  kChunkLen, rd_ok));
     if (!rd_ok) {
       continue;
     }
@@ -366,15 +363,13 @@ clio::run::TaskResume Runtime::ReconstructRow(
 
 clio::run::TaskResume Runtime::ReconstructDataChunk(const Group &g, clio::run::u64 row,
                                               int data_col, int exclude_col,
-                                              clio::run::RunContext &ctx,
                                               std::vector<uint8_t> &out,
                                               bool &ok) {
-  clio::run::RunContext &rctx = ctx;
   CLIO_TASK_BODY_BEGIN
   ok = false;
   std::vector<std::vector<uint8_t>> data_chunks;
   bool rec_ok = false;
-  CLIO_CO_AWAIT(ReconstructRow(g, row, exclude_col, rctx, data_chunks, rec_ok));
+  CLIO_CO_AWAIT(ReconstructRow(g, row, exclude_col, data_chunks, rec_ok));
   if (!rec_ok) {
     CLIO_CO_RETURN;
   }
@@ -388,9 +383,7 @@ clio::run::TaskResume Runtime::ReconstructDataChunk(const Group &g, clio::run::u
 // Method handlers
 //===========================================================================
 
-clio::run::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
-                                clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   CLIO_TASK_BODY_BEGIN
 
   // Get the creation parameters.
@@ -488,7 +481,7 @@ clio::run::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     bool present = false;
     bool sb_ok = false;
     CLIO_CO_AWAIT(ReadSuperblock(/*is_parity=*/false, static_cast<size_t>(col),
-                                 rctx, sb, present, sb_ok));
+                                 sb, present, sb_ok));
     if (!sb_ok) {
       HLOG(kError, "safe_bdev Create: superblock read failed for member '{}'",
            desc.pool_name_);
@@ -498,7 +491,7 @@ clio::run::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
     if (!present) {
       bool wr_ok = false;
       CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/false,
-                                    static_cast<size_t>(col), rctx, wr_ok));
+                                    static_cast<size_t>(col), wr_ok));
       if (!wr_ok) {
         HLOG(kError,
              "safe_bdev Create: superblock write failed for fresh member '{}'",
@@ -587,8 +580,7 @@ clio::run::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task,
 }
 
 clio::run::TaskResume Runtime::AllocateBlocks(
-    ctp::ipc::FullPtr<AllocateBlocksTask> task, clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+    clio::run::shared_ptr<AllocateBlocksTask> &task) {
   CLIO_TASK_BODY_BEGIN
   // Real reclaimable allocation from the CURRENT (widest) group: try the free
   // list first (reuse a freed block), else carve from the heap. Offsets are
@@ -649,11 +641,8 @@ clio::run::TaskResume Runtime::AllocateBlocks(
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task,
-                                    clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::FreeBlocks(clio::run::shared_ptr<FreeBlocksTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
   // Route each block to its OWNING group (by logical offset) and return it to
   // that group's free list (real reclaim). Normalize block_type_ from the block
   // SIZE so AllocateBlock (which picks the free list by size class) can find it
@@ -696,9 +685,7 @@ clio::run::TaskResume Runtime::FreeBlocks(ctp::ipc::FullPtr<FreeBlocksTask> task
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
-                               clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Write(clio::run::shared_ptr<WriteTask> &task) {
   CLIO_TASK_BODY_BEGIN
   if (groups_.empty() || task->blocks_.size() == 0) {
     task->return_code_ = 1;
@@ -802,9 +789,7 @@ clio::run::TaskResume Runtime::Write(ctp::ipc::FullPtr<WriteTask> task,
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
-                              clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Read(clio::run::shared_ptr<ReadTask> &task) {
   CLIO_TASK_BODY_BEGIN
   if (groups_.empty() || task->blocks_.size() == 0) {
     task->return_code_ = 1;
@@ -859,7 +844,7 @@ clio::run::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
         CLIO_CO_AWAIT(ReadDataSegment(static_cast<size_t>(data_col), phys,
                                       reinterpret_cast<uint8_t *>(data.ptr_) +
                                           buf_pos,
-                                      seg_len, rctx, seg_ok));
+                                      seg_len, seg_ok));
       } else if (IsRowDirty(global_row)) {
         // A data member is down AND this row's parity is not current: it is
         // unprotected, so reconstruction would yield wrong bytes. Fail loudly.
@@ -871,7 +856,7 @@ clio::run::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
       } else {
         std::vector<uint8_t> chunk;
         CLIO_CO_AWAIT(ReconstructDataChunk(g, global_row, data_col,
-                                           /*exclude_col=*/-1, rctx, chunk,
+                                           /*exclude_col=*/-1, chunk,
                                            seg_ok));
         if (seg_ok) {
           std::memcpy(data.ptr_ + buf_pos, chunk.data() + within, seg_len);
@@ -896,11 +881,8 @@ clio::run::TaskResume Runtime::Read(ctp::ipc::FullPtr<ReadTask> task,
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
-                                  clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::GetStats(clio::run::shared_ptr<GetStatsTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
   // Only the current (open) group is allocatable; frozen groups no longer hand
   // out new blocks, so their leftover space is not counted as usable remaining.
   clio::run::u64 remaining = 0;
@@ -915,9 +897,7 @@ clio::run::TaskResume Runtime::GetStats(ctp::ipc::FullPtr<GetStatsTask> task,
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
-                                 clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::AddBdev(clio::run::shared_ptr<AddBdevTask> &task) {
   CLIO_TASK_BODY_BEGIN
 
   const bool as_parity = (task->as_parity_ != 0);
@@ -975,7 +955,7 @@ clio::run::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
     bool present = false;
     bool sb_ok = false;
     CLIO_CO_AWAIT(ReadSuperblock(/*is_parity=*/false,
-                                 static_cast<size_t>(new_col), rctx, sb,
+                                 static_cast<size_t>(new_col), sb,
                                  present, sb_ok));
     if (!sb_ok) {
       HLOG(kError, "safe_bdev AddBdev: superblock read failed for member '{}'",
@@ -999,7 +979,7 @@ clio::run::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
     if (!present) {
       bool wr_ok = false;
       CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/false,
-                                    static_cast<size_t>(new_col), rctx, wr_ok));
+                                    static_cast<size_t>(new_col), wr_ok));
       if (!wr_ok) {
         HLOG(kWarning,
              "safe_bdev AddBdev: superblock write failed for new data member "
@@ -1085,7 +1065,7 @@ clio::run::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   // Stamp the new member's superblock with this array's identity.
   {
     bool wr_ok = false;
-    CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/true, new_j, rctx, wr_ok));
+    CLIO_CO_AWAIT(WriteSuperblock(/*is_parity=*/true, new_j, wr_ok));
     if (!wr_ok) {
       HLOG(kWarning,
            "safe_bdev AddBdev: superblock write failed for new parity member "
@@ -1099,11 +1079,8 @@ clio::run::TaskResume Runtime::AddBdev(ctp::ipc::FullPtr<AddBdevTask> task,
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task,
-                                    clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::RemoveBdev(clio::run::shared_ptr<RemoveBdevTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
   // Search data then parity members by pool id; mark faulty (recovery
   // candidate) or removed (clean unlink). State is positional — we never erase
   // the slot.
@@ -1135,9 +1112,7 @@ clio::run::TaskResume Runtime::RemoveBdev(ctp::ipc::FullPtr<RemoveBdevTask> task
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> task,
-                                     clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask> &task) {
   CLIO_TASK_BODY_BEGIN
 
   // Locate the failed member by its (old) pool id, in data then parity.
@@ -1196,7 +1171,7 @@ clio::run::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> ta
       std::vector<std::vector<uint8_t>> data_chunks;
       bool rd_ok = false;
       const int exclude_col = is_data ? idx : -1;
-      CLIO_CO_AWAIT(ReconstructRow(g, r, exclude_col, rctx, data_chunks,
+      CLIO_CO_AWAIT(ReconstructRow(g, r, exclude_col, data_chunks,
                                    rd_ok));
       if (!rd_ok) {
         task->return_code_ = 1;
@@ -1246,7 +1221,7 @@ clio::run::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> ta
   // Stamp the fresh recovery member's superblock with this array's identity.
   {
     bool wr_ok = false;
-    CLIO_CO_AWAIT(WriteSuperblock(!is_data, static_cast<size_t>(idx), rctx,
+    CLIO_CO_AWAIT(WriteSuperblock(!is_data, static_cast<size_t>(idx),
                                   wr_ok));
     if (!wr_ok) {
       HLOG(kWarning,
@@ -1262,9 +1237,7 @@ clio::run::TaskResume Runtime::RecoverBdev(ctp::ipc::FullPtr<RecoverBdevTask> ta
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> task,
-                                     clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::BuildParity(clio::run::shared_ptr<BuildParityTask> &task) {
   CLIO_TASK_BODY_BEGIN
   if (parity_level_ == 0) {
     // No parity configured: nothing to protect. Drop pending marks.
@@ -1319,7 +1292,7 @@ clio::run::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> ta
       bool one = false;
       CLIO_CO_AWAIT(ReadDataSegment(static_cast<size_t>(c), ChunkOffset(r),
                                     data_chunks[static_cast<size_t>(c)].data(),
-                                    kChunkLen, rctx, one));
+                                    kChunkLen, one));
       rd_ok = one;
       if (!rd_ok) {
         break;
@@ -1378,10 +1351,8 @@ clio::run::TaskResume Runtime::BuildParity(ctp::ipc::FullPtr<BuildParityTask> ta
 }
 
 clio::run::TaskResume Runtime::FlushAllocLog(
-    ctp::ipc::FullPtr<FlushAllocLogTask> task, clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+    clio::run::shared_ptr<FlushAllocLogTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
   // Append buffered records to disk (also folds them into the in-memory
   // recovered model). Idempotent when the buffer is empty.
   alloc_log_.Flush();
@@ -1401,10 +1372,8 @@ clio::run::TaskResume Runtime::FlushAllocLog(
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
-                                 clio::run::RunContext &rctx) {
+clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
   if (task->query_ == "stats") {
     clio::run::u32 dirty = 0;
     {
@@ -1433,11 +1402,8 @@ clio::run::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
   CLIO_TASK_BODY_END
 }
 
-clio::run::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task,
-                                 clio::run::RunContext &ctx) {
-  clio::run::RunContext &rctx = ctx;
+clio::run::TaskResume Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  (void)rctx;
   // Persist any buffered allocator-state records before teardown so a clean
   // pool destroy leaves a recoverable log on disk.
   alloc_log_.Flush();
