@@ -1,0 +1,57 @@
+# xfstests baseline: tests expected to PASS against the clio FUSE filesystem.
+#
+# One `generic/NNN` per line ('#' comments and blank lines ignored). This is
+# the regression gate for CI (scripts/xfstests/run_ci_xfstests.sh): every test
+# listed here must pass; a regression fails the job. Tests NOT listed here are
+# run informationally -- a listed-elsewhere failure won't fail CI, but a test
+# that starts passing should be promoted into this file.
+#
+# Baseline established 2026-07-02 (issue #677): 46/55 of the curated generic
+# list. The 9 currently-failing tests and their root causes are tracked in the
+# issue; see scripts/xfstests/ci_known_fail.txt.
+generic/001
+generic/002
+generic/006
+generic/007
+generic/011
+generic/028
+generic/113
+generic/131
+generic/207
+generic/210
+generic/212
+generic/236
+generic/245
+generic/246
+generic/248
+generic/249
+generic/257
+generic/263
+generic/308
+generic/362
+generic/364
+generic/428
+generic/430
+generic/431
+generic/432
+generic/433
+generic/437
+generic/443
+generic/448
+generic/451
+generic/471
+generic/478
+generic/490
+generic/532
+generic/571
+generic/591
+generic/609
+generic/632
+generic/637
+generic/638
+generic/676
+generic/706
+generic/708
+generic/736
+generic/755
+generic/763

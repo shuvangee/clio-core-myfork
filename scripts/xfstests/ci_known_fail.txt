@@ -1,0 +1,28 @@
+# xfstests known-failures against the clio FUSE filesystem (issue #677).
+#
+# These tests currently FAIL; they are run by CI informationally and are NOT a
+# gate (a failure here does not fail the job). When one starts passing, CI
+# flags it -- promote it into ci_baseline_pass.txt and drop it from here.
+#
+# Root cause (2026-07-02):
+#   generic/013  fsstress stability -- FLAKY: intermittently drops with
+#                "Transport endpoint is not connected" (FUSE daemon dies
+#                mid-stress). Kept out of the baseline gate so its flakiness
+#                cannot cause spurious CI failures.
+#   generic/014  O_DIRECT trunc+write returns EIO
+#   generic/075  fsx -- O_DIRECT data-integrity
+#   generic/091  fsx direct-IO; fs reports no fallocate mode support
+#   generic/112  fsx AIO variant -- O_DIRECT/AIO
+#   generic/198  aio+dio into holes -- AIO write returns -5 (EIO)
+#   generic/247  direct-IO vs mmap race
+#   generic/465  dio read/write i_size -- O_DIRECT write EIO
+#   generic/504  POSIX fcntl locking -- locks not surfaced in /proc/locks
+generic/013
+generic/014
+generic/075
+generic/091
+generic/112
+generic/198
+generic/247
+generic/465
+generic/504
