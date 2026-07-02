@@ -42,7 +42,7 @@
 #include <filesystem>
 
 // Global pointer variable definition for Configuration manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::ConfigManager, g_config_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::ConfigManager, g_config_manager);
 
 namespace clio::run {
 
@@ -57,7 +57,9 @@ bool ConfigManager::ClientInit() {
   config_file_path_ = GetServerConfigPath();
   HLOG(kInfo, "Config at: {}", config_file_path_);
 
-  // Load YAML configuration if path is provided
+  // Load YAML configuration if path is provided. LoadYaml re-applies the env
+  // overrides itself; do them explicitly here too so a missing/empty config
+  // path still honors CLIO_PORT et al.
   if (!config_file_path_.empty()) {
     if (!LoadYaml(config_file_path_)) {
       HLOG(kError,
@@ -65,27 +67,47 @@ bool ConfigManager::ClientInit() {
             config_file_path_);
     }
   }
+  ApplyEnvOverrides();
 
+  is_initialized_ = true;
+  return true;
+}
+
+void ConfigManager::ApplyEnvOverrides() {
   // Check CLIO_PORT env var (overrides YAML and default).
-  // GetCompat reads CLIO_PORT first, falls back to CHI_PORT for old deployments.
-  if (const char *env = chi::env::GetCompat("PORT")) {
+  if (const char *env = clio::run::env::GetCompat("PORT")) {
     std::string port_env(env);
     if (!port_env.empty()) {
       port_ = std::stoul(port_env);
     }
   }
 
+  // Check CLIO_EPHEMERAL env var (set by `clio_run start --ephemeral`). An
+  // ephemeral runtime skips the default compose section — it starts bare (just
+  // admin) and is composed explicitly.
+  if (const char *env = clio::run::env::GetCompat("EPHEMERAL")) {
+    std::string e(env);
+    ephemeral_ = !e.empty() && e != "0";
+  }
+
   // Check CLIO_SERVER_ADDR env var (overrides default 127.0.0.1).
-  // GetCompat reads CLIO_SERVER_ADDR first, falls back to CHI_SERVER_ADDR.
-  if (const char *env = chi::env::GetCompat("SERVER_ADDR")) {
+  if (const char *env = clio::run::env::GetCompat("SERVER_ADDR")) {
     std::string addr_env(env);
     if (!addr_env.empty()) {
       server_addr_ = addr_env;
     }
   }
 
-  is_initialized_ = true;
-  return true;
+  // CLIO_NUM_THREADS overrides the configured worker-thread count (last word,
+  // after any config file). Useful for forcing a single worker, e.g. to test
+  // whether a failure depends on cross-thread task migration.
+  if (const char *env = clio::run::env::GetCompat("NUM_THREADS")) {
+    char *end = nullptr;
+    unsigned long n = std::strtoul(env, &end, 10);
+    if (end != env && n >= 1) {
+      num_threads_ = static_cast<u32>(n);
+    }
+  }
 }
 
 bool ConfigManager::ServerInit() {
@@ -95,7 +117,12 @@ bool ConfigManager::ServerInit() {
 
 bool ConfigManager::LoadYaml(const std::string &config_path) {
   try {
-    // Use CTP BaseConfig methods
+    // Parse the YAML as-is (yaml port/settings win). Env overrides (CLIO_PORT
+    // et al.) are applied by ClientInit/ServerInit via ApplyEnvOverrides(), not
+    // here — a bare LoadYaml must reflect the file so callers parsing arbitrary
+    // configs (e.g. a compose file into a local ConfigManager) get the file's
+    // values, and the runtime's operational config is never silently retargeted
+    // by a config reload.
     LoadFromFile(config_path, true);
     return true;
   } catch (const std::exception &e) {
@@ -104,24 +131,24 @@ bool ConfigManager::LoadYaml(const std::string &config_path) {
 }
 
 std::string ConfigManager::GetServerConfigPath() const {
-  // Check env var first: CLIO_SERVER_CONF preferred, CHI_SERVER_CONF legacy.
-  const char *env_path = chi::env::GetCompat("SERVER_CONF");
+  // Check env var first: CLIO_SERVER_CONF preferred, CLIO_SERVER_CONF legacy.
+  const char *env_path = clio::run::env::GetCompat("SERVER_CONF");
   if (env_path) {
     return std::string(env_path);
   }
 
   // Fall back to a per-user config file. Lookup order, first hit wins:
   //   1. ~/.clio/clio.yaml      (new canonical name)
-  //   2. ~/.clio/chimaera.yaml  (legacy filename in the new dir)
-  //   3. ~/.chimaera/clio.yaml  (new filename in the legacy dir)
-  //   4. ~/.chimaera/chimaera.yaml  (legacy)
-  // All four are supported; installers seed both ~/.clio/ AND ~/.chimaera/
+  //   2. ~/.clio/clio.yaml  (legacy filename in the new dir)
+  //   3. ~/.clio/clio.yaml  (new filename in the legacy dir)
+  //   4. ~/.clio/clio.yaml  (legacy)
+  // All four are supported; installers seed both ~/.clio/ AND ~/.clio/
   // with identical content so either layout works in the wild.
   const char *kCandidates[] = {
       "${HOME}/.clio/clio.yaml",
-      "${HOME}/.clio/chimaera.yaml",
-      "${HOME}/.chimaera/clio.yaml",
-      "${HOME}/.chimaera/chimaera.yaml",
+      "${HOME}/.clio/clio.yaml",
+      "${HOME}/.clio/clio.yaml",
+      "${HOME}/.clio/clio.yaml",
   };
   for (const char *tmpl : kCandidates) {
     std::string path = ctp::ConfigParse::ExpandPath(tmpl);
@@ -148,12 +175,15 @@ size_t ConfigManager::GetMemorySegmentSize(MemorySegment segment) const {
 
 u32 ConfigManager::GetPort() const { return port_; }
 
+bool ConfigManager::IsEphemeral() const { return ephemeral_; }
+
 std::string ConfigManager::GetServerAddr() const { return server_addr_; }
 
 u32 ConfigManager::GetNeighborhoodSize() const { return neighborhood_size_; }
 
 std::string
-ConfigManager::GetSharedMemorySegmentName(MemorySegment segment) const {
+ConfigManager::GetSharedMemorySegmentName(MemorySegment segment,
+                                          u32 port) const {
   std::string segment_name;
 
   switch (segment) {
@@ -170,8 +200,14 @@ ConfigManager::GetSharedMemorySegmentName(MemorySegment segment) const {
     return "";
   }
 
+  // Suffix with the port so multiple runtimes on one node + ${USER} (the
+  // fallback-runtime topology) own distinct segments rather than colliding.
+  // port == 0 means "this runtime"; a non-zero port names another runtime's
+  // segment (the fallback client attaching the main runtime's segments).
+  u32 name_port = (port != 0) ? port : port_;
   // Use CTP's ExpandPath to resolve environment variables
-  return ctp::ConfigParse::ExpandPath(segment_name);
+  return ctp::ConfigParse::ExpandPath(segment_name) + "_" +
+         std::to_string(name_port);
 }
 
 std::string ConfigManager::GetHostfilePath() const {
@@ -270,11 +306,11 @@ void ConfigManager::ParseYAML(YAML::Node &yaml_conf) {
   }
   // Environment variable overrides for GPU config (higher priority than YAML).
   // Allows benchmarks to set the partition count dynamically from their
-  // thread parameters before CHIMAERA_INIT().
-  if (const char *env = chi::env::GetCompat("GPU_BLOCKS")) {
+  // thread parameters before CLIO_INIT().
+  if (const char *env = clio::run::env::GetCompat("GPU_BLOCKS")) {
     gpu_blocks_ = static_cast<u32>(std::stoul(env));
   }
-  if (const char *env = chi::env::GetCompat("GPU_THREADS")) {
+  if (const char *env = clio::run::env::GetCompat("GPU_THREADS")) {
     gpu_threads_per_block_ = static_cast<u32>(std::stoul(env));
   }
 
@@ -357,6 +393,25 @@ void ConfigManager::ParseYAML(YAML::Node &yaml_conf) {
         // Parse restart field if present
         if (pool_node["restart"]) {
           pool_config.restart_ = pool_node["restart"].as<bool>();
+        }
+
+        // Optional RPC access control. container_visibility sets the default
+        // visibility for every RPC (public|private, default public); a private
+        // container rejects RPCs from external user clients (runtime-internal
+        // callers are always allowed).
+        if (pool_node["container_visibility"]) {
+          std::string vis = pool_node["container_visibility"].as<std::string>();
+          pool_config.container_visibility_ = (vis == "private") ? 1u : 0u;
+        }
+        // container_rpc_acl is a map of RPC method NAME -> public|private that
+        // overrides container_visibility per method.
+        if (pool_node["container_rpc_acl"] &&
+            pool_node["container_rpc_acl"].IsMap()) {
+          for (const auto& kv : pool_node["container_rpc_acl"]) {
+            std::string name = kv.first.as<std::string>();
+            std::string v = kv.second.as<std::string>();
+            pool_config.rpc_acl_[name] = (v == "private") ? 1u : 0u;
+          }
         }
 
         // Add to compose config

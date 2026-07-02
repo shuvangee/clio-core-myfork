@@ -17,7 +17,7 @@ set(CLIO_CTE_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 # CMake modules and ChiMod utilities are now provided by ClioCoreCommon.cmake
 # All find_package calls are handled by root CMakeLists.txt
-# Targets chimaera::cxx, clio_admin_client, etc. are already available
+# Targets clio::run::cxx, clio_admin_client, etc. are already available
 
 # Python bindings configuration
 # nanobind is configured by root CMakeLists.txt when CLIO_CORE_ENABLE_PYTHON=ON
@@ -30,7 +30,7 @@ if(CLIO_CORE_ENABLE_PYTHON)
   endif()
 endif()
 
-message(STATUS "Found Chimaera framework - building full ChiMod implementation")
+message(STATUS "Found Clio framework - building full ChiMod implementation")
 
 # Ensure CUDA language is enabled in this directory scope so that chimod
 # subdirectories (core, compressor) can use add_cuda_library when
@@ -50,6 +50,28 @@ if(CLIO_CTE_ENABLE_COMPRESS)
     add_subdirectory(compressor)
 else()
     message(STATUS "CTE: Compression disabled - skipping compressor chimod (use -DWRP_CTE_ENABLE_COMPRESS=ON to enable)")
+endif()
+
+# Add the filesystem ChiMod (a filesystem interface over the CTE; the I/O
+# interceptors delegate to it). Default OFF while scaffolding (#552) so the
+# in-progress chimod can't break the default build; flip ON to develop it.
+option(CLIO_CTE_ENABLE_FILESYSTEM "Build the filesystem chimod (WIP, #552)" OFF)
+# The interceptor adapters (libfuse, POSIX, STDIO, MPI-IO) now delegate to the
+# filesystem chimod (#552), so they require the chimod to be built. Force it on
+# whenever any of them is enabled.
+if((CLIO_CTE_ENABLE_FUSE_ADAPTER OR CLIO_CTE_ENABLE_POSIX_ADAPTER OR
+    CLIO_CTE_ENABLE_STDIO_ADAPTER OR CLIO_CTE_ENABLE_MPIIO_ADAPTER OR
+    CLIO_CTE_ENABLE_VFD)
+   AND NOT CLIO_CTE_ENABLE_FILESYSTEM)
+    message(STATUS "CTE: enabling filesystem chimod (required by the I/O adapters)")
+    set(CLIO_CTE_ENABLE_FILESYSTEM ON CACHE BOOL
+        "Build the filesystem chimod (WIP, #552)" FORCE)
+endif()
+if(CLIO_CTE_ENABLE_FILESYSTEM)
+    message(STATUS "CTE: building filesystem chimod")
+    add_subdirectory(filesystem)
+else()
+    message(STATUS "CTE: filesystem chimod disabled (use -DCLIO_CTE_ENABLE_FILESYSTEM=ON)")
 endif()
 
 # Add the bdev ChiMod (when it exists)

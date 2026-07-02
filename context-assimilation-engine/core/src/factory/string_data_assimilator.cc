@@ -63,12 +63,10 @@ StringDataAssimilator::StringDataAssimilator(
     std::shared_ptr<clio::cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
-chi::TaskResume StringDataAssimilator::Schedule(const AssimilationCtx& ctx,
+clio::run::TaskResume StringDataAssimilator::Schedule(const AssimilationCtx& ctx,
                                                 int& error_code) {
-#ifdef __NVCOMPILER
-  thread_local chi::RunContext _fb_rctx;
-  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
-  chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
 #endif
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug,

@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_GPU_IPC_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_GPU_IPC_MANAGER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_GPU_IPC_MANAGER_H_
+#define CLIO_RUNTIME_INCLUDE_GPU_IPC_MANAGER_H_
 
 #include "clio_runtime/api.h"
 #include "clio_runtime/types.h"
@@ -63,7 +63,7 @@ namespace gpu {
  * Host-side (CPU) state held here:
  *   - `per_gpu_devices_`: one PerGpuDeviceState per physical GPU,
  *     each holding the gpu2cpu_queue + queue backend. Replaces the
- *     previous gpu_queues_ vector on chi::IpcManager.
+ *     previous gpu_queues_ vector on clio::run::IpcManager.
  *   - `client_backends_`: map from AllocatorId to a registered
  *     client-side device-memory backend. Populated by the admin
  *     RegisterMemory handler. The CPU GPU worker uses this map to
@@ -73,7 +73,7 @@ namespace gpu {
  *
  * Device-side (GPU) state held here:
  *   - `gpu_info_`: copy of the IpcManagerGpuInfo passed by value into
- *     the kernel via CHIMAERA_GPU_INIT.
+ *     the kernel via CLIO_GPU_INIT.
  */
 class IpcManager {
  public:
@@ -101,7 +101,7 @@ class IpcManager {
 
   /**
    * Initialize the per-block IpcManager from the host-supplied gpu_info.
-   * Called by the CHIMAERA_GPU_INIT macro at kernel entry.
+   * Called by the CLIO_GPU_INIT macro at kernel entry.
    */
   CTP_GPU_FUN void ClientInitGpu(const IpcManagerGpuInfo &gpu_info) {
     gpu_info_ = gpu_info;
@@ -123,7 +123,7 @@ class IpcManager {
   CTP_CROSS_FUN gpu::Future<TaskT> Send(
       const ctp::ipc::FullPtr<TaskT> &task_ptr) {
 #if CTP_IS_GPU || CTP_IS_SYCL_DEVICE
-    return IpcGpu2Cpu::ClientSend(this, task_ptr);
+    return IpcGpu2Cpu::SendIn(this, task_ptr);
 #else
     (void)task_ptr;
     return gpu::Future<TaskT>();
@@ -133,10 +133,10 @@ class IpcManager {
 #if CTP_IS_GPU_COMPILER
   /**
    * CUDA/ROCm only: per-block IpcManager lives in __shared__ storage so
-   * helpers reachable from the kernel (e.g. IpcGpu2Cpu::ClientSend) can
+   * helpers reachable from the kernel (e.g. IpcGpu2Cpu::SendIn) can
    * resolve it via plain symbol lookup. SYCL achieves the same with a
    * kernel-scope local + `g_ipc_manager_ptr` name-lookup trick (see the
-   * SYCL CHIMAERA_GPU_INIT macro below).
+   * SYCL CLIO_GPU_INIT macro below).
    */
   static CTP_GPU_FUN __noinline__ IpcManager *GetBlockIpcManager() {
     __shared__ char s_ipc_bytes[sizeof(IpcManager)];
@@ -145,7 +145,7 @@ class IpcManager {
 #endif  // CTP_IS_GPU_COMPILER
 
   /** Kind of memory a client-registered backend lives in. Visible from
-   *  both host and device passes so chi::IpcManager helper signatures can
+   *  both host and device passes so clio::run::IpcManager helper signatures can
    *  reference it without CTP_IS_HOST gating. */
   enum class MemKind : unsigned char {
     kPinnedHost = 0,    ///< cudaHostAlloc / hipHostMalloc / sycl::malloc_host
@@ -171,7 +171,7 @@ class IpcManager {
     char *host_view = nullptr;  ///< CPU-readable pointer (pinned/UVM only)
     char *device_ptr = nullptr; ///< Raw device pointer (for kDeviceMem D2H copy)
     size_t capacity = 0;
-    chi::u32 gpu_id = 0;
+    clio::run::u32 gpu_id = 0;
     MemKind kind = MemKind::kPinnedHost;
   };
 
@@ -181,7 +181,7 @@ class IpcManager {
     char *queue_backend = nullptr;
     size_t queue_backend_size = 0;
     /** The actual GpuTaskQueue object, constructed inside queue_backend. */
-    ctp::ipc::FullPtr<chi::GpuTaskQueue> gpu2cpu_queue;
+    ctp::ipc::FullPtr<clio::run::GpuTaskQueue> gpu2cpu_queue;
     /** AllocatorId → registered client backend. */
     std::unordered_map<u64, ClientBackend> client_backends;
     u32 gpu_id = 0;
@@ -235,7 +235,7 @@ class IpcManager {
    * Resolve an AllocatorId to its registered ClientBackend record.
    * Used by IpcManager::ToFullPtr when a CPU SHM allocator lookup
    * misses, so this must be inline (header-only) — callers like
-   * chimaera_commands link without libchimaera_cxx_gpu.
+   * clio_commands link without libclio_run_cxx_gpu.
    * Returns nullptr if unknown.
    */
   inline const ClientBackend *FindClientBackend(
@@ -258,11 +258,11 @@ class IpcManager {
 }  // namespace gpu
 }  // namespace clio::run
 
-// gpu::Future::Wait + IpcGpu2Cpu::ClientSend (both reach into gpu_info_).
+// gpu::Future::Wait + IpcGpu2Cpu::SendIn (both reach into gpu_info_).
 #include "clio_runtime/ipc/ipc_gpu2cpu_impl.h"
 
 // ================================================================
-// Single CHIMAERA_GPU_INIT macro (replaces the 5 legacy variants)
+// Single CLIO_GPU_INIT macro (replaces the 5 legacy variants)
 // ================================================================
 //
 // CUDA/ROCm: per-block IpcManager lives in __shared__ storage so any
@@ -274,24 +274,24 @@ class IpcManager {
 
 #if CTP_IS_SYCL_COMPILER
 
-#define CHIMAERA_GPU_INIT(gpu_info, ipc_ptr)                                  \
-  chi::gpu::IpcManager *g_ipc_manager_ptr = (ipc_ptr);                        \
+#define CLIO_GPU_INIT(gpu_info, ipc_ptr)                                  \
+  clio::run::gpu::IpcManager *g_ipc_manager_ptr = (ipc_ptr);                        \
   g_ipc_manager_ptr->ClientInitGpu(gpu_info);                                 \
-  chi::gpu::IpcManager &g_ipc_manager = *g_ipc_manager_ptr
+  clio::run::gpu::IpcManager &g_ipc_manager = *g_ipc_manager_ptr
 
 #else  // CUDA / ROCm
 
-#define CHIMAERA_GPU_INIT(gpu_info, ipc_ptr)                                  \
+#define CLIO_GPU_INIT(gpu_info, ipc_ptr)                                  \
   (void)(ipc_ptr);                                                            \
-  chi::gpu::IpcManager *g_ipc_manager_ptr =                                   \
-      chi::gpu::IpcManager::GetBlockIpcManager();                             \
-  if (chi::gpu::IpcManager::GetGpuThreadId() == 0) {                          \
+  clio::run::gpu::IpcManager *g_ipc_manager_ptr =                                   \
+      clio::run::gpu::IpcManager::GetBlockIpcManager();                             \
+  if (clio::run::gpu::IpcManager::GetGpuThreadId() == 0) {                          \
     g_ipc_manager_ptr->ClientInitGpu(gpu_info);                               \
   }                                                                           \
   __syncthreads();                                                            \
-  chi::gpu::IpcManager &g_ipc_manager = *g_ipc_manager_ptr
+  clio::run::gpu::IpcManager &g_ipc_manager = *g_ipc_manager_ptr
 
 #endif  // CTP_IS_SYCL_COMPILER
 
 #endif  // CTP_ENABLE_GPU
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_GPU_IPC_MANAGER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_GPU_IPC_MANAGER_H_

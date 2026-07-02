@@ -18,10 +18,10 @@ namespace clio::run::bdev {
 // Container Virtual API Implementations
 //==============================================================================
 
-void Runtime::Init(const chi::PoolId &pool_id, const std::string &pool_name,
-                   chi::u32 container_id) {
+void Runtime::Init(const clio::run::PoolId &pool_id, const std::string &pool_name,
+                   clio::run::u32 container_id) {
   // Call base class initialization
-  chi::Container::Init(pool_id, pool_name, container_id);
+  clio::run::Container::Init(pool_id, pool_name, container_id);
 
   // Initialize the client for this ChiMod
   client_ = Client(pool_id);
@@ -31,61 +31,61 @@ void Runtime::Init(const chi::PoolId &pool_id, const std::string &pool_name,
   SetMethodNames(Method::GetMethodNames());
 }
 
-chi::TaskResume Runtime::Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr, chi::RunContext& rctx) {
+clio::run::TaskResume Runtime::Run(clio::run::u32 method, clio::run::shared_ptr<clio::run::Task> task_ptr) {
   CLIO_TASK_BODY_BEGIN
   switch (method) {
     case Method::kCreate: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<CreateTask> typed_task = task_ptr.template Cast<CreateTask>();
-      CLIO_CO_AWAIT(Create(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<CreateTask>();
+      CLIO_CO_AWAIT(Create(typed_task));
       break;
     }
     case Method::kDestroy: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<DestroyTask> typed_task = task_ptr.template Cast<DestroyTask>();
-      CLIO_CO_AWAIT(Destroy(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<DestroyTask>();
+      CLIO_CO_AWAIT(Destroy(typed_task));
       break;
     }
     case Method::kMonitor: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<MonitorTask> typed_task = task_ptr.template Cast<MonitorTask>();
-      CLIO_CO_AWAIT(Monitor(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<MonitorTask>();
+      CLIO_CO_AWAIT(Monitor(typed_task));
       break;
     }
     case Method::kAllocateBlocks: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<AllocateBlocksTask> typed_task = task_ptr.template Cast<AllocateBlocksTask>();
-      CLIO_CO_AWAIT(AllocateBlocks(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<AllocateBlocksTask>();
+      CLIO_CO_AWAIT(AllocateBlocks(typed_task));
       break;
     }
     case Method::kFreeBlocks: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<FreeBlocksTask> typed_task = task_ptr.template Cast<FreeBlocksTask>();
-      CLIO_CO_AWAIT(FreeBlocks(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<FreeBlocksTask>();
+      CLIO_CO_AWAIT(FreeBlocks(typed_task));
       break;
     }
     case Method::kWrite: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<WriteTask> typed_task = task_ptr.template Cast<WriteTask>();
-      CLIO_CO_AWAIT(Write(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<WriteTask>();
+      CLIO_CO_AWAIT(Write(typed_task));
       break;
     }
     case Method::kRead: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<ReadTask> typed_task = task_ptr.template Cast<ReadTask>();
-      CLIO_CO_AWAIT(Read(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<ReadTask>();
+      CLIO_CO_AWAIT(Read(typed_task));
       break;
     }
     case Method::kGetStats: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<GetStatsTask> typed_task = task_ptr.template Cast<GetStatsTask>();
-      CLIO_CO_AWAIT(GetStats(typed_task, rctx));
+      auto& typed_task = task_ptr.template Cast<GetStatsTask>();
+      CLIO_CO_AWAIT(GetStats(typed_task));
       break;
     }
     case Method::kUpdate: {
       // Cast task FullPtr to specific type
-      ctp::ipc::FullPtr<UpdateTask> typed_task = task_ptr.template Cast<UpdateTask>();
-      co_await Update(typed_task, rctx);
+      auto& typed_task = task_ptr.template Cast<UpdateTask>();
+      CLIO_CO_AWAIT(Update(typed_task));
       break;
     }
     case Method::kFlushAllocLog: {
@@ -103,52 +103,52 @@ chi::TaskResume Runtime::Run(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_
   CLIO_TASK_BODY_END
 }
 
-void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive, 
-                        ctp::ipc::FullPtr<chi::Task> task_ptr) {
+void Runtime::SaveTask(clio::run::u32 method, clio::run::SaveTaskArchive& archive, 
+                        clio::run::shared_ptr<clio::run::Task>& task_ptr) {
   switch (method) {
     case Method::kCreate: {
-      auto typed_task = task_ptr.template Cast<CreateTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<CreateTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kDestroy: {
-      auto typed_task = task_ptr.template Cast<DestroyTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<DestroyTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kMonitor: {
-      auto typed_task = task_ptr.template Cast<MonitorTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<MonitorTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kAllocateBlocks: {
-      auto typed_task = task_ptr.template Cast<AllocateBlocksTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<AllocateBlocksTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kFreeBlocks: {
-      auto typed_task = task_ptr.template Cast<FreeBlocksTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<FreeBlocksTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kWrite: {
-      auto typed_task = task_ptr.template Cast<WriteTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<WriteTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kRead: {
-      auto typed_task = task_ptr.template Cast<ReadTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<ReadTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kGetStats: {
-      auto typed_task = task_ptr.template Cast<GetStatsTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<GetStatsTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kUpdate: {
-      auto typed_task = task_ptr.template Cast<UpdateTask>();
-      archive << *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<UpdateTask>();
+      archive << *typed_task;
       break;
     }
     case Method::kFlushAllocLog: {
@@ -163,52 +163,52 @@ void Runtime::SaveTask(chi::u32 method, chi::SaveTaskArchive& archive,
   }
 }
 
-void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
-                        ctp::ipc::FullPtr<chi::Task> task_ptr) {
+void Runtime::LoadTask(clio::run::u32 method, clio::run::LoadTaskArchive& archive,
+                        clio::run::shared_ptr<clio::run::Task>& task_ptr) {
   switch (method) {
     case Method::kCreate: {
-      auto typed_task = task_ptr.template Cast<CreateTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<CreateTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kDestroy: {
-      auto typed_task = task_ptr.template Cast<DestroyTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<DestroyTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kMonitor: {
-      auto typed_task = task_ptr.template Cast<MonitorTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<MonitorTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kAllocateBlocks: {
-      auto typed_task = task_ptr.template Cast<AllocateBlocksTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<AllocateBlocksTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kFreeBlocks: {
-      auto typed_task = task_ptr.template Cast<FreeBlocksTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<FreeBlocksTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kWrite: {
-      auto typed_task = task_ptr.template Cast<WriteTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<WriteTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kRead: {
-      auto typed_task = task_ptr.template Cast<ReadTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<ReadTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kGetStats: {
-      auto typed_task = task_ptr.template Cast<GetStatsTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<GetStatsTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kUpdate: {
-      auto typed_task = task_ptr.template Cast<UpdateTask>();
-      archive >> *typed_task.ptr_;
+      auto& typed_task = task_ptr.template Cast<UpdateTask>();
+      archive >> *typed_task;
       break;
     }
     case Method::kFlushAllocLog: {
@@ -223,69 +223,69 @@ void Runtime::LoadTask(chi::u32 method, chi::LoadTaskArchive& archive,
   }
 }
 
-ctp::ipc::FullPtr<chi::Task> Runtime::AllocLoadTask(chi::u32 method, chi::LoadTaskArchive& archive) {
-  ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);
+clio::run::shared_ptr<clio::run::Task> Runtime::AllocLoadTask(clio::run::u32 method, clio::run::LoadTaskArchive& archive) {
+  clio::run::shared_ptr<clio::run::Task> task_ptr = NewTask(method);
   if (!task_ptr.IsNull()) {
     LoadTask(method, archive, task_ptr);
   }
   return task_ptr;
 }
 
-void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
-                            ctp::ipc::FullPtr<chi::Task> task_ptr) {
+void Runtime::LocalLoadTask(clio::run::u32 method, clio::run::DefaultLoadArchive& archive,
+                            clio::run::shared_ptr<clio::run::Task>& task_ptr) {
   switch (method) {
     case Method::kCreate: {
-      auto typed_task = task_ptr.template Cast<CreateTask>();
+      auto& typed_task = task_ptr.template Cast<CreateTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kDestroy: {
-      auto typed_task = task_ptr.template Cast<DestroyTask>();
+      auto& typed_task = task_ptr.template Cast<DestroyTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kMonitor: {
-      auto typed_task = task_ptr.template Cast<MonitorTask>();
+      auto& typed_task = task_ptr.template Cast<MonitorTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kAllocateBlocks: {
-      auto typed_task = task_ptr.template Cast<AllocateBlocksTask>();
+      auto& typed_task = task_ptr.template Cast<AllocateBlocksTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kFreeBlocks: {
-      auto typed_task = task_ptr.template Cast<FreeBlocksTask>();
+      auto& typed_task = task_ptr.template Cast<FreeBlocksTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kWrite: {
-      auto typed_task = task_ptr.template Cast<WriteTask>();
+      auto& typed_task = task_ptr.template Cast<WriteTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kRead: {
-      auto typed_task = task_ptr.template Cast<ReadTask>();
+      auto& typed_task = task_ptr.template Cast<ReadTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kGetStats: {
-      auto typed_task = task_ptr.template Cast<GetStatsTask>();
+      auto& typed_task = task_ptr.template Cast<GetStatsTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kUpdate: {
-      auto typed_task = task_ptr.template Cast<UpdateTask>();
+      auto& typed_task = task_ptr.template Cast<UpdateTask>();
       // Use archive operator which respects msg_type
-      archive >> *typed_task.ptr_;
+      archive >> *typed_task;
       break;
     }
     case Method::kFlushAllocLog: {
@@ -301,69 +301,69 @@ void Runtime::LocalLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive,
   }
 }
 
-ctp::ipc::FullPtr<chi::Task> Runtime::LocalAllocLoadTask(chi::u32 method, chi::DefaultLoadArchive& archive) {
-  ctp::ipc::FullPtr<chi::Task> task_ptr = NewTask(method);
+clio::run::shared_ptr<clio::run::Task> Runtime::LocalAllocLoadTask(clio::run::u32 method, clio::run::DefaultLoadArchive& archive) {
+  clio::run::shared_ptr<clio::run::Task> task_ptr = NewTask(method);
   if (!task_ptr.IsNull()) {
     LocalLoadTask(method, archive, task_ptr);
   }
   return task_ptr;
 }
 
-void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive, 
-                             ctp::ipc::FullPtr<chi::Task> task_ptr) {
+void Runtime::LocalSaveTask(clio::run::u32 method, clio::run::DefaultSaveArchive& archive, 
+                             clio::run::shared_ptr<clio::run::Task>& task_ptr) {
   switch (method) {
     case Method::kCreate: {
-      auto typed_task = task_ptr.template Cast<CreateTask>();
+      auto& typed_task = task_ptr.template Cast<CreateTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kDestroy: {
-      auto typed_task = task_ptr.template Cast<DestroyTask>();
+      auto& typed_task = task_ptr.template Cast<DestroyTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kMonitor: {
-      auto typed_task = task_ptr.template Cast<MonitorTask>();
+      auto& typed_task = task_ptr.template Cast<MonitorTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kAllocateBlocks: {
-      auto typed_task = task_ptr.template Cast<AllocateBlocksTask>();
+      auto& typed_task = task_ptr.template Cast<AllocateBlocksTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kFreeBlocks: {
-      auto typed_task = task_ptr.template Cast<FreeBlocksTask>();
+      auto& typed_task = task_ptr.template Cast<FreeBlocksTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kWrite: {
-      auto typed_task = task_ptr.template Cast<WriteTask>();
+      auto& typed_task = task_ptr.template Cast<WriteTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kRead: {
-      auto typed_task = task_ptr.template Cast<ReadTask>();
+      auto& typed_task = task_ptr.template Cast<ReadTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kGetStats: {
-      auto typed_task = task_ptr.template Cast<GetStatsTask>();
+      auto& typed_task = task_ptr.template Cast<GetStatsTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kUpdate: {
-      auto typed_task = task_ptr.template Cast<UpdateTask>();
+      auto& typed_task = task_ptr.template Cast<UpdateTask>();
       // Use archive operator which respects msg_type
-      archive << *typed_task.ptr_;
+      archive << *typed_task;
       break;
     }
     case Method::kFlushAllocLog: {
@@ -379,10 +379,10 @@ void Runtime::LocalSaveTask(chi::u32 method, chi::DefaultSaveArchive& archive,
   }
 }
 
-ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task_ptr, bool deep) {
+clio::run::shared_ptr<clio::run::Task> Runtime::NewCopyTask(clio::run::u32 method, clio::run::shared_ptr<clio::run::Task>& orig_task_ptr, bool deep) {
   auto* ipc_manager = CLIO_IPC;
   if (!ipc_manager) {
-    return ctp::ipc::FullPtr<chi::Task>();
+    return clio::run::shared_ptr<clio::run::Task>();
   }
   
   switch (method) {
@@ -391,9 +391,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<CreateTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<CreateTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<CreateTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<CreateTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -402,9 +402,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<DestroyTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<DestroyTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<DestroyTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<DestroyTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -413,9 +413,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<MonitorTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<MonitorTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<MonitorTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<MonitorTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -424,9 +424,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<AllocateBlocksTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<AllocateBlocksTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<AllocateBlocksTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<AllocateBlocksTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -435,9 +435,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<FreeBlocksTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<FreeBlocksTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<FreeBlocksTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<FreeBlocksTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -446,9 +446,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<WriteTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<WriteTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<WriteTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<WriteTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -457,9 +457,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<ReadTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<ReadTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<ReadTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<ReadTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -468,9 +468,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<GetStatsTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<GetStatsTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<GetStatsTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<GetStatsTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -479,9 +479,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
       auto new_task_ptr = ipc_manager->NewTask<UpdateTask>();
       if (!new_task_ptr.IsNull()) {
         // Copy task fields (includes base Task fields)
-        auto task_typed = orig_task_ptr.template Cast<UpdateTask>();
-        new_task_ptr->Copy(task_typed);
-        return new_task_ptr.template Cast<chi::Task>();
+        auto& task_typed = orig_task_ptr.template Cast<UpdateTask>();
+        new_task_ptr->Copy(ctp::ipc::FullPtr<UpdateTask>(task_typed.get()));
+        return new_task_ptr.template Cast<clio::run::Task>();
       }
       break;
     }
@@ -498,9 +498,9 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
     }
     default: {
       // For unknown methods, create base Task copy
-      auto new_task_ptr = ipc_manager->NewTask<chi::Task>();
+      auto new_task_ptr = ipc_manager->NewTask<clio::run::Task>();
       if (!new_task_ptr.IsNull()) {
-        new_task_ptr->Copy(orig_task_ptr);
+        new_task_ptr->Copy(ctp::ipc::FullPtr<clio::run::Task>(orig_task_ptr.get()));
         return new_task_ptr;
       }
       break;
@@ -508,51 +508,51 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewCopyTask(chi::u32 method, ctp::ipc::Ful
   }
   
   (void)deep;    // Deep copy parameter reserved for future use
-  return ctp::ipc::FullPtr<chi::Task>();
+  return clio::run::shared_ptr<clio::run::Task>();
 }
 
-ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
+clio::run::shared_ptr<clio::run::Task> Runtime::NewTask(clio::run::u32 method) {
   auto* ipc_manager = CLIO_IPC;
   if (!ipc_manager) {
-    return ctp::ipc::FullPtr<chi::Task>();
+    return clio::run::shared_ptr<clio::run::Task>();
   }
   
   switch (method) {
     case Method::kCreate: {
       auto new_task_ptr = ipc_manager->NewTask<CreateTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kDestroy: {
       auto new_task_ptr = ipc_manager->NewTask<DestroyTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kMonitor: {
       auto new_task_ptr = ipc_manager->NewTask<MonitorTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kAllocateBlocks: {
       auto new_task_ptr = ipc_manager->NewTask<AllocateBlocksTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kFreeBlocks: {
       auto new_task_ptr = ipc_manager->NewTask<FreeBlocksTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kWrite: {
       auto new_task_ptr = ipc_manager->NewTask<WriteTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kRead: {
       auto new_task_ptr = ipc_manager->NewTask<ReadTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kGetStats: {
       auto new_task_ptr = ipc_manager->NewTask<GetStatsTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kUpdate: {
       auto new_task_ptr = ipc_manager->NewTask<UpdateTask>();
-      return new_task_ptr.template Cast<chi::Task>();
+      return new_task_ptr.template Cast<clio::run::Task>();
     }
     case Method::kFlushAllocLog: {
       auto new_task_ptr = ipc_manager->NewTask<FlushAllocLogTask>();
@@ -560,57 +560,57 @@ ctp::ipc::FullPtr<chi::Task> Runtime::NewTask(chi::u32 method) {
     }
     default: {
       // For unknown methods, return null pointer
-      return ctp::ipc::FullPtr<chi::Task>();
+      return clio::run::shared_ptr<clio::run::Task>();
     }
   }
 }
 
-void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
-                        const ctp::ipc::FullPtr<chi::Task>& replica_task) {
+void Runtime::AggregateOut(clio::run::u32 method, clio::run::shared_ptr<clio::run::Task>& orig_task,
+                        const clio::run::shared_ptr<clio::run::Task>& replica_task) {
   switch (method) {
     case Method::kCreate: {
-      auto typed_task = orig_task.template Cast<CreateTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<CreateTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kDestroy: {
-      auto typed_task = orig_task.template Cast<DestroyTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<DestroyTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kMonitor: {
-      auto typed_task = orig_task.template Cast<MonitorTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<MonitorTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kAllocateBlocks: {
-      auto typed_task = orig_task.template Cast<AllocateBlocksTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<AllocateBlocksTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kFreeBlocks: {
-      auto typed_task = orig_task.template Cast<FreeBlocksTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<FreeBlocksTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kWrite: {
-      auto typed_task = orig_task.template Cast<WriteTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<WriteTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kRead: {
-      auto typed_task = orig_task.template Cast<ReadTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<ReadTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kGetStats: {
-      auto typed_task = orig_task.template Cast<GetStatsTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<GetStatsTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kUpdate: {
-      auto typed_task = orig_task.template Cast<UpdateTask>();
-      typed_task->Aggregate(replica_task);
+      auto& typed_task = orig_task.template Cast<UpdateTask>();
+      typed_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
     case Method::kFlushAllocLog: {
@@ -619,61 +619,11 @@ void Runtime::Aggregate(chi::u32 method, ctp::ipc::FullPtr<chi::Task> orig_task,
       break;
     }
     default: {
-      orig_task->Aggregate(replica_task);
+      orig_task->AggregateOut(ctp::ipc::FullPtr<clio::run::Task>(replica_task.get()));
       break;
     }
   }
 }
 
-void Runtime::DelTask(chi::u32 method, ctp::ipc::FullPtr<chi::Task> task_ptr) {
-  auto* ipc_manager = CLIO_IPC;
-  if (!ipc_manager) return;
-  switch (method) {
-    case Method::kCreate: {
-      ipc_manager->DelTask(task_ptr.template Cast<CreateTask>());
-      break;
-    }
-    case Method::kDestroy: {
-      ipc_manager->DelTask(task_ptr.template Cast<DestroyTask>());
-      break;
-    }
-    case Method::kMonitor: {
-      ipc_manager->DelTask(task_ptr.template Cast<MonitorTask>());
-      break;
-    }
-    case Method::kAllocateBlocks: {
-      ipc_manager->DelTask(task_ptr.template Cast<AllocateBlocksTask>());
-      break;
-    }
-    case Method::kFreeBlocks: {
-      ipc_manager->DelTask(task_ptr.template Cast<FreeBlocksTask>());
-      break;
-    }
-    case Method::kWrite: {
-      ipc_manager->DelTask(task_ptr.template Cast<WriteTask>());
-      break;
-    }
-    case Method::kRead: {
-      ipc_manager->DelTask(task_ptr.template Cast<ReadTask>());
-      break;
-    }
-    case Method::kGetStats: {
-      ipc_manager->DelTask(task_ptr.template Cast<GetStatsTask>());
-      break;
-    }
-    case Method::kUpdate: {
-      ipc_manager->DelTask(task_ptr.template Cast<UpdateTask>());
-      break;
-    }
-    case Method::kFlushAllocLog: {
-      ipc_manager->DelTask(task_ptr.template Cast<FlushAllocLogTask>());
-      break;
-    }
-    default: {
-      ipc_manager->DelTask(task_ptr);
-      break;
-    }
-  }
-}
 
 } // namespace clio::run::bdev

@@ -45,22 +45,41 @@
                                   // apptainer --fusemount fd-injection path)
 #include <sys/uio.h>              // struct iovec, writev
 #include <sys/mount.h>            // mount syscall
+#include <sys/statvfs.h>          // struct statvfs (statfs op)
 #include <unistd.h>               // read, getuid, getgid
 #include <cerrno>                 // errno
 #include <cstdio>                 // snprintf, fprintf
+#include <fcntl.h>                // O_CREAT, O_RDWR
 
 #include "clio_runtime/clio_runtime.h"
 #include "clio_cte/core/content_transfer_engine.h"
+#include "clio_cte/core/core_client.h"  // CLIO_CTE_CLIENT + GetCapacity
+#include "clio_cte/filesystem/filesystem_client.h"
 
 using namespace clio::cae::fuse;
 
 // ============================================================================
 // Helpers
 // ============================================================================
+//
+// The libfuse adapter is now a thin shim over the filesystem chimod (issue
+// #552): every FUSE callback resolves to a path/handle operation on the
+// process-wide filesystem client (CLIO_CFS_CLIENT), which owns the path->tag
+// mapping, page-blob I/O, and per-file logical-size metadata. Reads/writes
+// are synchronous from FUSE's perspective (the client Waits on each op), so
+// there is no per-fd pending-write queue here anymore.
 
-static FuseFileHandle *GetHandle(struct fuse_file_info *fi) {
-  return reinterpret_cast<FuseFileHandle *>(fi->fh);
+namespace {
+/** Per-open-file state: the chimod handle + the path it was opened on. */
+struct CfsHandle {
+  clio::run::u64 fh = 0;
+  std::string path;
+};
+
+CfsHandle *GetHandle(struct fuse_file_info *fi) {
+  return reinterpret_cast<CfsHandle *>(fi->fh);
 }
+}  // namespace
 
 // ============================================================================
 // FUSE lifecycle
@@ -69,21 +88,51 @@ static FuseFileHandle *GetHandle(struct fuse_file_info *fi) {
 static void *cte_fuse_init(struct fuse_conn_info *conn,
                            struct fuse_config *cfg) {
   (void)conn;
-  cfg->use_ino = 0;
-  cfg->direct_io = 1;
+  // Trust the inode numbers we report (st_ino in getattr, d_ino in readdir),
+  // both derived from the tag id, instead of letting FUSE auto-generate them.
+  // This makes stat and readdir agree on d_ino/st_ino (generic/637), and gives
+  // hard-link aliases (which share a TagId) the same inode.
+  cfg->use_ino = 1;
+  // Keep the kernel page cache for file data (direct_io OFF). mmap on a FUSE
+  // file is served generically by the page cache — there is no .mmap callback
+  // in the high-level API; the kernel faults mapped pages through cte_fuse_read
+  // and flushes dirty pages through cte_fuse_write. direct_io bypasses the page
+  // cache, so the kernel returns ENODEV ("No such device") for any mmap (issue
+  // #597). Writes stay write-through (no FUSE_CAP_WRITEBACK_CACHE), so each
+  // write() still reaches the chimod synchronously and the exact logical size
+  // is preserved; only mmap dirty pages flush lazily, which is inherent to mmap.
+  cfg->direct_io = 0;
+  // Disable the kernel attribute/entry caches. Metadata (size, and especially
+  // st_nlink for hard links) can change without this FUSE process being the one
+  // that triggered the change, and there is no upcall to invalidate the cache.
+  // Without this, e.g. `ln a b; stat a` returns a's stale cached nlink. Every
+  // getattr/lookup goes to the chimod, which is the source of truth.
+  cfg->attr_timeout = 0;
+  cfg->entry_timeout = 0;
+  cfg->negative_timeout = 0;
 
-  bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+  bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
   if (!success) {
-    fprintf(stderr, "ERROR: CHIMAERA_INIT failed\n");
+    fprintf(stderr, "ERROR: CLIO_INIT failed\n");
     return nullptr;
   }
-  clio::cte::core::CLIO_CTE_CLIENT_INIT();
+  // Create-or-bind the filesystem chimod pool (which also brings up the CTE
+  // core pool it sits over). Every FUSE op below routes through CLIO_CFS_CLIENT.
+  if (!clio::cte::filesystem::CLIO_CFS_CLIENT_INIT()) {
+    fprintf(stderr, "ERROR: filesystem client init failed\n");
+    return nullptr;
+  }
+  // Bind the CTE core client to the same clio_cte_core pool (idempotent) so
+  // statfs can query real capacity via GetCapacity.
+  if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) {
+    fprintf(stderr, "WARNING: CTE core client init failed; statfs capacity=0\n");
+  }
   return nullptr;
 }
 
 static void cte_fuse_destroy(void *private_data) {
   (void)private_data;
-  chi::CHIMAERA_FINALIZE();
+  clio::run::CLIO_RUNTIME_FINALIZE();
 }
 
 // ============================================================================
@@ -97,39 +146,52 @@ static int cte_fuse_getattr(const char *path, struct stat *stbuf,
 
   std::string p(path);
 
-  // Root is always a directory
+  // Root is always a directory.
   if (p == "/") {
     stbuf->st_mode = S_IFDIR | 0755;
     stbuf->st_nlink = 2;
+    stbuf->st_ino = 1;  // fixed root inode
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
     return 0;
   }
 
-  // Check if path is an explicit directory (sentinel tag with trailing /)
-  // or an implicit directory (any tags under this prefix).
-  // Check directories BEFORE files so that "mkdir foo && touch foo" doesn't
-  // shadow the directory with a file of the same name.
-  if (CteTagExists(p + "/") || CteDirExists(p)) {
+  // Delegate to the filesystem chimod: it owns exists/is-dir/logical-size.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncGetattr(p);
+  t.Wait();
+  if (t->GetReturnCode() != 0 || t->exists_ == 0) {
+    return -ENOENT;
+  }
+  stbuf->st_uid = getuid();
+  stbuf->st_gid = getgid();
+  stbuf->st_ino = static_cast<ino_t>(t->ino_);  // stable inode = packed TagId
+  if (t->is_dir_) {
     stbuf->st_mode = S_IFDIR | 0755;
     stbuf->st_nlink = 2;
-    stbuf->st_uid = getuid();
-    stbuf->st_gid = getgid();
-    return 0;
-  }
-
-  // Check if path is a file (tag exists with this exact name)
-  if (CteTagExists(p)) {
-    auto tag_id = CteGetOrCreateTag(p);
+  } else {
     stbuf->st_mode = S_IFREG | 0644;
-    stbuf->st_nlink = 1;
-    stbuf->st_uid = getuid();
-    stbuf->st_gid = getgid();
-    stbuf->st_size = static_cast<off_t>(CteGetTagSize(tag_id));
-    return 0;
+    // POSIX link count = canonical name (1) + tag-level hard-link aliases.
+    // Ask the CTE core how many extra names are bound to this tag.
+    nlink_t nlink = 1;
+    auto *cte = CLIO_CTE_CLIENT;
+    if (cte != nullptr) {
+      auto na = cte->AsyncGetNumAliases(p);
+      na.Wait();
+      if (na->return_code_ == 0 && na->found_) {
+        nlink = static_cast<nlink_t>(na->num_aliases_) + 1;
+      }
+    }
+    stbuf->st_nlink = nlink;
+    stbuf->st_size = static_cast<off_t>(t->size_);
   }
-
-  return -ENOENT;
+  // Change time (ctime): the tag's last_changed_, in ns since the epoch. Tags
+  // only; 0 means the chimod had no value (leave st_ctim at the epoch).
+  if (t->ctime_ != 0) {
+    stbuf->st_ctim.tv_sec = static_cast<time_t>(t->ctime_ / 1000000000ULL);
+    stbuf->st_ctim.tv_nsec = static_cast<long>(t->ctime_ % 1000000000ULL);
+  }
+  return 0;
 }
 
 static int cte_fuse_utimens(const char *path, const struct timespec tv[2],
@@ -158,75 +220,51 @@ static int cte_fuse_readdir(const char *path, void *buf,
   filler(buf, ".", nullptr, 0, static_cast<fuse_fill_dir_flags>(0));
   filler(buf, "..", nullptr, 0, static_cast<fuse_fill_dir_flags>(0));
 
-  // List direct file children (tags whose full path is dir/name with no further slashes)
-  auto files = CteListDirectChildren(p);
-  for (const auto &name : files) {
-    filler(buf, name.c_str(), nullptr, 0, static_cast<fuse_fill_dir_flags>(0));
+  // Delegate listing to the filesystem chimod. It returns the full tag paths
+  // of the directory's children; strip the directory prefix to get basenames.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncReaddir(p);
+  t.Wait();
+  if (t->GetReturnCode() != 0) {
+    return 0;
   }
-
-  // List implicit subdirectories (dirs with files beneath them)
-  auto subdirs = CteListSubdirs(p);
-
-  // Also find explicit empty directories (sentinel tags ending with /).
-  // Sentinel tags under "/a/b" look like "/a/b/childdir/" — match with
-  // regex "^/a/b/[^/]+/$" to find direct child sentinels.
-  {
-    auto *cte_client = CLIO_CTE_CLIENT;
-    std::string escaped = RegexEscape(p);
-    if (!escaped.empty() && escaped.back() != '/') escaped += '/';
-    std::string regex = "^" + escaped + "[^/]+/$";
-    auto task = cte_client->AsyncTagQuery(regex, 0, chi::PoolQuery::Local());
-    task.Wait();
-    if (task->GetReturnCode() == 0) {
-      size_t prefix_len = p.size();
-      if (!p.empty() && p.back() != '/') prefix_len++;
-      for (const auto &sentinel : task->results_) {
-        // Extract dirname: strip prefix and trailing /
-        if (sentinel.size() > prefix_len + 1) {
-          std::string dirname = sentinel.substr(prefix_len,
-                                                sentinel.size() - prefix_len - 1);
-          if (std::find(subdirs.begin(), subdirs.end(), dirname) == subdirs.end()) {
-            subdirs.push_back(dirname);
-          }
-        }
-      }
-    }
+  size_t prefix_len = p.size();
+  if (!p.empty() && p.back() != '/') prefix_len++;
+  // entries_ and inos_ are index-aligned (the chimod builds them together).
+  for (size_t i = 0; i < t->entries_.size(); ++i) {
+    std::string full = t->entries_[i].str();
+    std::string name = full.size() > prefix_len ? full.substr(prefix_len) : full;
+    // A child sentinel directory may come back as "<dir>/<name>/"; drop the
+    // trailing slash so it shows as a plain directory entry.
+    if (!name.empty() && name.back() == '/') name.pop_back();
+    if (name.empty()) continue;
+    // Supply only d_ino (the child's tag-derived inode) so getdents agrees with
+    // a subsequent stat (generic/637). Leave st_mode = 0 (DT_UNKNOWN): the entry
+    // type is not reliably known here, so the kernel issues a getattr to resolve
+    // it — setting a wrong d_type would mislead `rm -rf`/`find`.
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    st.st_ino = i < t->inos_.size() ? static_cast<ino_t>(t->inos_[i]) : 0;
+    filler(buf, name.c_str(), &st, 0, static_cast<fuse_fill_dir_flags>(0));
   }
-
-  for (const auto &name : subdirs) {
-    // Avoid duplicates if a file and subdir have the same name
-    if (std::find(files.begin(), files.end(), name) == files.end()) {
-      filler(buf, name.c_str(), nullptr, 0,
-             static_cast<fuse_fill_dir_flags>(0));
-    }
-  }
-
   return 0;
 }
 
 static int cte_fuse_mkdir(const char *path, mode_t mode) {
   (void)mode;
-  std::string p(path);
-  // Create a sentinel tag with a trailing "/" to mark an explicit directory.
-  // This lets getattr report the directory before any files exist under it.
-  std::string sentinel = p + "/";
-  auto tag_id = CteGetOrCreateTag(sentinel);
-  if (tag_id.IsNull()) return -EIO;
-  return 0;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncMkdir(std::string(path));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());  // errno-style (0/EEXIST/EIO)
+  return rc == 0 ? 0 : -rc;
 }
 
 static int cte_fuse_rmdir(const char *path) {
-  std::string p(path);
-  // A directory can only be removed if it has no children
-  auto files = CteListDirectChildren(p);
-  auto subdirs = CteListSubdirs(p);
-  if (!files.empty() || !subdirs.empty()) return -ENOTEMPTY;
-  // Delete the sentinel tag if it exists
-  std::string sentinel = p + "/";
-  if (CteTagExists(sentinel)) {
-    CteDelTag(sentinel);
-  }
-  return 0;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncRmdir(std::string(path));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());  // 0/ENOTEMPTY/ENOENT/EIO
+  return rc == 0 ? 0 : -rc;
 }
 
 // ============================================================================
@@ -235,144 +273,127 @@ static int cte_fuse_rmdir(const char *path) {
 
 static int cte_fuse_create(const char *path, mode_t mode,
                            struct fuse_file_info *fi) {
-  (void)mode;
   std::string p(path);
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncOpen(p, O_CREAT | O_RDWR, static_cast<clio::run::u32>(mode));
+  t.Wait();
+  if (t->GetReturnCode() != 0) return -EIO;
 
-  auto tag_id = CteGetOrCreateTag(p);
-  if (tag_id.IsNull()) return -EIO;
-
-  auto *handle = new FuseFileHandle();
-  handle->tag_id = tag_id;
+  auto *handle = new CfsHandle();
+  handle->fh = t->handle_;
   handle->path = p;
-  handle->flags = fi->flags;
   fi->fh = reinterpret_cast<uint64_t>(handle);
   return 0;
 }
 
 static int cte_fuse_open(const char *path, struct fuse_file_info *fi) {
   std::string p(path);
+  auto *cfs = CLIO_CFS_CLIENT;
+  // The chimod honors O_CREAT: a plain open of a missing file returns
+  // handle==0 so we can surface ENOENT.
+  auto t = cfs->AsyncOpen(p, static_cast<clio::run::u32>(fi->flags), 0644);
+  t.Wait();
+  if (t->GetReturnCode() != 0) return -EIO;
+  if (t->handle_ == 0) return -ENOENT;
 
-  if (!CteTagExists(p)) return -ENOENT;
-
-  auto tag_id = CteGetOrCreateTag(p);
-  if (tag_id.IsNull()) return -EIO;
-
-  auto *handle = new FuseFileHandle();
-  handle->tag_id = tag_id;
+  auto *handle = new CfsHandle();
+  handle->fh = t->handle_;
   handle->path = p;
-  handle->flags = fi->flags;
   fi->fh = reinterpret_cast<uint64_t>(handle);
   return 0;
 }
 
-// flush is what close() actually triggers per-fd (release only fires once
-// the LAST reference drops). Without a handler libfuse returns 0
-// immediately and close() returns to userspace while async puts are still
-// queued — the next op (barrier, read, unmount) then races the in-flight
-// writes. Drain here so close() blocks until every page-put on this fd is
-// retired.
+// Writes go straight through to the chimod (each AsyncWrite is awaited), so
+// there is nothing to drain on flush/fsync — they are durability no-ops.
 static int cte_fuse_flush(const char *path, struct fuse_file_info *fi) {
   (void)path;
-  auto *handle = GetHandle(fi);
-  if (!handle) return 0;
-  return DrainPendingWrites(handle);
+  (void)fi;
+  return 0;
 }
 
-// fsync / fdatasync must also drain so durability semantics hold for
-// callers that explicitly sync mid-stream.
 static int cte_fuse_fsync(const char *path, int /*datasync*/,
                           struct fuse_file_info *fi) {
   (void)path;
-  auto *handle = GetHandle(fi);
-  if (!handle) return 0;
-  return DrainPendingWrites(handle);
+  (void)fi;
+  return 0;
 }
 
 static int cte_fuse_release(const char *path, struct fuse_file_info *fi) {
   (void)path;
   auto *handle = GetHandle(fi);
-  // Belt-and-suspenders: flush already drained on close(), but release
-  // can also fire after a non-close fd-drop path (mmap teardown, etc.)
-  // and we still own SHM buffers / Futures in pending_writes.
-  int rc = DrainPendingWrites(handle);
+  if (!handle) return 0;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncClose(handle->fh);
+  t.Wait();
+  int rc = (t->GetReturnCode() == 0) ? 0 : -EIO;
   delete handle;
   fi->fh = 0;
   return rc;
 }
 
 // ============================================================================
-// Read / Write — page-based I/O
+// Read / Write — delegated to the chimod's page-based I/O
 // ============================================================================
 
 static int cte_fuse_read(const char *path, char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi) {
   (void)path;
   auto *handle = GetHandle(fi);
+  if (!handle) return -EBADF;
 
   if (size > static_cast<size_t>(INT_MAX))
     size = static_cast<size_t>(INT_MAX);
+  if (size == 0) return 0;
 
-  // Drain any in-flight async puts for this fd before reading. Without
-  // this, an interleaved write+read pattern can return stale data: the
-  // last write's CtePutBlobAsync may still be parked in pending_writes
-  // when the read fires, and GetBlob would observe the pre-write blob.
-  // (cte_fuse_release/flush also drain, but the kernel can dispatch
-  // read() to a worker thread before release() is sent, so we need this
-  // here too.)
-  DrainPendingWrites(handle);
+  auto *ipc = CLIO_IPC;
+  ctp::ipc::FullPtr<char> shm_buf = ipc->AllocateBuffer(size);
+  if (shm_buf.IsNull()) return -ENOMEM;
+  ctp::ipc::ShmPtr<> shm_ptr(shm_buf.shm_);
 
-  size_t file_size = CteGetTagSize(handle->tag_id);
-  if (static_cast<size_t>(offset) >= file_size) return 0;
-  if (static_cast<size_t>(offset) + size > file_size)
-    size = file_size - offset;
-
-  size_t bytes_read = 0;
-  size_t cur = static_cast<size_t>(offset);
-
-  while (bytes_read < size) {
-    size_t page = cur / kDefaultPageSize;
-    size_t poff = cur % kDefaultPageSize;
-    size_t to_read = std::min(kDefaultPageSize - poff, size - bytes_read);
-
-    if (!CteGetBlob(handle->tag_id, std::to_string(page),
-                    buf + bytes_read, to_read, poff))
-      break;
-
-    bytes_read += to_read;
-    cur += to_read;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncRead(handle->fh, static_cast<clio::run::u64>(offset), size,
+                          shm_ptr);
+  t.Wait();
+  int rc;
+  if (t->GetReturnCode() == 0) {
+    size_t got = static_cast<size_t>(t->bytes_read_);
+    if (got > 0) memcpy(buf, shm_buf.ptr_, got);
+    rc = static_cast<int>(got);
+  } else {
+    rc = -EIO;
   }
-  return static_cast<int>(bytes_read);
+  ipc->FreeBuffer(shm_buf);
+  return rc;
 }
 
 static int cte_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi) {
   (void)path;
   auto *handle = GetHandle(fi);
+  if (!handle) return -EBADF;
 
   if (size > static_cast<size_t>(INT_MAX))
     size = static_cast<size_t>(INT_MAX);
+  if (size == 0) return 0;
 
-  size_t bytes_written = 0;
-  size_t cur = static_cast<size_t>(offset);
+  auto *ipc = CLIO_IPC;
+  ctp::ipc::FullPtr<char> shm_buf = ipc->AllocateBuffer(size);
+  if (shm_buf.IsNull()) return -ENOMEM;
+  memcpy(shm_buf.ptr_, buf, size);
+  ctp::ipc::ShmPtr<> shm_ptr(shm_buf.shm_);
 
-  while (bytes_written < size) {
-    size_t page = cur / kDefaultPageSize;
-    size_t poff = cur % kDefaultPageSize;
-    size_t to_write = std::min(kDefaultPageSize - poff, size - bytes_written);
-
-    // Submit the put without waiting; the Future + SHM buf are parked on
-    // the handle and drained at release()/fsync(). FUSE write() returns
-    // bytes_written immediately, letting the kernel pipeline more writes.
-    if (!CtePutBlobAsync(handle, std::to_string(page),
-                         buf + bytes_written, to_write, poff)) {
-      if (bytes_written == 0) return -EIO;
-      break;
-    }
-
-    bytes_written += to_write;
-    cur += to_write;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncWrite(handle->fh, static_cast<clio::run::u64>(offset), size,
+                           shm_ptr);
+  t.Wait();
+  int rc;
+  if (t->GetReturnCode() == 0) {
+    rc = static_cast<int>(t->bytes_written_);
+  } else {
+    rc = -EIO;
   }
-  return static_cast<int>(bytes_written);
+  ipc->FreeBuffer(shm_buf);
+  return rc;
 }
 
 // ============================================================================
@@ -380,35 +401,102 @@ static int cte_fuse_write(const char *path, const char *buf, size_t size,
 // ============================================================================
 
 static int cte_fuse_unlink(const char *path) {
-  std::string p(path);
-  if (!CteTagExists(p)) return -ENOENT;
-  CteDelTag(p);
-  return 0;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncUnlink(std::string(path));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());  // 0/EISDIR/EIO
+  return rc == 0 ? 0 : -rc;
 }
 
 static int cte_fuse_truncate(const char *path, off_t size,
                              struct fuse_file_info *fi) {
   (void)fi;
-  (void)size;
-  std::string p(path);
-  if (!CteTagExists(p)) return -ENOENT;
-  // CTE does not yet support blob truncation.
-  return 0;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncTruncate(std::string(path), static_cast<clio::run::u64>(size));
+  t.Wait();
+  return t->GetReturnCode() == 0 ? 0 : -EIO;
+}
+
+static int cte_fuse_link(const char *from, const char *to) {
+  // Hard link `to` -> existing file `from`. The chimod binds both names to the
+  // same CTE tag (a tag-level alias), so they share all data.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncLink(std::string(from), std::string(to));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  return rc == 0 ? 0 : -rc;  // chimod returns errno-style codes
+}
+
+static int cte_fuse_rename(const char *from, const char *to,
+                           unsigned int flags) {
+  // RENAME_NOREPLACE / RENAME_EXCHANGE aren't supported; POSIX replace is.
+  if (flags != 0) {
+    return -EINVAL;
+  }
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncRename(std::string(from), std::string(to));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  return rc == 0 ? 0 : -rc;  // chimod returns errno-style codes (ENOENT/EIO)
 }
 
 // ============================================================================
 // Main
 // ============================================================================
 
+// Report filesystem statistics. Total and remaining capacity are the real
+// cluster-wide values, obtained from the CTE: GetCapacity sums the registered
+// targets' total and remaining capacity per node, and a Broadcast aggregates
+// that across the cluster (the task's AggregateOut sums per-node results).
+// Reporting a non-zero capacity also matters operationally: a 0-block fs is
+// hidden by `df` (which lists no path), which breaks tools that probe free
+// space and xfstests' mount detection.
+static int cte_fuse_statfs(const char *path, struct statvfs *stbuf) {
+  (void)path;
+  std::memset(stbuf, 0, sizeof(*stbuf));
+  constexpr fsblkcnt_t kBlockSize = 4096;
+
+  clio::run::u64 total_bytes = 0;
+  clio::run::u64 remaining_bytes = 0;
+  auto *cte = CLIO_CTE_CLIENT;
+  if (cte != nullptr) {
+    // Broadcast: total + remaining capacity across the whole cluster.
+    auto t = cte->AsyncGetCapacity(clio::run::PoolQuery::Broadcast());
+    t.Wait();
+    if (t->return_code_ == 0) {
+      total_bytes = t->total_capacity_;
+      remaining_bytes = t->remaining_capacity_;
+    }
+  }
+  fsblkcnt_t total_blocks = total_bytes / kBlockSize;
+  fsblkcnt_t free_blocks = remaining_bytes / kBlockSize;
+
+  stbuf->f_bsize = kBlockSize;
+  stbuf->f_frsize = kBlockSize;
+  stbuf->f_blocks = total_blocks;
+  // Report real remaining space as both free and available (no reservation
+  // distinction), so df shows used = total - remaining.
+  stbuf->f_bfree = free_blocks;
+  stbuf->f_bavail = free_blocks;
+  stbuf->f_files = static_cast<fsfilcnt_t>(1) << 20;
+  stbuf->f_ffree = static_cast<fsfilcnt_t>(1) << 20;
+  stbuf->f_favail = static_cast<fsfilcnt_t>(1) << 20;
+  stbuf->f_namemax = 255;
+  return 0;
+}
+
 static const struct fuse_operations cte_fuse_ops = {
     .getattr = cte_fuse_getattr,
     .mkdir = cte_fuse_mkdir,
     .unlink = cte_fuse_unlink,
     .rmdir = cte_fuse_rmdir,
+    .rename = cte_fuse_rename,
+    .link = cte_fuse_link,
     .truncate = cte_fuse_truncate,
     .open = cte_fuse_open,
     .read = cte_fuse_read,
     .write = cte_fuse_write,
+    .statfs = cte_fuse_statfs,
     .flush = cte_fuse_flush,
     .release = cte_fuse_release,
     .fsync = cte_fuse_fsync,

@@ -1,4 +1,4 @@
-# Migrate Integration Tests for Chimaera Runtime
+# Migrate Integration Tests for Clio Runtime
 # Tests container migration with retry queue:
 # 1. Start 4-node cluster
 # 2. Create MOD_NAME pool with 4 containers
@@ -8,7 +8,7 @@
 # Usage:
 #   docker compose up -d
 #   # Run test from node1
-#   docker exec iowarp-migrate-node1 bash -c "chimaera_mod_name_tests 'migrate_reroute'"
+#   docker exec iowarp-migrate-node1 bash -c "clio_run_mod_name_tests 'migrate_reroute'"
 
 services:
   # Node 1 - Test coordinator

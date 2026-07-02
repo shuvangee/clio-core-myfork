@@ -59,13 +59,13 @@ namespace clio::cte::core {
 using MonitorTask = clio::run::admin::MonitorTask;
 
 // CTE Core Pool ID constant (major: 512, minor: 0)
-static constexpr chi::PoolId kCtePoolId(512, 0);
+static constexpr clio::run::PoolId kCtePoolId(512, 0);
 
 // CTE Core Pool Name constant
 static constexpr const char *kCtePoolName = "clio_cte_core";
 
 // Timestamp type definition - nanoseconds since epoch (0 on GPU)
-using Timestamp = chi::u64;
+using Timestamp = clio::run::u64;
 
 #if CTP_IS_GPU_COMPILER
 // CUDA/ROCm GPU compiler: CROSS_FUN so __device__ bodies can call it in
@@ -75,7 +75,7 @@ CTP_CROSS_FUN inline Timestamp GetCurrentTimeNs() {
 #ifdef __CUDA_ARCH__
   return 0;  // GPU device code: return 0 (no clock available)
 #else
-  return static_cast<chi::u64>(
+  return static_cast<clio::run::u64>(
       std::chrono::steady_clock::now().time_since_epoch().count());
 #endif
 }
@@ -89,13 +89,13 @@ inline Timestamp GetCurrentTimeNs() {
 #if CTP_IS_DEVICE_PASS
   return 0;
 #else
-  return static_cast<chi::u64>(
+  return static_cast<clio::run::u64>(
       std::chrono::steady_clock::now().time_since_epoch().count());
 #endif
 }
 #else
 inline Timestamp GetCurrentTimeNs() {
-  return static_cast<chi::u64>(
+  return static_cast<clio::run::u64>(
       std::chrono::steady_clock::now().time_since_epoch().count());
 }
 #endif
@@ -115,7 +115,7 @@ struct CreateParams {
   // is NOT a cross-process IPC handle (cross-process sharing requires
   // Level-Zero IPC on SYCL or cudaIpc on CUDA — see
   // gpu_metadata_cache.h header for the eventual extension).
-  chi::u64 gpu_cache_ptr_ = 0;
+  clio::run::u64 gpu_cache_ptr_ = 0;
 
   // Required: chimod library name for module manager
   static constexpr const char *chimod_lib_name = "clio_cte_core";
@@ -130,7 +130,7 @@ struct CreateParams {
 
   // Constructor with pool_id and CreateParams (required for admin
   // task creation)
-  CreateParams(const chi::PoolId &pool_id, const CreateParams &other)
+  CreateParams(const clio::run::PoolId &pool_id, const CreateParams &other)
       : config_(other.config_),
         gpu_cache_ptr_(other.gpu_cache_ptr_) {
     // pool_id is used by the admin task framework, but we don't need to store
@@ -155,6 +155,7 @@ struct CreateParams {
        config_.gpu_metadata_cache_.capacity_bytes_,
        config_.gpu_metadata_cache_.max_blobs_,
        config_.gpu_metadata_cache_.max_tags_,
+       config_.performance_.stat_targets_period_ms_,
        gpu_cache_ptr_);
   }
 
@@ -163,7 +164,7 @@ struct CreateParams {
    * Required for compose feature support
    * @param pool_config Pool configuration from compose section
    */
-  void LoadConfig(const chi::PoolConfig &pool_config) {
+  void LoadConfig(const clio::run::PoolConfig &pool_config) {
     // The pool_config.config_ contains the full CTE configuration YAML
     // in the format of config/cte_config.yaml (targets, storage, dpe sections).
     // Parse it directly into the Config object
@@ -207,16 +208,17 @@ using DestroyTask = clio::run::admin::DestroyTask;
  * Target information structure
  */
 struct TargetInfo {
-  chi::priv::string target_name_;
-  chi::priv::string bdev_pool_name_;
+  clio::run::priv::string target_name_;
+  clio::run::priv::string bdev_pool_name_;
   clio::run::bdev::Client bdev_client_;  // Bdev client for this target
-  chi::PoolQuery target_query_;         // Target pool query for bdev API calls
-  chi::u64 bytes_read_;
-  chi::u64 bytes_written_;
-  chi::u64 ops_read_;
-  chi::u64 ops_written_;
+  clio::run::PoolQuery target_query_;         // Target pool query for bdev API calls
+  clio::run::u64 bytes_read_;
+  clio::run::u64 bytes_written_;
+  clio::run::u64 ops_read_;
+  clio::run::u64 ops_written_;
   float target_score_;        // Target score (0-1, normalized log bandwidth)
-  chi::u64 remaining_space_;  // Remaining allocatable space in bytes
+  clio::run::u64 remaining_space_;  // Remaining allocatable space in bytes
+  clio::run::u64 max_capacity_;     // Total (max) capacity in bytes, fixed at register
   clio::run::bdev::PerfMetrics perf_metrics_;  // Performance metrics from bdev
   clio::run::bdev::PersistenceLevel persistence_level_;
   // Underlying bdev type, captured at RegisterTarget time. Used by the
@@ -233,6 +235,7 @@ struct TargetInfo {
         ops_written_(0),
         target_score_(0.0f),
         remaining_space_(0),
+        max_capacity_(0),
         persistence_level_(clio::run::bdev::PersistenceLevel::kVolatile),
         bdev_type_(clio::run::bdev::BdevType::kFile) {}
 
@@ -246,6 +249,7 @@ struct TargetInfo {
         ops_written_(0),
         target_score_(0.0f),
         remaining_space_(0),
+        max_capacity_(0),
         persistence_level_(clio::run::bdev::PersistenceLevel::kVolatile) {}
 #endif
 
@@ -260,6 +264,7 @@ struct TargetInfo {
         ops_written_(other.ops_written_),
         target_score_(other.target_score_),
         remaining_space_(other.remaining_space_),
+        max_capacity_(other.max_capacity_),
         perf_metrics_(other.perf_metrics_),
         persistence_level_(other.persistence_level_),
         bdev_type_(other.bdev_type_) {}
@@ -276,6 +281,7 @@ struct TargetInfo {
       ops_written_ = other.ops_written_;
       target_score_ = other.target_score_;
       remaining_space_ = other.remaining_space_;
+      max_capacity_ = other.max_capacity_;
       perf_metrics_ = other.perf_metrics_;
       persistence_level_ = other.persistence_level_;
       bdev_type_ = other.bdev_type_;
@@ -287,37 +293,37 @@ struct TargetInfo {
 /**
  * RegisterTarget task - Get/create bdev locally, create Target struct
  */
-struct RegisterTargetTask : public chi::Task {
+struct RegisterTargetTask : public clio::run::Task {
   // Task-specific data using CTP macros
-  IN chi::priv::string
+  IN clio::run::priv::string
       target_name_;  // Name and file path of the target to register
   IN clio::run::bdev::BdevType bdev_type_;  // Block device type enum
-  IN chi::u64 total_size_;                 // Total size for allocation
-  IN chi::PoolQuery target_query_;  // Target pool query for bdev API calls
-  IN chi::PoolId bdev_id_;          // PoolId to create for the underlying bdev
+  IN clio::run::u64 total_size_;                 // Total size for allocation
+  IN clio::run::PoolQuery target_query_;  // Target pool query for bdev API calls
+  IN clio::run::PoolId bdev_id_;          // PoolId to create for the underlying bdev
   // 0 = create a new bdev at bdev_id_ (default, as before); 1 = bind to the
   // ALREADY-EXISTING pool at bdev_id_ without creating it (e.g. a safe-bdev
   // pool). When attaching, the handler validates the pool via GetStats and
   // skips AsyncCreate.
-  IN chi::u32 attach_existing_;
+  IN clio::run::u32 attach_existing_;
 
   // SHM constructor
   CTP_CROSS_FUN RegisterTargetTask()
-      : chi::Task(),
+      : clio::run::Task(),
         target_name_(CLIO_PRIV_ALLOC),
         bdev_type_(clio::run::bdev::BdevType::kFile),
         total_size_(0),
-        bdev_id_(chi::PoolId::GetNull()),
+        bdev_id_(clio::run::PoolId::GetNull()),
         attach_existing_(0) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit RegisterTargetTask(
-      const chi::TaskId &task_id, const chi::PoolId &pool_id,
-      const chi::PoolQuery &pool_query, const std::string &target_name,
-      clio::run::bdev::BdevType bdev_type, chi::u64 total_size,
-      const chi::PoolQuery &target_query, const chi::PoolId &bdev_id,
-      chi::u32 attach_existing = 0)
-      : chi::Task(task_id, pool_id, pool_query, Method::kRegisterTarget),
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const std::string &target_name,
+      clio::run::bdev::BdevType bdev_type, clio::run::u64 total_size,
+      const clio::run::PoolQuery &target_query, const clio::run::PoolId &bdev_id,
+      clio::run::u32 attach_existing = 0)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kRegisterTarget),
         target_name_(CLIO_PRIV_ALLOC, target_name),
         bdev_type_(bdev_type),
         total_size_(total_size),
@@ -371,11 +377,11 @@ struct RegisterTargetTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<RegisterTargetTask>());
   }
 };
@@ -384,18 +390,18 @@ struct RegisterTargetTask : public chi::Task {
  * UnregisterTarget task - Unlink bdev from container (don't destroy bdev
  * container)
  */
-struct UnregisterTargetTask : public chi::Task {
-  IN chi::priv::string target_name_;  // Name of the target to unregister
+struct UnregisterTargetTask : public clio::run::Task {
+  IN clio::run::priv::string target_name_;  // Name of the target to unregister
 
   // SHM constructor
-  UnregisterTargetTask() : chi::Task(), target_name_(CLIO_PRIV_ALLOC) {}
+  UnregisterTargetTask() : clio::run::Task(), target_name_(CLIO_PRIV_ALLOC) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit UnregisterTargetTask(const chi::TaskId &task_id,
-                                               const chi::PoolId &pool_id,
-                                               const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit UnregisterTargetTask(const clio::run::TaskId &task_id,
+                                               const clio::run::PoolId &pool_id,
+                                               const clio::run::PoolQuery &pool_query,
                                                const std::string &target_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kUnregisterTarget),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kUnregisterTarget),
         target_name_(CLIO_PRIV_ALLOC, target_name) {
     task_id_ = task_id;
     pool_id_ = pool_id;
@@ -432,11 +438,11 @@ struct UnregisterTargetTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<UnregisterTargetTask>());
   }
 };
@@ -444,18 +450,18 @@ struct UnregisterTargetTask : public chi::Task {
 /**
  * ListTargets task - Return set of registered target names on this node
  */
-struct ListTargetsTask : public chi::Task {
+struct ListTargetsTask : public clio::run::Task {
   OUT std::vector<std::string>
       target_names_;  // List of registered target names
 
   // SHM constructor
-  ListTargetsTask() : chi::Task() {}
+  ListTargetsTask() : clio::run::Task() {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit ListTargetsTask(const chi::TaskId &task_id,
-                                          const chi::PoolId &pool_id,
-                                          const chi::PoolQuery &pool_query)
-      : chi::Task(task_id, pool_id, pool_query, Method::kListTargets) {
+  CTP_CROSS_FUN explicit ListTargetsTask(const clio::run::TaskId &task_id,
+                                          const clio::run::PoolId &pool_id,
+                                          const clio::run::PoolQuery &pool_query)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kListTargets) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kListTargets;
@@ -491,11 +497,11 @@ struct ListTargetsTask : public chi::Task {
   }
 
   /**
-   * Aggregate entries from another ListTargetsTask
+   * AggregateOut entries from another ListTargetsTask
    * Appends all target names from the other task to this one
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto other = other_base.template Cast<ListTargetsTask>();
     for (const auto &target_name : other->target_names_) {
       target_names_.push_back(target_name);
@@ -506,15 +512,15 @@ struct ListTargetsTask : public chi::Task {
 /**
  * StatTargets task - Poll each target in vector, update performance stats
  */
-struct StatTargetsTask : public chi::Task {
+struct StatTargetsTask : public clio::run::Task {
   // SHM constructor
-  StatTargetsTask() : chi::Task() {}
+  StatTargetsTask() : clio::run::Task() {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit StatTargetsTask(const chi::TaskId &task_id,
-                                          const chi::PoolId &pool_id,
-                                          const chi::PoolQuery &pool_query)
-      : chi::Task(task_id, pool_id, pool_query, Method::kStatTargets) {
+  CTP_CROSS_FUN explicit StatTargetsTask(const clio::run::TaskId &task_id,
+                                          const clio::run::PoolId &pool_id,
+                                          const clio::run::PoolQuery &pool_query)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kStatTargets) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kStatTargets;
@@ -551,11 +557,11 @@ struct StatTargetsTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<StatTargetsTask>());
   }
 };
@@ -564,18 +570,18 @@ struct StatTargetsTask : public chi::Task {
  * GetTargetInfo task - Get information about a specific target
  * Returns target score, remaining space, and performance metrics
  */
-struct GetTargetInfoTask : public chi::Task {
-  IN chi::priv::string target_name_;  // Name of target to query
+struct GetTargetInfoTask : public clio::run::Task {
+  IN clio::run::priv::string target_name_;  // Name of target to query
   OUT float target_score_;  // Target score (0-1, normalized log bandwidth)
-  OUT chi::u64 remaining_space_;  // Remaining allocatable space in bytes
-  OUT chi::u64 bytes_read_;       // Bytes read from target
-  OUT chi::u64 bytes_written_;    // Bytes written to target
-  OUT chi::u64 ops_read_;         // Read operations
-  OUT chi::u64 ops_written_;      // Write operations
+  OUT clio::run::u64 remaining_space_;  // Remaining allocatable space in bytes
+  OUT clio::run::u64 bytes_read_;       // Bytes read from target
+  OUT clio::run::u64 bytes_written_;    // Bytes written to target
+  OUT clio::run::u64 ops_read_;         // Read operations
+  OUT clio::run::u64 ops_written_;      // Write operations
 
   // SHM constructor
   GetTargetInfoTask()
-      : chi::Task(),
+      : clio::run::Task(),
         target_name_(CLIO_PRIV_ALLOC),
         target_score_(0.0f),
         remaining_space_(0),
@@ -585,11 +591,11 @@ struct GetTargetInfoTask : public chi::Task {
         ops_written_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit GetTargetInfoTask(const chi::TaskId &task_id,
-                                            const chi::PoolId &pool_id,
-                                            const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetTargetInfoTask(const clio::run::TaskId &task_id,
+                                            const clio::run::PoolId &pool_id,
+                                            const clio::run::PoolQuery &pool_query,
                                             const std::string &target_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetTargetInfo),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetTargetInfo),
         target_name_(CLIO_PRIV_ALLOC, target_name),
         target_score_(0.0f),
         remaining_space_(0),
@@ -638,10 +644,10 @@ struct GetTargetInfoTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results
+   * AggregateOut replica results
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     // For target info, just copy (should be same across replicas)
     Copy(other_base.template Cast<GetTargetInfoTask>());
   }
@@ -649,18 +655,18 @@ struct GetTargetInfoTask : public chi::Task {
 
 /**
  * TagId type definition
- * Uses chi::UniqueId with node_id as major and atomic counter as minor
+ * Uses clio::run::UniqueId with node_id as major and atomic counter as minor
  */
-using TagId = chi::UniqueId;
+using TagId = clio::run::UniqueId;
 
 }  // namespace clio::cte::core
 
-// Hash specialization for TagId (TagId uses same hash as chi::UniqueId)
+// Hash specialization for TagId (TagId uses same hash as clio::run::UniqueId)
 namespace ctp {
 template <>
 struct hash<clio::cte::core::TagId> {
   std::size_t operator()(const clio::cte::core::TagId &id) const {
-    std::hash<chi::u32> hasher;
+    std::hash<clio::run::u32> hasher;
     return hasher(id.major_) ^ (hasher(id.minor_) << 1);
   }
 };
@@ -672,26 +678,38 @@ namespace clio::cte::core {
  * Tag information structure for blob grouping
  */
 struct TagInfo {
-  chi::priv::string tag_name_;
+  clio::run::priv::string tag_name_;  // Canonical (non-alias) name of this tag
   TagId tag_id_;
-  chi::u64
+  clio::run::u64
       total_size_;  // Total size of all blobs in this tag (non-atomic for GPU)
   Timestamp last_modified_;
   Timestamp last_read_;
+  // Change time (ctime): bumped whenever this tag's METADATA changes — create,
+  // rename, hard-link add/remove, or size change. Distinct from last_modified_
+  // (content/mtime) and last_read_ (atime). Tags only; blobs are not tracked.
+  Timestamp last_changed_;
+  // Additional names bound to this tag's id (tag-level hard links). The
+  // canonical name lives in tag_name_; aliases_ holds every extra name. When
+  // the canonical tag is deleted, all of these bindings are removed too.
+  clio::run::priv::vector<clio::run::priv::string> aliases_;
 
   CTP_CROSS_FUN TagInfo()
       : tag_name_(CLIO_PRIV_ALLOC),
         tag_id_(TagId::GetNull()),
         total_size_(0),
         last_modified_(0),
-        last_read_(0) {}
+        last_read_(0),
+        last_changed_(0),
+        aliases_(CLIO_PRIV_ALLOC) {}
 
-  CTP_CROSS_FUN TagInfo(const chi::priv::string &tag_name, const TagId &tag_id)
+  CTP_CROSS_FUN TagInfo(const clio::run::priv::string &tag_name, const TagId &tag_id)
       : tag_name_(tag_name),
         tag_id_(tag_id),
         total_size_(0),
         last_modified_(0),
-        last_read_(0) {}
+        last_read_(0),
+        last_changed_(0),
+        aliases_(CLIO_PRIV_ALLOC) {}
 
 #if CTP_IS_HOST
   TagInfo(const std::string &tag_name, const TagId &tag_id)
@@ -699,7 +717,9 @@ struct TagInfo {
         tag_id_(tag_id),
         total_size_(0),
         last_modified_(GetCurrentTimeNs()),
-        last_read_(GetCurrentTimeNs()) {}
+        last_read_(GetCurrentTimeNs()),
+        last_changed_(GetCurrentTimeNs()),
+        aliases_(CLIO_PRIV_ALLOC) {}
 #endif
 
   CTP_CROSS_FUN TagInfo(const TagInfo &other)
@@ -707,7 +727,9 @@ struct TagInfo {
         tag_id_(other.tag_id_),
         total_size_(other.total_size_),
         last_modified_(other.last_modified_),
-        last_read_(other.last_read_) {}
+        last_read_(other.last_read_),
+        last_changed_(other.last_changed_),
+        aliases_(other.aliases_) {}
 
   CTP_CROSS_FUN TagInfo &operator=(const TagInfo &other) {
     if (this != &other) {
@@ -716,6 +738,8 @@ struct TagInfo {
       total_size_ = other.total_size_;
       last_modified_ = other.last_modified_;
       last_read_ = other.last_read_;
+      last_changed_ = other.last_changed_;
+      aliases_ = other.aliases_;
     }
     return *this;
   }
@@ -727,15 +751,15 @@ struct TagInfo {
  */
 struct BlobBlock {
   clio::run::bdev::Client bdev_client_;  // Bdev client for this block's target
-  chi::PoolQuery target_query_;         // Target pool query for bdev API calls
-  chi::u64 target_offset_;  // Offset within target where this block is stored
-  chi::u64 size_;           // Size of this block in bytes
+  clio::run::PoolQuery target_query_;         // Target pool query for bdev API calls
+  clio::run::u64 target_offset_;  // Offset within target where this block is stored
+  clio::run::u64 size_;           // Size of this block in bytes
 
   CTP_CROSS_FUN BlobBlock() : target_offset_(0), size_(0) {}
 
   CTP_CROSS_FUN BlobBlock(const clio::run::bdev::Client &client,
-                           const chi::PoolQuery &target_query, chi::u64 offset,
-                           chi::u64 size)
+                           const clio::run::PoolQuery &target_query, clio::run::u64 offset,
+                           clio::run::u64 size)
       : bdev_client_(client),
         target_query_(target_query),
         target_offset_(offset),
@@ -746,17 +770,17 @@ struct BlobBlock {
  * Blob information structure with block-based management
  */
 struct BlobInfo {
-  chi::priv::string blob_name_;
-  chi::priv::vector<BlobBlock> blocks_;
+  clio::run::priv::string blob_name_;
+  clio::run::priv::vector<BlobBlock> blocks_;
   float score_;  // 0-1 score for reorganization
   Timestamp last_modified_;
   Timestamp last_read_;
   int compress_lib_;     // Compression library ID used for this blob (0 = no
                          // compression)
   int compress_preset_;  // Compression preset used (1=FAST, 2=BALANCED, 3=BEST)
-  chi::u64
+  clio::run::u64
       trace_key_;  // Unique trace ID for linking to trace logs (0 = not traced)
-  chi::u64 preallocated_size_;  // Total preallocated capacity in bytes
+  clio::run::u64 preallocated_size_;  // Total preallocated capacity in bytes
   ctp::Mutex prealloc_lock_;   // Mutex for preallocation
 
   CTP_CROSS_FUN BlobInfo()
@@ -772,7 +796,7 @@ struct BlobInfo {
     prealloc_lock_.Init();
   }
 
-  CTP_CROSS_FUN BlobInfo(const chi::priv::string &blob_name, float score)
+  CTP_CROSS_FUN BlobInfo(const clio::run::priv::string &blob_name, float score)
       : blob_name_(blob_name),
         blocks_(CLIO_PRIV_ALLOC),
         score_(score),
@@ -828,8 +852,8 @@ struct BlobInfo {
     return *this;
   }
 
-  CTP_CROSS_FUN chi::u64 GetTotalSize() const {
-    chi::u64 total = 0;
+  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
+    clio::run::u64 total = 0;
     for (size_t i = 0; i < blocks_.size(); ++i) {
       total += blocks_[i].size_;
     }
@@ -847,7 +871,7 @@ struct Context {
   int min_persistence_level_;  // 0=volatile,
                                //   1=temp-nonvolatile, 2=long-term
 
-  chi::u64 preallocate_;  // Preallocate this many bytes for GPU block storage
+  clio::run::u64 preallocate_;  // Preallocate this many bytes for GPU block storage
                           // (0 = disabled)
 
 #if CTP_ENABLE_COMPRESS
@@ -855,7 +879,7 @@ struct Context {
   int compress_lib_;      // The compression library to apply (0-10)
   int compress_preset_;   // Compression preset: 1=FAST, 2=BALANCED, 3=BEST
                           // (default=2)
-  chi::u32 target_psnr_;  // The acceptable PSNR for lossy compression (0 means
+  clio::run::u32 target_psnr_;  // The acceptable PSNR for lossy compression (0 means
                           // infinity)
   int psnr_chance_;       // The chance PSNR will be validated (default 100%)
   bool max_performance_;  // Compression objective (performance vs ratio)
@@ -864,12 +888,12 @@ struct Context {
                         // unknown)
   int data_type_;       // The type of data (e.g., float, char, int, double)
   bool trace_;          // Enable tracing for this operation
-  chi::u64 trace_key_;  // Unique trace ID for this Put operation
+  clio::run::u64 trace_key_;  // Unique trace ID for this Put operation
   int trace_node_;      // Node ID where trace was initiated
                         //
   // Dynamic statistics (populated after compression)
-  chi::u64 actual_original_size_;    // Original data size in bytes
-  chi::u64 actual_compressed_size_;  // Actual size after compression in bytes
+  clio::run::u64 actual_original_size_;    // Original data size in bytes
+  clio::run::u64 actual_compressed_size_;  // Actual size after compression in bytes
   double actual_compression_ratio_;  // Actual compression ratio
                                      // (original/compressed)
   double actual_compress_time_ms_;   // Actual compression time in milliseconds
@@ -914,7 +938,7 @@ struct Context {
 #endif
   }
 
-  CTP_CROSS_FUN static Context Preallocate(chi::u64 size) {
+  CTP_CROSS_FUN static Context Preallocate(clio::run::u64 size) {
     Context ctx;
     ctx.preallocate_ = size;
     return ctx;
@@ -924,7 +948,7 @@ struct Context {
 /**
  * CTE Operation types for telemetry
  */
-enum class CteOp : chi::u32 {
+enum class CteOp : clio::run::u32 {
   kPutBlob = 0,
   kGetBlob = 1,
   kDelBlob = 2,
@@ -932,6 +956,18 @@ enum class CteOp : chi::u32 {
   kDelTag = 4,
   kGetTagSize = 5
 };
+
+/**
+ * PutBlobTask::flags_ bits.
+ *
+ * By default PutBlob is a partial modify: it writes [offset, offset+size),
+ * growing the blob if needed, and NEVER shrinks/clears it (POSIX write
+ * semantics). kCtePutReplace opts into wholesale replacement: the blob is
+ * resized to exactly offset+size (shrinking if needed) before the write, so a
+ * smaller put truly replaces a larger blob. Both the replace path and the
+ * explicit TruncateBlob op share Runtime::ResizeBlob.
+ */
+GLOBAL_CROSS_CONST clio::run::u32 kCtePutReplace = 0x1u;
 
 /**
  * CTE Telemetry data structure for performance monitoring
@@ -979,20 +1015,20 @@ struct CteTelemetry {
  * Template parameter allows different CreateParams types
  */
 template <typename CreateParamsT = CreateParams>
-struct GetOrCreateTagTask : public chi::Task {
-  IN chi::priv::string tag_name_;  // Tag name (required)
+struct GetOrCreateTagTask : public clio::run::Task {
+  IN clio::run::priv::string tag_name_;  // Tag name (required)
   INOUT TagId tag_id_;  // Tag unique ID (default null, output on creation)
 
   // SHM constructor
   CTP_CROSS_FUN GetOrCreateTagTask()
-      : chi::Task(), tag_name_(CLIO_PRIV_ALLOC), tag_id_(TagId::GetNull()) {}
+      : clio::run::Task(), tag_name_(CLIO_PRIV_ALLOC), tag_id_(TagId::GetNull()) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit GetOrCreateTagTask(
-      const chi::TaskId &task_id, const chi::PoolId &pool_id,
-      const chi::PoolQuery &pool_query, const std::string &tag_name,
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const std::string &tag_name,
       const TagId &tag_id = TagId::GetNull())
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetOrCreateTag),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetOrCreateTag),
         tag_name_(CLIO_PRIV_ALLOC, tag_name),
         tag_id_(tag_id) {
     task_id_ = task_id;
@@ -1036,11 +1072,11 @@ struct GetOrCreateTagTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<GetOrCreateTagTask>());
   }
 };
@@ -1048,26 +1084,26 @@ struct GetOrCreateTagTask : public chi::Task {
 /**
  * PutBlob task - Store a blob with optional compression context
  */
-struct PutBlobTask : public chi::Task {
+struct PutBlobTask : public clio::run::Task {
   IN TagId tag_id_;                    // Tag ID for blob grouping
-  INOUT chi::priv::string blob_name_;  // Blob name (required)
-  IN chi::u64 offset_;                 // Offset within blob
-  IN chi::u64 size_;                   // Size of blob data
+  INOUT clio::run::priv::string blob_name_;  // Blob name (required)
+  IN clio::run::u64 offset_;                 // Offset within blob
+  IN clio::run::u64 size_;                   // Size of blob data
   IN ctp::ipc::ShmPtr<> blob_data_;        // Blob data (shared memory pointer)
   IN float score_;         // Score for placement: -1.0=unknown (use defaults),
                            // 0.0-1.0=explicit
   INOUT Context context_;  // Context for compression control and statistics
-  IN chi::u32 flags_;      // Operation flags
+  IN clio::run::u32 flags_;      // Operation flags
   /**
    * Optional page index appended to blob_name_ at handler time as
    * "_pi<gpu_page_idx_>" so each cache page in a gpu_vector::Vector
    * resolves to its own blob. Sentinel kNoPageIdx (~0u) disables the
    * suffix (default for non-GPU clients). Mutated from device kernels
-   * (FlushPage / FaultPage) which can't safely rebuild a chi::priv::
+   * (FlushPage / FaultPage) which can't safely rebuild a clio::run::priv::
    * string at flush time, so the suffix is composed runtime-side.
    */
-  static constexpr chi::u32 kNoPageIdx = ~static_cast<chi::u32>(0);
-  IN chi::u32 gpu_page_idx_;
+  static constexpr clio::run::u32 kNoPageIdx = ~static_cast<clio::run::u32>(0);
+  IN clio::run::u32 gpu_page_idx_;
 
   // Submit-side timestamp (steady_clock nanoseconds), stamped by the
   // CTE client just before Send so the receiving daemon can compute
@@ -1075,13 +1111,13 @@ struct PutBlobTask : public chi::Task {
   // receiver-side accumulator ignores those tasks. Cross-node clocks
   // need ntp synchronization; on the same cluster that's usually
   // within a few hundred μs which is fine for ms-resolution diagnostics.
-  IN chi::u64 submit_ts_ns_;
+  IN clio::run::u64 submit_ts_ns_;
 
   // SHM constructor
   // Default score -1.0f means "unknown" - runtime will use 1.0 for new blobs
   // or preserve existing score for modifications
   CTP_CROSS_FUN PutBlobTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_id_(TagId::GetNull()),
         blob_name_(CLIO_PRIV_ALLOC),
         offset_(0),
@@ -1094,15 +1130,15 @@ struct PutBlobTask : public chi::Task {
         submit_ts_ns_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit PutBlobTask(const chi::TaskId &task_id,
-                                      const chi::PoolId &pool_id,
-                                      const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit PutBlobTask(const clio::run::TaskId &task_id,
+                                      const clio::run::PoolId &pool_id,
+                                      const clio::run::PoolQuery &pool_query,
                                       const TagId &tag_id,
                                       const std::string &blob_name,
-                                      chi::u64 offset, chi::u64 size,
+                                      clio::run::u64 offset, clio::run::u64 size,
                                       ctp::ipc::ShmPtr<> blob_data, float score,
-                                      const Context &context, chi::u32 flags)
-      : chi::Task(task_id, pool_id, pool_query, Method::kPutBlob),
+                                      const Context &context, clio::run::u32 flags)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kPutBlob),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         offset_(offset),
@@ -1121,15 +1157,15 @@ struct PutBlobTask : public chi::Task {
   }
 
   // GPU-compatible emplace constructor (const char* instead of std::string)
-  CTP_CROSS_FUN explicit PutBlobTask(const chi::TaskId &task_id,
-                                      const chi::PoolId &pool_id,
-                                      const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit PutBlobTask(const clio::run::TaskId &task_id,
+                                      const clio::run::PoolId &pool_id,
+                                      const clio::run::PoolQuery &pool_query,
                                       const TagId &tag_id,
-                                      const char *blob_name, chi::u64 offset,
-                                      chi::u64 size, ctp::ipc::ShmPtr<> blob_data,
+                                      const char *blob_name, clio::run::u64 offset,
+                                      clio::run::u64 size, ctp::ipc::ShmPtr<> blob_data,
                                       float score, const Context &context,
-                                      chi::u32 flags)
-      : chi::Task(task_id, pool_id, pool_query, Method::kPutBlob),
+                                      clio::run::u32 flags)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kPutBlob),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         offset_(offset),
@@ -1199,7 +1235,7 @@ struct PutBlobTask : public chi::Task {
     // crucially blob_data_ — must NOT be serialized here: blob_data_ is the
     // CLIENT's SHM buffer pointer, but the receiver runs with its own
     // (daemon-allocated) buffer. Echoing the receiver's blob_data_ back would
-    // clobber the origin task's blob_data_ during Aggregate, so a later
+    // clobber the origin task's blob_data_ during AggregateOut, so a later
     // FreeBuffer(task->blob_data_) frees a foreign/already-freed buffer and
     // corrupts the allocator — observed as a hang in CAE assimilators under
     // CLIO_FORCE_NET (issue #500).
@@ -1231,11 +1267,11 @@ struct PutBlobTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<PutBlobTask>());
   }
 };
@@ -1243,24 +1279,24 @@ struct PutBlobTask : public chi::Task {
 /**
  * GetBlob task - Retrieve a blob (unimplemented for now)
  */
-struct GetBlobTask : public chi::Task {
+struct GetBlobTask : public clio::run::Task {
   IN TagId tag_id_;                 // Tag ID for blob lookup
-  IN chi::priv::string blob_name_;  // Blob name (required)
-  IN chi::u64 offset_;              // Offset within blob
-  IN chi::u64 size_;                // Size of data to retrieve
-  IN chi::u32 flags_;               // Operation flags
+  IN clio::run::priv::string blob_name_;  // Blob name (required)
+  IN clio::run::u64 offset_;              // Offset within blob
+  IN clio::run::u64 size_;                // Size of data to retrieve
+  IN clio::run::u32 flags_;               // Operation flags
   IN ctp::ipc::ShmPtr<>
       blob_data_;  // Input buffer for blob data (shared memory pointer)
   /**
    * Optional page index appended to blob_name_ at handler time as
    * "_pi<gpu_page_idx_>". See PutBlobTask::gpu_page_idx_ for rationale.
    */
-  static constexpr chi::u32 kNoPageIdx = ~static_cast<chi::u32>(0);
-  IN chi::u32 gpu_page_idx_;
+  static constexpr clio::run::u32 kNoPageIdx = ~static_cast<clio::run::u32>(0);
+  IN clio::run::u32 gpu_page_idx_;
 
   // SHM constructor
   CTP_CROSS_FUN GetBlobTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_id_(TagId::GetNull()),
         blob_name_(CLIO_PRIV_ALLOC),
         offset_(0),
@@ -1270,14 +1306,14 @@ struct GetBlobTask : public chi::Task {
         gpu_page_idx_(kNoPageIdx) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit GetBlobTask(const chi::TaskId &task_id,
-                                      const chi::PoolId &pool_id,
-                                      const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetBlobTask(const clio::run::TaskId &task_id,
+                                      const clio::run::PoolId &pool_id,
+                                      const clio::run::PoolQuery &pool_query,
                                       const TagId &tag_id,
                                       const std::string &blob_name,
-                                      chi::u64 offset, chi::u64 size,
-                                      chi::u32 flags, ctp::ipc::ShmPtr<> blob_data)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetBlob),
+                                      clio::run::u64 offset, clio::run::u64 size,
+                                      clio::run::u32 flags, ctp::ipc::ShmPtr<> blob_data)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetBlob),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         offset_(offset),
@@ -1323,14 +1359,14 @@ struct GetBlobTask : public chi::Task {
   }
 
   // GPU-compatible emplace constructor (const char* instead of std::string)
-  CTP_CROSS_FUN explicit GetBlobTask(const chi::TaskId &task_id,
-                                      const chi::PoolId &pool_id,
-                                      const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetBlobTask(const clio::run::TaskId &task_id,
+                                      const clio::run::PoolId &pool_id,
+                                      const clio::run::PoolQuery &pool_query,
                                       const TagId &tag_id,
-                                      const char *blob_name, chi::u64 offset,
-                                      chi::u64 size, chi::u32 flags,
+                                      const char *blob_name, clio::run::u64 offset,
+                                      clio::run::u64 size, clio::run::u32 flags,
                                       ctp::ipc::ShmPtr<> blob_data)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetBlob),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetBlob),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         offset_(offset),
@@ -1388,11 +1424,11 @@ struct GetBlobTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<GetBlobTask>());
   }
 };
@@ -1400,26 +1436,26 @@ struct GetBlobTask : public chi::Task {
 /**
  * ReorganizeBlob task - Change score for a single blob
  */
-struct ReorganizeBlobTask : public chi::Task {
+struct ReorganizeBlobTask : public clio::run::Task {
   IN TagId tag_id_;                 // Tag ID containing blob
-  IN chi::priv::string blob_name_;  // Blob name to reorganize
+  IN clio::run::priv::string blob_name_;  // Blob name to reorganize
   IN float new_score_;              // New score for the blob (0-1)
 
   // SHM constructor
   ReorganizeBlobTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_id_(TagId::GetNull()),
         blob_name_(CLIO_PRIV_ALLOC),
         new_score_(0.0f) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit ReorganizeBlobTask(const chi::TaskId &task_id,
-                                             const chi::PoolId &pool_id,
-                                             const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit ReorganizeBlobTask(const clio::run::TaskId &task_id,
+                                             const clio::run::PoolId &pool_id,
+                                             const clio::run::PoolQuery &pool_query,
                                              const TagId &tag_id,
                                              const std::string &blob_name,
                                              float new_score)
-      : chi::Task(task_id, pool_id, pool_query, Method::kReorganizeBlob),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kReorganizeBlob),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         new_score_(new_score) {
@@ -1460,33 +1496,337 @@ struct ReorganizeBlobTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<ReorganizeBlobTask>());
+  }
+};
+
+// ===========================================================================
+// Fully-POD, GPU-compatible blob tasks (issue #556).
+//
+// These mirror PutBlob/GetBlob/ReorganizeBlob but carry the blob name in an
+// inline clio::run::priv::fixed_string<32> (no allocator, no SSO) instead of a
+// priv::string. Every field is therefore POD and the whole task is
+// bitwise-relocatable: a cudaMemcpy D<->H of the task is correct with ZERO
+// FixupAfterCopy (none is defined). Blob names are capped at 31 chars + NUL.
+// They share the runtime handler logic with the non-POD tasks via the
+// Runtime::*Impl<TaskT> member templates (same field names; both name types
+// expose .str()).
+// ===========================================================================
+
+/** Inline POD blob name used by all Pod*Blob tasks. */
+using PodBlobName = clio::run::priv::fixed_string<32>;
+
+/**
+ * PodPutBlob - fully-POD, GPU-compatible variant of PutBlobTask.
+ */
+struct PodPutBlobTask : public clio::run::Task {
+  IN TagId tag_id_;
+  INOUT PodBlobName blob_name_;
+  IN clio::run::u64 offset_;
+  IN clio::run::u64 size_;
+  IN ctp::ipc::ShmPtr<> blob_data_;
+  IN float score_;
+  INOUT Context context_;
+  IN clio::run::u32 flags_;
+  static constexpr clio::run::u32 kNoPageIdx = ~static_cast<clio::run::u32>(0);
+  IN clio::run::u32 gpu_page_idx_;
+  IN clio::run::u64 submit_ts_ns_;
+
+  // SHM constructor
+  CTP_CROSS_FUN PodPutBlobTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        blob_name_(),
+        offset_(0),
+        size_(0),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()),
+        score_(-1.0f),
+        context_(),
+        flags_(0),
+        gpu_page_idx_(kNoPageIdx),
+        submit_ts_ns_(0) {}
+
+  // GPU-compatible emplace constructor (const char* blob name, no allocator)
+  CTP_CROSS_FUN explicit PodPutBlobTask(
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const TagId &tag_id,
+      const char *blob_name, clio::run::u64 offset, clio::run::u64 size,
+      ctp::ipc::ShmPtr<> blob_data, float score, const Context &context,
+      clio::run::u32 flags)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kPodPutBlob),
+        tag_id_(tag_id),
+        blob_name_(blob_name),
+        offset_(offset),
+        size_(size),
+        blob_data_(blob_data),
+        score_(score),
+        context_(context),
+        flags_(flags),
+        gpu_page_idx_(kNoPageIdx),
+        submit_ts_ns_(0) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kPodPutBlob;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+#if CTP_IS_HOST
+  // std::string convenience overload (host clients).
+  explicit PodPutBlobTask(const clio::run::TaskId &task_id,
+                          const clio::run::PoolId &pool_id,
+                          const clio::run::PoolQuery &pool_query,
+                          const TagId &tag_id, const std::string &blob_name,
+                          clio::run::u64 offset, clio::run::u64 size,
+                          ctp::ipc::ShmPtr<> blob_data, float score,
+                          const Context &context, clio::run::u32 flags)
+      : PodPutBlobTask(task_id, pool_id, pool_query, tag_id, blob_name.c_str(),
+                       offset, size, blob_data, score, context, flags) {}
+#endif
+
+  /** Destructor — frees blob_data_ when this task owns the buffer (see
+   *  PutBlobTask::~PutBlobTask for the TASK_DATA_OWNER rationale). */
+  CTP_CROSS_FUN ~PodPutBlobTask() {
+#if !CTP_IS_DEVICE_PASS
+    if (task_flags_.Any(TASK_DATA_OWNER) && !blob_data_.IsNull()) {
+      auto *ipc_manager = CLIO_CPU_IPC;
+      if (ipc_manager) {
+        ipc_manager->FreeBuffer(blob_data_.template Cast<char>());
+      }
+    }
+#endif
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_, blob_name_, offset_, size_, blob_data_, score_, context_,
+       flags_, gpu_page_idx_, submit_ts_ns_);
+    ar.bulk(blob_data_, size_, BULK_XFER);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    // Only INOUT fields travel back (see PutBlobTask::SerializeOut for why
+    // blob_data_ must NOT be echoed).
+    ar(blob_name_, context_);
+  }
+
+  // No FixupAfterCopy — fixed_string is position-independent.
+
+  void Copy(const ctp::ipc::FullPtr<PodPutBlobTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    blob_name_ = other->blob_name_;
+    offset_ = other->offset_;
+    size_ = other->size_;
+    blob_data_ = other->blob_data_;
+    score_ = other->score_;
+    context_ = other->context_;
+    flags_ = other->flags_;
+    gpu_page_idx_ = other->gpu_page_idx_;
+    submit_ts_ns_ = other->submit_ts_ns_;
+  }
+
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<PodPutBlobTask>());
+  }
+};
+
+/**
+ * PodGetBlob - fully-POD, GPU-compatible variant of GetBlobTask.
+ */
+struct PodGetBlobTask : public clio::run::Task {
+  IN TagId tag_id_;
+  IN PodBlobName blob_name_;
+  IN clio::run::u64 offset_;
+  IN clio::run::u64 size_;
+  IN clio::run::u32 flags_;
+  IN ctp::ipc::ShmPtr<> blob_data_;
+  static constexpr clio::run::u32 kNoPageIdx = ~static_cast<clio::run::u32>(0);
+  IN clio::run::u32 gpu_page_idx_;
+
+  // SHM constructor
+  CTP_CROSS_FUN PodGetBlobTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        blob_name_(),
+        offset_(0),
+        size_(0),
+        flags_(0),
+        blob_data_(ctp::ipc::ShmPtr<>::GetNull()),
+        gpu_page_idx_(kNoPageIdx) {}
+
+  // GPU-compatible emplace constructor (const char* blob name, no allocator)
+  CTP_CROSS_FUN explicit PodGetBlobTask(
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const TagId &tag_id,
+      const char *blob_name, clio::run::u64 offset, clio::run::u64 size,
+      clio::run::u32 flags, ctp::ipc::ShmPtr<> blob_data)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kPodGetBlob),
+        tag_id_(tag_id),
+        blob_name_(blob_name),
+        offset_(offset),
+        size_(size),
+        flags_(flags),
+        blob_data_(blob_data),
+        gpu_page_idx_(kNoPageIdx) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kPodGetBlob;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+#if CTP_IS_HOST
+  // std::string convenience overload (host clients).
+  explicit PodGetBlobTask(const clio::run::TaskId &task_id,
+                          const clio::run::PoolId &pool_id,
+                          const clio::run::PoolQuery &pool_query,
+                          const TagId &tag_id, const std::string &blob_name,
+                          clio::run::u64 offset, clio::run::u64 size,
+                          clio::run::u32 flags, ctp::ipc::ShmPtr<> blob_data)
+      : PodGetBlobTask(task_id, pool_id, pool_query, tag_id, blob_name.c_str(),
+                       offset, size, flags, blob_data) {}
+#endif
+
+  /** Destructor — frees blob_data_ when this task owns the buffer (see
+   *  GetBlobTask::~GetBlobTask for the TASK_DATA_OWNER rationale). */
+  CTP_CROSS_FUN ~PodGetBlobTask() {
+#if !CTP_IS_DEVICE_PASS
+    if (task_flags_.Any(TASK_DATA_OWNER) && !blob_data_.IsNull()) {
+      auto *ipc_manager = CLIO_CPU_IPC;
+      if (ipc_manager) {
+        ipc_manager->FreeBuffer(blob_data_.template Cast<char>());
+      }
+    }
+#endif
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_, blob_name_, offset_, size_, flags_, blob_data_, gpu_page_idx_);
+    ar.bulk(blob_data_, size_, BULK_EXPOSE);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    ar.bulk(blob_data_, size_, BULK_XFER);
+  }
+
+  // No FixupAfterCopy — fixed_string is position-independent.
+
+  void Copy(const ctp::ipc::FullPtr<PodGetBlobTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    blob_name_ = other->blob_name_;
+    offset_ = other->offset_;
+    size_ = other->size_;
+    flags_ = other->flags_;
+    blob_data_ = other->blob_data_;
+    gpu_page_idx_ = other->gpu_page_idx_;
+  }
+
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<PodGetBlobTask>());
+  }
+};
+
+/**
+ * PodReorganizeBlob - fully-POD, GPU-compatible variant of ReorganizeBlobTask.
+ */
+struct PodReorganizeBlobTask : public clio::run::Task {
+  IN TagId tag_id_;
+  IN PodBlobName blob_name_;
+  IN float new_score_;
+
+  // SHM constructor
+  CTP_CROSS_FUN PodReorganizeBlobTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        blob_name_(),
+        new_score_(0.0f) {}
+
+  // GPU-compatible emplace constructor (const char* blob name, no allocator)
+  CTP_CROSS_FUN explicit PodReorganizeBlobTask(
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const TagId &tag_id,
+      const char *blob_name, float new_score)
+      : clio::run::Task(task_id, pool_id, pool_query,
+                        Method::kPodReorganizeBlob),
+        tag_id_(tag_id),
+        blob_name_(blob_name),
+        new_score_(new_score) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kPodReorganizeBlob;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+#if CTP_IS_HOST
+  // std::string convenience overload (host clients).
+  explicit PodReorganizeBlobTask(const clio::run::TaskId &task_id,
+                                 const clio::run::PoolId &pool_id,
+                                 const clio::run::PoolQuery &pool_query,
+                                 const TagId &tag_id,
+                                 const std::string &blob_name, float new_score)
+      : PodReorganizeBlobTask(task_id, pool_id, pool_query, tag_id,
+                              blob_name.c_str(), new_score) {}
+#endif
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_, blob_name_, new_score_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<PodReorganizeBlobTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    blob_name_ = other->blob_name_;
+    new_score_ = other->new_score_;
+  }
+
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<PodReorganizeBlobTask>());
   }
 };
 
 /**
  * DelBlob task - Remove blob and decrement tag size
  */
-struct DelBlobTask : public chi::Task {
+struct DelBlobTask : public clio::run::Task {
   IN TagId tag_id_;                 // Tag ID for blob lookup
-  IN chi::priv::string blob_name_;  // Blob name (required)
+  IN clio::run::priv::string blob_name_;  // Blob name (required)
 
   // SHM constructor
   DelBlobTask()
-      : chi::Task(), tag_id_(TagId::GetNull()), blob_name_(CLIO_PRIV_ALLOC) {}
+      : clio::run::Task(), tag_id_(TagId::GetNull()), blob_name_(CLIO_PRIV_ALLOC) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit DelBlobTask(const chi::TaskId &task_id,
-                                      const chi::PoolId &pool_id,
-                                      const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit DelBlobTask(const clio::run::TaskId &task_id,
+                                      const clio::run::PoolId &pool_id,
+                                      const clio::run::PoolQuery &pool_query,
                                       const TagId &tag_id,
                                       const std::string &blob_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kDelBlob),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kDelBlob),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name) {
     task_id_ = task_id;
@@ -1525,12 +1865,71 @@ struct DelBlobTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<DelBlobTask>());
+  }
+};
+
+/**
+ * TruncateBlob task - resize a blob to an exact logical size.
+ * Grows (zero-extends) or shrinks (frees trailing blocks). Shares
+ * Runtime::ResizeBlob with PutBlob's replace path.
+ */
+struct TruncateBlobTask : public clio::run::Task {
+  IN TagId tag_id_;                 // Tag ID for blob lookup
+  IN clio::run::priv::string blob_name_;  // Blob name (required)
+  IN clio::run::u64 new_size_;            // Target logical size in bytes
+
+  // SHM constructor
+  TruncateBlobTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        blob_name_(CLIO_PRIV_ALLOC),
+        new_size_(0) {}
+
+  // Emplace constructor
+  CTP_CROSS_FUN explicit TruncateBlobTask(const clio::run::TaskId &task_id,
+                                          const clio::run::PoolId &pool_id,
+                                          const clio::run::PoolQuery &pool_query,
+                                          const TagId &tag_id,
+                                          const std::string &blob_name,
+                                          clio::run::u64 new_size)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kTruncateBlob),
+        tag_id_(tag_id),
+        blob_name_(CLIO_PRIV_ALLOC, blob_name),
+        new_size_(new_size) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kTruncateBlob;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_, blob_name_, new_size_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<TruncateBlobTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    blob_name_ = other->blob_name_;
+    new_size_ = other->new_size_;
+  }
+
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<TruncateBlobTask>());
   }
 };
 
@@ -1538,20 +1937,20 @@ struct DelBlobTask : public chi::Task {
  * DelTag task - Remove all blobs from tag and remove tag
  * Supports lookup by either tag ID or tag name
  */
-struct DelTagTask : public chi::Task {
+struct DelTagTask : public clio::run::Task {
   INOUT TagId tag_id_;             // Tag ID to delete (input or lookup result)
-  IN chi::priv::string tag_name_;  // Tag name for lookup (optional)
+  IN clio::run::priv::string tag_name_;  // Tag name for lookup (optional)
 
   // SHM constructor
   DelTagTask()
-      : chi::Task(), tag_id_(TagId::GetNull()), tag_name_(CLIO_PRIV_ALLOC) {}
+      : clio::run::Task(), tag_id_(TagId::GetNull()), tag_name_(CLIO_PRIV_ALLOC) {}
 
   // Emplace constructor with tag ID
-  CTP_CROSS_FUN explicit DelTagTask(const chi::TaskId &task_id,
-                                     const chi::PoolId &pool_id,
-                                     const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit DelTagTask(const clio::run::TaskId &task_id,
+                                     const clio::run::PoolId &pool_id,
+                                     const clio::run::PoolQuery &pool_query,
                                      const TagId &tag_id)
-      : chi::Task(task_id, pool_id, pool_query, Method::kDelTag),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kDelTag),
         tag_id_(tag_id),
         tag_name_(CLIO_PRIV_ALLOC) {
     task_id_ = task_id;
@@ -1562,11 +1961,11 @@ struct DelTagTask : public chi::Task {
   }
 
   // Emplace constructor with tag name
-  CTP_CROSS_FUN explicit DelTagTask(const chi::TaskId &task_id,
-                                     const chi::PoolId &pool_id,
-                                     const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit DelTagTask(const clio::run::TaskId &task_id,
+                                     const clio::run::PoolId &pool_id,
+                                     const clio::run::PoolQuery &pool_query,
                                      const std::string &tag_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kDelTag),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kDelTag),
         tag_id_(TagId::GetNull()),
         tag_name_(CLIO_PRIV_ALLOC, tag_name) {
     task_id_ = task_id;
@@ -1605,33 +2004,232 @@ struct DelTagTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<DelTagTask>());
+  }
+};
+
+/**
+ * RenameTag task - change a tag's name, keeping its TagId (and therefore all
+ * of its blobs) intact. Broadcast: each container moves the name->id binding
+ * it holds (old_name_ -> new_name_) and updates the tag's stored name.
+ */
+struct RenameTagTask : public clio::run::Task {
+  INOUT TagId tag_id_;                 // Tag ID (input, or resolved from name)
+  IN clio::run::priv::string old_name_;      // Current tag name
+  IN clio::run::priv::string new_name_;      // Desired tag name
+
+  RenameTagTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        old_name_(CLIO_PRIV_ALLOC),
+        new_name_(CLIO_PRIV_ALLOC) {}
+
+  CTP_CROSS_FUN explicit RenameTagTask(const clio::run::TaskId &task_id,
+                                       const clio::run::PoolId &pool_id,
+                                       const clio::run::PoolQuery &pool_query,
+                                       const TagId &tag_id,
+                                       const std::string &old_name,
+                                       const std::string &new_name)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kRenameTag),
+        tag_id_(tag_id),
+        old_name_(CLIO_PRIV_ALLOC, old_name),
+        new_name_(CLIO_PRIV_ALLOC, new_name) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kRenameTag;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_, old_name_, new_name_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    ar(tag_id_);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<RenameTagTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    old_name_ = other->old_name_;
+    new_name_ = other->new_name_;
+  }
+
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<RenameTagTask>());
+  }
+};
+
+/**
+ * GetOrCreateTagAlias task - bind an additional name (alias_name_) to an
+ * EXISTING tag's TagId, so the alias shares the target's id and therefore all
+ * of its blobs (a hard link at the tag level). The target may be given by id
+ * (tag_id_) or by name (existing_name_); if it does not exist, found_ stays 0
+ * and the caller treats it as an error. Idempotent: if alias_name_ is already
+ * bound, its existing id is returned. Broadcast.
+ */
+struct GetOrCreateTagAliasTask : public clio::run::Task {
+  INOUT TagId tag_id_;              // Target tag id (input, or resolved by name)
+  IN clio::run::priv::string existing_name_;  // Target tag name (used if tag_id_ null)
+  IN clio::run::priv::string alias_name_;     // New name to bind to the target id
+  OUT clio::run::u32 found_;              // 1 if the target tag exists (success)
+
+  GetOrCreateTagAliasTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        existing_name_(CLIO_PRIV_ALLOC),
+        alias_name_(CLIO_PRIV_ALLOC),
+        found_(0) {}
+
+  CTP_CROSS_FUN explicit GetOrCreateTagAliasTask(
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const TagId &tag_id,
+      const std::string &existing_name, const std::string &alias_name)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetOrCreateTagAlias),
+        tag_id_(tag_id),
+        existing_name_(CLIO_PRIV_ALLOC, existing_name),
+        alias_name_(CLIO_PRIV_ALLOC, alias_name),
+        found_(0) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kGetOrCreateTagAlias;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_, existing_name_, alias_name_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    ar(tag_id_, found_);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<GetOrCreateTagAliasTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    existing_name_ = other->existing_name_;
+    alias_name_ = other->alias_name_;
+    found_ = other->found_;
+  }
+
+  // Broadcast aggregation: the alias exists if ANY container confirmed the
+  // target, and the resolved id is whichever non-null id a replica reported.
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    auto other = other_base.template Cast<GetOrCreateTagAliasTask>();
+    if (other->found_) {
+      found_ = 1;
+    }
+    if (tag_id_.IsNull() && !other->tag_id_.IsNull()) {
+      tag_id_ = other->tag_id_;
+    }
+  }
+};
+
+/**
+ * GetTagName task - resolve a TagId to its full (absolute) tag name.
+ *
+ * Tag names are stored RELATIVELY: a hierarchical child holds
+ * "$tagid{major.minor}/leaf" referencing its parent's id, so moving a
+ * directory tag is O(1). This task walks those parent references on the
+ * owning container and returns the fully-resolved name (e.g. "/a/b/c").
+ * Flat (non-path) tags resolve to themselves. Broadcast; the container that
+ * owns the tag's metadata produces the answer.
+ */
+struct GetTagNameTask : public clio::run::Task {
+  IN TagId tag_id_;                 // Tag ID to resolve
+  OUT clio::run::priv::string tag_name_;  // Resolved full name (empty if not found)
+  OUT clio::run::u32 found_;              // 1 if the tag's metadata was located
+
+  GetTagNameTask()
+      : clio::run::Task(),
+        tag_id_(TagId::GetNull()),
+        tag_name_(CLIO_PRIV_ALLOC),
+        found_(0) {}
+
+  CTP_CROSS_FUN explicit GetTagNameTask(const clio::run::TaskId &task_id,
+                                        const clio::run::PoolId &pool_id,
+                                        const clio::run::PoolQuery &pool_query,
+                                        const TagId &tag_id)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetTagName),
+        tag_id_(tag_id),
+        tag_name_(CLIO_PRIV_ALLOC),
+        found_(0) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kGetTagName;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_id_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    ar(tag_name_, found_);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<GetTagNameTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_id_ = other->tag_id_;
+    tag_name_ = other->tag_name_;
+    found_ = other->found_;
+  }
+
+  // Broadcast aggregation: keep the answer from whichever container owns the
+  // tag (the one that set found_ and a non-empty resolved name).
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    auto other = other_base.template Cast<GetTagNameTask>();
+    if (other->found_ && !found_) {
+      found_ = 1;
+      tag_name_ = other->tag_name_;
+    }
   }
 };
 
 /**
  * GetTagSize task - Get the total size of a tag
  */
-struct GetTagSizeTask : public chi::Task {
+struct GetTagSizeTask : public clio::run::Task {
   IN TagId tag_id_;      // Tag ID to query
   OUT size_t tag_size_;  // Total size of all blobs in tag
+  OUT clio::run::u64 ctime_;   // Tag change-time (last_changed_), ns; 0 if unknown
 
   // SHM constructor
-  GetTagSizeTask() : chi::Task(), tag_id_(TagId::GetNull()), tag_size_(0) {}
+  GetTagSizeTask()
+      : clio::run::Task(), tag_id_(TagId::GetNull()), tag_size_(0), ctime_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit GetTagSizeTask(const chi::TaskId &task_id,
-                                         const chi::PoolId &pool_id,
-                                         const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetTagSizeTask(const clio::run::TaskId &task_id,
+                                         const clio::run::PoolId &pool_id,
+                                         const clio::run::PoolQuery &pool_query,
                                          const TagId &tag_id)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetTagSize),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetTagSize),
         tag_id_(tag_id),
-        tag_size_(0) {
+        tag_size_(0),
+        ctime_(0) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kGetTagSize;
@@ -1654,7 +2252,7 @@ struct GetTagSizeTask : public chi::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(tag_size_);
+    ar(tag_size_, ctime_);
   }
 
   /**
@@ -1665,39 +2263,173 @@ struct GetTagSizeTask : public chi::Task {
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
     tag_size_ = other->tag_size_;
+    ctime_ = other->ctime_;
   }
 
   /**
-   * Aggregate results from a replica task
-   * Sums the tag_size_ values from multiple nodes
+   * AggregateOut results from a replica task
+   * Sums the tag_size_ values from multiple nodes; keeps the newest ctime.
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto replica = other_base.template Cast<GetTagSizeTask>();
     tag_size_ += replica->tag_size_;
+    if (replica->ctime_ > ctime_) ctime_ = replica->ctime_;
+  }
+};
+
+/**
+ * GetCapacity task - total and remaining storage capacity.
+ *
+ * The handler sums max_capacity_ (total) and remaining_space_ (free) over the
+ * targets registered on this node, so a Local query returns this node's
+ * capacity. Because AggregateOut sums both fields across replicas, a Broadcast
+ * query returns the whole cluster's total and remaining capacity.
+ */
+struct GetCapacityTask : public clio::run::Task {
+  OUT clio::run::u64 total_capacity_;      // Summed total capacity in bytes
+  OUT clio::run::u64 remaining_capacity_;  // Summed remaining (free) capacity in bytes
+
+  // SHM constructor
+  GetCapacityTask()
+      : clio::run::Task(), total_capacity_(0), remaining_capacity_(0) {}
+
+  // Emplace constructor
+  CTP_CROSS_FUN explicit GetCapacityTask(const clio::run::TaskId &task_id,
+                                            const clio::run::PoolId &pool_id,
+                                            const clio::run::PoolQuery &pool_query)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetCapacity),
+        total_capacity_(0),
+        remaining_capacity_(0) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kGetCapacity;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    ar(total_capacity_, remaining_capacity_);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<GetCapacityTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    total_capacity_ = other->total_capacity_;
+    remaining_capacity_ = other->remaining_capacity_;
+  }
+
+  /**
+   * AggregateOut: sum capacity from each node so a Broadcast yields the total
+   * and remaining cluster capacity.
+   */
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    auto other = other_base.template Cast<GetCapacityTask>();
+    total_capacity_ += other->total_capacity_;
+    remaining_capacity_ += other->remaining_capacity_;
+  }
+};
+
+/**
+ * GetNumAliases task - number of extra names (tag-level hard links) bound to a
+ * tag, identified by name or id. The canonical name is NOT counted, so a file
+ * with no hard links returns 0; the POSIX link count is num_aliases_ + 1.
+ *
+ * The tag's metadata (and its aliases_ list) lives on a single container, so
+ * this is a Broadcast-safe op: AggregateOut keeps the answer from whichever
+ * replica located the tag (mirrors GetTagName).
+ */
+struct GetNumAliasesTask : public clio::run::Task {
+  IN clio::run::priv::string tag_name_;  // Tag name/path (empty => use tag_id_)
+  IN TagId tag_id_;                // Tag id (used when tag_name_ is empty)
+  OUT clio::run::u32 num_aliases_;       // # of extra names bound to the tag
+  OUT clio::run::u32 found_;             // 1 if the tag's metadata was located
+
+  // SHM constructor
+  GetNumAliasesTask()
+      : clio::run::Task(),
+        tag_name_(CLIO_PRIV_ALLOC),
+        tag_id_(TagId::GetNull()),
+        num_aliases_(0),
+        found_(0) {}
+
+  // Emplace constructor
+  CTP_CROSS_FUN explicit GetNumAliasesTask(const clio::run::TaskId &task_id,
+                                           const clio::run::PoolId &pool_id,
+                                           const clio::run::PoolQuery &pool_query,
+                                           const std::string &tag_name,
+                                           const TagId &tag_id)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetNumAliases),
+        tag_name_(CLIO_PRIV_ALLOC, tag_name),
+        tag_id_(tag_id),
+        num_aliases_(0),
+        found_(0) {
+    task_id_ = task_id;
+    pool_id_ = pool_id;
+    method_ = Method::kGetNumAliases;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(tag_name_, tag_id_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+    ar(num_aliases_, found_);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<GetNumAliasesTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    tag_name_ = other->tag_name_;
+    tag_id_ = other->tag_id_;
+    num_aliases_ = other->num_aliases_;
+    found_ = other->found_;
+  }
+
+  // Broadcast aggregation: keep the answer from whichever container owns the
+  // tag (the one that set found_).
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    auto other = other_base.template Cast<GetNumAliasesTask>();
+    if (other->found_ && !found_) {
+      found_ = 1;
+      num_aliases_ = other->num_aliases_;
+    }
   }
 };
 
 /**
  * PollTelemetryLog task - Poll telemetry log with minimum logical time filter
  */
-struct PollTelemetryLogTask : public chi::Task {
+struct PollTelemetryLogTask : public clio::run::Task {
   IN std::uint64_t minimum_logical_time_;        // Minimum logical time filter
   OUT std::uint64_t last_logical_time_;          // Last logical time scanned
-  OUT chi::priv::vector<CteTelemetry> entries_;  // Retrieved telemetry entries
+  OUT clio::run::priv::vector<CteTelemetry> entries_;  // Retrieved telemetry entries
 
   // SHM constructor
   PollTelemetryLogTask()
-      : chi::Task(),
+      : clio::run::Task(),
         minimum_logical_time_(0),
         last_logical_time_(0),
         entries_(CLIO_PRIV_ALLOC) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit PollTelemetryLogTask(
-      const chi::TaskId &task_id, const chi::PoolId &pool_id,
-      const chi::PoolQuery &pool_query, std::uint64_t minimum_logical_time)
-      : chi::Task(task_id, pool_id, pool_query, Method::kPollTelemetryLog),
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, std::uint64_t minimum_logical_time)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kPollTelemetryLog),
         minimum_logical_time_(minimum_logical_time),
         last_logical_time_(0),
         entries_(CLIO_PRIV_ALLOC) {
@@ -1738,11 +2470,11 @@ struct PollTelemetryLogTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<PollTelemetryLogTask>());
   }
 };
@@ -1750,25 +2482,25 @@ struct PollTelemetryLogTask : public chi::Task {
 /**
  * GetBlobScore task - Get the score of a blob
  */
-struct GetBlobScoreTask : public chi::Task {
+struct GetBlobScoreTask : public clio::run::Task {
   IN TagId tag_id_;                 // Tag ID for blob lookup
-  IN chi::priv::string blob_name_;  // Blob name (required)
+  IN clio::run::priv::string blob_name_;  // Blob name (required)
   OUT float score_;                 // Blob score (0-1)
 
   // SHM constructor
   GetBlobScoreTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_id_(TagId::GetNull()),
         blob_name_(CLIO_PRIV_ALLOC),
         score_(0.0f) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit GetBlobScoreTask(const chi::TaskId &task_id,
-                                           const chi::PoolId &pool_id,
-                                           const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetBlobScoreTask(const clio::run::TaskId &task_id,
+                                           const clio::run::PoolId &pool_id,
+                                           const clio::run::PoolQuery &pool_query,
                                            const TagId &tag_id,
                                            const std::string &blob_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetBlobScore),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetBlobScore),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         score_(0.0f) {
@@ -1809,11 +2541,11 @@ struct GetBlobScoreTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<GetBlobScoreTask>());
   }
 };
@@ -1821,25 +2553,25 @@ struct GetBlobScoreTask : public chi::Task {
 /**
  * GetBlobSize task - Get the size of a blob
  */
-struct GetBlobSizeTask : public chi::Task {
+struct GetBlobSizeTask : public clio::run::Task {
   IN TagId tag_id_;                 // Tag ID for blob lookup
-  IN chi::priv::string blob_name_;  // Blob name (required)
-  OUT chi::u64 size_;               // Blob size in bytes
+  IN clio::run::priv::string blob_name_;  // Blob name (required)
+  OUT clio::run::u64 size_;               // Blob size in bytes
 
   // SHM constructor
   GetBlobSizeTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_id_(TagId::GetNull()),
         blob_name_(CLIO_PRIV_ALLOC),
         size_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit GetBlobSizeTask(const chi::TaskId &task_id,
-                                          const chi::PoolId &pool_id,
-                                          const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetBlobSizeTask(const clio::run::TaskId &task_id,
+                                          const clio::run::PoolId &pool_id,
+                                          const clio::run::PoolQuery &pool_query,
                                           const TagId &tag_id,
                                           const std::string &blob_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetBlobSize),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetBlobSize),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         size_(0) {
@@ -1880,11 +2612,11 @@ struct GetBlobSizeTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    * @param other Pointer to the replica task to aggregate from
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<GetBlobSizeTask>());
   }
 };
@@ -1894,22 +2626,22 @@ struct GetBlobSizeTask : public chi::Task {
  * Contains the target pool ID and size for each block
  */
 struct BlobBlockInfo {
-  chi::PoolId
+  clio::run::PoolId
       target_pool_id_;     // Pool ID of the target (bdev) storing this block
-  chi::u64 block_size_;    // Size of this block in bytes
-  chi::u64 block_offset_;  // Offset within target where block is stored
+  clio::run::u64 block_size_;    // Size of this block in bytes
+  clio::run::u64 block_offset_;  // Offset within target where block is stored
 
   BlobBlockInfo() : target_pool_id_(), block_size_(0), block_offset_(0) {}
-  BlobBlockInfo(const chi::PoolId &pool_id, chi::u64 size, chi::u64 offset)
+  BlobBlockInfo(const clio::run::PoolId &pool_id, clio::run::u64 size, clio::run::u64 offset)
       : target_pool_id_(pool_id), block_size_(size), block_offset_(offset) {}
 
   template <typename Archive>
   void serialize(Archive &ar) {
-    chi::u64 pool_id_u64 =
+    clio::run::u64 pool_id_u64 =
         target_pool_id_.IsNull() ? 0 : target_pool_id_.ToU64();
     ar(pool_id_u64, block_size_, block_offset_);
     // Restore PoolId from u64 when deserializing
-    target_pool_id_ = chi::PoolId::FromU64(pool_id_u64);
+    target_pool_id_ = clio::run::PoolId::FromU64(pool_id_u64);
   }
 };
 
@@ -1917,16 +2649,16 @@ struct BlobBlockInfo {
  * GetBlobInfo task - Get comprehensive blob metadata
  * Returns score, size, and block placement information
  */
-struct GetBlobInfoTask : public chi::Task {
+struct GetBlobInfoTask : public clio::run::Task {
   IN TagId tag_id_;                        // Tag ID for blob lookup
-  IN chi::priv::string blob_name_;         // Blob name (required)
+  IN clio::run::priv::string blob_name_;         // Blob name (required)
   OUT float score_;                        // Blob score (0.0-1.0)
-  OUT chi::u64 total_size_;                // Total blob size in bytes
+  OUT clio::run::u64 total_size_;                // Total blob size in bytes
   OUT std::vector<BlobBlockInfo> blocks_;  // Block placement info
 
   // SHM constructor
   GetBlobInfoTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_id_(TagId::GetNull()),
         blob_name_(CLIO_PRIV_ALLOC),
         score_(0.0f),
@@ -1934,12 +2666,12 @@ struct GetBlobInfoTask : public chi::Task {
         blocks_() {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit GetBlobInfoTask(const chi::TaskId &task_id,
-                                          const chi::PoolId &pool_id,
-                                          const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit GetBlobInfoTask(const clio::run::TaskId &task_id,
+                                          const clio::run::PoolId &pool_id,
+                                          const clio::run::PoolQuery &pool_query,
                                           const TagId &tag_id,
                                           const std::string &blob_name)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetBlobInfo),
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetBlobInfo),
         tag_id_(tag_id),
         blob_name_(CLIO_PRIV_ALLOC, blob_name),
         score_(0.0f),
@@ -1983,10 +2715,10 @@ struct GetBlobInfoTask : public chi::Task {
   }
 
   /**
-   * Aggregate replica results into this task
+   * AggregateOut replica results into this task
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<GetBlobInfoTask>());
   }
 };
@@ -1994,18 +2726,18 @@ struct GetBlobInfoTask : public chi::Task {
 /**
  * GetContainedBlobs task - Get all blob names contained in a tag
  */
-struct GetContainedBlobsTask : public chi::Task {
+struct GetContainedBlobsTask : public clio::run::Task {
   IN TagId tag_id_;                          // Tag ID to query
   OUT std::vector<std::string> blob_names_;  // Vector of blob names in the tag
 
   // SHM constructor
-  GetContainedBlobsTask() : chi::Task(), tag_id_(TagId::GetNull()) {}
+  GetContainedBlobsTask() : clio::run::Task(), tag_id_(TagId::GetNull()) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit GetContainedBlobsTask(
-      const chi::TaskId &task_id, const chi::PoolId &pool_id,
-      const chi::PoolQuery &pool_query, const TagId &tag_id)
-      : chi::Task(task_id, pool_id, pool_query, Method::kGetContainedBlobs),
+      const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, const TagId &tag_id)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetContainedBlobs),
         tag_id_(tag_id) {
     task_id_ = task_id;
     pool_id_ = pool_id;
@@ -2043,11 +2775,11 @@ struct GetContainedBlobsTask : public chi::Task {
   }
 
   /**
-   * Aggregate results from a replica task
+   * AggregateOut results from a replica task
    * Merges the blob_names_ vectors from multiple nodes
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto replica = other_base.template Cast<GetContainedBlobsTask>();
     // Merge blob names from replica into this task's blob_names_
     for (size_t i = 0; i < replica->blob_names_.size(); ++i) {
@@ -2063,28 +2795,32 @@ struct GetContainedBlobsTask : public chi::Task {
  *   limit.
  * - Returns a vector of tag names matching the query.
  * - total_tags_matched_ sums the total number of tags that matched the
- *   pattern across replicas during Aggregate.
+ *   pattern across replicas during AggregateOut.
  */
-struct TagQueryTask : public chi::Task {
-  IN chi::priv::string tag_regex_;
-  IN chi::u32 max_tags_;
-  OUT chi::u64 total_tags_matched_;
+struct TagQueryTask : public clio::run::Task {
+  IN clio::run::priv::string tag_regex_;
+  IN clio::run::u32 max_tags_;
+  OUT clio::run::u64 total_tags_matched_;
   OUT std::vector<std::string> results_;
+  // Packed TagId per matched tag, index-aligned with results_:
+  // (major_ << 32) | minor_. Lets callers (e.g. the filesystem readdir) assign
+  // a stable per-tag inode without a second round trip per entry.
+  OUT std::vector<clio::run::u64> result_ids_;
 
   // SHM constructor
   TagQueryTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_regex_(CLIO_PRIV_ALLOC),
         max_tags_(0),
         total_tags_matched_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit TagQueryTask(const chi::TaskId &task_id,
-                                       const chi::PoolId &pool_id,
-                                       const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit TagQueryTask(const clio::run::TaskId &task_id,
+                                       const clio::run::PoolId &pool_id,
+                                       const clio::run::PoolQuery &pool_query,
                                        const std::string &tag_regex,
-                                       chi::u32 max_tags = 0)
-      : chi::Task(task_id, pool_id, pool_query, Method::kTagQuery),
+                                       clio::run::u32 max_tags = 0)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kTagQuery),
         tag_regex_(CLIO_PRIV_ALLOC, tag_regex),
         max_tags_(max_tags),
         total_tags_matched_(0) {
@@ -2110,7 +2846,7 @@ struct TagQueryTask : public chi::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(total_tags_matched_, results_);
+    ar(total_tags_matched_, results_, result_ids_);
   }
 
   /**
@@ -2123,22 +2859,25 @@ struct TagQueryTask : public chi::Task {
     max_tags_ = other->max_tags_;
     total_tags_matched_ = other->total_tags_matched_;
     results_ = other->results_;
+    result_ids_ = other->result_ids_;
   }
 
   /**
-   * Aggregate results from multiple nodes
+   * AggregateOut results from multiple nodes
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto other = other_base.template Cast<TagQueryTask>();
     // Sum total matched tags across replicas
     total_tags_matched_ += other->total_tags_matched_;
 
-    // Append results up to max_tags_ (if non-zero)
-    for (const auto &tag_name : other->results_) {
+    // Append results (and their packed ids, in lockstep) up to max_tags_.
+    for (size_t i = 0; i < other->results_.size(); ++i) {
       if (max_tags_ != 0 && results_.size() >= static_cast<size_t>(max_tags_))
         break;
-      results_.push_back(tag_name);
+      results_.push_back(other->results_[i]);
+      if (i < other->result_ids_.size())
+        result_ids_.push_back(other->result_ids_[i]);
     }
   }
 };
@@ -2151,32 +2890,32 @@ struct TagQueryTask : public chi::Task {
  * - Returns a vector of pairs where each pair contains (tag_name, blob_name)
  *   for blobs matching the query.
  * - total_blobs_matched_ sums the total number of blobs that matched across
- *   replicas during Aggregate.
+ *   replicas during AggregateOut.
  */
-struct BlobQueryTask : public chi::Task {
-  IN chi::priv::string tag_regex_;
-  IN chi::priv::string blob_regex_;
-  IN chi::u32 max_blobs_;
-  OUT chi::u64 total_blobs_matched_;
+struct BlobQueryTask : public clio::run::Task {
+  IN clio::run::priv::string tag_regex_;
+  IN clio::run::priv::string blob_regex_;
+  IN clio::run::u32 max_blobs_;
+  OUT clio::run::u64 total_blobs_matched_;
   OUT std::vector<std::string> tag_names_;
   OUT std::vector<std::string> blob_names_;
 
   // SHM constructor
   BlobQueryTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_regex_(CLIO_PRIV_ALLOC),
         blob_regex_(CLIO_PRIV_ALLOC),
         max_blobs_(0),
         total_blobs_matched_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit BlobQueryTask(const chi::TaskId &task_id,
-                                        const chi::PoolId &pool_id,
-                                        const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit BlobQueryTask(const clio::run::TaskId &task_id,
+                                        const clio::run::PoolId &pool_id,
+                                        const clio::run::PoolQuery &pool_query,
                                         const std::string &tag_regex,
                                         const std::string &blob_regex,
-                                        chi::u32 max_blobs = 0)
-      : chi::Task(task_id, pool_id, pool_query, Method::kBlobQuery),
+                                        clio::run::u32 max_blobs = 0)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kBlobQuery),
         tag_regex_(CLIO_PRIV_ALLOC, tag_regex),
         blob_regex_(CLIO_PRIV_ALLOC, blob_regex),
         max_blobs_(max_blobs),
@@ -2221,10 +2960,10 @@ struct BlobQueryTask : public chi::Task {
   }
 
   /**
-   * Aggregate results from multiple nodes
+   * AggregateOut results from multiple nodes
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto other = other_base.template Cast<BlobQueryTask>();
     // Sum total matched blobs across replicas
     total_blobs_matched_ += other->total_blobs_matched_;
@@ -2244,17 +2983,17 @@ struct BlobQueryTask : public chi::Task {
  * FlushMetadataTask - Periodic task to flush tag/blob metadata to durable
  * storage
  */
-struct FlushMetadataTask : public chi::Task {
-  OUT chi::u64 entries_flushed_;
+struct FlushMetadataTask : public clio::run::Task {
+  OUT clio::run::u64 entries_flushed_;
 
   /** SHM default constructor */
-  FlushMetadataTask() : chi::Task(), entries_flushed_(0) {}
+  FlushMetadataTask() : clio::run::Task(), entries_flushed_(0) {}
 
   /** Emplace constructor */
-  CTP_CROSS_FUN explicit FlushMetadataTask(const chi::TaskId &task_node,
-                                            const chi::PoolId &pool_id,
-                                            const chi::PoolQuery &pool_query)
-      : chi::Task(task_node, pool_id, pool_query, Method::kFlushMetadata),
+  CTP_CROSS_FUN explicit FlushMetadataTask(const clio::run::TaskId &task_node,
+                                            const clio::run::PoolId &pool_id,
+                                            const clio::run::PoolQuery &pool_query)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kFlushMetadata),
         entries_flushed_(0) {
     task_id_ = task_node;
     pool_id_ = pool_id;
@@ -2279,8 +3018,8 @@ struct FlushMetadataTask : public chi::Task {
     entries_flushed_ = other->entries_flushed_;
   }
 
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<FlushMetadataTask>());
   }
 };
@@ -2289,24 +3028,24 @@ struct FlushMetadataTask : public chi::Task {
  * FlushDataTask - Periodic task to flush data from volatile to non-volatile
  * targets
  */
-struct FlushDataTask : public chi::Task {
+struct FlushDataTask : public clio::run::Task {
   IN int target_persistence_level_;
-  OUT chi::u64 bytes_flushed_;
-  OUT chi::u64 blobs_flushed_;
+  OUT clio::run::u64 bytes_flushed_;
+  OUT clio::run::u64 blobs_flushed_;
 
   /** SHM default constructor */
   FlushDataTask()
-      : chi::Task(),
+      : clio::run::Task(),
         target_persistence_level_(1),
         bytes_flushed_(0),
         blobs_flushed_(0) {}
 
   /** Emplace constructor */
-  CTP_CROSS_FUN explicit FlushDataTask(const chi::TaskId &task_node,
-                                        const chi::PoolId &pool_id,
-                                        const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit FlushDataTask(const clio::run::TaskId &task_node,
+                                        const clio::run::PoolId &pool_id,
+                                        const clio::run::PoolQuery &pool_query,
                                         int target_persistence_level = 1)
-      : chi::Task(task_node, pool_id, pool_query, Method::kFlushData),
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kFlushData),
         target_persistence_level_(target_persistence_level),
         bytes_flushed_(0),
         blobs_flushed_(0) {
@@ -2336,8 +3075,8 @@ struct FlushDataTask : public chi::Task {
     blobs_flushed_ = other->blobs_flushed_;
   }
 
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     Copy(other_base.template Cast<FlushDataTask>());
   }
 };
@@ -2381,30 +3120,30 @@ struct SemanticSearchResult {
  * Regexes use std::regex_match (full-string) for parity with
  * BlobQueryTask. Use ".*pattern.*" for substring matching.
  */
-struct SemanticSearchTask : public chi::Task {
-  IN chi::priv::string tag_regex_;
-  IN chi::priv::string blob_regex_;
-  IN chi::priv::string query_text_;
-  IN chi::u32 k_;
+struct SemanticSearchTask : public clio::run::Task {
+  IN clio::run::priv::string tag_regex_;
+  IN clio::run::priv::string blob_regex_;
+  IN clio::run::priv::string query_text_;
+  IN clio::run::u32 k_;
   OUT std::vector<SemanticSearchResult> results_;
 
   // SHM constructor
   SemanticSearchTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_regex_(CLIO_PRIV_ALLOC),
         blob_regex_(CLIO_PRIV_ALLOC),
         query_text_(CLIO_PRIV_ALLOC),
         k_(10) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit SemanticSearchTask(const chi::TaskId &task_id,
-                                             const chi::PoolId &pool_id,
-                                             const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit SemanticSearchTask(const clio::run::TaskId &task_id,
+                                             const clio::run::PoolId &pool_id,
+                                             const clio::run::PoolQuery &pool_query,
                                              const std::string &tag_regex,
                                              const std::string &blob_regex,
                                              const std::string &query_text,
-                                             chi::u32 k)
-      : chi::Task(task_id, pool_id, pool_query, Method::kSemanticSearch),
+                                             clio::run::u32 k)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kSemanticSearch),
         tag_regex_(CLIO_PRIV_ALLOC, tag_regex),
         blob_regex_(CLIO_PRIV_ALLOC, blob_regex),
         query_text_(CLIO_PRIV_ALLOC, query_text),
@@ -2438,18 +3177,18 @@ struct SemanticSearchTask : public chi::Task {
   }
 
   /**
-   * Aggregate one replica's results into this (origin) task.
+   * AggregateOut one replica's results into this (origin) task.
    *
    * SemanticSearch defaults to a Broadcast query, so every tag-owning
    * container runs BM25 over its own slice and returns its local top-k
-   * (already sorted descending by score). Aggregate is called once per
+   * (already sorted descending by score). AggregateOut is called once per
    * replica; it must MERGE those partial result sets and keep the global
    * top-k by score — not overwrite (the previous Copy() dropped every
    * replica but the last). Merge → sort descending by BM25 score → trim
    * to k_ (k_ == 0 means "no cap", keep all).
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto other = other_base.template Cast<SemanticSearchTask>();
     if (other->results_.empty()) {
       return;
@@ -2496,17 +3235,17 @@ struct TemporalSearchResult {
  *
  * This is a pure metadata scan — no blob bytes are read.
  */
-struct TemporalSearchTask : public chi::Task {
-  IN chi::priv::string tag_regex_;
-  IN chi::priv::string blob_regex_;
+struct TemporalSearchTask : public clio::run::Task {
+  IN clio::run::priv::string tag_regex_;
+  IN clio::run::priv::string blob_regex_;
   IN Timestamp time_begin_;
   IN Timestamp time_end_;
-  IN chi::u32 max_entries_;
+  IN clio::run::u32 max_entries_;
   OUT std::vector<TemporalSearchResult> results_;
 
   // SHM constructor
   TemporalSearchTask()
-      : chi::Task(),
+      : clio::run::Task(),
         tag_regex_(CLIO_PRIV_ALLOC),
         blob_regex_(CLIO_PRIV_ALLOC),
         time_begin_(0),
@@ -2514,15 +3253,15 @@ struct TemporalSearchTask : public chi::Task {
         max_entries_(0) {}
 
   // Emplace constructor
-  CTP_CROSS_FUN explicit TemporalSearchTask(const chi::TaskId &task_id,
-                                             const chi::PoolId &pool_id,
-                                             const chi::PoolQuery &pool_query,
+  CTP_CROSS_FUN explicit TemporalSearchTask(const clio::run::TaskId &task_id,
+                                             const clio::run::PoolId &pool_id,
+                                             const clio::run::PoolQuery &pool_query,
                                              const std::string &tag_regex,
                                              const std::string &blob_regex,
                                              Timestamp time_begin,
                                              Timestamp time_end,
-                                             chi::u32 max_entries)
-      : chi::Task(task_id, pool_id, pool_query, Method::kTemporalSearch),
+                                             clio::run::u32 max_entries)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kTemporalSearch),
         tag_regex_(CLIO_PRIV_ALLOC, tag_regex),
         blob_regex_(CLIO_PRIV_ALLOC, blob_regex),
         time_begin_(time_begin),
@@ -2558,18 +3297,18 @@ struct TemporalSearchTask : public chi::Task {
   }
 
   /**
-   * Aggregate one replica's results into this (origin) task.
+   * AggregateOut one replica's results into this (origin) task.
    *
    * Like SemanticSearch, TemporalSearch defaults to a Broadcast query: every
    * tag-owning container returns its own oldest `max_entries_` blobs (sorted
-   * ascending by last-modified timestamp). Aggregate is called once per
+   * ascending by last-modified timestamp). AggregateOut is called once per
    * replica; it must MERGE those partial sets and keep the global oldest
    * `max_entries_` — not overwrite (the previous Copy() dropped every replica
    * but the last). Merge → sort ascending by timestamp → trim to max_entries_
    * (max_entries_ == 0 means "no cap", keep all).
    */
-  void Aggregate(const ctp::ipc::FullPtr<chi::Task> &other_base) {
-    Task::Aggregate(other_base);
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
     auto other = other_base.template Cast<TemporalSearchTask>();
     if (other->results_.empty()) {
       return;

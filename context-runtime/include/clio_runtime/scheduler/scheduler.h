@@ -32,8 +32,8 @@
  */
 
 // Copyright 2024 IOWarp contributors
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_SCHEDULER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_SCHEDULER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_SCHEDULER_SCHEDULER_H_
+#define CLIO_RUNTIME_INCLUDE_SCHEDULER_SCHEDULER_H_
 
 #include "clio_runtime/types.h"
 #include "clio_runtime/task.h"
@@ -88,7 +88,7 @@ class Scheduler {
    * @return Worker ID to assign the task to
    */
   virtual u32 RuntimeMapTask(Worker *worker, const Future<Task> &task,
-                             Container *container) = 0;
+                             ContainerHold container) = 0;
 
   /**
    * Either steal or delegate tasks on a worker to balance load.
@@ -103,9 +103,9 @@ class Scheduler {
    * Implements adaptive polling to reduce CPU utilization when tasks
    * aren't performing I/O or computation.
    *
-   * @param run_ctx Pointer to the RunContext for the periodic task
+   * @param task The periodic task whose RunContext polling interval to adjust
    */
-  virtual void AdjustPolling(RunContext *run_ctx) = 0;
+  virtual void AdjustPolling(const clio::run::shared_ptr<Task> &task) = 0;
 
   /**
    * Get the designated GPU worker (polls GPU queues).
@@ -140,4 +140,4 @@ class Scheduler {
 
 }  // namespace clio::run
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_SCHEDULER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_SCHEDULER_SCHEDULER_H_

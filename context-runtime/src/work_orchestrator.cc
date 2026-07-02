@@ -47,7 +47,7 @@
 #include "clio_runtime/ipc_manager.h"
 
 // Global pointer variable definition for Work Orchestrator singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::WorkOrchestrator, g_work_orchestrator);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::WorkOrchestrator, g_work_orchestrator);
 
 namespace clio::run {
 
@@ -371,8 +371,8 @@ bool WorkOrchestrator::HasWorkRemaining(u64 &total_work_remaining) const {
     const PoolInfo *info = pool_manager->GetPoolInfo(pool_id);
     if (!info) continue;
     for (const auto &pair : info->containers_) {
-      if (pair.second) {
-        total_work_remaining += pair.second->GetWorkRemaining();
+      if (ContainerHold c = pair.second.get()) {
+        total_work_remaining += c->GetWorkRemaining();
       }
     }
   }

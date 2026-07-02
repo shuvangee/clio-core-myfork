@@ -40,6 +40,7 @@
 #include <clio_ctp/lightbeam/transport_factory_impl.h>
 #include <clio_runtime/ipc/ipc_cpu2cpu_zmq.h>
 #include <clio_ctp/introspect/system_info.h>
+#include <clio_ctp/thread/thread_model_manager.h>
 
 #include <atomic>
 #include <cerrno>
@@ -60,11 +61,11 @@ IpcManagerRun2Run::IpcManagerRun2Run()
 // SendIn helpers
 // =============================================================================
 
-chi::u64 IpcManagerRun2Run::SendInResolveTargetNode(
-    chi::IpcManager *ipc_manager,
-    chi::PoolManager *pool_manager,
-    ctp::ipc::FullPtr<chi::Task> origin_task,
-    const chi::PoolQuery &query) {
+clio::run::u64 IpcManagerRun2Run::SendInResolveTargetNode(
+    clio::run::IpcManager *ipc_manager,
+    clio::run::PoolManager *pool_manager,
+    clio::run::shared_ptr<clio::run::Task> origin_task,
+    const clio::run::PoolQuery &query) {
   if (query.IsLocalMode()) {
     return ipc_manager->GetNodeId();
   }
@@ -79,12 +80,12 @@ chi::u64 IpcManagerRun2Run::SendInResolveTargetNode(
     return query.GetNodeId();
   }
   if (query.IsDirectIdMode()) {
-    chi::ContainerId container_id = query.GetContainerId();
+    clio::run::ContainerId container_id = query.GetContainerId();
     return pool_manager->GetContainerNodeId(origin_task->pool_id_, container_id);
   }
   if (query.IsRangeMode()) {
-    chi::u32 offset = query.GetRangeOffset();
-    chi::ContainerId container_id(offset);
+    clio::run::u32 offset = query.GetRangeOffset();
+    clio::run::ContainerId container_id(offset);
     return pool_manager->GetContainerNodeId(origin_task->pool_id_, container_id);
   }
   if (query.IsBroadcastMode()) {
@@ -102,13 +103,14 @@ chi::u64 IpcManagerRun2Run::SendInResolveTargetNode(
 }
 
 void IpcManagerRun2Run::SendInTransmitReplica(
-    chi::Container *container,
-    chi::IpcManager *ipc_manager,
-    ctp::ipc::FullPtr<chi::Task> task_copy,
-    chi::u64 target_node_id,
-    ctp::ipc::FullPtr<chi::Task> origin_task) {
+    clio::run::IpcManager *ipc_manager,
+    clio::run::shared_ptr<clio::run::Task> task_copy,
+    clio::run::u64 target_node_id,
+    clio::run::shared_ptr<clio::run::Task> origin_task) {
+  clio::run::ContainerHold container =
+      CLIO_POOL_MANAGER->GetStaticContainer(task_copy->pool_id_).get();
   auto *config_manager = CLIO_CONFIG_MANAGER;
-  const chi::Host *target_host = ipc_manager->GetHost(target_node_id);
+  const clio::run::Host *target_host = ipc_manager->GetHost(target_node_id);
 
   int port = static_cast<int>(config_manager->GetPort());
   ctp::lbm::Transport *lbm_transport =
@@ -124,7 +126,12 @@ void IpcManagerRun2Run::SendInTransmitReplica(
     return;
   }
 
-  chi::SaveTaskArchive archive(chi::MsgType::kSerializeIn, lbm_transport);
+  clio::run::SaveTaskArchive archive(clio::run::MsgType::kSerializeIn, lbm_transport);
+  // Advertise this node's server port as the response port. The receiver pairs
+  // it with our return-node address to open a dedicated dial-back connection
+  // for SendOut (see RecvInHandleOne), keyed in the connection cache by
+  // return-host + this port.
+  archive.client_port_ = static_cast<int>(config_manager->GetPort());
   container->SaveTask(task_copy->method_, archive, task_copy);
 
   ctp::lbm::LbmContext ctx(ctp::lbm::LBM_SYNC);
@@ -147,7 +154,7 @@ void IpcManagerRun2Run::SendInTransmitReplica(
 // SendIn
 // =============================================================================
 
-void IpcManagerRun2Run::SendIn(ctp::ipc::FullPtr<chi::Task> origin_task) {
+void IpcManagerRun2Run::SendIn(clio::run::shared_ptr<clio::run::Task> origin_task) {
   auto *ipc_manager = CLIO_IPC;
   auto *pool_manager = CLIO_POOL_MANAGER;
 
@@ -156,52 +163,48 @@ void IpcManagerRun2Run::SendIn(ctp::ipc::FullPtr<chi::Task> origin_task) {
     return;
   }
 
-  chi::Container *container =
-      pool_manager->GetStaticContainer(origin_task->pool_id_);
+  auto container =
+      pool_manager->GetStaticContainer(origin_task->pool_id_).get();
   if (container == nullptr) {
     HLOG(kError, "SendIn: container not found for pool_id {}",
          origin_task->pool_id_);
     return;
   }
 
-  size_t send_map_key = size_t(origin_task.ptr_);
+  size_t send_map_key = size_t(origin_task.get());
   {
     std::lock_guard<std::mutex> lk(send_map_mutex_);
     send_map_[send_map_key] = origin_task;
   }
 
-  if (!origin_task->GetRunCtx()) {
-    HLOG(kError, "SendIn: origin_task has no RunContext");
-    return;
-  }
-  chi::RunContext *origin_rctx = origin_task->GetRunCtx();
 
-  const std::vector<chi::PoolQuery> &pool_queries = origin_rctx->pool_queries_;
+  const std::vector<clio::run::PoolQuery> &pool_queries =
+      origin_task->PoolQueries();
   size_t num_replicas = pool_queries.size();
-  origin_rctx->subtasks_.resize(num_replicas);
+  origin_task->Subtasks().resize(num_replicas);
 
   HLOG(kDebug, "[SendIn] Task {} to {} replicas", origin_task->task_id_,
        num_replicas);
 
   for (size_t i = 0; i < num_replicas; ++i) {
-    const chi::PoolQuery &query = pool_queries[i];
+    const clio::run::PoolQuery &query = pool_queries[i];
 
-    chi::u64 target_node_id =
+    clio::run::u64 target_node_id =
         SendInResolveTargetNode(ipc_manager, pool_manager, origin_task, query);
     if (target_node_id == kInvalidNodeId) {
       continue;
     }
 
-    const chi::Host *target_host = ipc_manager->GetHost(target_node_id);
+    const clio::run::Host *target_host = ipc_manager->GetHost(target_node_id);
     if (!target_host) {
       HLOG(kError, "[SendIn] Task {} FAILED: Host not found for node_id {}",
            origin_task->task_id_, target_node_id);
       continue;
     }
 
-    ctp::ipc::FullPtr<chi::Task> task_copy =
+    clio::run::shared_ptr<clio::run::Task> task_copy =
         container->NewCopyTask(origin_task->method_, origin_task, true);
-    origin_rctx->subtasks_[i] = task_copy;
+    origin_task->Subtasks()[i] = task_copy;
 
     task_copy->task_id_.net_key_ = send_map_key;
     task_copy->task_id_.replica_id_ = i;
@@ -214,7 +217,7 @@ void IpcManagerRun2Run::SendIn(ctp::ipc::FullPtr<chi::Task> origin_task) {
         HLOG(kWarning,
              "[SendIn] Task {} target node {} is dead, net_timeout=0 -> skip",
              origin_task->task_id_, target_node_id);
-        origin_rctx->completed_replicas_++;
+        origin_task->CompletedReplicas()++;
         continue;
       }
       HLOG(kWarning,
@@ -226,8 +229,8 @@ void IpcManagerRun2Run::SendIn(ctp::ipc::FullPtr<chi::Task> origin_task) {
       continue;
     }
 
-    SendInTransmitReplica(container, ipc_manager, task_copy, target_node_id,
-                          origin_task);
+    SendInTransmitReplica(ipc_manager, task_copy,
+                          target_node_id, origin_task);
   }
 }
 
@@ -236,15 +239,30 @@ void IpcManagerRun2Run::SendIn(ctp::ipc::FullPtr<chi::Task> origin_task) {
 // =============================================================================
 
 int IpcManagerRun2Run::SendOutTransmit(
-    chi::Container *container,
-    chi::IpcManager *ipc_manager,
-    ctp::ipc::FullPtr<chi::Task> origin_task,
-    chi::u64 target_node_id,
-    const chi::Host *target_host) {
+    clio::run::IpcManager *ipc_manager,
+    clio::run::shared_ptr<clio::run::Task> origin_task,
+    clio::run::u64 target_node_id,
+    const clio::run::Host *target_host) {
+  clio::run::ContainerHold container =
+      CLIO_POOL_MANAGER->GetStaticContainer(origin_task->pool_id_).get();
   auto *config_manager = CLIO_CONFIG_MANAGER;
   int port = static_cast<int>(config_manager->GetPort());
-  ctp::lbm::Transport *lbm_transport =
-      ipc_manager->GetOrCreateClient(target_host->ip_address, port);
+
+  // Prefer the dedicated dial-back connection resolved at RecvIn (stored on the
+  // task's FutureShm). Fall back to resolving the peer connection by address if
+  // it is absent (e.g. a legacy sender that advertised no client_port_, or a
+  // retry whose FutureShm was already freed).
+  ctp::lbm::Transport *lbm_transport = nullptr;
+  {
+    ctp::ipc::FullPtr<clio::run::RunContext> fshm =
+        origin_task->RunFuture().GetFutureShm();
+    if (!fshm.IsNull() && fshm->response_transport_ != nullptr) {
+      lbm_transport = fshm->response_transport_;
+    }
+  }
+  if (lbm_transport == nullptr) {
+    lbm_transport = ipc_manager->GetOrCreateClient(target_host->ip_address, port);
+  }
 
   if (lbm_transport == nullptr) {
     HLOG(kError, "[SendOut] Task {} FAILED: Could not get client for {}:{}",
@@ -256,7 +274,7 @@ int IpcManagerRun2Run::SendOutTransmit(
     return -1;
   }
 
-  chi::SaveTaskArchive archive(chi::MsgType::kSerializeOut, lbm_transport);
+  clio::run::SaveTaskArchive archive(clio::run::MsgType::kSerializeOut, lbm_transport);
   container->SaveTask(origin_task->method_, archive, origin_task);
 
   ctp::lbm::LbmContext ctx(ctp::lbm::LBM_SYNC);
@@ -281,23 +299,18 @@ int IpcManagerRun2Run::SendOutTransmit(
 // SendOut
 // =============================================================================
 
-void IpcManagerRun2Run::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
+void IpcManagerRun2Run::SendOut(clio::run::shared_ptr<clio::run::Task> origin_task) {
   auto *ipc_manager = CLIO_IPC;
-  auto *pool_manager = CLIO_POOL_MANAGER;
 
   if (origin_task.IsNull()) {
     HLOG(kError, "SendOut: origin_task is null");
     return;
   }
 
-  chi::Container *container =
-      pool_manager->GetStaticContainer(origin_task->pool_id_);
-  if (container == nullptr) {
-    HLOG(kError, "SendOut: container not found for pool_id {}",
-         origin_task->pool_id_);
-    return;
-  }
-
+  // The recv-side FutureShm is owned by the Future's shared_ptr (created in
+  // RecvInHandleOne and stored in this task's RunContext). It is freed
+  // automatically when the RunContext (and its Future copy) is destroyed by
+  // DelTask below — no manual capture/FreeBuffer needed.
   size_t recv_key = origin_task->task_id_.net_key_ ^
                     (static_cast<size_t>(origin_task->task_id_.replica_id_) *
                      0x9e3779b97f4a7c15ULL);
@@ -306,7 +319,7 @@ void IpcManagerRun2Run::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
     recv_map_.erase(recv_key);
   }
 
-  chi::u64 target_node_id = origin_task->pool_query_.GetReturnNode();
+  clio::run::u64 target_node_id = origin_task->pool_query_.GetReturnNode();
 
   if (!ipc_manager->IsAlive(target_node_id)) {
     HLOG(kWarning,
@@ -318,18 +331,19 @@ void IpcManagerRun2Run::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
     return;
   }
 
-  const chi::Host *target_host = ipc_manager->GetHost(target_node_id);
+  const clio::run::Host *target_host = ipc_manager->GetHost(target_node_id);
   if (target_host == nullptr) {
     HLOG(kError, "[SendOut] Task {} FAILED: Host not found for node_id {}",
          origin_task->task_id_, target_node_id);
     return;
   }
 
-  int rc = SendOutTransmit(container, ipc_manager, origin_task, target_node_id,
-                           target_host);
-  if (rc == 0) {
-    container->DelTask(origin_task->method_, origin_task);
-  }
+  int rc = SendOutTransmit(ipc_manager, origin_task,
+                           target_node_id, target_host);
+  (void)rc;
+  // Task frees via RAII when its shared_ptr owners drop (the by-value
+  // origin_task handle here, plus the RunContext/send_map_ entry) — no
+  // explicit DelTask.
 }
 
 // =============================================================================
@@ -337,19 +351,19 @@ void IpcManagerRun2Run::SendOut(ctp::ipc::FullPtr<chi::Task> origin_task) {
 // =============================================================================
 
 bool IpcManagerRun2Run::RecvInHandleOne(
-    chi::IpcManager *ipc_manager,
-    chi::PoolManager *pool_manager,
-    const chi::TaskInfo &task_info,
-    chi::LoadTaskArchive &archive,
+    clio::run::IpcManager *ipc_manager,
+    clio::run::PoolManager *pool_manager,
+    const clio::run::TaskInfo &task_info,
+    clio::run::LoadTaskArchive &archive,
     ctp::lbm::Transport *lbm_transport) {
-  chi::Container *container =
-      pool_manager->GetStaticContainer(task_info.pool_id_);
+  auto container =
+      pool_manager->GetStaticContainer(task_info.pool_id_).get();
   if (!container) {
     HLOG(kError, "Admin: Container not found for pool_id {}", task_info.pool_id_);
     return false;
   }
 
-  ctp::ipc::FullPtr<chi::Task> task_ptr =
+  clio::run::shared_ptr<clio::run::Task> task_ptr =
       container->AllocLoadTask(task_info.method_id_, archive);
 
   if (task_ptr.IsNull()) {
@@ -357,22 +371,23 @@ bool IpcManagerRun2Run::RecvInHandleOne(
     return false;
   }
 
-  chi::u64 sender_node = task_ptr->pool_query_.GetReturnNode();
+  clio::run::u64 sender_node = task_ptr->pool_query_.GetReturnNode();
   if (sender_node != ipc_manager->GetNodeId() &&
-      ipc_manager->GetNodeState(sender_node) == chi::NodeState::kDead) {
+      ipc_manager->GetNodeState(sender_node) == clio::run::NodeState::kDead) {
     HLOG(kInfo, "[RecvIn] Received task from dead node {}, marking alive",
          sender_node);
     FlushStaleStateForNode(sender_node);
     ipc_manager->SetAlive(sender_node);
   }
 
-  chi::u32 set_flags = TASK_REMOTE;
+  clio::run::u32 set_flags = TASK_REMOTE;
   if (archive.daemon_allocated_bulk_count_ > 0) {
     set_flags |= TASK_DATA_OWNER;
   }
   task_ptr->SetFlags(set_flags);
-  task_ptr->ClearFlags(TASK_PERIODIC | TASK_ROUTED | TASK_RUN_CTX_EXISTS |
-                       TASK_STARTED);
+  // routed_/started_ are fresh per-RunContext (BeginTask below); only the
+  // serialized TASK_PERIODIC flag needs resetting on receive.
+  task_ptr->ClearFlags(TASK_PERIODIC);
 
   size_t recv_key =
       task_ptr->task_id_.net_key_ ^
@@ -385,19 +400,30 @@ bool IpcManagerRun2Run::RecvInHandleOne(
   HLOG(kDebug, "[RecvIn] Task {} method={} pool_id={} dispatching to workers",
        task_ptr->task_id_, task_ptr->method_, task_ptr->pool_id_);
 
-  chi::Future<chi::Task> future = ipc_manager->MakePointerFuture(task_ptr);
+  clio::run::Future<clio::run::Task> future(task_ptr->pool_id_,
+                                            task_ptr->method_, task_ptr);
   if (future.GetFutureShm().IsNull()) {
-    HLOG(kError, "[RecvIn] MakePointerFuture failed for task {}",
+    HLOG(kError, "[RecvIn] Future construction failed for task {}",
          task_ptr->task_id_);
     return false;
   }
-  if (!task_ptr->task_flags_.Any(TASK_RUN_CTX_EXISTS)) {
-    ipc_manager->BeginTask(future, container, nullptr);
-  }
-  task_ptr->SetFlags(TASK_ROUTED);
+
+  // NOTE: the response connection is intentionally NOT opened here. A ZMQ socket
+  // must be created and used by the same thread; this RecvIn runs on the recv
+  // thread, but the response is sent by net_send_worker_ in SendOutTransmit.
+  // Opening the dial-back DEALER here and sending on it there is exactly the
+  // cross-thread socket sharing that forced sock_mtx_ and wedged force_net.
+  // SendOut re-resolves the return node (pool_query_.GetReturnNode()) and
+  // GetOrCreateClient's the connection on the send worker — same cache, same
+  // endpoint (return-host:cluster-port), but single-threaded socket ownership.
+
+  // Allocate the task's RunContext (and resolve its container) now that it is
+  // deserialized, so RouteTask / the worker have an active RunContext.
+  future.GetTaskPtr()->BeginRunContext();
+  task_ptr->SetRouted();
 
   if (ipc_manager->GetScheduler() != nullptr) {
-    chi::u32 lane_id =
+    clio::run::u32 lane_id =
         ipc_manager->GetScheduler()->ClientMapTask(ipc_manager, future);
     auto *worker_queues = ipc_manager->GetTaskQueue();
     if (worker_queues) {
@@ -417,7 +443,7 @@ bool IpcManagerRun2Run::RecvInHandleOne(
 // RecvIn
 // =============================================================================
 
-int IpcManagerRun2Run::RecvIn(chi::LoadTaskArchive &archive,
+int IpcManagerRun2Run::RecvIn(clio::run::LoadTaskArchive &archive,
                                ctp::lbm::Transport *lbm_transport) {
   auto *ipc_manager = CLIO_IPC;
   auto *pool_manager = CLIO_POOL_MANAGER;
@@ -439,12 +465,12 @@ int IpcManagerRun2Run::RecvIn(chi::LoadTaskArchive &archive,
 // =============================================================================
 
 int IpcManagerRun2Run::RecvOutDeserialize(
-    chi::PoolManager *pool_manager,
-    const std::vector<chi::TaskInfo> &task_infos,
-    chi::LoadTaskArchive &archive) {
+    clio::run::PoolManager *pool_manager,
+    const std::vector<clio::run::TaskInfo> &task_infos,
+    clio::run::LoadTaskArchive &archive) {
   for (const auto &task_info : task_infos) {
     size_t net_key = task_info.task_id_.net_key_;
-    ctp::ipc::FullPtr<chi::Task> origin_task;
+    clio::run::shared_ptr<clio::run::Task> origin_task;
     {
       std::lock_guard<std::mutex> lk(send_map_mutex_);
       auto send_it = send_map_.find(net_key);
@@ -458,23 +484,19 @@ int IpcManagerRun2Run::RecvOutDeserialize(
       origin_task = *send_it;
     }
 
-    if (!origin_task->GetRunCtx()) {
-      HLOG(kError, "Admin: origin_task has no RunContext");
-      return 6;
-    }
-    chi::RunContext *origin_rctx = origin_task->GetRunCtx();
 
-    chi::u32 replica_id = task_info.task_id_.replica_id_;
-    if (replica_id >= origin_rctx->subtasks_.size()) {
+    clio::run::u32 replica_id = task_info.task_id_.replica_id_;
+    if (replica_id >= origin_task->Subtasks().size()) {
       HLOG(kError, "Admin: Invalid replica_id {} (subtasks size: {})",
-           replica_id, origin_rctx->subtasks_.size());
+           replica_id, origin_task->Subtasks().size());
       return 7;
     }
 
-    ctp::ipc::FullPtr<chi::Task> replica = origin_rctx->subtasks_[replica_id];
+    clio::run::shared_ptr<clio::run::Task> replica =
+        origin_task->Subtasks()[replica_id];
 
-    chi::Container *container =
-        pool_manager->GetStaticContainer(origin_task->pool_id_);
+    auto container =
+        pool_manager->GetStaticContainer(origin_task->pool_id_).get();
     if (!container) {
       HLOG(kError, "Admin: Container not found for pool_id {}",
            origin_task->pool_id_);
@@ -488,12 +510,12 @@ int IpcManagerRun2Run::RecvOutDeserialize(
 }
 
 int IpcManagerRun2Run::RecvOutAggregate(
-    const std::vector<chi::TaskInfo> &task_infos) {
+    const std::vector<clio::run::TaskInfo> &task_infos) {
   auto *ipc_manager = CLIO_IPC;
 
   for (const auto &task_info : task_infos) {
     size_t net_key = task_info.task_id_.net_key_;
-    ctp::ipc::FullPtr<chi::Task> origin_task;
+    clio::run::shared_ptr<clio::run::Task> origin_task;
     {
       std::lock_guard<std::mutex> lk(send_map_mutex_);
       auto send_it = send_map_.find(net_key);
@@ -505,41 +527,37 @@ int IpcManagerRun2Run::RecvOutAggregate(
       origin_task = *send_it;
     }
 
-    if (!origin_task->GetRunCtx()) {
-      HLOG(kError, "Admin: origin_task has no RunContext");
-      continue;
-    }
-    chi::RunContext *origin_rctx = origin_task->GetRunCtx();
 
-    chi::u32 replica_id = task_info.task_id_.replica_id_;
-    if (replica_id >= origin_rctx->subtasks_.size()) {
+    clio::run::u32 replica_id = task_info.task_id_.replica_id_;
+    if (replica_id >= origin_task->Subtasks().size()) {
       HLOG(kError, "Admin: Invalid replica_id {} (subtasks size: {})",
-           replica_id, origin_rctx->subtasks_.size());
+           replica_id, origin_task->Subtasks().size());
       continue;
     }
 
-    ctp::ipc::FullPtr<chi::Task> replica = origin_rctx->subtasks_[replica_id];
+    clio::run::shared_ptr<clio::run::Task> replica =
+        origin_task->Subtasks()[replica_id];
 
-    // Aggregate via the Container so the concrete task type's Aggregate()
-    // runs (which merges OUT fields like bdev's blocks_). Task::Aggregate is
+    // AggregateOut via the Container so the concrete task type's AggregateOut()
+    // runs (which merges OUT fields like bdev's blocks_). Task::AggregateOut is
     // intentionally non-virtual to keep Task vtable-free, so calling
-    // origin_task->Aggregate(replica) here would slice to the base and drop
+    // origin_task->AggregateOut(replica) here would slice to the base and drop
     // every derived OUT field — leaving callers with empty results.
-    chi::Container *container =
-        CLIO_POOL_MANAGER->GetStaticContainer(origin_task->pool_id_);
+    auto container =
+        CLIO_POOL_MANAGER->GetStaticContainer(origin_task->pool_id_).get();
     if (!container) {
       HLOG(kError, "[RecvOut] Container not found for pool_id {}",
            origin_task->pool_id_);
       continue;
     }
-    container->Aggregate(origin_task->method_, origin_task, replica);
+    container->AggregateOut(origin_task->method_, origin_task, replica);
 
     HLOG(kDebug, "[RecvOut] Task {}", origin_task->task_id_);
 
-    chi::u32 completed =
-        origin_rctx->completed_replicas_.fetch_add(1) + 1;
-    if (completed == origin_rctx->subtasks_.size()) {
-      RecvOutCompleteOriginTask(net_key, origin_task, origin_rctx);
+    clio::run::u32 completed =
+        origin_task->CompletedReplicas().fetch_add(1) + 1;
+    if (completed == origin_task->Subtasks().size()) {
+      RecvOutCompleteOriginTask(net_key, origin_task);
     }
   }
 
@@ -548,26 +566,21 @@ int IpcManagerRun2Run::RecvOutAggregate(
 
 void IpcManagerRun2Run::RecvOutCompleteOriginTask(
     size_t net_key,
-    ctp::ipc::FullPtr<chi::Task> origin_task,
-    chi::RunContext *origin_rctx) {
+    clio::run::shared_ptr<clio::run::Task> origin_task) {
   auto *ipc_manager = CLIO_IPC;
 
-  chi::Container *container =
+  clio::run::DynamicContainer container =
       CLIO_POOL_MANAGER->GetStaticContainer(origin_task->pool_id_);
-  if (container != nullptr) {
-    origin_rctx->container_ = container;
+  if (container) {
+    origin_task->ExecContainer() = container;
   }
 
-  for (const auto &subtask_ptr : origin_rctx->subtasks_) {
+  for (const auto &subtask_ptr : origin_task->Subtasks()) {
     subtask_ptr->ClearFlags(TASK_DATA_OWNER);
-    if (container != nullptr) {
-      container->DelTask(subtask_ptr->method_, subtask_ptr);
-    } else {
-      HLOG(kError, "[RecvOut] Container not found for pool_id {} while deleting subtask",
-           origin_task->pool_id_);
-    }
   }
-  origin_rctx->subtasks_.clear();
+  // Clearing the vector drops the last shared_ptr owner of each replica subtask,
+  // freeing them via RAII (replaces the former per-subtask DelTask).
+  origin_task->Subtasks().clear();
 
   {
     std::lock_guard<std::mutex> lk(send_map_mutex_);
@@ -580,7 +593,7 @@ void IpcManagerRun2Run::RecvOutCompleteOriginTask(
     worker = scheduler ? scheduler->GetNetRecvWorker() : nullptr;
   }
   if (worker) {
-    worker->EndTask(origin_task, origin_rctx, true);
+    worker->EndTask(origin_task, true);
   } else {
     HLOG(kError,
          "[RecvOut] No worker available to call EndTask for task {}",
@@ -592,7 +605,7 @@ void IpcManagerRun2Run::RecvOutCompleteOriginTask(
 // RecvOut
 // =============================================================================
 
-int IpcManagerRun2Run::RecvOut(chi::LoadTaskArchive &archive,
+int IpcManagerRun2Run::RecvOut(clio::run::LoadTaskArchive &archive,
                                 ctp::lbm::Transport *lbm_transport) {
   auto *pool_manager = CLIO_POOL_MANAGER;
 
@@ -615,12 +628,12 @@ int IpcManagerRun2Run::RecvOut(chi::LoadTaskArchive &archive,
 // Retry helpers
 // =============================================================================
 
-bool IpcManagerRun2Run::RetrySendToNode(RetryEntry &entry, chi::u64 node_id) {
+bool IpcManagerRun2Run::RetrySendToNode(RetryEntry &entry, clio::run::u64 node_id) {
   auto *ipc_manager = CLIO_IPC;
   auto *pool_manager = CLIO_POOL_MANAGER;
   auto *config_manager = CLIO_CONFIG_MANAGER;
 
-  const chi::Host *target_host = ipc_manager->GetHost(node_id);
+  const clio::run::Host *target_host = ipc_manager->GetHost(node_id);
   if (!target_host) {
     return false;
   }
@@ -632,34 +645,34 @@ bool IpcManagerRun2Run::RetrySendToNode(RetryEntry &entry, chi::u64 node_id) {
     return false;
   }
 
-  chi::Container *container =
-      pool_manager->GetStaticContainer(entry.task->pool_id_);
+  auto container =
+      pool_manager->GetStaticContainer(entry.task->pool_id_).get();
   if (!container) {
     return false;
   }
 
-  chi::SaveTaskArchive archive(chi::MsgType::kSerializeIn, lbm_transport);
+  clio::run::SaveTaskArchive archive(clio::run::MsgType::kSerializeIn, lbm_transport);
   container->SaveTask(entry.task->method_, archive, entry.task);
   ctp::lbm::LbmContext ctx(0);
   int rc = lbm_transport->Send(archive, ctx);
   return rc == 0;
 }
 
-chi::u64 IpcManagerRun2Run::RerouteRetryEntry(RetryEntry &entry) {
+clio::run::u64 IpcManagerRun2Run::RerouteRetryEntry(RetryEntry &entry) {
   auto *pool_manager = CLIO_POOL_MANAGER;
-  const chi::PoolQuery &query = entry.task->pool_query_;
+  const clio::run::PoolQuery &query = entry.task->pool_query_;
 
   if (query.IsDirectIdMode()) {
-    chi::ContainerId container_id = query.GetContainerId();
-    chi::u32 new_node =
+    clio::run::ContainerId container_id = query.GetContainerId();
+    clio::run::u32 new_node =
         pool_manager->GetContainerNodeId(entry.task->pool_id_, container_id);
     if (new_node != 0 && new_node != entry.target_node_id) {
       return new_node;
     }
   } else if (query.IsRangeMode()) {
-    chi::u32 offset = query.GetRangeOffset();
-    chi::ContainerId container_id(offset);
-    chi::u32 new_node =
+    clio::run::u32 offset = query.GetRangeOffset();
+    clio::run::ContainerId container_id(offset);
+    clio::run::u32 new_node =
         pool_manager->GetContainerNodeId(entry.task->pool_id_, container_id);
     if (new_node != 0 && new_node != entry.target_node_id) {
       return new_node;
@@ -700,7 +713,7 @@ void IpcManagerRun2Run::ProcessRetryQueues() {
         ++it;
       }
     } else {
-      chi::u64 new_node = RerouteRetryEntry(*it);
+      clio::run::u64 new_node = RerouteRetryEntry(*it);
       if (new_node != 0 && ipc_manager->IsAlive(new_node)) {
         HLOG(kInfo,
              "[RetryQueue] Re-routing task from dead node {} to node {}",
@@ -731,7 +744,7 @@ void IpcManagerRun2Run::ProcessRetryQueues() {
            elapsed, it->target_node_id);
       it = send_out_retry_.erase(it);
     } else if (ipc_manager->IsAlive(it->target_node_id)) {
-      ctp::ipc::FullPtr<chi::Task> retry_task = it->task;
+      clio::run::shared_ptr<clio::run::Task> retry_task = it->task;
       it = send_out_retry_.erase(it);
       _rqlk.unlock();
       SendOut(retry_task);
@@ -756,21 +769,20 @@ void IpcManagerRun2Run::ScanSendMapTimeouts() {
     return;
   }
 
-  std::unordered_map<chi::u64, std::chrono::steady_clock::time_point> dead_map;
+  std::unordered_map<clio::run::u64, std::chrono::steady_clock::time_point> dead_map;
   for (const auto &entry : dead_nodes) {
     dead_map[entry.node_id] = entry.detected_at;
   }
 
-  std::vector<std::pair<size_t, ctp::ipc::FullPtr<chi::Task>>> to_complete;
+  std::vector<std::pair<size_t, clio::run::shared_ptr<clio::run::Task>>> to_complete;
   {
     std::lock_guard<std::mutex> lk(send_map_mutex_);
     send_map_.for_each(
-        [&](const size_t &key, ctp::ipc::FullPtr<chi::Task> &origin_task) {
-          if (origin_task.IsNull() || !origin_task->GetRunCtx()) {
+        [&](const size_t &key, clio::run::shared_ptr<clio::run::Task> &origin_task) {
+          if (origin_task.IsNull()) {
             return;
           }
 
-          chi::RunContext *rctx = origin_task->GetRunCtx();
           float task_timeout = kRun2RunRetryTimeoutSec;
           float task_net_timeout = origin_task->pool_query_.GetNetTimeout();
           if (task_net_timeout >= 0) {
@@ -778,7 +790,7 @@ void IpcManagerRun2Run::ScanSendMapTimeouts() {
           }
 
           bool any_timed_out = false;
-          for (const auto &pq : rctx->pool_queries_) {
+          for (const auto &pq : origin_task->PoolQueries()) {
             if (!pq.IsPhysicalMode()) {
               continue;
             }
@@ -802,16 +814,12 @@ void IpcManagerRun2Run::ScanSendMapTimeouts() {
 
   for (auto &entry : to_complete) {
     auto &origin_task = entry.second;
-    chi::RunContext *rctx = origin_task->GetRunCtx();
-    if (!rctx) {
-      continue;
-    }
     HLOG(kError,
          "[ScanSendMapTimeouts] Task {} timed out waiting for dead node",
          origin_task->task_id_);
     origin_task->SetReturnCode(kRun2RunNetworkTimeoutRC);
     auto *worker = CLIO_CUR_WORKER;
-    worker->EndTask(origin_task, rctx, true);
+    worker->EndTask(origin_task, true);
   }
 
   if (!to_complete.empty()) {
@@ -826,7 +834,7 @@ void IpcManagerRun2Run::ScanSendMapTimeouts() {
 // FlushStaleStateForNode
 // =============================================================================
 
-void IpcManagerRun2Run::FlushStaleStateForNode(chi::u64 node_id) {
+void IpcManagerRun2Run::FlushStaleStateForNode(clio::run::u64 node_id) {
   std::lock_guard<std::mutex> _rqlk(retry_queues_mutex_);
 
   for (auto it = send_in_retry_.begin(); it != send_in_retry_.end();) {
@@ -835,7 +843,7 @@ void IpcManagerRun2Run::FlushStaleStateForNode(chi::u64 node_id) {
       continue;
     }
     size_t net_key = it->task->task_id_.net_key_;
-    ctp::ipc::FullPtr<chi::Task> origin;
+    clio::run::shared_ptr<clio::run::Task> origin;
     {
       std::lock_guard<std::mutex> lk(send_map_mutex_);
       auto send_it = send_map_.find(net_key);
@@ -843,8 +851,8 @@ void IpcManagerRun2Run::FlushStaleStateForNode(chi::u64 node_id) {
         origin = *send_it;
       }
     }
-    if (!origin.IsNull() && origin->GetRunCtx()) {
-      origin->GetRunCtx()->completed_replicas_++;
+    if (!origin.IsNull()) {
+      origin->CompletedReplicas()++;
     }
     HLOG(kInfo,
          "[FlushStale] Discarding SendIn retry for restarted node {}",
@@ -868,6 +876,19 @@ void IpcManagerRun2Run::FlushStaleStateForNode(chi::u64 node_id) {
 // StartRecvThreads / StopRecvThreads
 // =============================================================================
 
+// How long a recv thread blocks in EventManager::Wait() before re-checking
+// recv_shutdown_ and re-draining. The fd-readability signal (epoll /
+// WSAEventSelect) wakes Wait() immediately when data arrives, so this only
+// bounds idle re-poll and shutdown-join latency; it is NOT added to
+// message-delivery latency. Mirrors the established RecvZmqClientThread wait.
+static constexpr int kRecvWaitTimeoutUs = 100;
+
+// Milliseconds a blocking zmq_poll (Transport::PollRecv) waits before returning
+// to re-check recv_shutdown_. zmq_poll wakes immediately on data, so this only
+// bounds idle re-poll + shutdown latency. ZMQ transports use this instead of an
+// EventManager because ZMQ_FD cannot be watched with WSAEventSelect on Windows.
+static constexpr int kZmqPollTimeoutMs = 1;
+
 void IpcManagerRun2Run::StartRecvThreads() {
   // Dedicated single peer recv thread: polls the main p2p transport
   // (port 9413 by default) and dispatches inbound task forwards/responses.
@@ -878,61 +899,96 @@ void IpcManagerRun2Run::StartRecvThreads() {
     for (int spin = 0; spin < 1000 && !recv_shutdown_.load(); ++spin) {
       lbm_transport = ipc_manager->GetMainTransport();
       if (lbm_transport) break;
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      CTP_THREAD_MODEL->SleepForUs(1000);
     }
     if (!lbm_transport) {
       HLOG(kError, "[PeerRecvThread] main transport never appeared");
       return;
     }
+    // Block on transport readability instead of spin-polling. main_transport_
+    // is a ZMQ transport, so we use its native zmq_poll (Transport::PollRecv)
+    // rather than an EventManager: ZMQ_FD can't be registered with
+    // WSAEventSelect on Windows. Each wake drains every pending message before
+    // blocking again.
     HLOG(kInfo, "[PeerRecvThread] started");
     while (!recv_shutdown_.load(std::memory_order_acquire)) {
-      chi::LoadTaskArchive archive;
-      auto info = lbm_transport->Recv(archive);
-      int rc = info.rc;
-      if (rc == EAGAIN) {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
-        continue;
-      }
-      if (rc != 0) {
-        if (rc != -1) {
-          HLOG(kError, "[PeerRecvThread] Recv failed rc={}", rc);
+      bool drained_any = false;
+      while (!recv_shutdown_.load(std::memory_order_acquire)) {
+        clio::run::LoadTaskArchive archive;
+        auto info = lbm_transport->Recv(archive);
+        int rc = info.rc;
+        if (rc != 0) {
+          // EAGAIN (nothing left) or a peer-closed/transient error ends the
+          // drain. rc == -1 is the routine peer-closed case (SocketTransport
+          // already cleaned up the fd inside Recv()).
+          if (rc != EAGAIN && rc != -1) {
+            HLOG(kError, "[PeerRecvThread] Recv failed rc={}", rc);
+          }
+          break;
         }
-        continue;
+        drained_any = true;
+        clio::run::MsgType msg_type = archive.GetMsgType();
+        switch (msg_type) {
+          case clio::run::MsgType::kSerializeIn:
+            RecvIn(archive, lbm_transport);
+            break;
+          case clio::run::MsgType::kSerializeOut:
+            RecvOut(archive, lbm_transport);
+            break;
+          case clio::run::MsgType::kHeartbeat:
+            break;
+          default:
+            HLOG(kError, "[PeerRecvThread] unknown msg_type={}",
+                 static_cast<int>(msg_type));
+            break;
+        }
+        lbm_transport->ClearRecvHandles(archive);
       }
-      chi::MsgType msg_type = archive.GetMsgType();
-      switch (msg_type) {
-        case chi::MsgType::kSerializeIn:
-          RecvIn(archive, lbm_transport);
-          break;
-        case chi::MsgType::kSerializeOut:
-          RecvOut(archive, lbm_transport);
-          break;
-        case chi::MsgType::kHeartbeat:
-          break;
-        default:
-          HLOG(kError, "[PeerRecvThread] unknown msg_type={}",
-               static_cast<int>(msg_type));
-          break;
+      if (!drained_any && !recv_shutdown_.load(std::memory_order_acquire)) {
+        lbm_transport->PollRecv(kZmqPollTimeoutMs);
       }
-      lbm_transport->ClearRecvHandles(archive);
     }
     HLOG(kInfo, "[PeerRecvThread] shutting down");
   });
 
   // Dedicated single client recv thread: drains TCP (port 9416) and IPC
-  // (unix socket) client transports via IpcCpu2CpuZmq::RuntimeRecv.
+  // (unix socket) client transports via IpcCpu2CpuZmq::RecvIn.
   client_recv_thread_ = std::thread([this]() {
     ctp::SystemInfo::SetCurrentThreadName("chi-client-recv");
     auto *ipc_manager = CLIO_IPC;
+    // Block instead of spin-polling. The two client transports use different
+    // readiness primitives: the IPC (unix-socket) transport registers with our
+    // EventManager (epoll / WSAEventSelect both work); the TCP transport is ZMQ,
+    // whose ZMQ_FD can't be watched with WSAEventSelect on Windows, so it blocks
+    // via its native zmq_poll (Transport::PollRecv). The transports are created
+    // during IpcManager init, which may race this thread's start.
+    ctp::lbm::Transport *tcp_transport = nullptr;
+    ctp::lbm::Transport *ipc_transport = nullptr;
+    for (int spin = 0; spin < 1000 && !recv_shutdown_.load(); ++spin) {
+      tcp_transport = ipc_manager->GetClientTransport(clio::run::IpcMode::kTcp);
+      ipc_transport = ipc_manager->GetClientTransport(clio::run::IpcMode::kIpc);
+      if (tcp_transport || ipc_transport) break;
+      CTP_THREAD_MODEL->SleepForUs(1000);
+    }
+    if (ipc_transport) ipc_transport->RegisterEventManager(client_recv_em_);
     HLOG(kInfo, "[ClientRecvThread] started");
     while (!recv_shutdown_.load(std::memory_order_acquire)) {
-      chi::u32 tasks_received = 0;
-      bool did_work = chi::IpcCpu2CpuZmq::RuntimeRecv(ipc_manager,
+      clio::run::u32 tasks_received = 0;
+      bool did_work = clio::run::IpcCpu2CpuZmq::RecvIn(ipc_manager,
                                                        tasks_received);
-      if (!did_work) {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      if (!did_work && !recv_shutdown_.load(std::memory_order_acquire)) {
+        // Nothing drained: block on the IPC socket via the EventManager (its
+        // bounded timeout also re-polls the TCP transport). If only TCP exists,
+        // block on its native zmq_poll instead so we don't hit the EventManager's
+        // tick-floored empty-handle Sleep fallback on Windows.
+        if (ipc_transport) {
+          client_recv_em_.Wait(kRecvWaitTimeoutUs);
+        } else if (tcp_transport) {
+          tcp_transport->PollRecv(kZmqPollTimeoutMs);
+        }
       }
     }
+    if (ipc_transport) ipc_transport->UnregisterEventManager();
     HLOG(kInfo, "[ClientRecvThread] shutting down");
   });
 }

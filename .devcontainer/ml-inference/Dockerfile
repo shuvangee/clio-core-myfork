@@ -4,6 +4,19 @@
 FROM iowarp/deps-ml:latest
 USER root
 
+# FUSE 3 runtime (fusermount3) + dev headers, needed to build the libfuse
+# adapter (clio_cte_fuse) and run its mount integration tests. Installed here
+# so a devcontainer rebuild picks it up immediately; it is also in the base
+# image (docker/iowarp-base.Dockerfile) as the canonical default. The
+# container runs --privileged, so /dev/fuse + SYS_ADMIN are available.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      fuse3 libfuse3-dev \
+      libboost-context-dev libboost-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Boost.Context stackful coroutine backend available + on by default (issue #620).
+ENV CLIO_CORE_ENABLE_BOOST_COROUTINES=ON
+
 # Remap iowarp user UID/GID to match the host user.
 ARG HOST_UID=1000
 ARG HOST_GID=1000
@@ -13,10 +26,11 @@ RUN if id ubuntu >/dev/null 2>&1; then \
       groupmod -g 59999 ubuntu; \
     fi && \
     OLD_UID=$(id -u iowarp) && OLD_GID=$(id -g iowarp) && \
-    if [ "${HOST_UID}" != "${OLD_UID}" ] || [ "${HOST_GID}" != "${OLD_GID}" ]; then \
-      groupmod -o -g "${HOST_GID}" iowarp && \
-      usermod  -o -u "${HOST_UID}" -g "${HOST_GID}" iowarp && \
-      chown -R "${HOST_UID}:${HOST_GID}" /home/iowarp; \
+    NEW_UID="${HOST_UID:-1000}" && NEW_GID="${HOST_GID:-1000}" && \
+    if [ "${NEW_UID}" != "${OLD_UID}" ] || [ "${NEW_GID}" != "${OLD_GID}" ]; then \
+      groupmod -o -g "${NEW_GID}" iowarp && \
+      usermod  -o -u "${NEW_UID}" -g "${NEW_GID}" iowarp && \
+      chown -R "${NEW_UID}:${NEW_GID}" /home/iowarp; \
     fi
 
 USER iowarp

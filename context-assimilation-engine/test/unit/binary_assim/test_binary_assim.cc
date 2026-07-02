@@ -48,7 +48,7 @@
  * - Tests chunking behavior for files > 1MB
  *
  * Environment Variables:
- * - INIT_CHIMAERA: If set to "1", initializes CLIO Runtime runtime
+ * - INIT_CLIO: If set to "1", initializes CLIO Runtime runtime
  * - TEST_FILE_SIZE: Override default 256MB test file size (in MB)
  */
 
@@ -220,22 +220,22 @@ int main(int argc, char* argv[]) {
   int exit_code = 0;
 
   try {
-    // Initialize CLIO Runtime runtime (CHI_WITH_RUNTIME controls behavior)
-    HLOG(kInfo, "Initializing Chimaera...");
-    bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+    // Initialize CLIO Runtime runtime (CLIO_WITH_RUNTIME controls behavior)
+    HLOG(kInfo, "Initializing Clio...");
+    bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
     if (!success) {
-      HLOG(kError, "Failed to initialize Chimaera");
+      HLOG(kError, "Failed to initialize Clio");
       return 1;
     }
-    HLOG(kSuccess, "Chimaera initialized successfully");
+    HLOG(kSuccess, "Clio initialized successfully");
 
     // Verify CLIO Runtime IPC is available
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager) {
-      HLOG(kError, "Chimaera IPC not initialized");
+      HLOG(kError, "Clio IPC not initialized");
       return 1;
     }
-    HLOG(kSuccess, "Chimaera IPC verified");
+    HLOG(kSuccess, "Clio IPC verified");
 
     // Get test file size from environment or use default
     size_t file_size_mb = kDefaultFileSizeMB;
@@ -267,7 +267,7 @@ int main(int argc, char* argv[]) {
     clio::cae::core::CreateParams params;
 
     auto create_task = cae_client.AsyncCreate(
-        chi::PoolQuery::Local(),
+        clio::run::PoolQuery::Local(),
         "test_cae_pool",
         clio::cae::core::kCaePoolId,
         params);
@@ -303,8 +303,8 @@ int main(int argc, char* argv[]) {
     HLOG(kInfo, "[STEP 5] Calling ParseOmni...");
     auto parse_task = cae_client.AsyncParseOmni(contexts);
     parse_task.Wait();
-    chi::u32 result_code = parse_task->GetReturnCode();
-    chi::u32 num_tasks_scheduled = parse_task->num_tasks_scheduled_;
+    clio::run::u32 result_code = parse_task->GetReturnCode();
+    clio::run::u32 num_tasks_scheduled = parse_task->num_tasks_scheduled_;
 
     HLOG(kInfo, "ParseOmni completed:");
     HLOG(kInfo, "  result_code: {}", result_code);

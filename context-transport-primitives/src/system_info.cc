@@ -46,7 +46,9 @@
 #define PATH_MAX 4096  // POSIX default; not always in <climits> under NVHPC
 #endif
 // LCOV_EXCL_STOP
+#include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 
 #include "clio_ctp/constants/macros.h"
@@ -82,6 +84,7 @@
 #include <sys/sysctl.h>
 #endif
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #if __linux__
 #include <linux/memfd.h>
@@ -433,12 +436,12 @@ void *SystemInfo::GetTls(const ThreadLocalKey &key) {
 }
 
 std::string SystemInfo::GetMemfdDir() {
-  // Default is /tmp/chimaera_$USER, but some sites have a tiny /
+  // Default is /tmp/clio_$USER, but some sites have a tiny /
   // partition where /tmp fills up (ares compute nodes are a known
   // example: a stale prior run -- or any other user's clutter --
   // can leave no space, mkdir under /tmp silently fails, and the
   // subsequent memfd symlink + shm_open returns ENOENT here. Allow
-  // env override so deployments can point chimaera's per-user
+  // env override so deployments can point clio's per-user
   // bookkeeping at an NFS-backed location (e.g. $HOME).
   const char *override_dir = ctp::env::GetCompat("MEMFD_DIR");
   if (override_dir && *override_dir) {
@@ -452,11 +455,11 @@ std::string SystemInfo::GetMemfdDir() {
   std::error_code ec;
   std::filesystem::path base = std::filesystem::temp_directory_path(ec);
   if (ec) base = std::filesystem::path(".");
-  return (base / (std::string("chimaera_") + user)).string();
+  return (base / (std::string("clio_") + user)).string();
 #else
   const char *user = getenv("USER");
   if (!user) user = "unknown";
-  return std::string("/tmp/chimaera_") + user;
+  return std::string("/tmp/clio_") + user;
 #endif
 }
 
@@ -510,7 +513,7 @@ bool SystemInfo::CreateNewSharedMemory(File &fd, const std::string &name,
   // macOS / BSD: POSIX shm_open() names are capped at PSHMNAMLEN (31 chars
   // on macOS) and shm objects live in an anonymous namespace with no
   // filesystem path, so the per-user readiness probes and tooling that
-  // expect /tmp/chimaera_$USER/<name> (mirroring Linux's memfd symlink)
+  // expect /tmp/clio_$USER/<name> (mirroring Linux's memfd symlink)
   // never observe the segment -- WaitForServer() then times out, the test
   // leaves an orphaned server holding the port, and every later test fails
   // with "Address already in use". Back the segment with a regular file in
@@ -772,6 +775,53 @@ void SystemInfo::TerminateProcessNow(int exit_code) {
 #endif
 }
 
+#if CTP_ENABLE_WINDOWS_SYSINFO
+// Defined in winnt.h for SDK 10.0.17134 (Windows 10 1803) and later; define
+// defensively so an older SDK still compiles (the flag is simply ignored, and
+// the null-handle fallback below downgrades to a standard-resolution timer).
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+#endif
+
+void SystemInfo::SleepForUs(size_t us) {
+  if (us == 0) return;
+#if CTP_ENABLE_PROCFS_SYSINFO
+  // POSIX: nanosleep already honors sub-microsecond requests (subject to the
+  // hrtimer slack, ~50us by default), so no special handling is needed.
+  struct timespec ts;
+  ts.tv_sec = static_cast<time_t>(us / 1000000);
+  ts.tv_nsec = static_cast<long>((us % 1000000) * 1000);
+  nanosleep(&ts, nullptr);
+#elif CTP_ENABLE_WINDOWS_SYSINFO
+  // One-shot high-resolution waitable timer. Unlike std::this_thread::sleep_for
+  // (which rounds up to the ~1-15.6ms global timer tick), this gives
+  // sub-millisecond accuracy without calling timeBeginPeriod (no global timer
+  // rate change). The timer is created/closed per call rather than cached in a
+  // thread_local (a project rule + per-DLL duplication hazard on Windows); the
+  // CreateWaitableTimer cost is a few microseconds, dwarfed by any sleep long
+  // enough to be worth issuing.
+  HANDLE timer = ::CreateWaitableTimerExW(
+      nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+  if (timer == nullptr) {
+    // Pre-1803: high-resolution flag unsupported. Standard-resolution timer.
+    timer = ::CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+  }
+  if (timer != nullptr) {
+    LARGE_INTEGER due;
+    // Negative => relative due time, expressed in 100ns units.
+    due.QuadPart = -static_cast<LONGLONG>(us) * 10;
+    if (::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) {
+      ::WaitForSingleObject(timer, INFINITE);
+    }
+    ::CloseHandle(timer);
+    return;
+  }
+  // Last resort: coarse Sleep, rounded up to >= 1ms.
+  ::Sleep(static_cast<DWORD>((us + 999) / 1000));
+#endif
+}
+
 void SystemInfo::SetCurrentThreadName(const std::string &name) {
 #if CTP_ENABLE_PROCFS_SYSINFO
 #ifdef __linux__
@@ -1017,7 +1067,7 @@ void SystemInfo::Setenv(const char *name, const std::string &value,
   // reads) and the Win32 process environment block (which
   // GetEnvironmentVariable reads). SetEnvironmentVariable only touches
   // the Win32 block, which would leave std::getenv blind to the new
-  // value — and chi::env::GetCompat goes through std::getenv. Honor the
+  // value — and clio::run::env::GetCompat goes through std::getenv. Honor the
   // overwrite flag manually since _putenv_s always overwrites.
   if (!overwrite) {
     char probe[2];
@@ -1107,6 +1157,69 @@ SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept {
     other.handle_ = nullptr;
   }
   return *this;
+}
+
+/// @brief Retrieves storage device hardware health statistics.
+///
+/// Reads a JSON file left by an external admin service
+/// (e.g. a smartmontools/smartd cron job writing
+/// /tmp/iowarp_hw_health_<device>.json).  iowarp itself never needs
+/// elevated privileges; this function is purely a non-root consumer.
+///
+/// @param path  Path to the file or block device whose health to query.
+///              If not already a /dev/ node, df is used to find the backing
+///              device so the correct per-device JSON file is located.
+/// @return      JSON string with health stats, or "{}" if unavailable.
+std::string SystemInfo::GetDeviceHealthStats(const std::string &path) {
+#if CTP_ENABLE_PROCFS_SYSINFO
+  std::string device = path;
+
+  // If the path is not a raw block device, find the mount's backing device.
+  if (path.find("/dev/") != 0) {
+    // Quote path to handle spaces safely.
+    std::string cmd =
+        "df -P \"" + path + "\" 2>/dev/null | tail -1 | awk '{print $1}'";
+    char buffer[256];
+    FILE *pipe = popen(cmd.c_str(), "r");
+    if (pipe) {
+      if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        std::string df_out = buffer;
+        if (!df_out.empty() && df_out.back() == '\n') {
+          df_out.pop_back();
+        }
+        // Only use the df output if it returned a real /dev/ node
+        // (ignore things like 'overlay' in containers).
+        if (df_out.find("/dev/") == 0) {
+          device = df_out;
+        }
+      }
+      pclose(pipe);
+    }
+  }
+
+  // Extract the basename of the device (e.g. /dev/nvme0n1 -> nvme0n1).
+  std::string dev_basename = device;
+  size_t slash_pos = dev_basename.find_last_of('/');
+  if (slash_pos != std::string::npos) {
+    dev_basename = dev_basename.substr(slash_pos + 1);
+  }
+
+  // Read health stats written by the external admin service.
+  // e.g. /tmp/iowarp_hw_health_nvme0n1.json
+  std::string stats_path =
+      "/tmp/iowarp_hw_health_" + dev_basename + ".json";
+  std::ifstream stats_file(stats_path);
+  if (!stats_file.is_open()) {
+    return "{}";
+  }
+
+  std::string result((std::istreambuf_iterator<char>(stats_file)),
+                     std::istreambuf_iterator<char>());
+  return result.empty() ? "{}" : result;
+#else
+  (void)path;
+  return "{}";
+#endif
 }
 
 }  // namespace ctp

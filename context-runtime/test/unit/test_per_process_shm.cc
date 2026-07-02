@@ -57,12 +57,12 @@
 
 namespace {
 // Test setup helper - same pattern as other tests
-bool initialize_chimaera() {
-  return chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+bool initialize_clio() {
+  return clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
 }
 
-// The runtime server is launched out-of-process via chi::test::RuntimeServer
-// (clio_run start) instead of fork()+CHIMAERA_INIT(kServer): fork-without-exec
+// The runtime server is launched out-of-process via clio::run::test::RuntimeServer
+// (clio_run start) instead of fork()+CLIO_INIT(kServer): fork-without-exec
 // deadlocks on macOS when the child dlopen()s ChiMods. The client child below
 // is still a real fork() -- client mode does not dlopen, so it is macOS-safe
 // and exercises the per-process shm path this test is about.
@@ -80,8 +80,8 @@ constexpr size_t k1_5GB = 1536ULL * 1024 * 1024;  // 1.5 GB
 TEST_CASE("Per-process shared memory GetClientShmInfo",
           "[ipc][per_process_shm][shm_info][fork]") {
   // Fork a server, then fork a client child to test GetClientShmInfo.
-  // Both children start with clean process state (no prior CHIMAERA_INIT).
-  chi::test::RuntimeServer server;
+  // Both children start with clean process state (no prior CLIO_INIT).
+  clio::run::test::RuntimeServer server;
   REQUIRE(server.Start());
   REQUIRE(server.WaitForReady());
 
@@ -92,7 +92,7 @@ TEST_CASE("Per-process shared memory GetClientShmInfo",
     (void)freopen("/dev/null", "w", stderr);
     setenv("CLIO_WITH_RUNTIME", "0", 1);
     setenv("CLIO_IPC_MODE", "SHM", 1);
-    if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
+    if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false)) {
       _exit(1);
     }
     auto *client_ipc = CLIO_IPC;
@@ -101,13 +101,13 @@ TEST_CASE("Per-process shared memory GetClientShmInfo",
     auto buffer = client_ipc->AllocateBuffer(k1MB);
     if (buffer.IsNull()) _exit(3);
 
-    chi::ClientShmInfo info = client_ipc->GetClientShmInfo(0);
+    clio::run::ClientShmInfo info = client_ipc->GetClientShmInfo(0);
     if (info.owner_pid != getpid()) _exit(4);
     if (info.shm_index != 0) _exit(5);
     if (info.size == 0) _exit(6);
 
     std::string expected_prefix =
-        "chimaera_" + std::to_string(getpid()) + "_";
+        "clio_" + std::to_string(getpid()) + "_";
     if (info.shm_name.find(expected_prefix) != 0) _exit(7);
 
     _exit(0);  // Success
@@ -124,7 +124,7 @@ TEST_CASE("Per-process shared memory GetClientShmInfo",
 
 TEST_CASE("Per-process shared memory AllocateBuffer medium sizes",
           "[ipc][per_process_shm][allocate][medium]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -164,7 +164,7 @@ TEST_CASE("Per-process shared memory AllocateBuffer medium sizes",
 
 TEST_CASE("Per-process shared memory AllocateBuffer exceeding 1GB",
           "[ipc][per_process_shm][allocate][large]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -203,7 +203,7 @@ TEST_CASE("Per-process shared memory AllocateBuffer exceeding 1GB",
 
 TEST_CASE("Per-process shared memory multiple large allocations",
           "[ipc][per_process_shm][allocate][multiple_large]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -249,7 +249,7 @@ TEST_CASE("Per-process shared memory multiple large allocations",
 
 TEST_CASE("Per-process shared memory allocation patterns",
           "[ipc][per_process_shm][allocate][patterns]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -305,7 +305,7 @@ TEST_CASE("Per-process shared memory allocation patterns",
 
 TEST_CASE("Per-process shared memory FreeBuffer",
           "[ipc][per_process_shm][free]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -349,7 +349,7 @@ TEST_CASE("Per-process shared memory FreeBuffer",
 
 TEST_CASE("Per-process shared memory ToFullPtr conversion",
           "[ipc][per_process_shm][tofullptr]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -383,7 +383,7 @@ TEST_CASE("Per-process shared memory ToFullPtr conversion",
 
 TEST_CASE("Per-process shared memory stress test",
           "[ipc][per_process_shm][stress]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
@@ -426,19 +426,19 @@ TEST_CASE("Per-process shared memory stress test",
 
 TEST_CASE("Per-process shared memory ClientShmInfo",
           "[ipc][per_process_shm][shm_info]") {
-  REQUIRE(initialize_chimaera());
+  REQUIRE(initialize_clio());
 
   auto* ipc_manager = CLIO_IPC;
   REQUIRE(ipc_manager != nullptr);
 
   SECTION("ClientShmInfo struct creation") {
     // Create a ClientShmInfo manually
-    chi::ClientShmInfo info;
+    clio::run::ClientShmInfo info;
     info.shm_name = "test_shm";
     info.owner_pid = getpid();
     info.shm_index = 0;
     info.size = k100MB;
-    info.alloc_id = ctp::ipc::AllocatorId(static_cast<chi::u32>(getpid()), 0);
+    info.alloc_id = ctp::ipc::AllocatorId(static_cast<clio::run::u32>(getpid()), 0);
 
     REQUIRE(info.shm_name == "test_shm");
     REQUIRE(info.owner_pid == getpid());

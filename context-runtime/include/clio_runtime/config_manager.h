@@ -31,10 +31,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_MANAGERS_CONFIG_MANAGER_H_
+#define CLIO_RUNTIME_INCLUDE_MANAGERS_CONFIG_MANAGER_H_
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "clio_runtime/types.h"
@@ -52,6 +53,13 @@ struct PoolConfig {
   PoolQuery pool_query_;     /**< Pool query routing (Dynamic or Local) */
   std::string config_;       /**< Remaining YAML configuration as string */
   bool restart_ = false;     /**< If true, store compose file for crash-restart */
+  /** Default RPC visibility for the container: 0 = public (default),
+   *  1 = private. A private container rejects RPCs from external user clients
+   *  (runtime-internal callers are always allowed). */
+  u32 container_visibility_ = 0;
+  /** Per-RPC visibility overrides, keyed by RPC method NAME -> 0 public /
+   *  1 private. Methods absent here inherit container_visibility_. */
+  std::unordered_map<std::string, u32> rpc_acl_;
 
   PoolConfig() = default;
 
@@ -70,7 +78,8 @@ struct PoolConfig {
    */
   template <class Archive>
   void serialize(Archive& ar) {
-    ar(mod_name_, pool_name_, pool_id_, pool_query_, config_, restart_);
+    ar(mod_name_, pool_name_, pool_id_, pool_query_, config_, restart_,
+       container_visibility_, rpc_acl_);
   }
 };
 
@@ -88,11 +97,11 @@ struct ComposeConfig {
  *
  * Inherits from ctp BaseConfig and manages YAML configuration parsing.
  * Config lookup, first hit wins:
- *   1. CLIO_SERVER_CONF env (or legacy CHI_SERVER_CONF via env_compat)
+ *   1. CLIO_SERVER_CONF env (or legacy CLIO_SERVER_CONF via env_compat)
  *   2. ~/.clio/clio.yaml
- *   3. ~/.clio/chimaera.yaml
- *   4. ~/.chimaera/clio.yaml
- *   5. ~/.chimaera/chimaera.yaml
+ *   3. ~/.clio/clio.yaml
+ *   4. ~/.clio/clio.yaml
+ *   5. ~/.clio/clio.yaml
  *   6. Bare-minimum defaults (no compose)
  * Uses CTP global cross pointer variable singleton pattern.
  */
@@ -129,11 +138,11 @@ class ConfigManager : public ctp::BaseConfig {
   /**
    * Get server configuration file path.
    * Lookup order (first hit wins):
-   *   1. CLIO_SERVER_CONF env var (or legacy CHI_SERVER_CONF via env_compat)
+   *   1. CLIO_SERVER_CONF env var (or legacy CLIO_SERVER_CONF via env_compat)
    *   2. ~/.clio/clio.yaml         (new canonical user config)
-   *   3. ~/.clio/chimaera.yaml     (legacy filename in new dir)
-   *   4. ~/.chimaera/clio.yaml     (new filename in legacy dir)
-   *   5. ~/.chimaera/chimaera.yaml (legacy)
+   *   3. ~/.clio/clio.yaml     (legacy filename in new dir)
+   *   4. ~/.clio/clio.yaml     (new filename in legacy dir)
+   *   5. ~/.clio/clio.yaml (legacy)
    *   6. Empty string (bare-minimum defaults, no compose)
    * Both per-user directories are seeded with identical content by
    * `make install` and by the iowarp_core pip wheel's _setup() hook.
@@ -179,8 +188,15 @@ class ConfigManager : public ctp::BaseConfig {
   u32 GetPort() const;
 
   /**
+   * @return true if this runtime is ephemeral (started with --ephemeral /
+   * CLIO_EPHEMERAL): it skips the default compose section and starts bare
+   * (admin only), to be composed explicitly.
+   */
+  bool IsEphemeral() const;
+
+  /**
    * Get server address for client connections
-   * @return Server address (default: "127.0.0.1", overridden by CHI_SERVER_ADDR)
+   * @return Server address (default: "127.0.0.1", overridden by CLIO_SERVER_ADDR)
    */
   std::string GetServerAddr() const;
 
@@ -191,11 +207,17 @@ class ConfigManager : public ctp::BaseConfig {
   u32 GetNeighborhoodSize() const;
 
   /**
-   * Get shared memory segment names
-   * @param segment Memory segment identifier`
+   * Get shared memory segment names. The name is suffixed with the runtime port
+   * so that multiple runtimes sharing one node + ${USER} (the fallback-runtime
+   * topology) each own a distinct segment instead of colliding. Pass an explicit
+   * non-zero @p port to compute another runtime's segment name (used by the
+   * fallback client to attach the main runtime's segments).
+   * @param segment Memory segment identifier
+   * @param port Port to key the name on; 0 = this runtime's configured port
    * @return Expanded segment name with environment variables resolved
    */
-  std::string GetSharedMemorySegmentName(MemorySegment segment) const;
+  std::string GetSharedMemorySegmentName(MemorySegment segment,
+                                         u32 port = 0) const;
 
   /**
    * Get hostfile path for distributed scheduling
@@ -314,6 +336,15 @@ class ConfigManager : public ctp::BaseConfig {
    */
   void ParseYAML(YAML::Node& yaml_conf) override;
 
+  /**
+   * Apply environment-variable overrides (CLIO_PORT, CLIO_SERVER_ADDR, etc.).
+   * Must run after every (re)load: LoadFromFile resets to defaults via
+   * LoadDefault, so a config reload (e.g. parsing a compose file into this
+   * manager) would otherwise silently drop the env-configured port — which on
+   * the force-net path retargets every forward at the wrong port.
+   */
+  void ApplyEnvOverrides();
+
   bool is_initialized_ = false;
   std::string config_file_path_;
 
@@ -325,6 +356,8 @@ class ConfigManager : public ctp::BaseConfig {
   size_t client_data_segment_size_ = ctp::Unit<size_t>::Megabytes(256);
 
   u32 port_ = 9413;
+  // If true (CLIO_EPHEMERAL / --ephemeral), skip the default compose at startup.
+  bool ephemeral_ = false;
   std::string server_addr_ = "127.0.0.1";
   u32 neighborhood_size_ = 32;
 
@@ -368,18 +401,17 @@ class ConfigManager : public ctp::BaseConfig {
   ComposeConfig compose_config_;
 
   // Configuration directory for persistent runtime config
-  std::string conf_dir_ = "/tmp/chimaera";
+  std::string conf_dir_ = "/tmp/clio";
 };
 
 }  // namespace clio::run
 
 // Global pointer variable declaration for Configuration manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::ConfigManager, g_config_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::ConfigManager, g_config_manager);
 
 // Macro for accessing the Configuration manager singleton using global pointer variable
-#define CLIO_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ConfigManager, g_config_manager)
+#define CLIO_CONFIG_MANAGER CTP_GET_GLOBAL_PTR_VAR(::clio::run::ConfigManager, g_config_manager)
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_CONFIG_MANAGER  CLIO_CONFIG_MANAGER
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_CONFIG_MANAGER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_MANAGERS_CONFIG_MANAGER_H_

@@ -237,7 +237,41 @@ macro(wrp_core_enable_sycl CXX_STANDARD)
         "Pass -fsycl-allow-virtual-functions to DPC++ (recent compiler only)"
         OFF)
 
-    message(STATUS "SYCL enabled: compiler=${CLIO_SYCL_COMPILER} target=${SYCL_TARGET} device=${SYCL_DEVICE}")
+    # Locate the SYCL headers so HOST translation units -- compiled with
+    # CTP_ENABLE_SYCL=1 but WITHOUT -fsycl (see context-runtime/src and
+    # context-transfer-engine/core) -- can still find <sycl/sycl.hpp>.
+    # icpx only adds this directory to its search path under -fsycl, so for
+    # plain host TUs we must supply it explicitly. Derive it from the compiler
+    # location rather than hardcoding a vendor prefix: on Aurora the headers
+    # live next to icpx (e.g. .../oneapi/compiler/latest/include/sycl), NOT at
+    # /opt/intel/dpcpp. <sycl/sycl.hpp> is plain C++ and parses without the
+    # SYCL frontend (it only warns; we silence that via the compile def below).
+    if(NOT DEFINED CACHE{CLIO_SYCL_INCLUDE_DIR})
+        set(_wrp_sycl_inc "")
+        if(CLIO_SYCL_COMPILER STREQUAL "DPCPP")
+            get_filename_component(_wrp_cxx_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            get_filename_component(_wrp_cmplr_root "${_wrp_cxx_bin}" DIRECTORY)
+            if(EXISTS "${_wrp_cmplr_root}/include/sycl/sycl.hpp")
+                set(_wrp_sycl_inc "${_wrp_cmplr_root}/include")
+            elseif(EXISTS "/opt/intel/dpcpp/include/sycl/sycl.hpp")
+                set(_wrp_sycl_inc "/opt/intel/dpcpp/include")
+            endif()
+        elseif(CLIO_SYCL_COMPILER STREQUAL "ACPP")
+            if(EXISTS "/opt/adaptivecpp/include/AdaptiveCpp/sycl/sycl.hpp")
+                set(_wrp_sycl_inc "/opt/adaptivecpp/include/AdaptiveCpp")
+            endif()
+        endif()
+        set(CLIO_SYCL_INCLUDE_DIR "${_wrp_sycl_inc}" CACHE PATH
+            "SYCL header directory for host TUs compiled without -fsycl")
+    endif()
+    if(NOT CLIO_SYCL_INCLUDE_DIR)
+        message(WARNING
+            "SYCL enabled but <sycl/sycl.hpp> not located next to ${CMAKE_CXX_COMPILER} "
+            "nor at the legacy /opt prefixes. Host TUs that include it will fail to "
+            "compile. Set -DCLIO_SYCL_INCLUDE_DIR=<dir containing sycl/sycl.hpp>.")
+    endif()
+
+    message(STATUS "SYCL enabled: compiler=${CLIO_SYCL_COMPILER} target=${SYCL_TARGET} device=${SYCL_DEVICE} include=${CLIO_SYCL_INCLUDE_DIR}")
 endmacro()
 
 # Apply SYCL compile and link flags to a specific target.
@@ -250,7 +284,7 @@ endmacro()
 #          -fsycl-allow-virtual-functions if CLIO_SYCL_ALLOW_VIRTUAL_FUNCTIONS=ON.
 #   ACPP   --acpp-targets=<target>.
 #
-# -fsycl-allow-func-ptr is required by chi::gpu::Container's function-pointer
+# -fsycl-allow-func-ptr is required by clio::run::gpu::Container's function-pointer
 # dispatch table; without it DPC++ rejects taking the address of device
 # functions.
 function(wrp_core_apply_sycl_flags target)
@@ -777,19 +811,19 @@ function(_clio_run_link_runtime_to_client RUNTIME_TARGET CLIENT_TARGET)
 endfunction()
 
 # Function to read repository namespace from clio_repo.yaml (preferred) or
-# chimaera_repo.yaml (legacy). Both formats are accepted; the new clio_repo.yaml
+# clio_repo.yaml (legacy). Both formats are accepted; the new clio_repo.yaml
 # takes precedence so projects can migrate gradually. Searches up the directory
 # tree from the given path.
 function(read_repo_namespace output_var start_path)
   set(current_path "${start_path}")
-  set(namespace "chimaera")  # Default fallback
+  set(namespace "clio::run")  # Default fallback
 
   # Search up the directory tree; at each level look for the new name first,
   # then the legacy name. Either is sufficient.
   while(NOT "${current_path}" STREQUAL "/" AND NOT "${current_path}" STREQUAL "")
     set(_repo_candidates
         "${current_path}/clio_repo.yaml"      # preferred (new)
-        "${current_path}/chimaera_repo.yaml") # legacy, still supported
+        "${current_path}/clio_repo.yaml") # legacy, still supported
     foreach(repo_file ${_repo_candidates})
       if(EXISTS "${repo_file}")
         file(READ "${repo_file}" REPO_YAML_CONTENT)
@@ -818,12 +852,12 @@ function(read_repo_namespace output_var start_path)
 endfunction()
 
 # Function to read module configuration from clio_mod.yaml (preferred) or
-# chimaera_mod.yaml (legacy). Both formats are accepted; the new name takes
+# clio_mod.yaml (legacy). Both formats are accepted; the new name takes
 # precedence to enable gradual migration.
 function(clio_run_read_module_config MODULE_DIR)
   set(_mod_candidates
       "${MODULE_DIR}/clio_mod.yaml"
-      "${MODULE_DIR}/chimaera_mod.yaml")
+      "${MODULE_DIR}/clio_mod.yaml")
   set(CONFIG_FILE "")
   foreach(_cand ${_mod_candidates})
     if(EXISTS "${_cand}")
@@ -834,7 +868,7 @@ function(clio_run_read_module_config MODULE_DIR)
 
   if(NOT CONFIG_FILE)
     message(FATAL_ERROR
-            "Missing clio_mod.yaml (or legacy chimaera_mod.yaml) in ${MODULE_DIR}")
+            "Missing clio_mod.yaml (or legacy clio_mod.yaml) in ${MODULE_DIR}")
   endif()
 
   # Parse YAML file (simple regex parsing for key: value pairs)
@@ -861,7 +895,7 @@ function(clio_run_read_module_config MODULE_DIR)
   # value gets reused for library output names, install destinations and
   # export file names where `::` is illegal or filesystem-unfriendly. Replace
   # `::` with `_` so `clio::run` -> `clio_run`, `clio::cte` -> `clio_cte`,
-  # legacy `chimaera` -> `chimaera`. Downstream code that needs the path
+  # legacy `clio_run` -> `clio_run`. Downstream code that needs the path
   # form references CLIO_RUN_PACKAGE_NAME; code that needs the C++/target
   # prefix references CLIO_RUN_NAMESPACE.
   string(REPLACE "::" "_" CLIO_RUN_PACKAGE_NAME "${CLIO_RUN_NAMESPACE}")
@@ -892,9 +926,9 @@ endfunction()
 #   INCLUDE_DIRECTORIES - Additional include directories
 #
 # Automatic Cross-Namespace Dependencies (Unified Builds):
-#   For non-chimaera namespaces (e.g., clio_cte, clio_cae), this function automatically
-#   links chimaera admin and bdev client libraries if they are available as targets.
-#   This enables wrp_* ChiMods to use chimaera ChiMod headers and functionality without
+#   For non-clio_run namespaces (e.g., clio_cte, clio_cae), this function automatically
+#   links clio_run admin and bdev client libraries if they are available as targets.
+#   This enables wrp_* ChiMods to use clio_run ChiMod headers and functionality without
 #   explicit dependency declarations in their CMakeLists.txt files.
 #
 function(add_clio_module_client)
@@ -961,10 +995,10 @@ function(add_clio_module_client)
     target_link_directories(${TARGET_NAME} PUBLIC ${ARG_LINK_DIRECTORIES})
   endif()
 
-  # Link libraries - use chimaera::cxx for internal builds, ctp::cxx for external
+  # Link libraries - use clio::run::cxx for internal builds, ctp::cxx for external
   set(CORE_LIB "")
-  if(TARGET chimaera::cxx)
-    set(CORE_LIB chimaera::cxx)
+  if(TARGET clio::run::cxx)
+    set(CORE_LIB clio::run::cxx)
   elseif(TARGET ctp::cxx)
     set(CORE_LIB ctp::cxx)
   elseif(TARGET ClioCtp::cxx)
@@ -972,13 +1006,13 @@ function(add_clio_module_client)
   elseif(TARGET cxx)
     set(CORE_LIB cxx)
   else()
-    message(FATAL_ERROR "Neither chimaera::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
+    message(FATAL_ERROR "Neither clio::run::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
   endif()
 
   # Automatically add foundational ChiMod dependencies in unified builds.
   # Skip when the target being built IS one of those foundational modules
-  # (admin keeps LIB_NAME=chimaera_admin, bdev uses LIB_NAME=clio_bdev) — the
-  # old guard `NOT NAMESPACE STREQUAL "chimaera"` no longer works now that
+  # (admin keeps LIB_NAME=clio_run_admin, bdev uses LIB_NAME=clio_bdev) — the
+  # old guard `NOT NAMESPACE STREQUAL "clio_run"` no longer works now that
   # admin's own namespace is `clio_run`.
   set(CLIO_RUN_MODULE_DEPS "")
   if(NOT "${CLIO_RUN_MODULE_NAME}" STREQUAL "admin" AND
@@ -1001,12 +1035,6 @@ function(add_clio_module_client)
 
   # Create alias for external use
   add_library(${CLIO_RUN_NAMESPACE}::${CLIO_RUN_MODULE_NAME}_client ALIAS ${TARGET_NAME})
-  # Also expose the legacy `chimaera::` alias so consumers that pre-date
-  # the module-namespace rename (e.g. coeus-adapter, in-tree CMakeLists
-  # that link to chimaera::admin_client) keep working at build time.
-  if(NOT TARGET chimaera::${CLIO_RUN_MODULE_NAME}_client)
-    add_library(chimaera::${CLIO_RUN_MODULE_NAME}_client ALIAS ${TARGET_NAME})
-  endif()
 
   # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
   # so the .so file on disk matches the CMake target.  PACKAGE_NAME (not
@@ -1028,16 +1056,12 @@ function(add_clio_module_client)
 
   # Install the client library
   # MODULE_PACKAGE_NAME: install dir under lib/cmake/. For runtime modules
-  # whose namespace was renamed chimaera -> clio::run (admin, bdev, MOD_NAME)
-  # we pin to the legacy `chimaera_<module>` form so external find_package
+  # whose namespace was renamed clio_run -> clio::run (admin, bdev, MOD_NAME)
+  # we pin to the legacy `clio_<module>` form so external find_package
   # consumers (e.g. coeus-adapter) keep working. For other namespaces
   # (clio::cte, clio::cae, …) we use the standard `<package>_<module>` form
   # (always filesystem-safe).
-  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio::run")
-    set(MODULE_PACKAGE_NAME "chimaera_${CLIO_RUN_MODULE_NAME}")
-  else()
-    set(MODULE_PACKAGE_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}")
-  endif()
+  set(MODULE_PACKAGE_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}")
   set(MODULE_EXPORT_NAME "${MODULE_PACKAGE_NAME}")
 
   install(TARGETS ${TARGET_NAME}
@@ -1057,10 +1081,12 @@ function(add_clio_module_client)
   endif()
 
   # Precompiled headers for faster builds
-  target_precompile_headers(${TARGET_NAME} PRIVATE
-      <string> <vector> <memory> <unordered_map>
-      <functional> <algorithm> <cstdint> <cstring> <iostream>
-  )
+  if(CLIO_CORE_ENABLE_PCH)
+    target_precompile_headers(${TARGET_NAME} PRIVATE
+        <string> <vector> <memory> <unordered_map>
+        <functional> <algorithm> <cstdint> <cstring> <iostream>
+    )
+  endif()
 
   # Export module info to parent scope
   set(CLIO_RUN_MODULE_CLIENT_TARGET ${TARGET_NAME} PARENT_SCOPE)
@@ -1086,9 +1112,9 @@ endfunction()
 #   INCLUDE_DIRECTORIES - Additional include directories
 #
 # Automatic Cross-Namespace Dependencies (Unified Builds):
-#   For non-chimaera namespaces (e.g., clio_cte, clio_cae), this function automatically
-#   links chimaera admin and bdev runtime libraries if they are available as targets.
-#   This enables wrp_* ChiMods to use chimaera ChiMod headers and functionality without
+#   For non-clio_run namespaces (e.g., clio_cte, clio_cae), this function automatically
+#   links clio_run admin and bdev runtime libraries if they are available as targets.
+#   This enables wrp_* ChiMods to use clio_run ChiMod headers and functionality without
 #   explicit dependency declarations in their CMakeLists.txt files.
 #
 function(add_clio_module_runtime)
@@ -1126,10 +1152,10 @@ function(add_clio_module_runtime)
     $<$<CONFIG:Release>:NDEBUG>
   )
 
-  # Add compile definitions (runtime always has CHIMAERA_RUNTIME=1)
+  # Add compile definitions (runtime always has CLIO_RUNTIME=1)
   target_compile_definitions(${TARGET_NAME}
     PUBLIC
-      CHIMAERA_RUNTIME=1
+      CLIO_RUNTIME=1
       ${CLIO_RUN_COMMON_COMPILE_DEFS}
       ${ARG_COMPILE_DEFINITIONS}
   )
@@ -1153,10 +1179,10 @@ function(add_clio_module_runtime)
     target_link_directories(${TARGET_NAME} PUBLIC ${ARG_LINK_DIRECTORIES})
   endif()
 
-  # Link libraries - use ctp::cxx for internal builds, chimaera::cxx for external
+  # Link libraries - use ctp::cxx for internal builds, clio::run::cxx for external
   set(CORE_LIB "")
-  if(TARGET chimaera::cxx)
-    set(CORE_LIB chimaera::cxx)
+  if(TARGET clio::run::cxx)
+    set(CORE_LIB clio::run::cxx)
   elseif(TARGET ctp::cxx)
     set(CORE_LIB ctp::cxx)
   elseif(TARGET ClioCtp::cxx)
@@ -1164,7 +1190,7 @@ function(add_clio_module_runtime)
   elseif(TARGET cxx)
     set(CORE_LIB cxx)
   else()
-    message(FATAL_ERROR "Neither chimaera::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
+    message(FATAL_ERROR "Neither clio::run::cxx, ctp::cxx, ClioCtp::cxx nor cxx target found")
   endif()
 
   # Runtime-specific link libraries
@@ -1211,12 +1237,6 @@ function(add_clio_module_runtime)
 
   # Create alias for external use
   add_library(${CLIO_RUN_NAMESPACE}::${CLIO_RUN_MODULE_NAME}_runtime ALIAS ${TARGET_NAME})
-  # Also expose the legacy `chimaera::` alias so consumers that pre-date
-  # the module-namespace rename (e.g. coeus-adapter, in-tree CMakeLists
-  # that link to chimaera::admin_runtime) keep working at build time.
-  if(NOT TARGET chimaera::${CLIO_RUN_MODULE_NAME}_runtime)
-    add_library(chimaera::${CLIO_RUN_MODULE_NAME}_runtime ALIAS ${TARGET_NAME})
-  endif()
 
   # Set properties for installation. OUTPUT_NAME tracks LIB_NAME when given
   # so the .so file on disk matches the CMake target.  PACKAGE_NAME (not
@@ -1239,16 +1259,12 @@ function(add_clio_module_runtime)
 
   # Install the runtime library (add to existing export set if client exists)
   # MODULE_PACKAGE_NAME: install dir under lib/cmake/. For runtime modules
-  # whose namespace was renamed chimaera -> clio::run (admin, bdev, MOD_NAME)
-  # we pin to the legacy `chimaera_<module>` form so external find_package
+  # whose namespace was renamed clio_run -> clio::run (admin, bdev, MOD_NAME)
+  # we pin to the legacy `clio_<module>` form so external find_package
   # consumers (e.g. coeus-adapter) keep working. For other namespaces
   # (clio::cte, clio::cae, …) we use the standard `<package>_<module>` form
   # (filesystem-safe).
-  if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio::run")
-    set(MODULE_PACKAGE_NAME "chimaera_${CLIO_RUN_MODULE_NAME}")
-  else()
-    set(MODULE_PACKAGE_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}")
-  endif()
+  set(MODULE_PACKAGE_NAME "${CLIO_RUN_PACKAGE_NAME}_${CLIO_RUN_MODULE_NAME}")
   set(MODULE_EXPORT_NAME "${MODULE_PACKAGE_NAME}")
 
   install(TARGETS ${TARGET_NAME}
@@ -1277,15 +1293,12 @@ function(add_clio_module_runtime)
 
   if(SHOULD_GENERATE_CONFIG)
     # Export targets file
-    # NAMESPACE: for chimaera-renamed runtime modules (admin/bdev/MOD_NAME,
-    # now under clio::run::), pin to `chimaera::` so installed targets keep
+    # NAMESPACE: for clio_run-renamed runtime modules (admin/bdev/MOD_NAME,
+    # now under clio::run::), pin to `clio::run::` so installed targets keep
     # the legacy name external consumers (coeus-adapter etc.) expect. For
     # other modules use the canonical namespace. Either way the modern
     # alias namespace is emitted in Config.cmake below.
     set(_install_namespace "${CLIO_RUN_NAMESPACE}")
-    if("${CLIO_RUN_NAMESPACE}" STREQUAL "clio::run")
-      set(_install_namespace "chimaera")
-    endif()
     install(EXPORT ${MODULE_EXPORT_NAME}
       FILE ${MODULE_EXPORT_NAME}.cmake
       NAMESPACE ${_install_namespace}::
@@ -1324,7 +1337,7 @@ function(add_clio_module_runtime)
 include(CMakeFindDependencyMacro)
 
 # Find the core CLIO Runtime package (handles all other dependencies)
-find_dependency(chimaera REQUIRED)
+find_dependency(clio_run REQUIRED)
 
 # Include the exported targets
 include(\"\${CMAKE_CURRENT_LIST_DIR}/${MODULE_EXPORT_NAME}.cmake\")
@@ -1391,10 +1404,12 @@ check_required_components(${MODULE_PACKAGE_NAME})
   endif()
 
   # Precompiled headers for faster builds
-  target_precompile_headers(${TARGET_NAME} PRIVATE
-      <string> <vector> <memory> <unordered_map>
-      <functional> <algorithm> <cstdint> <cstring> <iostream>
-  )
+  if(CLIO_CORE_ENABLE_PCH)
+    target_precompile_headers(${TARGET_NAME} PRIVATE
+        <string> <vector> <memory> <unordered_map>
+        <functional> <algorithm> <cstdint> <cstring> <iostream>
+    )
+  endif()
 
   # Export module info to parent scope
   set(CLIO_RUN_MODULE_RUNTIME_TARGET ${TARGET_NAME} PARENT_SCOPE)
@@ -1406,9 +1421,9 @@ endfunction()
 message(STATUS "IowarpCoreCommon.cmake loaded successfully")
 
 #==============================================================================
-# Backward-compat aliases (CHIMAERA_* / chimaera_* / add_chimod_* names)
+# Backward-compat aliases (CLIO_* / clio_* / add_chimod_* names)
 #
-# All CMake-facing identifiers in this file were renamed CHIMAERA_* -> CLIO_RUN_*
+# All CMake-facing identifiers in this file were renamed CLIO_* -> CLIO_RUN_*
 # and the helper functions gained `clio` branding (e.g. add_chimod_client ->
 # add_clio_module_client). The legacy names below are macro wrappers that
 # forward to the new names so out-of-tree CMake code keeps building unchanged.
@@ -1424,16 +1439,6 @@ macro(add_chimod_runtime)
   add_clio_module_runtime(${ARGV})
 endmacro()
 
-macro(chimaera_read_module_config _dir)
-  clio_run_read_module_config(${_dir})
-  # Re-export the new variables under their legacy CHIMAERA_* names so any
-  # CMakeLists.txt that still reads e.g. `${CHIMAERA_MODULE_NAME}` keeps
-  # working transparently.
-  set(CHIMAERA_NAMESPACE             "${CLIO_RUN_NAMESPACE}"             PARENT_SCOPE)
-  set(CHIMAERA_MODULE_NAME           "${CLIO_RUN_MODULE_NAME}"           PARENT_SCOPE)
-endmacro()
-
-
 # ---------------------------------------------------------------------------
 # clio_add_force_net_test
 # ---------------------------------------------------------------------------
@@ -1445,7 +1450,7 @@ endmacro()
 #
 # Such tests are always:
 #   * LABELS "msan_skip"            (libzmq is uninstrumented)
-#   * RESOURCE_LOCK "chimaera_runtime" (one runtime owns the fixed port at a time)
+#   * RESOURCE_LOCK "clio_runtime" (one runtime owns the fixed port at a time)
 #   * given CLIO_FORCE_NET=1 appended to the supplied ENVIRONMENT
 #
 # Usage:
@@ -1481,7 +1486,7 @@ function(clio_add_force_net_test)
   set_tests_properties(${FN_NAME} PROPERTIES
     TIMEOUT ${FN_TIMEOUT}
     LABELS "msan_skip"
-    RESOURCE_LOCK "chimaera_runtime"
+    RESOURCE_LOCK "clio_runtime"
     ENVIRONMENT "${FN_ENVIRONMENT};CLIO_FORCE_NET=1")
   if(FN_WORKING_DIRECTORY)
     set_tests_properties(${FN_NAME} PROPERTIES

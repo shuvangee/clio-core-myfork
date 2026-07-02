@@ -7,7 +7,7 @@ from spack.package import *
 
 
 class Iowarp(CMakePackage):
-    """IOWarp Core: Unified repository containing runtime (Chimaera),
+    """IOWarp Core: Unified repository containing runtime (Clio),
     context-transport-primitives, context-transfer-engine,
     context-assimilation-engine, and context-exploration-engine."""
 
@@ -25,7 +25,7 @@ class Iowarp(CMakePackage):
     variant('benchmark', default=True, description='Enable benchmarks for all components')
 
     # Component enable/disable variants
-    variant('runtime', default=True, description='Enable Chimaera runtime component')
+    variant('runtime', default=True, description='Enable Clio runtime component')
     variant('cte', default=True, description='Enable context-transfer-engine component')
     variant('cae', default=True, description='Enable context-assimilation-engine component')
     variant('cee', default=True, description='Enable context-exploration-engine component')
@@ -46,6 +46,8 @@ class Iowarp(CMakePackage):
     variant('rocm', default=False, description='Enable ROCm support')
     variant('adios2', default=False, description='Build with ADIOS2 support')
     variant('fuse', default=False, description='Enable FUSE3 adapter (CTE)')
+    variant('boost_coro', default=False,
+            description='Use Boost.Context stackful coroutine backend (issue #620)')
 
     # Core dependencies (always required)
     depends_on('cmake@3.25:')
@@ -73,6 +75,7 @@ class Iowarp(CMakePackage):
     depends_on('hdf5', when='+hdf5')
     depends_on('adios2', when='+adios2')
     depends_on('libfuse@3:', when='+fuse')
+    depends_on('boost+context', when='+boost_coro')
 
     conflicts('+fuse', when='~cte', msg='fuse adapter lives under CTE; enable +cte')
 
@@ -120,6 +123,8 @@ class Iowarp(CMakePackage):
         args.append(self.define_from_variant('CLIO_CORE_ENABLE_CTE', 'cte'))
         args.append(self.define_from_variant('CLIO_CORE_ENABLE_CAE', 'cae'))
         args.append(self.define_from_variant('CLIO_CORE_ENABLE_CEE', 'cee'))
+        args.append(self.define_from_variant(
+            'CLIO_CORE_ENABLE_BOOST_COROUTINES', 'boost_coro'))
 
         # Context-transport-primitives (CTP) options
         if '+hdf5' in self.spec:
@@ -146,14 +151,14 @@ class Iowarp(CMakePackage):
         if '+test' in self.spec:
             args.append(self.define('CLIO_CORE_ENABLE_TESTS', 'ON'))
             args.append(self.define('CTP_ENABLE_TESTS', 'ON'))
-            args.append(self.define('CHIMAERA_ENABLE_TESTS', 'ON'))
+            args.append(self.define('CLIO_ENABLE_TESTS', 'ON'))
             args.append(self.define('CLIO_CTE_ENABLE_TESTS', 'ON'))
             args.append(self.define('CLIO_CAE_ENABLE_TESTS', 'ON'))
             args.append(self.define('CLIO_CEE_ENABLE_TESTS', 'ON'))
         else:
             args.append(self.define('CLIO_CORE_ENABLE_TESTS', 'OFF'))
             args.append(self.define('CTP_ENABLE_TESTS', 'OFF'))
-            args.append(self.define('CHIMAERA_ENABLE_TESTS', 'OFF'))
+            args.append(self.define('CLIO_ENABLE_TESTS', 'OFF'))
             args.append(self.define('CLIO_CTE_ENABLE_TESTS', 'OFF'))
             args.append(self.define('CLIO_CAE_ENABLE_TESTS', 'OFF'))
             args.append(self.define('CLIO_CEE_ENABLE_TESTS', 'OFF'))
@@ -161,14 +166,14 @@ class Iowarp(CMakePackage):
         if '+benchmark' in self.spec:
             args.append(self.define('CLIO_CORE_ENABLE_BENCHMARKS', 'ON'))
             args.append(self.define('CTP_ENABLE_BENCHMARKS', 'ON'))
-            args.append(self.define('CHIMAERA_ENABLE_BENCHMARKS', 'ON'))
+            args.append(self.define('CLIO_ENABLE_BENCHMARKS', 'ON'))
             args.append(self.define('CLIO_CTE_ENABLE_BENCHMARKS', 'ON'))
             args.append(self.define('CLIO_CAE_ENABLE_BENCHMARKS', 'ON'))
             args.append(self.define('CLIO_CEE_ENABLE_BENCHMARKS', 'ON'))
         else:
             args.append(self.define('CLIO_CORE_ENABLE_BENCHMARKS', 'OFF'))
             args.append(self.define('CTP_ENABLE_BENCHMARKS', 'OFF'))
-            args.append(self.define('CHIMAERA_ENABLE_BENCHMARKS', 'OFF'))
+            args.append(self.define('CLIO_ENABLE_BENCHMARKS', 'OFF'))
             args.append(self.define('CLIO_CTE_ENABLE_BENCHMARKS', 'OFF'))
             args.append(self.define('CLIO_CAE_ENABLE_BENCHMARKS', 'OFF'))
             args.append(self.define('CLIO_CEE_ENABLE_BENCHMARKS', 'OFF'))
@@ -176,9 +181,9 @@ class Iowarp(CMakePackage):
         # CLIO Runtime runtime options (if enabled)
         if '+runtime' in self.spec:
             if '+cuda' in self.spec:
-                args.append(self.define('CHIMAERA_ENABLE_CUDA', 'ON'))
+                args.append(self.define('CLIO_ENABLE_CUDA', 'ON'))
             if '+rocm' in self.spec:
-                args.append(self.define('CHIMAERA_ENABLE_ROCM', 'ON'))
+                args.append(self.define('CLIO_ENABLE_ROCM', 'ON'))
 
         # Context-transfer-engine (CTE) options (if enabled)
         if '+cte' in self.spec:

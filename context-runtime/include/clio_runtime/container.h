@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_CONTAINER_H_
+#define CLIO_RUNTIME_INCLUDE_CONTAINER_H_
 
 #include <cmath>
 #include <clio_ctp/data_structures/serialization/global_serialize.h>
@@ -90,6 +90,14 @@ class Container {
  public:
   static constexpr u32 CONTAINER_PLUG = BIT_OPT(u32, 0);
 
+  /** RPC visibility, as a small bitfield. A "private" RPC rejects calls from
+   *  external user clients; runtime-internal callers are always allowed. */
+  struct MethodProperty {
+    static constexpr u32 kPrivate = BIT_OPT(u32, 0);
+    u32 bits_ = 0;
+    bool IsPrivate() const { return (bits_ & kPrivate) != 0; }
+  };
+
   PoolId pool_id_;         ///< The unique ID of this pool
   std::string pool_name_;  ///< The semantic name of this pool
   u32 container_id_;       ///< The logical ID of this container instance
@@ -108,6 +116,13 @@ class Container {
   std::vector<float> method_mape_wall_;   ///< Per-method wall clock MAPE
   std::vector<std::string> method_names_;  ///< Per-method human-readable names
   float learning_rate_ = 0.2f;      ///< SGD learning rate for model updates
+  /** Default RPC visibility for this container (from compose
+   *  container_visibility). */
+  MethodProperty container_visibility_;
+  /** Per-method visibility overrides keyed by method id (from compose
+   *  container_rpc_acl). Built once in ConfigureAcl, then read-only — no
+   *  locking needed on the enforcement hot path. */
+  std::unordered_map<u32, MethodProperty> method_acl_;
 
  public:
   Container() = default;
@@ -158,6 +173,45 @@ class Container {
    */
   void SetMethodNames(const std::vector<std::string>& names) {
     method_names_ = names;
+  }
+
+  /**
+   * Configure per-RPC access control from a compose PoolConfig. Must be called
+   * once after Init()/SetMethodNames() (so method_names_ is populated), before
+   * the container serves tasks. Translates the name-keyed ACL into a
+   * method_id-keyed map; afterwards the ACL state is read-only.
+   * @param container_visibility default visibility (0 public, 1 private)
+   * @param rpc_acl per-RPC overrides: method NAME -> 0 public / 1 private
+   */
+  void ConfigureAcl(u32 container_visibility,
+                    const std::unordered_map<std::string, u32>& rpc_acl) {
+    container_visibility_.bits_ =
+        container_visibility ? MethodProperty::kPrivate : 0u;
+    method_acl_.clear();
+    for (const auto& kv : rpc_acl) {
+      for (u32 id = 0; id < method_names_.size(); ++id) {
+        if (method_names_[id] == kv.first) {
+          method_acl_[id].bits_ = kv.second ? MethodProperty::kPrivate : 0u;
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+   * @return true if a caller may invoke `method_id`. Runtime-internal callers
+   * (is_external == false) are always allowed. External user clients are
+   * rejected when the method is private (per-method override if present, else
+   * the container default visibility).
+   */
+  bool IsRpcAllowed(u32 method_id, bool is_external) const {
+    if (!is_external) {
+      return true;
+    }
+    auto it = method_acl_.find(method_id);
+    const MethodProperty& mp =
+        (it != method_acl_.end()) ? it->second : container_visibility_;
+    return !mp.IsPrivate();
   }
 
   /**
@@ -280,7 +334,8 @@ class Container {
    * @param task Full pointer to the task being scheduled
    * @return The PoolQuery to use for routing this task
    */
-  virtual PoolQuery ScheduleTask(const ctp::ipc::FullPtr<Task> &task) {
+  virtual PoolQuery ScheduleTask(
+      const clio::run::shared_ptr<Task> &task) {
     return task->pool_query_;
   }
 
@@ -289,13 +344,15 @@ class Container {
    *
    * This method returns TaskResume to support C++20 coroutine-based execution.
    * The returned TaskResume holds the coroutine handle that the worker uses
-   * to suspend and resume task execution.
+   * to suspend and resume task execution. The RunContext is obtained inside
+   * handlers via clio::run::GetCurrentRunContext() (the worker sets it before
+   * every Run/resume), so it is no longer a parameter.
    */
-  virtual TaskResume Run(u32 method, ctp::ipc::FullPtr<Task> task_ptr,
-                         RunContext& rctx) = 0;
+  virtual TaskResume Run(u32 method,
+                         clio::run::shared_ptr<Task> task_ptr) = 0;
 
   /**
-   * Fix up POD bytewise-copied tasks (chi::priv::string SSO data_
+   * Fix up POD bytewise-copied tasks (clio::run::priv::string SSO data_
    * pointers, etc.) before dispatching Run. Called by the GPU2CPU pop
    * path when the kernel's task was in kDeviceMem and the worker had
    * to D2H-copy the POD bytes into a host scratch buffer — at that
@@ -307,7 +364,8 @@ class Container {
    * has SSO/SVO members should override and dispatch per method to
    * the per-task `FixupAfterCopy()`.
    */
-  virtual void FixupAfterCopy(u32 method, ctp::ipc::FullPtr<Task> task_ptr) {
+  virtual void FixupAfterCopy(u32 method,
+                              clio::run::shared_ptr<Task> &task_ptr) {
     (void)method;
     (void)task_ptr;
   }
@@ -326,11 +384,10 @@ class Container {
    * @param rctx Current run context
    * @param increment Work count change (positive or negative)
    */
-  virtual void UpdateWork(ctp::ipc::FullPtr<Task> task_ptr, RunContext& rctx,
+  virtual void UpdateWork(clio::run::shared_ptr<Task> &task_ptr,
                           i64 increment) {
     // Default: no work tracking
     (void)task_ptr;
-    (void)rctx;
     (void)increment;  // Suppress unused warnings
   }
 
@@ -409,7 +466,7 @@ class Container {
    * @param task_ptr Full pointer to the task to serialize
    */
   virtual void SaveTask(u32 method, SaveTaskArchive& archive,
-                        ctp::ipc::FullPtr<Task> task_ptr) = 0;
+                        clio::run::shared_ptr<Task> &task_ptr) = 0;
 
   /**
    * Deserialize task parameters into an existing task from network transfer
@@ -421,7 +478,7 @@ class Container {
    * @param task_ptr Full pointer to the pre-allocated task to load into
    */
   virtual void LoadTask(u32 method, LoadTaskArchive& archive,
-                        ctp::ipc::FullPtr<Task> task_ptr) = 0;
+                        clio::run::shared_ptr<Task> &task_ptr) = 0;
 
   /**
    * Allocate and deserialize task parameters from network transfer
@@ -430,7 +487,7 @@ class Container {
    * @param archive LoadTaskArchive configured with srl_mode (true=In, false=Out)
    * @return Full pointer to the newly allocated and deserialized task
    */
-  virtual ctp::ipc::FullPtr<Task> AllocLoadTask(u32 method, LoadTaskArchive& archive) = 0;
+  virtual clio::run::shared_ptr<Task> AllocLoadTask(u32 method, LoadTaskArchive& archive) = 0;
 
   /**
    * Deserialize task input parameters into an existing task using LocalSerialize
@@ -442,7 +499,7 @@ class Container {
    * @param task_ptr Full pointer to the pre-allocated task to load into
    */
   virtual void LocalLoadTask(u32 method, DefaultLoadArchive& archive,
-                             ctp::ipc::FullPtr<Task> task_ptr) = 0;
+                             clio::run::shared_ptr<Task> &task_ptr) = 0;
 
   /**
    * Allocate and deserialize task input parameters using LocalSerialize
@@ -451,7 +508,7 @@ class Container {
    * @param archive DefaultLoadArchive for deserializing inputs
    * @return Full pointer to the newly allocated and loaded task
    */
-  virtual ctp::ipc::FullPtr<Task> LocalAllocLoadTask(u32 method, DefaultLoadArchive& archive) = 0;
+  virtual clio::run::shared_ptr<Task> LocalAllocLoadTask(u32 method, DefaultLoadArchive& archive) = 0;
 
   /**
    * Serialize task output parameters using LocalSerialize (for local transfers)
@@ -462,7 +519,7 @@ class Container {
    * @param task_ptr Full pointer to the task to save outputs from
    */
   virtual void LocalSaveTask(u32 method, DefaultSaveArchive& archive,
-                              ctp::ipc::FullPtr<Task> task_ptr) = 0;
+                              clio::run::shared_ptr<Task> &task_ptr) = 0;
 
   /**
    * Create a new copy of a task (deep copy for distributed execution) - must be
@@ -473,8 +530,8 @@ class Container {
    * @param deep Whether to perform a deep copy
    * @return Full pointer to the newly created copy
    */
-  CTP_DLL virtual ctp::ipc::FullPtr<Task> NewCopyTask(u32 method,
-                                                    ctp::ipc::FullPtr<Task> orig_task_ptr,
+  CTP_DLL virtual clio::run::shared_ptr<Task> NewCopyTask(u32 method,
+                                                    clio::run::shared_ptr<Task> &orig_task_ptr,
                                                     bool deep) = 0;
 
   /**
@@ -484,26 +541,44 @@ class Container {
    * @param method The method ID for the task type to create
    * @return Full pointer to the newly allocated task (cast to base Task type)
    */
-  CTP_DLL virtual ctp::ipc::FullPtr<Task> NewTask(u32 method) = 0;
+  CTP_DLL virtual clio::run::shared_ptr<Task> NewTask(u32 method) = 0;
 
   /**
-   * Aggregate replica results into origin task via Container dispatch
-   * Replaces virtual Task::Aggregate to avoid vtable on Task
+   * AggregateOut replica OUTPUTS into the origin task via Container dispatch
+   * (a.k.a. AggregateOut). This is the existing output-merge semantics: every
+   * chimod's per-task AggregateOut() merges OUT fields of a replica into the
+   * origin (used by the replica/gather path in RecvOutAggregate and by the
+   * ManyToOne result broadcast).
+   * Replaces virtual Task::AggregateOut to avoid vtable on Task
    * @param method The method ID for proper task type casting
    * @param orig_task The origin task to aggregate into
    * @param replica_task The replica task to aggregate from
    */
-  virtual void Aggregate(u32 method, ctp::ipc::FullPtr<Task> orig_task,
-                          const ctp::ipc::FullPtr<Task>& replica_task) = 0;
+  virtual void AggregateOut(u32 method, clio::run::shared_ptr<Task> &orig_task,
+                          const clio::run::shared_ptr<Task>& replica_task) = 0;
 
   /**
-   * Delete a task via Container dispatch with proper type casting
-   * Replaces direct CLIO_IPC->DelTask(base_ptr) to ensure correct destructor
+   * AggregateOut member INPUTS into a collective aggregate task (ManyToOne).
+   * Combines the IN fields of a batched member into the synthetic aggregate
+   * task that will run once for the whole batch. Distinct from AggregateOut
+   * (AggregateOut), which merges OUT fields. Default is a no-op: with no
+   * override the aggregate runs as a copy of the first member (e.g. a barrier
+   * / dedup collective). Chimods whose collective combines inputs (sum, max,
+   * concat, ...) override this. Dispatched per method by the chimod.
    * @param method The method ID for proper task type casting
-   * @param task_ptr The task to delete
+   * @param agg_task The synthetic aggregate task to combine into
+   * @param member_task A batched member whose inputs are folded in
    */
-  virtual void DelTask(u32 method, ctp::ipc::FullPtr<Task> task_ptr) = 0;
+  virtual void AggregateIn(u32 method, clio::run::shared_ptr<Task> &agg_task,
+                           const clio::run::shared_ptr<Task>& member_task) {
+    (void)method;
+    (void)agg_task;
+    (void)member_task;
+  }
 
+  // NOTE: There is no DelTask virtual. Tasks are clio::run::shared_ptr handles
+  // freed automatically (RAII) when their last owner drops. Type-correct
+  // destruction is guaranteed by the type-erased deleter in the control header.
 };
 
 /**
@@ -586,7 +661,7 @@ class ContainerClient {
    * @return Full pointer to allocated task
    */
   template <typename TaskT, typename... Args>
-  ctp::ipc::FullPtr<TaskT> AllocateTask(MemorySegment segment, Args&&... args);
+  clio::run::shared_ptr<TaskT> AllocateTask(MemorySegment segment, Args&&... args);
 };
 
 }  // namespace clio::run
@@ -600,11 +675,11 @@ class ContainerClient {
 
 extern "C" {
 // Required ChiMod entry points
-typedef chi::Container* (*alloc_chimod_t)();
-typedef chi::Container* (*new_chimod_t)(const chi::PoolId* pool_id,
+typedef clio::run::Container* (*alloc_chimod_t)();
+typedef clio::run::Container* (*new_chimod_t)(const clio::run::PoolId* pool_id,
                                         const char* pool_name);
 typedef const char* (*get_chimod_name_t)(void);
-typedef void (*destroy_chimod_t)(chi::Container* container);
+typedef void (*destroy_chimod_t)(clio::run::Container* container);
 }
 
 /**
@@ -615,29 +690,28 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
  */
 #define CLIO_CHIMOD_CC(CONTAINER_CLASS, MOD_NAME)                    \
   extern "C" {                                                       \
-  chi::Container* alloc_chimod() {                                   \
-    return reinterpret_cast<chi::Container*>(new CONTAINER_CLASS()); \
+  clio::run::Container* alloc_chimod() {                                   \
+    return reinterpret_cast<clio::run::Container*>(new CONTAINER_CLASS()); \
   }                                                                  \
                                                                      \
-  chi::Container* new_chimod(const chi::PoolId* pool_id,             \
+  clio::run::Container* new_chimod(const clio::run::PoolId* pool_id,             \
                              const char* pool_name) {                \
-    chi::Container* container =                                      \
-        reinterpret_cast<chi::Container*>(new CONTAINER_CLASS());    \
+    clio::run::Container* container =                                      \
+        reinterpret_cast<clio::run::Container*>(new CONTAINER_CLASS());    \
     /* Initialization is handled by the container's Create method */ \
     return container;                                                \
   }                                                                  \
                                                                      \
   const char* get_chimod_name() { return MOD_NAME; }                 \
                                                                      \
-  void destroy_chimod(chi::Container* container) {                   \
+  void destroy_chimod(clio::run::Container* container) {                   \
     delete reinterpret_cast<CONTAINER_CLASS*>(container);            \
   }                                                                  \
                                                                      \
-  static bool is_chimaera_chimod_ = true;                            \
+  static bool is_clio_chimod_ = true;                            \
   }
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_CHIMOD_CC  CLIO_CHIMOD_CC
 
 /**
  * Macro to define ChiMod entry points for task-based modules
@@ -649,29 +723,28 @@ typedef void (*destroy_chimod_t)(chi::Container* container);
  */
 #define CLIO_TASK_CC(CONTAINER_CLASS)                                \
   extern "C" {                                                       \
-  chi::Container* alloc_chimod() {                                   \
-    return reinterpret_cast<chi::Container*>(new CONTAINER_CLASS()); \
+  clio::run::Container* alloc_chimod() {                                   \
+    return reinterpret_cast<clio::run::Container*>(new CONTAINER_CLASS()); \
   }                                                                  \
                                                                      \
-  chi::Container* new_chimod(const chi::PoolId* pool_id,             \
+  clio::run::Container* new_chimod(const clio::run::PoolId* pool_id,             \
                              const char* pool_name) {                \
     auto* container = new CONTAINER_CLASS();                         \
     /* Initialization is handled by the container's Create method */ \
-    return reinterpret_cast<chi::Container*>(container);             \
+    return reinterpret_cast<clio::run::Container*>(container);             \
   }                                                                  \
                                                                      \
   const char* get_chimod_name() {                                    \
     return CONTAINER_CLASS::CreateParams::chimod_lib_name;           \
   }                                                                  \
                                                                      \
-  void destroy_chimod(chi::Container* container) {                   \
+  void destroy_chimod(clio::run::Container* container) {                   \
     delete reinterpret_cast<CONTAINER_CLASS*>(container);            \
   }                                                                  \
                                                                      \
-  static bool is_chimaera_chimod_ = true;                            \
+  static bool is_clio_chimod_ = true;                            \
   }
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_TASK_CC  CLIO_TASK_CC
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_CONTAINER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_CONTAINER_H_

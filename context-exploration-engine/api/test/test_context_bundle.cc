@@ -47,7 +47,7 @@
  * - Tests query functionality after bundling
  *
  * Environment Variables:
- * - INIT_CHIMAERA: If set to "1", initializes CLIO Runtime runtime
+ * - INIT_CLIO: If set to "1", initializes CLIO Runtime runtime
  */
 
 #include <clio_cee/api/context_interface.h>
@@ -175,10 +175,10 @@ void test_bundle_and_retrieve_workflow() {
       "ram::cee_test_storage",  // Target name (RAM storage)
       clio::run::bdev::BdevType::kRam,  // RAM block device type
       4ULL * 1024 * 1024 * 1024,  // 4GB capacity
-      chi::PoolQuery::Local(),  // Local pool query for single-node
-      chi::PoolId(800, 0));  // Explicit bdev pool ID
+      clio::run::PoolQuery::Local(),  // Local pool query for single-node
+      clio::run::PoolId(800, 0));  // Explicit bdev pool ID
   register_task.Wait();
-  chi::u32 register_result = register_task->return_code_;
+  clio::run::u32 register_result = register_task->return_code_;
   assert(register_result == 0 && "Failed to register storage target");
   HLOG(kSuccess, "Storage target registered successfully");
 
@@ -188,7 +188,7 @@ void test_bundle_and_retrieve_workflow() {
   clio::cae::core::CreateParams params;
 
   auto create_task = cae_client.AsyncCreate(
-      chi::PoolQuery::Local(),
+      clio::run::PoolQuery::Local(),
       "test_cee_cae_pool",
       clio::cae::core::kCaePoolId,
       params);
@@ -262,22 +262,22 @@ int main(int argc, char** argv) {
 
   try {
     // Initialize CLIO Runtime runtime if requested (for unit tests)
-    const char* init_chimaera = std::getenv("INIT_CHIMAERA");
-    if (init_chimaera && std::strcmp(init_chimaera, "1") == 0) {
-      HLOG(kInfo, "Initializing Chimaera (INIT_CHIMAERA=1)...");
-      chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
-      HLOG(kSuccess, "Chimaera initialized");
+    const char* init_clio = std::getenv("INIT_CLIO");
+    if (init_clio && std::strcmp(init_clio, "1") == 0) {
+      HLOG(kInfo, "Initializing Clio (INIT_CLIO=1)...");
+      clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
+      HLOG(kSuccess, "Clio initialized");
     }
 
     // Verify CLIO Runtime IPC is available
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager) {
-      HLOG(kError, "Chimaera IPC not initialized. Is the runtime running?");
-      HLOG(kInfo, "HINT: Set INIT_CHIMAERA=1 to initialize runtime or start runtime externally");
+      HLOG(kError, "Clio IPC not initialized. Is the runtime running?");
+      HLOG(kInfo, "HINT: Set INIT_CLIO=1 to initialize runtime or start runtime externally");
       ctp::SystemInfo::TerminateProcessNow(1);
       return 1;
     }
-    HLOG(kSuccess, "Chimaera IPC verified");
+    HLOG(kSuccess, "Clio IPC verified");
 
     // Run all tests
     test_empty_bundle();

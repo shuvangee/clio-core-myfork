@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.10)
 # Phase 2: Node 1 runtime restarted externally, client re-inits and verifies health
 
 # Build the test binary
-set(LEADER_ELECT_TEST_TARGET chimaera_leader_elect_tests)
+set(LEADER_ELECT_TEST_TARGET clio_run_leader_elect_tests)
 
 add_executable(${LEADER_ELECT_TEST_TARGET}
   ${CMAKE_CURRENT_SOURCE_DIR}/test_leader_elect.cc
@@ -23,8 +23,8 @@ target_include_directories(${LEADER_ELECT_TEST_TARGET} PRIVATE
 target_link_libraries(${LEADER_ELECT_TEST_TARGET}
   clio_admin_runtime
   clio_admin_client
-  chimaera_MOD_NAME_runtime
-  chimaera_MOD_NAME_client
+  clio_MOD_NAME_runtime
+  clio_MOD_NAME_client
   ctp::cxx
   ${CMAKE_THREAD_LIBS_INIT}
 )
@@ -51,6 +51,6 @@ set_tests_properties(cr_leader_elect_integration_docker PROPERTIES
     ENVIRONMENT "NUM_NODES=4;TEST_FILTER=[leader_elect]"
 )
 
-message(STATUS "Chimaera leader election integration test configured")
+message(STATUS "Clio leader election integration test configured")
 message(STATUS "  Test directory: ${LEADER_ELECT_TEST_DIR}")
 message(STATUS "  Run with: ctest -L integration")

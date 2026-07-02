@@ -2,6 +2,22 @@ cmake_minimum_required(VERSION 3.20)
 project(iowarp-core VERSION 2.1.0 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
+# MSVC-like front end detection
+#------------------------------------------------------------------------------
+# True for cl.exe (MSVC) and for compilers that drive an MSVC-compatible command
+# line: clang-cl and Intel's icx.exe on Windows. These accept "/"-style flags
+# (e.g. /Zi, /Od, /Fo<obj>) and MUST NOT be given GNU-style flags. Mixing GNU
+# flags (-g -O0 -Wfatal-errors) onto icx.exe flips it into clang driver mode,
+# where it ignores /Fo<obj> and writes <basename>.o into the build root --
+# leaving CMake/ninja's expected .obj absent and breaking the DLL link
+# (WINDOWS_EXPORT_ALL_SYMBOLS / bindexplib). See issue #555.
+if(MSVC OR (WIN32 AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    set(CLIO_CORE_MSVC_LIKE ON)
+else()
+    set(CLIO_CORE_MSVC_LIKE OFF)
+endif()
+
+#------------------------------------------------------------------------------
 # Project Options
 #==============================================================================
 # BUILD CONFIGURATION OPTIONS
@@ -24,11 +40,22 @@ option(CLIO_CORE_ENABLE_CEE "Enable context-exploration-engine component" ON)
 option(CLIO_CORE_ENABLE_TESTS "Master switch: Enable testing for all components" OFF)
 option(CLIO_CORE_ENABLE_BENCHMARKS "Master switch: Enable benchmarks for all components" ON)
 option(CLIO_CORE_ENABLE_PYTHON "Enable Python bindings for all components" OFF)
+# The context visualizer is pure Python (no compilation), so it ships as a
+# standard feature in every package — independent of the heavyweight nanobind
+# bindings gated by CLIO_CORE_ENABLE_PYTHON. Keep it ON so the .deb/.rpm/conda
+# packages (built with CLIO_CORE_ENABLE_PYTHON=OFF) still include it.
+option(CLIO_CORE_ENABLE_VISUALIZER "Install the pure-Python context visualizer dashboard" ON)
 option(CLIO_CORE_ENABLE_CMAKE_DOTENV "Enable reading environment variables from .env.cmake" OFF)
+# Precompiled headers speed up builds but conflict with WINDOWS_EXPORT_ALL_SYMBOLS
+# under the Ninja generator with non-MSVC Windows compilers (icx/clang-cl): the
+# bindexplib pass (cmake -E __create_def) fails to read the cmake_pch object.
+# Default ON (no change for existing builds); turn OFF for those toolchains.
+option(CLIO_CORE_ENABLE_PCH "Enable precompiled headers for faster builds" ON)
 option(CLIO_CORE_ENABLE_ASAN "Enable AddressSanitizer + LeakSanitizer for debugging" OFF)
 option(CLIO_CORE_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer for debugging" OFF)
 option(CLIO_CORE_ENABLE_MSAN "Enable MemorySanitizer for debugging (requires instrumented dependencies)" OFF)
 option(CLIO_CORE_ENABLE_COVERAGE "Enable code coverage instrumentation for all components" OFF)
+option(CLIO_CORE_ENABLE_LEAK_CHECK "Enable allocator allocation-size tracking (CTP_ALLOC_TRACK_SIZE) so tests can assert no runtime memory is leaked. Adds a small per-allocation atomic; keep OFF in production." OFF)
 option(CLIO_CORE_ENABLE_DOXYGEN "Check how well the code is documented" OFF)
 option(CLIO_CORE_ENABLE_RPATH "Enable RPATH configuration with relative ($ORIGIN) paths" ON)
 option(CLIO_CORE_ENABLE_CPACK "Enable CPack for package generation" OFF)
@@ -100,6 +127,7 @@ option(CLIO_CORE_ENABLE_CEREAL "Enable serialization using cereal" ON)
 option(CLIO_CTE_ENABLE_COMPRESS "Enable compression support (builds compressor chimod and tests)" OFF)
 option(CLIO_CORE_ENABLE_ENCRYPT "Enable encryption" OFF)
 option(CLIO_CORE_ENABLE_IO_URING "Enable io_uring async I/O backend (Linux 5.1+, requires liburing)" OFF)
+option(CLIO_CORE_ENABLE_BOOST_COROUTINES "Use Boost.Context stackful coroutines for task execution instead of C++20 stackless coroutines (issue #620). Opt-in; reuses fiber stacks to avoid the per-task heap frame the stackless backend allocates." OFF)
 
 # Set internal compression flags from CLIO_CTE_ENABLE_COMPRESS
 if(CLIO_CTE_ENABLE_COMPRESS)
@@ -120,6 +148,8 @@ option(CLIO_CORE_ENABLE_NIXL "Enable NIXL (NVIDIA Inference Xfer Library) transp
 option(CLIO_CORE_ENABLE_NVSHMEM "Enable NVSHMEM GPU-to-GPU communication library" OFF)
 option(CLIO_CORE_ENABLE_SYCL "Enable Intel GPU support via SYCL/oneAPI (icpx -fsycl)" OFF)
 option(CLIO_CORE_ENABLE_JARVIS "Enable Jarvis CI infrastructure installation" OFF)
+option(CLIO_ENABLE_AMAZON_DRIVE "Enable Amazon S3 intermediate storage" OFF)
+option(CLIO_ENABLE_GOOGLE_CLOUD "Enable Google Cloud Storage intermediate storage" OFF)
 
 #------------------------------------------------------------------------------
 # ClioCtp (context-transport-primitives) Options
@@ -709,7 +739,8 @@ else()
     message(STATUS "HDF5 support disabled")
 endif()
 
-# Poco and nlohmann_json (optional - for CAE Globus support)
+# Poco and nlohmann_json (optional - for CAE Globus support and the Google
+# Cloud Storage bdev adapter, which uses Poco::Net for HTTPS + Poco::JSON).
 find_package(Poco COMPONENTS Net NetSSL Crypto JSON QUIET)
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
@@ -721,6 +752,20 @@ if(NOT nlohmann_json_FOUND)
   )
   FetchContent_MakeAvailable(nlohmann_json)
   set(nlohmann_json_FOUND TRUE)
+endif()
+
+# The Google Cloud Storage adapter (kGcs bdev transport) talks to GCS over HTTPS
+# via Poco. If the option is requested but Poco isn't available, warn and disable
+# rather than fail the configure (mirrors the CAE Globus dependency check).
+if(CLIO_ENABLE_GOOGLE_CLOUD AND NOT Poco_FOUND)
+  message(WARNING "CLIO_ENABLE_GOOGLE_CLOUD is ON but the Poco library "
+                  "(Net, NetSSL, Crypto, JSON components) was not found. "
+                  "Google Cloud Storage support will be disabled. "
+                  "Install Poco (libpoco-dev) to enable it.")
+  set(CLIO_ENABLE_GOOGLE_CLOUD OFF)
+endif()
+if(CLIO_ENABLE_GOOGLE_CLOUD)
+  message(STATUS "Google Cloud Storage bdev support: ENABLED (Poco found)")
 endif()
 
 if (CLIO_CTE_ENABLE_ADIOS2_ADAPTER OR CLIO_CORE_ENABLE_GRAY_SCOTT)
@@ -793,15 +838,28 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Allocation-size tracking for leak-detection tests. Compiler-agnostic and
+# applied to every target/subdirectory so allocator headers and the runtime
+# observe the same definition. Off by default to avoid the per-allocation
+# atomic add/sub in production builds.
+if(CLIO_CORE_ENABLE_LEAK_CHECK)
+    message(STATUS "Allocation leak tracking enabled (CTP_ALLOC_TRACK_SIZE)")
+    add_compile_definitions(CTP_ALLOC_TRACK_SIZE)
+endif()
+
 # C++20 Coroutines support
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options(-fcoroutines)
   message(STATUS "GCC detected - enabling coroutines with -fcoroutines")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
-  # NVHPC 25.5 crashes (ICE in llc) when compiling GCC 14 libstdc++ coroutines.
-  # CLIO Runtime uses ucontext_t fibers via CHI_CO_AWAIT/CHI_CO_RETURN macros instead.
-  # No __cpp_impl_coroutine needed - we do not include <coroutine> for NVHPC.
-  message(STATUS "NVHPC detected - using ucontext_t fiber fallback for C++20 coroutines")
+  # NVHPC 25.5 crashes (ICE in llc) when compiling GCC 14 libstdc++ coroutines,
+  # so it cannot use the C++20 stackless backend. Force the Boost.Context
+  # stackful backend instead (issue #620). The C++ carries no NVHPC-specific
+  # coroutine path anymore: the compiler decision is made here, in the build,
+  # and the runtime never includes <coroutine> when the Boost backend is on.
+  set(CLIO_CORE_ENABLE_BOOST_COROUTINES ON CACHE BOOL
+      "Forced ON: NVHPC cannot compile C++20 coroutines (issue #620)" FORCE)
+  message(STATUS "NVHPC detected - C++20 coroutines unsupported; forcing Boost.Context stackful backend")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # Clang 16+ enables C++20 coroutines natively (no flags needed for CXX).
   # NVCC host compilation uses GCC which needs -fcoroutines for the builtins.
@@ -814,18 +872,41 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   endif()
 endif()
 
+# Boost.Context stackful coroutine backend (issue #620). Opt-in alternative to
+# the C++20 stackless coroutines above. Selected globally (the coroutine return
+# type / macros are header-driven, so the whole program must agree) and links
+# Boost::context into every target via the runtime's public interface.
+if(CLIO_CORE_ENABLE_BOOST_COROUTINES)
+  find_package(Boost REQUIRED COMPONENTS context)
+  add_compile_definitions(CLIO_ENABLE_BOOST_COROUTINES=1)
+  # make_task_fiber() (boost::context::fiber) is header-instantiated in every
+  # module's task methods, so every target must link Boost::context. This block
+  # runs before any add_subdirectory(), so link_libraries() reaches them all.
+  link_libraries(Boost::context)
+  message(STATUS "Boost stackful coroutine backend ENABLED (Boost::context ${Boost_VERSION})")
+endif()
+
 # Export compile commands for IDE integration - Applied to all subdirectories
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Position Independent Code - Applied to all subdirectories
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# ccache — accelerate rebuilds by caching compiled objects
+# ccache — accelerate rebuilds by caching compiled objects.
+# NOT used for MSVC-like compilers (cl / clang-cl / icx-cl): as a compiler
+# launcher under Ninja, ccache mishandles the cl-style /Fo<obj> output flag and
+# the object is written as <base>.o into the build root instead of the expected
+# path, which breaks WINDOWS_EXPORT_ALL_SYMBOLS / the DLL link. (The Visual
+# Studio generator never applied the launcher, which is why MSVC CI was fine.)
+# See issue #555.
+option(CLIO_CORE_ENABLE_CCACHE "Use ccache as compiler launcher when available" ON)
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if(CCACHE_PROGRAM AND CLIO_CORE_ENABLE_CCACHE AND NOT CLIO_CORE_MSVC_LIKE)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     message(STATUS "ccache enabled: ${CCACHE_PROGRAM}")
+elseif(CCACHE_PROGRAM)
+    message(STATUS "ccache found but not used (CLIO_CORE_ENABLE_CCACHE=${CLIO_CORE_ENABLE_CCACHE}, CLIO_CORE_MSVC_LIKE=${CLIO_CORE_MSVC_LIKE})")
 else()
     message(STATUS "ccache not found — install ccache for faster rebuilds")
 endif()
@@ -858,7 +939,9 @@ endif()
 #------------------------------------------------------------------------------
 # Compiler Flags
 #------------------------------------------------------------------------------
-if(NOT MSVC)
+# Use CLIO_CORE_MSVC_LIKE (not just MSVC) so clang-cl / icx.exe on Windows take
+# the MSVC-style flag path; GNU flags break icx's /Fo handling (see issue #555).
+if(NOT CLIO_CORE_MSVC_LIKE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
         # Add compiler flags following Google C++ style guide
@@ -1007,12 +1090,12 @@ if(CLIO_CORE_ENABLE_TESTS)
     # after every test that requires the fixture, even if those tests fail
     # or crash, ensuring temp files do not persist between runs.
     # -----------------------------------------------------------------------
-    set(_chimaera_cleanup_cmd
+    set(_clio_cleanup_cmd
         "fuser -k 5555/tcp 5558/tcp 9413/tcp 9414/tcp 9416/tcp 2>/dev/null; \
-         rm -f /tmp/chimaera_*.ipc 2>/dev/null; \
-         rm -f /tmp/chimaera_server_timing.log 2>/dev/null; \
-         rm -rf /tmp/chimaera_memfd 2>/dev/null; \
-         rm -rf /tmp/chimaera_${USER} 2>/dev/null; \
+         rm -f /tmp/clio_*.ipc 2>/dev/null; \
+         rm -f /tmp/clio_server_timing.log 2>/dev/null; \
+         rm -rf /tmp/clio_memfd 2>/dev/null; \
+         rm -rf /tmp/clio_${USER} 2>/dev/null; \
          rm -f /dev/shm/sm_segment.* 2>/dev/null; \
          rm -f /dev/shm/test_buddy_bench_* 2>/dev/null; \
          rm -f \"${CMAKE_BINARY_DIR}\"/cte_*.dat* \"${CMAKE_BINARY_DIR}\"/cte_*.yaml \"${CMAKE_BINARY_DIR}\"/*stress*.bin* \"${CMAKE_BINARY_DIR}\"/*reorganize*.bin* \"${CMAKE_BINARY_DIR}\"/*reorganize*.yaml \"${CMAKE_BINARY_DIR}\"/temp_unregister_test.dat 2>/dev/null; \
@@ -1022,20 +1105,20 @@ if(CLIO_CORE_ENABLE_TESTS)
     if(UNIX)
       add_test(
           NAME cr_pre_test_cleanup
-          COMMAND bash -c "${_chimaera_cleanup_cmd}"
+          COMMAND bash -c "${_clio_cleanup_cmd}"
       )
       set_tests_properties(cr_pre_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_SETUP chimaera_test_cleanup_fixture
+          FIXTURES_SETUP clio_test_cleanup_fixture
       )
 
       add_test(
           NAME cr_post_test_cleanup
-          COMMAND bash -c "${_chimaera_cleanup_cmd}"
+          COMMAND bash -c "${_clio_cleanup_cmd}"
       )
       set_tests_properties(cr_post_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_CLEANUP chimaera_test_cleanup_fixture
+          FIXTURES_CLEANUP clio_test_cleanup_fixture
       )
     elseif(WIN32)
       # Windows equivalent: kill any lingering test binaries that might still
@@ -1048,7 +1131,7 @@ if(CLIO_CORE_ENABLE_TESTS)
       # stale rule never fails the whole suite. Build artifacts under
       # ${CMAKE_BINARY_DIR}/bin are scrubbed the same way the POSIX path scrubs
       # ${CMAKE_BINARY_DIR}/cte_*.dat etc.
-      set(_chimaera_cleanup_cmd_win
+      set(_clio_cleanup_cmd_win
           "$ErrorActionPreference='Continue'; \
            Get-Process | Where-Object { $_.Path -and $_.Path -like '${CMAKE_BINARY_DIR}/bin/*' } | Stop-Process -Force -ErrorAction SilentlyContinue; \
            Get-ChildItem '${CMAKE_BINARY_DIR}' -Filter 'cte_*.dat*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; \
@@ -1060,20 +1143,36 @@ if(CLIO_CORE_ENABLE_TESTS)
 
       add_test(
           NAME cr_pre_test_cleanup
-          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_chimaera_cleanup_cmd_win}"
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_clio_cleanup_cmd_win}"
       )
       set_tests_properties(cr_pre_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_SETUP chimaera_test_cleanup_fixture
+          FIXTURES_SETUP clio_test_cleanup_fixture
       )
 
       add_test(
           NAME cr_post_test_cleanup
-          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_chimaera_cleanup_cmd_win}"
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command "${_clio_cleanup_cmd_win}"
       )
       set_tests_properties(cr_post_test_cleanup PROPERTIES
           TIMEOUT 30
-          FIXTURES_CLEANUP chimaera_test_cleanup_fixture
+          FIXTURES_CLEANUP clio_test_cleanup_fixture
+      )
+
+      # Pre-allow every test binary through Windows Defender Firewall so ctest
+      # doesn't pop a per-binary "Allow access?" prompt. The script self-elevates
+      # only when new binaries appear (it caches the allowed set in a marker), so
+      # a normal "build once, run ctest repeatedly" loop triggers at most one UAC
+      # prompt right after a fresh build. It is best-effort (always exits 0), and
+      # is a SETUP for the shared fixture so it runs before any networked test.
+      add_test(
+          NAME cr_firewall_allow
+          COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                  -File "${CMAKE_SOURCE_DIR}/scripts/windows/allow_firewall.ps1"
+      )
+      set_tests_properties(cr_firewall_allow PROPERTIES
+          TIMEOUT 300
+          FIXTURES_SETUP clio_test_cleanup_fixture
       )
     endif()
 endif()
@@ -1184,12 +1283,14 @@ else()
     message(STATUS "Context-exploration-engine component disabled")
 endif()
 
-# Context Visualizer (pure Python web dashboard)
-if(CLIO_CORE_ENABLE_PYTHON)
+# Context Visualizer (pure Python web dashboard). Gated on its own option so
+# it ships in the .deb/.rpm/conda packages even though those set
+# CLIO_CORE_ENABLE_PYTHON=OFF (it needs no compilation, only a Python runtime).
+if(CLIO_CORE_ENABLE_VISUALIZER)
     message(STATUS "Building context-visualizer component (Python)")
     add_subdirectory(context-visualizer)
 else()
-    message(STATUS "Context-visualizer component disabled (requires CLIO_CORE_ENABLE_PYTHON)")
+    message(STATUS "Context-visualizer component disabled (CLIO_CORE_ENABLE_VISUALIZER=OFF)")
 endif()
 
 # Gray-Scott Example Application
@@ -1222,12 +1323,12 @@ if(CLIO_CORE_ENABLE_TESTS)
             "detect_leaks=1:halt_on_error=0:print_stacktrace=1:symbolize=1:suppressions=${CMAKE_SOURCE_DIR}/CI/lsan_suppressions.txt")
     endif()
 
-    function(_chimaera_lock_tests_recursive dir lsan_opts)
+    function(_clio_lock_tests_recursive dir lsan_opts)
         get_directory_property(_tests DIRECTORY "${dir}" TESTS)
         if(_tests)
             set_tests_properties(${_tests}
                 DIRECTORY "${dir}"
-                PROPERTIES RESOURCE_LOCK "chimaera_runtime_port")
+                PROPERTIES RESOURCE_LOCK "clio_runtime_port")
             if(lsan_opts)
                 set_tests_properties(${_tests}
                     DIRECTORY "${dir}"
@@ -1237,7 +1338,7 @@ if(CLIO_CORE_ENABLE_TESTS)
         endif()
         get_directory_property(_subdirs DIRECTORY "${dir}" SUBDIRECTORIES)
         foreach(_sub ${_subdirs})
-            _chimaera_lock_tests_recursive("${_sub}" "${lsan_opts}")
+            _clio_lock_tests_recursive("${_sub}" "${lsan_opts}")
         endforeach()
     endfunction()
 
@@ -1250,7 +1351,7 @@ if(CLIO_CORE_ENABLE_TESTS)
         list(GET _pair 0 _component_dir)
         list(GET _pair 1 _component_flag)
         if(${_component_flag} AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}")
-            _chimaera_lock_tests_recursive(
+            _clio_lock_tests_recursive(
                 "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}"
                 "${_lsan_opts}")
         endif()
@@ -1261,18 +1362,18 @@ if(CLIO_CORE_ENABLE_TESTS)
     # cr_post_test_cleanup hook runs after the whole suite, even when
     # individual tests fail. Excludes the cleanup fixtures themselves.
     # -----------------------------------------------------------------------
-    function(_chimaera_require_cleanup_fixture_recursive dir)
+    function(_clio_require_cleanup_fixture_recursive dir)
         get_directory_property(_tests DIRECTORY "${dir}" TESTS)
         foreach(_t ${_tests})
             if(NOT _t STREQUAL "cr_pre_test_cleanup" AND
                NOT _t STREQUAL "cr_post_test_cleanup")
                 set_property(TEST ${_t} DIRECTORY "${dir}" APPEND PROPERTY
-                    FIXTURES_REQUIRED chimaera_test_cleanup_fixture)
+                    FIXTURES_REQUIRED clio_test_cleanup_fixture)
             endif()
         endforeach()
         get_directory_property(_subdirs DIRECTORY "${dir}" SUBDIRECTORIES)
         foreach(_sub ${_subdirs})
-            _chimaera_require_cleanup_fixture_recursive("${_sub}")
+            _clio_require_cleanup_fixture_recursive("${_sub}")
         endforeach()
     endfunction()
 
@@ -1286,7 +1387,7 @@ if(CLIO_CORE_ENABLE_TESTS)
         list(GET _pair 0 _component_dir)
         list(GET _pair 1 _component_flag)
         if(${_component_flag} AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}")
-            _chimaera_require_cleanup_fixture_recursive(
+            _clio_require_cleanup_fixture_recursive(
                 "${CMAKE_CURRENT_SOURCE_DIR}/${_component_dir}")
         endif()
     endforeach()
@@ -1439,7 +1540,7 @@ message(STATUS "  Package name: iowarp-core (canonical alias: clio-core)")
 message(STATUS "  Install destination: lib/cmake/iowarp-core, lib/cmake/clio-core")
 message(STATUS "  Components included:")
 message(STATUS "    - ClioCtp (context-transport-primitives)")
-message(STATUS "    - Chimaera (runtime)")
+message(STATUS "    - Clio (runtime)")
 message(STATUS "    - Core ChiMods: admin, bdev")
 if(CLIO_CORE_ENABLE_CTE)
     message(STATUS "    - CTE ChiMod: clio_cte_core")
@@ -1471,6 +1572,7 @@ message(STATUS "    AddressSanitizer (ASan):    ${CLIO_CORE_ENABLE_ASAN}")
 message(STATUS "    UndefinedBehaviorSan (UBSan): ${CLIO_CORE_ENABLE_UBSAN}")
 message(STATUS "    MemorySanitizer (MSan):     ${CLIO_CORE_ENABLE_MSAN}")
 message(STATUS "    Code Coverage:              ${CLIO_CORE_ENABLE_COVERAGE}")
+message(STATUS "    Leak tracking (alloc size): ${CLIO_CORE_ENABLE_LEAK_CHECK}")
 message(STATUS "")
 
 
@@ -1500,12 +1602,12 @@ if(TARGET clio_bdev_client)
   list(APPEND PIP_LIB_TARGETS clio_bdev_client clio_bdev_runtime)
 endif()
 # Template chimod (used by clio_run_thrpt_bench's "latency" test case via
-# chimaera::MOD_NAME_client).  Without this the benchmark binary's NEEDED list
-# references libchimaera_MOD_NAME_client.so but the wheel doesn't contain it,
+# clio::run::MOD_NAME_client).  Without this the benchmark binary's NEEDED list
+# references libclio_MOD_NAME_client.so but the wheel doesn't contain it,
 # and the dynamic linker segfaults at load time on glibc/patchelf combinations
 # instead of failing cleanly.  See #429.
-if(TARGET chimaera_MOD_NAME_client)
-  list(APPEND PIP_LIB_TARGETS chimaera_MOD_NAME_client chimaera_MOD_NAME_runtime)
+if(TARGET clio_MOD_NAME_client)
+  list(APPEND PIP_LIB_TARGETS clio_MOD_NAME_client clio_MOD_NAME_runtime)
 endif()
 if(CLIO_CORE_ENABLE_CTE AND TARGET clio_cte_core_client)
   list(APPEND PIP_LIB_TARGETS clio_cte_core_client clio_cte_core_runtime)
@@ -1523,12 +1625,12 @@ if(PIP_LIB_TARGETS)
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
-    PUBLIC_HEADER DESTINATION include/chimaera)
+    PUBLIC_HEADER DESTINATION include/clio_runtime)
   # Mirror the install into the default ("Unspecified") component so the
   # same shared libs ship in the .deb / .rpm built by cpack -G DEB/RPM
   # (those generators filter to CPACK_COMPONENTS_ALL=Unspecified). Without
   # this, libclio_admin_client.so / libclio_admin_runtime.so /
-  # libclio_bdev_*.so / libchimaera_MOD_NAME_*.so are only in the pip
+  # libclio_bdev_*.so / libclio_MOD_NAME_*.so are only in the pip
   # wheel — and the .rpm's clio_run binary then fails to start with
   #   error while loading shared libraries: libclio_admin_client.so
   # because its NEEDED entry (Fedora's ld doesn't strip --as-needed as
@@ -1541,57 +1643,20 @@ if(PIP_LIB_TARGETS)
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
-    PUBLIC_HEADER DESTINATION include/chimaera)
+    PUBLIC_HEADER DESTINATION include/clio_runtime)
 endif()
 
-# CLI binary -> iowarp_core/bin/
-# Install the canonical `clio_run` binary plus a legacy `chimaera` symlink.
-# Matches the parallel install in context-runtime/util/CMakeLists.txt for
-# system installs; this branch handles the pip-wheel COMPONENT pip_package.
+# CLI binary -> iowarp_core/bin/ (pip-wheel COMPONENT pip_package).
 if(TARGET clio_run)
   install(TARGETS clio_run
     COMPONENT pip_package
     RUNTIME DESTINATION bin)
-  install(CODE "
-    if(WIN32)
-      set(_pip_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run.exe\")
-      set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera.exe\")
-    else()
-      set(_pip_src \"\${CMAKE_INSTALL_PREFIX}/bin/clio_run\")
-      set(_pip_dst \"\${CMAKE_INSTALL_PREFIX}/bin/chimaera\")
-    endif()
-    if(EXISTS \"\${_pip_src}\" AND NOT EXISTS \"\${_pip_dst}\")
-      if(WIN32)
-        file(INSTALL \"\${_pip_src}\"
-             DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\" RENAME chimaera.exe)
-      else()
-        execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink clio_run \"\${_pip_dst}\")
-      endif()
-    endif()
-  " COMPONENT pip_package)
   # Also install to PYTHON_SITE_PACKAGES/iowarp_core/bin/ so that
   # `sudo make install` keeps the binary in sync with the Python package,
-  # matching how chimaera_runtime_ext.so is installed directly to site-packages.
+  # matching how clio_runtime_ext.so is installed directly to site-packages.
   if(CLIO_CORE_ENABLE_PYTHON AND PYTHON_SITE_PACKAGES)
     install(TARGETS clio_run
       RUNTIME DESTINATION "${PYTHON_SITE_PACKAGES}/iowarp_core/bin")
-    install(CODE "
-      if(WIN32)
-        set(_py_src \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run.exe\")
-        set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera.exe\")
-      else()
-        set(_py_src \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/clio_run\")
-        set(_py_dst \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin/chimaera\")
-      endif()
-      if(EXISTS \"\${_py_src}\" AND NOT EXISTS \"\${_py_dst}\")
-        if(WIN32)
-          file(INSTALL \"\${_py_src}\"
-               DESTINATION \"${PYTHON_SITE_PACKAGES}/iowarp_core/bin\" RENAME chimaera.exe)
-        else()
-          execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink clio_run \"\${_py_dst}\")
-        endif()
-      endif()
-    ")
   endif()
 endif()
 
@@ -1623,7 +1688,7 @@ endif()
 # context-runtime/benchmark/CMakeLists.txt:17 are functionally identical
 # to the working installs at context-transfer-engine/benchmark and
 # context-assimilation-engine/core, but at v1.9.5 the resulting .deb
-# shipped without clio_run / clio_run_thrpt_bench / chimaera while it
+# shipped without clio_run / clio_run_thrpt_bench / clio_run while it
 # DID ship clio_cte_bench / clio_cae / allocator_benchmark. Exact root
 # cause is unidentified (the per-subdir rules look correct in cmake_install.cmake).
 # Add explicit top-level installs as a safety net so any future drop-out
@@ -1635,7 +1700,7 @@ endif()
 if(TARGET clio_run_thrpt_bench)
   install(TARGETS clio_run_thrpt_bench RUNTIME DESTINATION bin)
 endif()
-# `chimaera` is created as a symlink to `clio_run` by an install(CODE)
+# `clio_run` is created as a symlink to `clio_run` by an install(CODE)
 # in context-runtime/util/CMakeLists.txt — that runs after this point
 # during cmake --install, so the symlink lands in the default
 # component too. No extra rule needed here.
@@ -1660,7 +1725,7 @@ if(CLIO_CORE_ENABLE_PYTHON)
 endif()
 
 # Default config -> iowarp_core/data/
-install(FILES context-runtime/config/chimaera_default.yaml
+install(FILES context-runtime/config/clio_default.yaml
   COMPONENT pip_package
   DESTINATION data)
 

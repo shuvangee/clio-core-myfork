@@ -72,13 +72,28 @@ if(BUILD_TESTING)
         PROPERTIES
         LABELS "python;bindings"
         TIMEOUT 120
-        ENVIRONMENT "CHI_WITH_RUNTIME=1"
+        ENVIRONMENT "CLIO_WITH_RUNTIME=1"
     )
 
     # Ensure test depends on the built module
     set_tests_properties(
         python_bindings_test
         PROPERTIES
+        DEPENDS clio_cte_core_ext
+    )
+
+    # Runtime-free coverage of the CTE binding value types (UniqueId,
+    # PoolQuery, search-result repr, CteTelemetry, enums). No runtime needed.
+    add_test(
+        NAME python_types_test
+        COMMAND ${Python_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/test_cte_types.py
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:clio_cte_core_ext>
+    )
+    set_tests_properties(
+        python_types_test
+        PROPERTIES
+        LABELS "python;bindings"
+        TIMEOUT 60
         DEPENDS clio_cte_core_ext
     )
 
@@ -128,7 +143,7 @@ if(BUILD_TESTING)
         PROPERTIES
         LABELS "python;bindings;semantic-search"
         TIMEOUT 120
-        ENVIRONMENT "CHI_WITH_RUNTIME=1;CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "CLIO_WITH_RUNTIME=1;CLIO_BIND_ADDR=127.0.0.1"
         DEPENDS clio_cte_core_ext
     )
 
@@ -144,7 +159,24 @@ if(BUILD_TESTING)
         PROPERTIES
         LABELS "python;bindings;temporal-search"
         TIMEOUT 120
-        ENVIRONMENT "CHI_WITH_RUNTIME=1;CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "CLIO_WITH_RUNTIME=1;CLIO_BIND_ADDR=127.0.0.1"
+        DEPENDS clio_cte_core_ext
+    )
+
+    # GetBlob binary round-trip — regression guard for the nb::bytes return
+    # type (a std::string return decoded non-UTF-8 blob data and raised
+    # UnicodeDecodeError).
+    add_test(
+        NAME python_getblob_bytes_test
+        COMMAND ${Python_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/test_cte_getblob_bytes.py
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:clio_cte_core_ext>
+    )
+    set_tests_properties(
+        python_getblob_bytes_test
+        PROPERTIES
+        LABELS "python;bindings;getblob"
+        TIMEOUT 120
+        ENVIRONMENT "CLIO_WITH_RUNTIME=1;CLIO_BIND_ADDR=127.0.0.1"
         DEPENDS clio_cte_core_ext
     )
 endif()

@@ -19,7 +19,7 @@
  * performed in CAE yet — these handlers just forward.
  *
  * The full GetOrCreateTag → PutBlob → GetBlob round-trip runs inside a
- * single TEST_CASE so that all calls share one chimaera server lifetime
+ * single TEST_CASE so that all calls share one clio server lifetime
  * (the RAM bdev storage doesn't survive a process restart).
  */
 
@@ -47,9 +47,9 @@ TEST_CASE("CLIO_CTE_CLIENT PutBlob writes to CAE interceptor and reads back",
                           "test_cae_cte_interceptor_config.yaml";
   ctp::SystemInfo::Setenv("CLIO_SERVER_CONF", config_path.string(), 1);
 
-  bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer);
+  bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kServer);
   REQUIRE(success);
-  SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+  SimpleTest::g_test_finalize = clio::run::CLIO_RUNTIME_FINALIZE;
 
   // Give compose pools a moment to materialize.
   std::this_thread::sleep_for(1s);

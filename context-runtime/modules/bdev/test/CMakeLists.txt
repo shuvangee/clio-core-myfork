@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Bdev ChiMod test executable
-set(BDEV_TEST_TARGET chimaera_bdev_chimod_tests)
+set(BDEV_TEST_TARGET clio_run_bdev_chimod_tests)
 set(BDEV_TEST_SOURCES
   test_bdev_chimod.cc
 )
@@ -55,10 +55,10 @@ if(CLIO_CORE_ENABLE_TESTS)
   )
   set_tests_properties(cr_all_bdev_tests PROPERTIES
     TIMEOUT 180
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_MODE=1;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
   )
 
-  # Dedicated explicit backend tests — each sets CHI_IPC_MODE so the
+  # Dedicated explicit backend tests — each sets CLIO_IPC_MODE so the
   # corresponding TEST_CASE runs while the other two auto-skip.
   add_test(
     NAME cr_bdev_explicit_backend_shm
@@ -67,7 +67,7 @@ if(CLIO_CORE_ENABLE_TESTS)
   )
   set_tests_properties(cr_bdev_explicit_backend_shm PROPERTIES
     TIMEOUT 180
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1;CHI_IPC_MODE=SHM;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_MODE=1;CLIO_IPC_MODE=SHM;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
   )
 
   add_test(
@@ -77,7 +77,7 @@ if(CLIO_CORE_ENABLE_TESTS)
   )
   set_tests_properties(cr_bdev_explicit_backend_tcp PROPERTIES
     TIMEOUT 180
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1;CHI_IPC_MODE=TCP;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_MODE=1;CLIO_IPC_MODE=TCP;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
   )
 
   add_test(
@@ -87,7 +87,7 @@ if(CLIO_CORE_ENABLE_TESTS)
   )
   set_tests_properties(cr_bdev_explicit_backend_ipc PROPERTIES
     TIMEOUT 180
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1;CHI_IPC_MODE=IPC;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_MODE=1;CLIO_IPC_MODE=IPC;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
   )
 
   # Set test properties
@@ -99,7 +99,7 @@ if(CLIO_CORE_ENABLE_TESTS)
     PROPERTIES
       TIMEOUT 300
       LABELS "msan_skip"
-      ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+      ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_MODE=1;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
   )
 
   # Force-net stress test: routes all bdev tasks through the network path
@@ -112,7 +112,7 @@ if(CLIO_CORE_ENABLE_TESTS)
   set_tests_properties(cr_bdev_force_net PROPERTIES
     TIMEOUT 300
     LABELS "msan_skip"
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHIMAERA_TEST_MODE=1;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500;CLIO_FORCE_NET=1"
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_MODE=1;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500;CLIO_FORCE_NET=1"
   )
 endif()
 
@@ -121,49 +121,49 @@ add_custom_target(test_bdev
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev ChiMod tests"
+  COMMENT "Running Clio bdev ChiMod tests"
 )
 
 add_custom_target(test_bdev_create
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev container creation tests"
+  COMMENT "Running Clio bdev container creation tests"
 )
 
 add_custom_target(test_bdev_allocate
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev block allocation tests"
+  COMMENT "Running Clio bdev block allocation tests"
 )
 
 add_custom_target(test_bdev_io
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev I/O operation tests"
+  COMMENT "Running Clio bdev I/O operation tests"
 )
 
 add_custom_target(test_bdev_async
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev asynchronous I/O tests"
+  COMMENT "Running Clio bdev asynchronous I/O tests"
 )
 
 add_custom_target(test_bdev_performance
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev performance metrics tests"
+  COMMENT "Running Clio bdev performance metrics tests"
 )
 
 add_custom_target(test_bdev_error
   COMMAND ${BDEV_TEST_TARGET}
   DEPENDS ${BDEV_TEST_TARGET}
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-  COMMENT "Running Chimaera bdev error handling tests"
+  COMMENT "Running Clio bdev error handling tests"
 )
 
 # Install test executable

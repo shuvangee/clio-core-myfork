@@ -35,7 +35,9 @@
  * CLIO Runtime manager implementation
  */
 
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 
@@ -58,7 +60,13 @@ namespace clio::run {
 // CTP Thread-local storage key definitions
 CLIO_RUN_API ctp::ThreadLocalKey chi_cur_worker_key_;
 CLIO_RUN_API bool chi_cur_worker_key_created_ = false;
+// Fallback current-RunContext for threads that are NOT workers (e.g. tests that
+// invoke Container::Run directly). On a worker thread the worker's own context
+// takes precedence; this TLS is only consulted when there is no current worker.
+CLIO_RUN_API ctp::ThreadLocalKey chi_cur_runctx_key_;
+CLIO_RUN_API bool chi_cur_runctx_key_created_ = false;
 CLIO_RUN_API ctp::ThreadLocalKey chi_task_counter_key_;
+CLIO_RUN_API bool chi_task_counter_key_created_ = false;
 CLIO_RUN_API ctp::ThreadLocalKey chi_is_client_thread_key_;
 
 /**
@@ -84,7 +92,7 @@ TaskId CreateTaskId() {
     Worker *current_worker = CLIO_CUR_WORKER;
     if (current_worker) {
       // Get current task from worker
-      FullPtr<Task> current_task = current_worker->GetCurrentTask();
+      clio::run::shared_ptr<Task> current_task = current_worker->GetCurrentTask();
       if (!current_task.IsNull()) {
         // Copy TaskId from current task, keep replica_id_ same, and allocate
         // new unique from counter
@@ -165,8 +173,8 @@ bool RuntimeManager::ClientInit() {
   // CLIO_ADMIN uses GetGlobalPtrVar which auto-creates with default constructor!
   if (g_admin == nullptr) {
     HLOG(kInfo, "ClientInit: Creating admin client with kAdminPoolId={}",
-         chi::kAdminPoolId);
-    g_admin = new clio::run::admin::Client(chi::kAdminPoolId);
+         clio::run::kAdminPoolId);
+    g_admin = new clio::run::admin::Client(clio::run::kAdminPoolId);
     HLOG(kInfo, "ClientInit: Admin client created, pool_id_={}",
          g_admin->pool_id_);
   } else {
@@ -242,9 +250,17 @@ bool RuntimeManager::ServerInit() {
     return false;
   }
 
-  // Process compose section if present
+  // Process compose section if present — unless this runtime is ephemeral
+  // (--ephemeral / CLIO_EPHEMERAL), in which case it starts bare and is
+  // composed explicitly (e.g. a spawned per-app runtime backed by a main
+  // runtime via the fallback).
   const auto &compose_config = config_manager->GetComposeConfig();
-  if (!compose_config.pools_.empty()) {
+  if (config_manager->IsEphemeral() && !compose_config.pools_.empty()) {
+    HLOG(kInfo,
+         "Ephemeral runtime: skipping default compose ({} pools in config)",
+         compose_config.pools_.size());
+  }
+  if (!config_manager->IsEphemeral() && !compose_config.pools_.empty()) {
     HLOG(kInfo, "Processing compose configuration with {} pools",
          compose_config.pools_.size());
 
@@ -313,8 +329,24 @@ bool RuntimeManager::ServerInit() {
       }
       HLOG(kInfo, "Restart log: replaying {} registered container(s) from {}",
            containers.size(), restart_log.path());
+      bool pruned_any = false;
       for (const auto &container_path : containers) {
-        chi::ConfigManager file_config;
+        // A registered compose file can disappear out from under us (deleted,
+        // moved, or on a since-unmounted volume). ConfigManager::LoadYaml is
+        // fatal on a missing/unreadable file, so guard with an existence check
+        // first and self-heal by pruning the dead entry from the WAL. Without
+        // this, one dangling entry would abort every future startup.
+        std::error_code ec;
+        if (!std::filesystem::exists(container_path, ec) || ec) {
+          HLOG(kWarning,
+               "Restart log: registered container '{}' no longer exists; "
+               "unregistering it",
+               container_path);
+          restart_log.AppendRm(container_path);
+          pruned_any = true;
+          continue;
+        }
+        clio::run::ConfigManager file_config;
         if (!file_config.LoadYaml(container_path)) {
           HLOG(kError, "Restart log: failed to load container '{}' (skipping)",
                container_path);
@@ -338,12 +370,16 @@ bool RuntimeManager::ServerInit() {
           }
         }
       }
+      // Collapse the appended rm entries so dead paths don't linger in the log.
+      if (pruned_any) {
+        restart_log.Compact();
+      }
     }
   }
 
   // GPU work orchestrator removed: kernels submit tasks to the CPU
   // runtime via gpu2cpu_queue and the CPU executes them through the
-  // standard chi::Container path. No orchestrator launch needed —
+  // standard clio::run::Container path. No orchestrator launch needed —
   // ChiServerBootstrap{Hip,Sycl}Gpu in IpcManager::ServerInit already
   // set up the gpu2cpu_queue + gpu2cpu_copy_backend at server-init
   // time.
@@ -371,6 +407,10 @@ void RuntimeManager::ClientFinalize() {
     return;
   }
 
+  // Leak shared-context ZMQ sockets on Windows during teardown (see
+  // ServerFinalize) to avoid libzmq's WSASTARTUP signaler assertion.
+  ctp::lbm::sock::SetSocketLibShutdown();
+
   // Finalize client components
   auto *pool_manager = CLIO_POOL_MANAGER;
   pool_manager->Finalize();
@@ -385,15 +425,81 @@ void RuntimeManager::ClientFinalize() {
   }
 }
 
+void RuntimeManager::DrainPendingTasks(u64 timeout_ms) {
+  if (!is_initialized_ || !is_runtime_mode_) {
+    return;
+  }
+  auto *work_orchestrator = CLIO_WORK_ORCHESTRATOR;
+  auto *ipc_manager = CLIO_IPC;
+  if (!work_orchestrator || !ipc_manager) {
+    return;
+  }
+
+  // Sum the depth of every cross-node/client net-send queue.
+  auto net_pending = [&]() -> size_t {
+    size_t total = 0;
+    for (u32 p = 0; p < kNetQueueNumPriorities; ++p) {
+      total += ipc_manager->GetNetQueueSize(static_cast<NetQueuePriority>(p));
+    }
+    return total;
+  };
+
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  u64 work_remaining = 0;
+  while (true) {
+    bool has_work = work_orchestrator->HasWorkRemaining(work_remaining);
+    size_t pending = net_pending();
+    if (!has_work && pending == 0) {
+      HLOG(kDebug, "DrainPendingTasks: drained (no pending work or net tasks)");
+      break;
+    }
+    if (std::chrono::steady_clock::now() >= deadline) {
+      HLOG(kWarning,
+           "DrainPendingTasks: timed out after {} ms (work_remaining={}, "
+           "net_pending={}) — proceeding with shutdown",
+           timeout_ms, work_remaining, pending);
+      break;
+    }
+    // Workers are still running here, so yield to let them finish in-flight
+    // tasks and flush the net queues.
+    CTP_THREAD_MODEL->Yield();
+  }
+}
+
 void RuntimeManager::ServerFinalize() {
   if (!is_initialized_ || !is_runtime_mode_) {
     return;
   }
 
+  // Mark shutdown before any transport teardown so ZeroMqTransport leaks
+  // shared-context sockets on Windows instead of zmq_close-ing them (which
+  // trips libzmq's signaler WSASTARTUP assert during teardown). Must precede
+  // StopWorkers / ClearClientPool below.
+  ctp::lbm::sock::SetSocketLibShutdown();
+
+  // Flush in-flight (non-periodic) tasks and the net queues while the workers
+  // are still running, so client/runtime work completes on its normal path and
+  // its task + Future allocations are reclaimed instead of being abandoned by
+  // the abrupt StopWorkers() below.
+  DrainPendingTasks();
+
   // Stop workers and finalize server components
   auto *work_orchestrator = CLIO_WORK_ORCHESTRATOR;
   auto *ipc_manager = CLIO_IPC;
   work_orchestrator->StopWorkers();
+
+  // Destroy all containers now: the workers are stopped (no concurrent
+  // container access) but the Worker objects, event queues and transports are
+  // still alive, which the ChiMod Destroy methods / coroutine machinery may
+  // touch. Each container runs its Destroy method (releasing module-managed
+  // state — e.g. CTE clears its maps and closes WAL files) and is then deleted
+  // so ~Runtime() frees the rest (bdev RAM pages + fds, the object itself).
+  // Must run before ModuleManager::Finalize() unloads the ChiMod libraries.
+  // Without this the container state leaks until process exit.
+  auto *pool_manager = CLIO_POOL_MANAGER;
+  pool_manager->DestroyAllContainers();
+
   // Reset transports while Worker::EventManager objects are still alive.
   // Transports hold raw EventManager* pointers registered via
   // admin_runtime; Finalize() below destroys the workers that own them.
@@ -401,11 +507,11 @@ void RuntimeManager::ServerFinalize() {
     ipc_manager->ClearTransports();
   }
   work_orchestrator->Finalize();
+
   auto *module_manager = CLIO_MODULE_MANAGER;
   module_manager->Finalize();
 
-  // Finalize shared components
-  auto *pool_manager = CLIO_POOL_MANAGER;
+  // Finalize shared components (metadata-only now that containers are gone)
   pool_manager->Finalize();
 
   // Reap all shared memory segments before finalizing IPC

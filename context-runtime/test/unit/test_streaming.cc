@@ -47,11 +47,11 @@
 #include <chrono>
 #include <thread>
 
-using namespace chi;
+using namespace clio::run;
 using namespace std::chrono_literals;
 
 // Test pool ID for MOD_NAME
-constexpr chi::PoolId kTestModNamePoolId = chi::PoolId(200, 0);
+constexpr clio::run::PoolId kTestModNamePoolId = clio::run::PoolId(200, 0);
 
 // Global flag to track runtime initialization
 static bool g_initialized = false;
@@ -63,10 +63,10 @@ class StreamingTestFixture {
 public:
   StreamingTestFixture() {
     if (!g_initialized) {
-      bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+      bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
       if (success) {
         g_initialized = true;
-        SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+        SimpleTest::g_test_finalize = clio::run::CLIO_RUNTIME_FINALIZE;
         std::this_thread::sleep_for(500ms);
       }
     }
@@ -81,7 +81,7 @@ TEST_CASE("Task Streaming - Small Output", "[streaming][small]") {
   clio::run::MOD_NAME::Client client(kTestModNamePoolId);
 
   // Create the MOD_NAME container
-  chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
+  clio::run::PoolQuery pool_query = clio::run::PoolQuery::Dynamic();
   std::string pool_name = "streaming_test_small";
   auto create_task = client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
   create_task.Wait();
@@ -107,7 +107,7 @@ TEST_CASE("Task Streaming - Large Output (1MB)", "[streaming][large]") {
   clio::run::MOD_NAME::Client client(kTestModNamePoolId);
 
   // Create the MOD_NAME container
-  chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
+  clio::run::PoolQuery pool_query = clio::run::PoolQuery::Dynamic();
   std::string pool_name = "streaming_test_large";
   auto create_task = client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
   create_task.Wait();
@@ -150,7 +150,7 @@ TEST_CASE("Task Streaming - Large Output (1MB)", "[streaming][large]") {
   INFO("Streaming mechanism tested successfully for output > 4KB copy space");
 }
 
-TEST_CASE("FutureShm Bitfield Operations", "[streaming][bitfield]") {
+TEST_CASE("Task completion signals", "[streaming][completion]") {
   StreamingTestFixture fixture;
   REQUIRE(g_initialized);
 
@@ -158,7 +158,7 @@ TEST_CASE("FutureShm Bitfield Operations", "[streaming][bitfield]") {
   clio::run::MOD_NAME::Client client(kTestModNamePoolId);
 
   // Create the MOD_NAME container
-  chi::PoolQuery pool_query = chi::PoolQuery::Dynamic();
+  clio::run::PoolQuery pool_query = clio::run::PoolQuery::Dynamic();
   std::string pool_name = "streaming_test_bitfield";
   auto create_task = client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
   create_task.Wait();
@@ -168,41 +168,185 @@ TEST_CASE("FutureShm Bitfield Operations", "[streaming][bitfield]") {
   // Submit a simple task
   auto task = client.AsyncCustom(pool_query, "bitfield test", 1);
 
-  // Get the future's shared memory structure
-  auto future_shm = task.GetFutureShm();
-  REQUIRE(!future_shm.IsNull());
+  // Wait returns true once the task completes. CPU/host completion now lives on
+  // Task::is_complete_ (managed by the Future), replacing FutureShm::flags_
+  // FUTURE_COMPLETE.
+  INFO("Testing completion via Task::is_complete_");
+  REQUIRE(task.Wait());
 
-  // Test initial state (task not complete yet)
-  INFO("Testing initial bitfield state");
-  // Note: We can't reliably test the state before Wait() as the task might complete very fast
+  // Exercise the Task completion / new-data signal accessors directly.
+  INFO("Testing Task is_complete_ / is_new_data_ accessors");
+  auto t = ctp::make_shared<clio::run::Task>(CTP_MALLOC);
+  t->UnsetComplete();
+  t->UnsetNewData();
+  REQUIRE_FALSE(t->IsComplete());
+  t->SetComplete();
+  REQUIRE(t->IsComplete());
 
-  // Wait for task to complete
-  task.Wait();
+  REQUIRE_FALSE(t->IsNewData());
+  t->SetNewData();
+  REQUIRE(t->IsNewData());
+  REQUIRE(t->IsComplete());  // new-data is independent of completion
 
-  // After completion, FUTURE_COMPLETE should be set
-  INFO("Testing FUTURE_COMPLETE flag after Wait()");
-  using FutureShm = chi::FutureShm;
-  REQUIRE(future_shm->flags_.Any(FutureShm::FUTURE_COMPLETE));
+  t->UnsetNewData();
+  REQUIRE_FALSE(t->IsNewData());
+  REQUIRE(t->IsComplete());  // completion still set
 
-  // Test manual flag operations on a separate bitfield
-  ctp::abitfield32_t test_flags;
-  test_flags.SetBits(0);  // Initialize
+  t->UnsetComplete();
+  REQUIRE_FALSE(t->IsComplete());
 
-  INFO("Testing manual FUTURE_COMPLETE flag set");
-  test_flags.SetBits(FutureShm::FUTURE_COMPLETE);
-  REQUIRE(test_flags.Any(FutureShm::FUTURE_COMPLETE));
+  INFO("Task completion-signal accessors verified successfully");
+}
 
-  INFO("Testing FUTURE_NEW_DATA flag set");
-  test_flags.SetBits(FutureShm::FUTURE_NEW_DATA);
-  REQUIRE(test_flags.Any(FutureShm::FUTURE_NEW_DATA));
-  REQUIRE(test_flags.Any(FutureShm::FUTURE_COMPLETE)); // Should still be set
+// Regression guard for runtime-internal allocation leaks (e.g. #560: the
+// server-side FutureShm that leaked once per cross-process RPC). Most valuable
+// under the force-net variant, which routes every RPC through the ZMQ
+// cpu2cpu path that allocates the server-side FutureShm. Only asserts when
+// built with -DCLIO_CORE_ENABLE_LEAK_CHECK=ON (CTP_ALLOC_TRACK_SIZE); otherwise
+// GetRuntimeHeapAllocatedBytes() returns 0 and this is a cheap no-op.
+TEST_CASE("Runtime Heap Leak Check", "[streaming][leak]") {
+  StreamingTestFixture fixture;
+  REQUIRE(g_initialized);
 
-  INFO("Testing flag unset");
-  test_flags.UnsetBits(FutureShm::FUTURE_NEW_DATA);
-  REQUIRE_FALSE(test_flags.Any(FutureShm::FUTURE_NEW_DATA));
-  REQUIRE(test_flags.Any(FutureShm::FUTURE_COMPLETE)); // Should still be set
+  clio::run::MOD_NAME::Client client(kTestModNamePoolId);
+  clio::run::PoolQuery pool_query = clio::run::PoolQuery::Dynamic();
+  std::string pool_name = "streaming_test_leak";
+  auto create_task =
+      client.AsyncCreate(pool_query, pool_name, kTestModNamePoolId);
+  create_task.Wait();
+  client.pool_id_ = create_task->new_pool_id_;
+  REQUIRE(create_task->return_code_ == 0);
 
-  INFO("Bitfield operations verified successfully");
+#ifdef CTP_ALLOC_TRACK_SIZE
+  auto *ipc = CLIO_IPC;
+  REQUIRE(ipc != nullptr);
+
+  // Submit one Custom RPC and block until the response is received.
+  auto run_rpc = [&](int i) {
+    auto task = client.AsyncCustom(pool_query, "leak probe", i);
+    task.Wait();
+    REQUIRE(task->return_code_ == 0);
+  };
+
+  // The server frees its per-request FutureShm *after* sending the response
+  // (SendOut), so the free can lag the client's Wait(). Poll until the
+  // runtime private-heap usage stops moving before snapshotting.
+  auto stabilized_heap = [&]() -> size_t {
+    size_t prev = ipc->GetRuntimeHeapAllocatedBytes();
+    for (int i = 0; i < 150; ++i) {  // up to ~3s
+      std::this_thread::sleep_for(20ms);
+      size_t cur = ipc->GetRuntimeHeapAllocatedBytes();
+      if (cur == prev) return cur;
+      prev = cur;
+    }
+    return prev;
+  };
+
+  // Warm up: the first RPCs lazily allocate caches/pools that legitimately
+  // persist, so they must not count against the measured window.
+  constexpr int kWarmup = 50;
+  for (int i = 0; i < kWarmup; ++i) run_rpc(i);
+  const size_t baseline = stabilized_heap();
+
+  // Measured window: a per-RPC leak makes the post-drain heap grow ~linearly
+  // with the RPC count.
+  constexpr int kMeasured = 400;
+  for (int i = 0; i < kMeasured; ++i) run_rpc(i);
+  const size_t after = stabilized_heap();
+
+  const size_t delta = (after > baseline) ? (after - baseline) : 0;
+  const double per_rpc = static_cast<double>(delta) / kMeasured;
+  INFO("Runtime heap: baseline=" << baseline << " after=" << after
+       << " delta=" << delta << " B (" << per_rpc << " B/RPC over "
+       << kMeasured << " RPCs)");
+
+  // With #560 fixed, steady-state per-RPC growth is ~0. The leaked FutureShm is
+  // well over 100 B/RPC, so this tolerance cleanly separates pass from
+  // regression while absorbing minor incidental allocations.
+  constexpr double kMaxBytesPerRpc = 16.0;
+  REQUIRE(per_rpc <= kMaxBytesPerRpc);
+#else
+  INFO("Leak check disabled (build with -DCLIO_CORE_ENABLE_LEAK_CHECK=ON)");
+  REQUIRE(true);
+#endif
+}
+
+// ===========================================================================
+// Positive controls for the leak detector itself: deliberately leak (skip the
+// free), confirm GetRuntimeHeapAllocatedBytes() *observes* the leak, then free
+// so the case ends balanced (also confirming the detector drops back toward
+// baseline on free). These prove a real un-freed allocation would be caught.
+// Only assert under CLIO_CORE_ENABLE_LEAK_CHECK (CTP_ALLOC_TRACK_SIZE); a no-op
+// otherwise. Run via cr_streaming_force_net (the whole binary).
+// ===========================================================================
+
+TEST_CASE("Leak Detector - AllocateBuffer leak is detected",
+          "[streaming][leak-detector]") {
+  StreamingTestFixture fixture;
+  REQUIRE(g_initialized);
+#ifdef CTP_ALLOC_TRACK_SIZE
+  auto *ipc = CLIO_IPC;
+  REQUIRE(ipc != nullptr);
+  constexpr size_t kLeakBytes = 1u << 20;       // 1 MiB — dwarfs idle churn
+  constexpr size_t kSlack = 64u << 10;          // tolerate background activity
+
+  const size_t before = ipc->GetRuntimeHeapAllocatedBytes();
+
+  // Leak: allocate from the runtime private heap (CTP_MALLOC) and DON'T free.
+  auto buf = ipc->AllocateBuffer(kLeakBytes);
+  REQUIRE(!buf.IsNull());
+  const size_t leaked = ipc->GetRuntimeHeapAllocatedBytes();
+  INFO("AllocateBuffer leak: detector observed +" << (leaked - before)
+       << " B (leaked " << kLeakBytes << ")");
+  REQUIRE(leaked >= before + kLeakBytes);        // detector found the leak
+
+  // Free it: the detector must drop back toward baseline.
+  ipc->FreeBuffer(buf);
+  const size_t after_free = ipc->GetRuntimeHeapAllocatedBytes();
+  REQUIRE(after_free < leaked);
+  REQUIRE(after_free <= before + kSlack);
+#else
+  INFO("Leak tracking off; build -DCLIO_CORE_ENABLE_LEAK_CHECK=ON to exercise");
+  REQUIRE(true);
+#endif
+}
+
+TEST_CASE("Leak Detector - NewTask leak is detected",
+          "[streaming][leak-detector]") {
+  StreamingTestFixture fixture;
+  REQUIRE(g_initialized);
+#ifdef CTP_ALLOC_TRACK_SIZE
+  auto *ipc = CLIO_IPC;
+  REQUIRE(ipc != nullptr);
+  using TaskT = clio::run::MOD_NAME::CustomTask;
+  constexpr int kNumTasks = 256;                 // dominate idle churn
+  constexpr size_t kSlack = 64u << 10;
+  const size_t expected = kNumTasks * sizeof(TaskT);
+
+  const size_t before = ipc->GetRuntimeHeapAllocatedBytes();
+
+  // Leak: allocate tasks via NewTask (global new — invisible to CTP_MALLOC, so
+  // this exercises the NewTask/DelTask accounting) and DON'T DelTask them.
+  std::vector<clio::run::shared_ptr<TaskT>> tasks;
+  tasks.reserve(kNumTasks);
+  for (int i = 0; i < kNumTasks; ++i) {
+    tasks.push_back(ipc->NewTask<TaskT>());
+    REQUIRE(!tasks.back().IsNull());
+  }
+  const size_t leaked = ipc->GetRuntimeHeapAllocatedBytes();
+  INFO("NewTask leak: detector observed +" << (leaked - before) << " B over "
+       << kNumTasks << " tasks (sizeof=" << sizeof(TaskT) << ")");
+  REQUIRE(leaked >= before + expected);          // detector found the leak
+
+  // Free them: the detector must drop back toward baseline.
+  for (auto &t : tasks) t.reset();
+  const size_t after_free = ipc->GetRuntimeHeapAllocatedBytes();
+  REQUIRE(after_free < leaked);
+  REQUIRE(after_free <= before + kSlack);
+#else
+  INFO("Leak tracking off; build -DCLIO_CORE_ENABLE_LEAK_CHECK=ON to exercise");
+  REQUIRE(true);
+#endif
 }
 
 SIMPLE_TEST_MAIN()

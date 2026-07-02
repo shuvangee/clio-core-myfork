@@ -15,12 +15,14 @@ if(WIN32)
         # Headers stay Win32-clean; impls live here.
         iocp_io.cc
         event_manager_win.cc
+        thread_model.cc
     )
 else()
     set(SRC_FILES
         system_info.cc
         malloc_allocator.cc
         socket_posix.cc
+        thread_model.cc
     )
 endif()
 
@@ -49,10 +51,12 @@ target_include_directories(clio_ctp_host PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 hshm_target_compile_definitions(clio_ctp_host)
-target_precompile_headers(clio_ctp_host PRIVATE
-    <string> <vector> <memory> <unordered_map>
-    <functional> <algorithm> <cstdint> <cstring> <iostream>
-)
+if(CLIO_CORE_ENABLE_PCH)
+    target_precompile_headers(clio_ctp_host PRIVATE
+        <string> <vector> <memory> <unordered_map>
+        <functional> <algorithm> <cstdint> <cstring> <iostream>
+    )
+endif()
 list(APPEND CLIO_CTP_LIBS clio_ctp_host)
 add_library(cxx INTERFACE)
 target_link_libraries(cxx INTERFACE clio_ctp_host)

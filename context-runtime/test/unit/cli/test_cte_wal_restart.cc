@@ -127,6 +127,12 @@ TEST_CASE("CteWalRestart - WAL snapshot, replay on daemon restart",
 
   setenv("CLIO_WAIT_SERVER", "15", 1);
   setenv("CLIO_BIND_ADDR", "127.0.0.1", 1);
+  // Isolate the restart-log WAL inside work_dir so `compose` registration does
+  // not pollute the shared ~/.clio/restart_log.bin. Child clio_run processes
+  // (daemons + CLI) inherit this env var, so they all agree on the path, and
+  // it is removed with work_dir at the end of the test.
+  const fs::path restart_log = work_dir / "restart_log.bin";
+  setenv("CLIO_RESTART_LOG", restart_log.string().c_str(), 1);
 
   // --- Phase 1: daemon up, compose the pool, write data through a client.
   clio::run::test::RuntimeServer server;
@@ -135,10 +141,10 @@ TEST_CASE("CteWalRestart - WAL snapshot, replay on daemon restart",
 
   REQUIRE(RunCliTimed({"compose", compose_yaml.string()}, 60) == 0);
 
-  REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false));
+  REQUIRE(clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false));
   REQUIRE(clio::cte::core::CLIO_CTE_CLIENT_INIT());
   auto* cte = CLIO_CTE_CLIENT;
-  cte->Init(chi::PoolId(700, 0));
+  cte->Init(clio::run::PoolId(700, 0));
 
   auto* ipc = CLIO_IPC;
   REQUIRE(ipc != nullptr);
@@ -175,9 +181,9 @@ TEST_CASE("CteWalRestart - WAL snapshot, replay on daemon restart",
 
   // Snapshot the metadata, then add entries AFTER the snapshot so the
   // restart exercises BOTH RestoreMetadataFromLog and ReplayTransactionLogs.
-  auto flush_meta = cte->AsyncFlushMetadata(chi::PoolQuery::Local(), 0);
+  auto flush_meta = cte->AsyncFlushMetadata(clio::run::PoolQuery::Local(), 0);
   flush_meta.Wait();
-  auto flush_data = cte->AsyncFlushData(chi::PoolQuery::Local(), 0, 0);
+  auto flush_data = cte->AsyncFlushData(clio::run::PoolQuery::Local(), 0, 0);
   flush_data.Wait();
 
   auto tag_c = cte->AsyncGetOrCreateTag("wal_tag_post_snapshot");

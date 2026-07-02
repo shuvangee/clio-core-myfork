@@ -1,7 +1,7 @@
 """
 IOWarp Runtime Service Package
 
-Manages the Chimaera runtime deployment. Supports both bare-metal (default)
+Manages the Clio runtime deployment. Supports both bare-metal (default)
 and container deployment modes via deploy_mode configuration.
 """
 from jarvis_cd.core.pkg import Service
@@ -36,7 +36,7 @@ class ClioRuntime(Service):
     """
 
     def _init(self):
-        self.config_file = f'{self.shared_dir}/chimaera_config.yaml'
+        self.config_file = f'{self.shared_dir}/clio_config.yaml'
 
     def _configure_menu(self):
         return [
@@ -168,7 +168,7 @@ class ClioRuntime(Service):
                         'another package in the pipeline owns the runtime '
                         'process (e.g. clio_cte_libfuse with '
                         'embedded_runtime=true), in which case clio_runtime '
-                        'still generates chimaera_config.yaml + manages '
+                        'still generates clio_config.yaml + manages '
                         'configure/stop but skips the daemon spawn.'),
                 'type': bool,
                 'default': True
@@ -226,7 +226,7 @@ class ClioRuntime(Service):
     def _configure(self, **kwargs):
         super()._configure(**kwargs)
 
-        self.config_file = f'{self.shared_dir}/chimaera_config.yaml'
+        self.config_file = f'{self.shared_dir}/clio_config.yaml'
 
         self.setenv('CLIO_SERVER_CONF', self.config_file)
         self.setenv('CTP_LOG_LEVEL', self.config['log_level'])
@@ -268,7 +268,7 @@ class ClioRuntime(Service):
             },
             'logging': {
                 'level': self.config['log_level'],
-                'file': f"{self.shared_dir}/chimaera.log"
+                'file': f"{self.shared_dir}/clio_run.log"
             },
             'runtime': {
                 'num_threads': self.config['num_threads'],
@@ -279,7 +279,7 @@ class ClioRuntime(Service):
                 'first_busy_wait': self.config['first_busy_wait'],
                 'max_sleep': self.config['max_sleep']
             },
-            # Parsed by chi::ConfigManager::ParseYAML — keys must match
+            # Parsed by clio::run::ConfigManager::ParseYAML — keys must match
             # the names used there (swim.enabled, swim.direct_probe_timeout_sec,
             # swim.indirect_probe_timeout_sec, swim.suspicion_timeout_sec).
             'swim': {
@@ -294,7 +294,7 @@ class ClioRuntime(Service):
         }
 
         with open(self.config_file, 'w') as f:
-            f.write('# Chimaera Runtime Configuration\n\n')
+            f.write('# Clio Runtime Configuration\n\n')
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
 
     # ------------------------------------------------------------------
@@ -305,13 +305,13 @@ class ClioRuntime(Service):
         # When `do_start: false`, another package in the pipeline owns
         # the clio_run runtime process (e.g. clio_cte_libfuse with
         # embedded_runtime=true). clio_runtime stays in the pipeline to
-        # generate chimaera_config.yaml and handle configure/stop, but
+        # generate clio_config.yaml and handle configure/stop, but
         # the daemon spawn is skipped to avoid a port-9413 conflict.
         # Ordering note: any package that consumes the runtime as a
         # client (clio_cte, workloads) must appear *after* the package
         # that actually owns the runtime in the pipeline pkg list.
         if not self.config.get('do_start', True):
-            self.log("do_start=false: skipping chimaera daemon spawn "
+            self.log("do_start=false: skipping clio_run daemon spawn "
                      "(another package owns the runtime)",
                      color=Color.YELLOW)
             return
@@ -365,7 +365,7 @@ class ClioRuntime(Service):
         # package that owns the runtime (e.g. clio_cte_libfuse) tears
         # down its own daemon during its own stop().
         if not self.config.get('do_start', True):
-            self.log("do_start=false: skipping chimaera daemon stop "
+            self.log("do_start=false: skipping clio_run daemon stop "
                      "(another package owns the runtime)",
                      color=Color.YELLOW)
             return
@@ -374,7 +374,7 @@ class ClioRuntime(Service):
 
         Exec('clio_run runtime stop',
              PsshExecInfo(env=self.env, hostfile=self.hostfile)).run()
-        Kill('chimaera',
+        Kill('clio_run',
              PsshExecInfo(env=self.env, hostfile=self.hostfile)).run()
 
         port = self.config['port']
@@ -395,7 +395,7 @@ class ClioRuntime(Service):
 
     def kill(self):
         self.log("Forcibly killing IOWarp runtime")
-        Kill('chimaera', PsshExecInfo(
+        Kill('clio_run', PsshExecInfo(
             hostfile=self.hostfile
         )).run()
 
@@ -405,7 +405,7 @@ class ClioRuntime(Service):
         if self.config_file and os.path.exists(self.config_file):
             os.remove(self.config_file)
 
-        log_file = f'{self.shared_dir}/chimaera.log'
+        log_file = f'{self.shared_dir}/clio_run.log'
         if os.path.exists(log_file):
             os.remove(log_file)
 

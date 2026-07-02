@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_TYPES_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_TYPES_H_
+#ifndef CLIO_RUNTIME_INCLUDE_TYPES_H_
+#define CLIO_RUNTIME_INCLUDE_TYPES_H_
 
 #include <chrono>
 #include <cstdint>
@@ -46,30 +46,49 @@
 #include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <clio_ctp/memory/allocator/round_robin_allocator.h>
 #include <clio_ctp/memory/allocator/thread_allocator.h>
+#include <clio_ctp/memory/smart_ptr/shared_ptr.h>
+#include <clio_ctp/memory/smart_ptr/unique_ptr.h>
 #include <clio_ctp/util/env_compat.h>
 // CLIO_RUN_API + CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_{H,CC} macros (per-DLL
 // export decoration so data globals work across DLL boundaries on Windows).
 #include "clio_runtime/api.h"
 
 /**
+ * Virtual/override qualifiers for Task types.
+ *
+ * Tasks must have the SAME layout and interpretation on host and device (issue
+ * #556): the runtime (host) destroys a concrete derived task through a
+ * clio::run::shared_ptr<clio::run::Task> base-view, which needs a virtual
+ * destructor. For the object layout (and field offsets) to be identical across
+ * a host<->device cudaMemcpy, the vtable pointer must therefore be present on
+ * BOTH passes. So CLIO_VIRTUAL/CLIO_OVERRIDE keep `virtual`/`override` on device
+ * too. Device code NEVER dispatches through these virtuals (it always uses TYPED
+ * tasks, never a base-Task view), so the (host) vtable is simply ignored there —
+ * we keep the keyword purely for layout parity. Both the base and derived Task
+ * destructors are CTP_CROSS_FUN, so they share the same __host__ __device__
+ * execution space and nvcc accepts the override (the earlier mismatch came from
+ * a __host__-only virtual base vs a __host__ __device__ derived override).
+ */
+#define CLIO_VIRTUAL virtual
+#define CLIO_OVERRIDE override
+
+// CLIO_THROW: clio-namespaced alias of CTP_THROW. Expands to `throw X` on the
+// host and to nothing on a GPU/device pass (no exceptions there), so Task's
+// null-checked RunContext accessors compile unchanged in device code.
+// Usage: CLIO_THROW(std::runtime_error("..."));
+#define CLIO_THROW(X) CTP_THROW(X)
+
+/**
  * Core type definitions for CLIO Runtime distributed task execution framework
  */
 
-// Canonical runtime namespace: clio::run.  `chi` is kept as a permanent
-// alias so the millions of existing chi::Foo qualified lookups in this
-// codebase (and in every downstream chimod) keep resolving unchanged.
-// The forward-decl ensures the alias resolves even at this top-of-file
-// position where the clio::run namespace hasn't been opened yet.
-namespace clio {
-namespace run {}
-}  // namespace clio
-namespace chi = clio::run;
+// Canonical runtime namespace: clio::run.
 
 namespace clio::run {
 
 // Backward-compat env-var helper alias. Canonical lives in clio_ctp
 // (ctp::env::GetCompat) so ctp-internal code can use it without an upward
-// dependency on clio_runtime; this alias makes chi::env::GetCompat reachable
+// dependency on clio_runtime; this alias makes clio::run::env::GetCompat reachable
 // from every clio_runtime TU that already includes <clio_runtime/types.h>.
 // See clio_ctp/util/env_compat.h for the implementation.
 namespace env {
@@ -438,10 +457,11 @@ struct AddressHash {
 };
 
 // Task flags using CTP BIT_OPT macro
-#define TASK_PERIODIC BIT_OPT(chi::u32, 0)
-#define TASK_ROUTED BIT_OPT(chi::u32, 1)
-#define TASK_DATA_OWNER BIT_OPT(chi::u32, 2)
-#define TASK_REMOTE BIT_OPT(chi::u32, 3)
+#define TASK_PERIODIC BIT_OPT(clio::run::u32, 0)
+// Bit 1 retired: TASK_ROUTED — now RunContext::routed_ (execution-local state,
+// no longer serialized on the task).
+#define TASK_DATA_OWNER BIT_OPT(clio::run::u32, 2)
+#define TASK_REMOTE BIT_OPT(clio::run::u32, 3)
 // Bit 4 was TASK_FORCE_NET — removed in favor of the CLIO_FORCE_NET env
 // variable (read by IpcManager::ServerInit, stored as force_net_, checked
 // in IsTaskLocal). The per-task flag was redundant and noisier: every
@@ -449,17 +469,24 @@ struct AddressHash {
 // that flips the runtime's routing decision once. Bit position kept
 // reserved so existing on-wire/persisted flag values keep their bit
 // numbering.
-#define TASK_STARTED \
-  BIT_OPT(chi::u32, 5)  ///< Task execution has been started (set in BeginTask,
-                        ///< unset in ReschedulePeriodicTask)
-#define TASK_RUN_CTX_EXISTS \
-  BIT_OPT(chi::u32, 6)  ///< RunContext has been allocated for this task (set in
-                        ///< BeginTask, prevents duplicate BeginTask calls when
-                        ///< task is forwarded between workers)
+// Bit 5 retired: TASK_STARTED — now RunContext::started_.
+// (bit 6 retired: TASK_RUN_CTX_EXISTS — RunContext is now allocated exactly
+//  once by the inbound ipc_* transport's BeginTask, so no guard flag is needed)
 #define TASK_FIRE_AND_FORGET \
-  BIT_OPT(chi::u32, 7)  ///< Task does not need a response. Wait/co_await return
+  BIT_OPT(clio::run::u32, 7)  ///< Task does not need a response. Wait/co_await return
                         ///< instantly; SendOut, ClientSend, and
                         ///< IpcManager::SendRuntime are skipped.
+#define TASK_BATCH_AGGREGATE \
+  BIT_OPT(clio::run::u32, 8)  ///< ManyToOne: this is the synthetic aggregate task the
+                        ///< neighborhood leader runs for a batch. On completion,
+                        ///< its OUT is broadcast to the batched original tasks.
+#define TASK_EXTERNAL_CLIENT \
+  BIT_OPT(clio::run::u32, 9)  ///< Task ingressed from an external user client (set in
+                        ///< the IpcCpu2Cpu / IpcCpu2CpuZmq client-receive paths,
+                        ///< never on runtime-internal self-sends). Serialized in
+                        ///< SerializeIn so it rides a remote hop to the container
+                        ///< owner, which enforces per-RPC access control
+                        ///< (private methods reject external callers).
 
 // Bulk transfer flags are defined in clio_ctp/lightbeam/lightbeam.h:
 // - BULK_EXPOSE: Bulk is exposed (sender exposes for reading)
@@ -482,7 +509,7 @@ constexpr PoolId kAdminPoolId =
 //
 // CLIO_QUEUE_ALLOC_T: BuddyAllocator on both CPU and GPU (queue ring buffers)
 //
-// CLIO_TASK_ALLOC_T: allocator for task data and chi::priv structures
+// CLIO_TASK_ALLOC_T: allocator for task data and clio::run::priv structures
 //   CPU: MultiProcessAllocator — shared across processes in the main SHM
 //   segment GPU: BuddyAllocator       — per-thread GPU allocator
 //
@@ -490,9 +517,24 @@ constexpr PoolId kAdminPoolId =
 //   CPU: MallocAllocator / CTP_MALLOC
 //   GPU: CLIO_TASK_ALLOC_T  / CLIO_IPC->GetMainAllocator()
 //        (task constructors are never called from GPU kernels, so the GPU
-//         CLIO_PRIV_ALLOC is only used for dynamic chi::priv operations in
+//         CLIO_PRIV_ALLOC is only used for dynamic clio::run::priv operations in
 //         kernels)
 #define CLIO_QUEUE_ALLOC_T ctp::ipc::BuddyAllocator
+
+/**
+ * Reference-counted, RAII handle to a Task (or any object) allocated from the
+ * private MallocAllocator. This is the canonical owning handle used by the
+ * runtime: IpcManager::NewTask returns one (via ctp::make_shared), Future
+ * stores one, and module methods receive a clio::run::shared_ptr<TaskT>&.
+ * Bridges to the FullPtr-based transport/serialization layer via .get().
+ */
+template <typename T>
+using shared_ptr = ctp::shared_ptr<T, ctp::ipc::MallocAllocator>;
+
+/** Single-owner RAII handle from the private MallocAllocator (host-only alloc).
+ *  Used e.g. for a Task's owned RunContext. */
+template <typename T>
+using unique_ptr = ctp::unique_ptr<T, ctp::ipc::MallocAllocator>;
 
 /** Allocator scope for NewObj: private (warp-local) or shared (cross-warp) */
 enum class AllocScope { kPrivate, kShared };
@@ -525,14 +567,14 @@ enum class AllocScope { kPrivate, kShared };
  * @return Pointer to the warp's cached BuddyAllocator
  */
 CTP_GPU_FUN ctp::ipc::PrivateBuddyAllocator *GetPrivAllocGpu();
-#define CLIO_PRIV_ALLOC (::chi::GetPrivAllocGpu())
+#define CLIO_PRIV_ALLOC (::clio::run::GetPrivAllocGpu())
 // GPU: CLIO_PRIV_SHARED_ALLOC returns the PartitionedAllocator
 // (PartitionedAllocator) which dispatches allocations to the calling warp's
 // partition via GetAutoTid(). Use for cross-warp data structures (shared maps,
 // vectors) where multiple warps may allocate/free concurrently.
 #define CLIO_PRIV_SHARED_ALLOC_T ctp::ipc::RoundRobinAllocator
 CTP_GPU_FUN ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu();
-#define CLIO_PRIV_SHARED_ALLOC (::chi::GetSharedAllocGpu())
+#define CLIO_PRIV_SHARED_ALLOC (::clio::run::GetSharedAllocGpu())
 #endif
 
 // ---------------------------------------------------------------------------
@@ -549,13 +591,6 @@ CTP_GPU_FUN ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu();
 // uses the legacy CHI_* spelling keeps working unchanged. These are
 // text-substitution aliases — they resolve to whichever CLIO_* def is
 // active for the current compilation pass (host vs device).
-#define CHI_QUEUE_ALLOC_T CLIO_QUEUE_ALLOC_T
-#define CHI_TASK_ALLOC_T CLIO_TASK_ALLOC_T
-#define CHI_PRIV_ALLOC_T CLIO_PRIV_ALLOC_T
-#define CHI_PRIV_ALLOC CLIO_PRIV_ALLOC
-#define CHI_PRIV_SHARED_ALLOC_T CLIO_PRIV_SHARED_ALLOC_T
-#define CHI_PRIV_SHARED_ALLOC CLIO_PRIV_SHARED_ALLOC
-#define CHI_MAIN_ALLOC_T CLIO_MAIN_ALLOC_T
 
 // Memory segment identifiers
 enum MemorySegment {
@@ -573,7 +608,14 @@ enum MemorySegment {
 // CTP Thread-local storage keys
 extern CLIO_RUN_API ctp::ThreadLocalKey chi_cur_worker_key_;
 extern CLIO_RUN_API bool chi_cur_worker_key_created_;
+// Fallback current-RunContext TLS for non-worker threads (see manager.cc).
+extern CLIO_RUN_API ctp::ThreadLocalKey chi_cur_runctx_key_;
+extern CLIO_RUN_API bool chi_cur_runctx_key_created_;
 extern CLIO_RUN_API ctp::ThreadLocalKey chi_task_counter_key_;
+// Guards chi_task_counter_key_ creation. Without it a second IpcManager bring-up
+// in the same process (the fallback runtime client) would re-create the global
+// pthread key, leaking the old one and colliding all TLS ops on key 0.
+extern CLIO_RUN_API bool chi_task_counter_key_created_;
 extern CLIO_RUN_API ctp::ThreadLocalKey chi_is_client_thread_key_;
 
 /**
@@ -669,6 +711,12 @@ enum class IpcMode : u32 {
 namespace clio::run::priv {
 typedef ctp::priv::string<CLIO_PRIV_ALLOC_T> string;
 
+/** Fixed-capacity, inline POD string (no allocator). Bitwise-relocatable with an
+ *  identical layout on host and device — used by GPU-compatible POD tasks in
+ *  place of `string` so no SSO/SVO fixup is needed after a cudaMemcpy. */
+template <size_t N = 32>
+using fixed_string = ctp::priv::fixed_string<N>;
+
 template <typename T>
 using vector = ctp::priv::vector<T, CLIO_PRIV_ALLOC_T>;
 
@@ -705,19 +753,19 @@ using vector = ctp::ipc::vector<T, CLIO_QUEUE_ALLOC_T>;
 // Hash function specializations for std::unordered_map
 namespace std {
 template <>
-struct hash<chi::UniqueId> {
-  size_t operator()(const chi::UniqueId &id) const {
-    return hash<chi::u32>()(id.major_) ^ (hash<chi::u32>()(id.minor_) << 1);
+struct hash<clio::run::UniqueId> {
+  size_t operator()(const clio::run::UniqueId &id) const {
+    return hash<clio::run::u32>()(id.major_) ^ (hash<clio::run::u32>()(id.minor_) << 1);
   }
 };
 
 template <>
-struct hash<chi::TaskId> {
-  size_t operator()(const chi::TaskId &id) const {
-    return hash<chi::u64>()(id.ToU64());
+struct hash<clio::run::TaskId> {
+  size_t operator()(const clio::run::TaskId &id) const {
+    return hash<clio::run::u64>()(id.ToU64());
   }
 };
 
 }  // namespace std
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_TYPES_H_
+#endif  // CLIO_RUNTIME_INCLUDE_TYPES_H_

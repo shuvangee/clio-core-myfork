@@ -58,12 +58,10 @@ GlobusFileAssimilator::GlobusFileAssimilator(
     std::shared_ptr<clio::cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
-chi::TaskResume GlobusFileAssimilator::Schedule(const AssimilationCtx& ctx,
+clio::run::TaskResume GlobusFileAssimilator::Schedule(const AssimilationCtx& ctx,
                                                 int& error_code) {
-#ifdef __NVCOMPILER
-  thread_local chi::RunContext _fb_rctx;
-  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
-  chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
 #endif
   CLIO_TASK_BODY_BEGIN
 #ifndef CAE_ENABLE_GLOBUS
@@ -190,7 +188,7 @@ chi::TaskResume GlobusFileAssimilator::Schedule(const AssimilationCtx& ctx,
     }
 
     // Download file from Globus to local filesystem.
-    // Note: this blocks the chimaera scheduler worker, but ZMQ I/O threads
+    // Note: this blocks the clio scheduler worker, but ZMQ I/O threads
     // remain active so the runtime's IPC port stays alive for heartbeats.
     // access_token = Transfer API token (for endpoint metadata)
     // https_token = Collection HTTPS token (for file download)
@@ -442,7 +440,7 @@ static std::string UrlEncodePath(const std::string& path) {
 
 // Fork + exec curl to perform HTTP requests.  This completely avoids the
 // glibc NSS SIGSEGV that occurs when getaddrinfo() is called from inside a
-// chimaera worker-thread context (dlopen'd module + ctp allocator + NSS
+// clio worker-thread context (dlopen'd module + ctp allocator + NSS
 // lazy-init = null nss_action_list → segfault at address 0x2).
 //
 // RunCurlCapture: forks curl and returns stdout as a string.
@@ -521,7 +519,7 @@ static int RunCurlExec(const std::vector<std::string>& args) {
 
 std::string GlobusFileAssimilator::HttpGet(const std::string& url,
                                            const std::string& access_token) {
-  // Use fork/exec curl to avoid NSS crash in chimaera worker-thread context.
+  // Use fork/exec curl to avoid NSS crash in clio worker-thread context.
   // -s: silent  -L: follow redirects  -k: skip cert verify  --fail: non-200
   // returns non-zero exit code (RunCurlCapture returns "" in that case)
   std::string auth = "Authorization: Bearer " + access_token;
@@ -541,7 +539,7 @@ std::string GlobusFileAssimilator::HttpGet(const std::string& url,
 std::string GlobusFileAssimilator::HttpPost(const std::string& url,
                                             const std::string& access_token,
                                             const std::string& payload) {
-  // Use fork/exec curl to avoid NSS crash in chimaera worker-thread context.
+  // Use fork/exec curl to avoid NSS crash in clio worker-thread context.
   std::string auth = "Authorization: Bearer " + access_token;
   std::string result = RunCurlCapture({
       "-s", "-L", "-k", "--fail",

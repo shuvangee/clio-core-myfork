@@ -40,7 +40,7 @@
  * 2. Issues ONE broadcast SemanticSearch for that keyword and asks for a
  *    configurable number of top-k results. With a broadcast query every
  *    tag-owning container scores its slice and returns its local top-k;
- *    SemanticSearchTask::Aggregate then merges those partial sets and keeps
+ *    SemanticSearchTask::AggregateOut then merges those partial sets and keeps
  *    the global top-k by descending BM25 score.
  *
  * On completion it prints an overall retrieval-performance summary — the
@@ -150,9 +150,9 @@ int main(int argc, char **argv) {
   Args a = ParseArgs(argc, argv);
   if (!a.ok) return 1;
 
-  HLOG(kInfo, "Initializing Chimaera runtime...");
-  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
-    HLOG(kError, "Failed to initialize Chimaera runtime");
+  HLOG(kInfo, "Initializing Clio runtime...");
+  if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false)) {
+    HLOG(kError, "Failed to initialize Clio runtime");
     return 1;
   }
   struct ClientFinalizeGuard {
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
   for (long k = 0; k < a.blobs; ++k) {
     std::string blob_name = "blob_" + std::to_string(k);
     auto t = cte->AsyncPutBlob(tag_id, blob_name.c_str(), 0,
-                               static_cast<chi::u64>(a.size), put_ptr, 1.0f,
+                               static_cast<clio::run::u64>(a.size), put_ptr, 1.0f,
                                clio::cte::core::Context(), 0);
     t.Wait();
     if (t->return_code_.load() != 0) {
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
   for (int it = 0; it < a.query_iters; ++it) {
     auto q_t0 = steady_clock::now();
     auto search = cte->AsyncSemanticSearch(
-        tag_name, ".*", a.keyword, a.results, chi::PoolQuery::Broadcast());
+        tag_name, ".*", a.keyword, a.results, clio::run::PoolQuery::Broadcast());
     search.Wait();
     double q_s = duration<double>(steady_clock::now() - q_t0).count();
     if (search->return_code_.load() != 0) {

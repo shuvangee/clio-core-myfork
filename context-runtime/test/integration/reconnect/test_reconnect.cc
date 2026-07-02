@@ -34,7 +34,7 @@
 /**
  * Integration test for client failover to new hosts
  *
- * Validates WaitForServerAndReconnect Phase 2 (CHI_CLIENT_TRY_NEW_SERVERS).
+ * Validates WaitForServerAndReconnect Phase 2 (CLIO_CLIENT_TRY_NEW_SERVERS).
  *
  * Test flow (single phase, orchestrated by run_tests.sh):
  *   1. Start 4 runtimes (via docker-compose)
@@ -48,8 +48,8 @@
  *   9. Task completes successfully on the new host
  *
  * Environment (set by docker-compose):
- *   CHI_CLIENT_RETRY_TIMEOUT=5    (Phase 1 gives up after 5s)
- *   CHI_CLIENT_TRY_NEW_SERVERS=16 (Phase 2 tries up to 16 random hosts)
+ *   CLIO_CLIENT_RETRY_TIMEOUT=5    (Phase 1 gives up after 5s)
+ *   CLIO_CLIENT_TRY_NEW_SERVERS=16 (Phase 2 tries up to 16 random hosts)
  */
 
 #include "simple_test.h"
@@ -72,29 +72,29 @@ using namespace std::chrono_literals;
 
 namespace {
 bool g_initialized = false;
-const chi::PoolId kReconnectPoolId(60000, 0);
-constexpr chi::u32 kHoldMs = 100;
+const clio::run::PoolId kReconnectPoolId(60000, 0);
+constexpr clio::run::u32 kHoldMs = 100;
 }  // namespace
 
 class ReconnectTestFixture {
  public:
   ReconnectTestFixture() {
     if (!g_initialized) {
-      INFO("Initializing Chimaera client for Reconnect tests...");
-      bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+      INFO("Initializing Clio client for Reconnect tests...");
+      bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
       if (success) {
         g_initialized = true;
         // NOTE: Do NOT set g_test_finalize here because the test
-        // intentionally kills the local runtime.  Calling CHIMAERA_FINALIZE
+        // intentionally kills the local runtime.  Calling CLIO_RUNTIME_FINALIZE
         // after the server is dead would hang or crash.
         std::this_thread::sleep_for(500ms);
         REQUIRE(CLIO_RUNTIME_MANAGER != nullptr);
         REQUIRE(CLIO_IPC != nullptr);
         REQUIRE(CLIO_POOL_MANAGER != nullptr);
         REQUIRE(CLIO_IPC->IsInitialized());
-        INFO("Chimaera initialization successful");
+        INFO("Clio initialization successful");
       } else {
-        FAIL("Failed to initialize Chimaera");
+        FAIL("Failed to initialize Clio");
       }
     }
   }
@@ -114,7 +114,7 @@ TEST_CASE("Failover to new host after server shutdown",
     clio::run::MOD_NAME::Client mod_name_client(kReconnectPoolId);
     {
       auto create_task = mod_name_client.AsyncCreate(
-          chi::PoolQuery::Dynamic(), "reconnect_test_pool", kReconnectPoolId);
+          clio::run::PoolQuery::Dynamic(), "reconnect_test_pool", kReconnectPoolId);
       create_task.Wait();
       mod_name_client.pool_id_ = create_task->new_pool_id_;
       mod_name_client.return_code_ = create_task->return_code_;
@@ -124,7 +124,7 @@ TEST_CASE("Failover to new host after server shutdown",
 
     {
       auto task = mod_name_client.AsyncCoMutexTest(
-          chi::PoolQuery::Local(), 1, kHoldMs);
+          clio::run::PoolQuery::Local(), 1, kHoldMs);
       task.Wait();
       REQUIRE(task->return_code_ == 0);
       INFO("Step 1: Pre-shutdown task completed on local node");
@@ -135,11 +135,11 @@ TEST_CASE("Failover to new host after server shutdown",
     // ------------------------------------------------------------------
     INFO("Step 2: Sending AsyncStopRuntime to local runtime");
     {
-      clio::run::admin::Client admin_client(chi::kAdminPoolId);
+      clio::run::admin::Client admin_client(clio::run::kAdminPoolId);
       // Fire-and-forget: send stop with short grace period.
       // Do NOT call Wait() — the server may die before responding.
       admin_client.AsyncStopRuntime(
-          chi::PoolQuery::Local(), 0, 1000);
+          clio::run::PoolQuery::Local(), 0, 1000);
     }
 
     // Wait for the runtime process to actually exit
@@ -152,8 +152,8 @@ TEST_CASE("Failover to new host after server shutdown",
     // ------------------------------------------------------------------
     // The Recv() call will detect the server is dead, enter
     // WaitForServerAndReconnect, time out on the original server
-    // (Phase 1, ~5s via CHI_CLIENT_RETRY_TIMEOUT), then try random
-    // hosts from the hostfile (Phase 2, CHI_CLIENT_TRY_NEW_SERVERS=16).
+    // (Phase 1, ~5s via CLIO_CLIENT_RETRY_TIMEOUT), then try random
+    // hosts from the hostfile (Phase 2, CLIO_CLIENT_TRY_NEW_SERVERS=16).
     // One of nodes 2/3/4 should accept the connection.
     //
     // After reconnection the client is on a new node where the pool
@@ -164,7 +164,7 @@ TEST_CASE("Failover to new host after server shutdown",
     {
       clio::run::MOD_NAME::Client new_client(kReconnectPoolId);
       auto create_task = new_client.AsyncCreate(
-          chi::PoolQuery::Dynamic(), "reconnect_post_failover_pool",
+          clio::run::PoolQuery::Dynamic(), "reconnect_post_failover_pool",
           kReconnectPoolId);
       create_task.Wait();
       new_client.pool_id_ = create_task->new_pool_id_;
@@ -173,7 +173,7 @@ TEST_CASE("Failover to new host after server shutdown",
       INFO("Step 3: Pool created on new host");
 
       auto task = new_client.AsyncCoMutexTest(
-          chi::PoolQuery::Local(), 1, kHoldMs);
+          clio::run::PoolQuery::Local(), 1, kHoldMs);
       task.Wait();
       REQUIRE(task->return_code_ == 0);
       INFO("Step 3: Post-failover task completed successfully");

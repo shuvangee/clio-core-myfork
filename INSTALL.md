@@ -11,7 +11,7 @@ and the `apt` / `dnf` package names that satisfy them.
 > | Channel  | Command                                  | Includes                                                                 |
 > | -------- | ---------------------------------------- | ------------------------------------------------------------------------ |
 > | pip      | `pip install iowarp-core`                | CLIO runtime, CTE, CAE, CEE; `clio_run` / `clio_cte_bench` CLIs; Python `clio_cee` |
-> | conda    | `bash install.sh release` (uses Miniconda) | Same as pip; pulls deps from conda-forge instead of statically linking |
+> | conda    | `conda install -c iowarp -c conda-forge iowarp-core` | Same as pip; pulls deps from conda-forge instead of statically linking |
 > | release  | [GitHub Releases](https://github.com/iowarp/clio-core/releases) | `.deb`, `.rpm`, `.AppImage` per tag (currently v1.9.1+) |
 >
 > Source builds are necessary only when you want CUDA / ROCm / SYCL,
