@@ -313,9 +313,11 @@ def restart_runtime():
 def _run_c_tests():
     """Compile + run the isolated C tests through the VOL. Returns
     {name: {"pass": bool}}; each C program exits 0 on pass. These cover ops h5py
-    cannot exercise via a non-native VOL (modern-API iteration)."""
+    cannot exercise well via a non-native VOL: modern-API iteration
+    (c_iteration) and Safe-mode H5Fflush durability (c_safeflush)."""
     src_dir = os.path.dirname(os.path.abspath(__file__))
-    tests = {"c_iteration": "vol_c_iteration_test.c"}
+    tests = {"c_iteration": "vol_c_iteration_test.c",
+             "c_safeflush": "vol_c_safeflush_test.c"}
     out = {}
     for name, src in tests.items():
         binp = os.path.join(TMP, name)
@@ -334,7 +336,12 @@ def _run_c_tests():
                            env=_env(True), timeout=120)
         ok = (r.returncode == 0)
         out[name] = {"pass": ok}
-        print(f"  {name:<20} {'PASS' if ok else 'FAIL'}  ({r.stdout.strip()[-70:]})")
+        # The binary's own verdict line ends in PASS/FAIL; isolate it from any
+        # interleaved clio runtime INFO logging on stdout (e.g. PoolId(major:...)).
+        verdict = [l for l in r.stdout.strip().splitlines()
+                   if l.rstrip().endswith(("PASS", "FAIL"))]
+        detail = verdict[-1] if verdict else r.stdout.strip()[-70:]
+        print(f"  {name:<20} {'PASS' if ok else 'FAIL'}  ({detail})")
     return out
 
 

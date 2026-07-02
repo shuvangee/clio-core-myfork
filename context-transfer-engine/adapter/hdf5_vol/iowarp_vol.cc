@@ -26,6 +26,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <unordered_set>
 
 #include <clio_runtime/clio_runtime.h>
 /* transport_factory_impl.h provides the inline definitions of
@@ -42,7 +43,8 @@
  * Internal state structures
  * ======================================================================== */
 
-struct iowarp_file_t;  /* fwd */
+struct iowarp_file_t;     /* fwd */
+struct iowarp_dataset_t;  /* fwd */
 
 /* parent_file points to the iowarp_file_t this object belongs to. For
    files it is a self-pointer; for groups, datasets, attributes it is
@@ -60,6 +62,12 @@ struct iowarp_file_t {
   clio::cte::core::TagId tag_id;
   std::string file_name;
   size_t chunk_size;
+  /* Safe mode: cacheable datasets currently open in this file. H5Fflush and
+     H5Fclose drain their pending CTE puts so no async write outlives a
+     successful flush/close (the native file is already written synchronously and
+     stays authoritative; this keeps the CTE cache coherent with it). */
+  std::mutex ds_mtx;
+  std::unordered_set<iowarp_dataset_t *> open_datasets;
 };
 
 struct iowarp_dataset_t {
@@ -91,7 +99,23 @@ static iowarp_dataset_t *make_dataset_wrapper(void *under, hid_t under_vol_id,
   dset->obj.parent_file = parent_file;
   dset->dataset_path = path ? path : "";
   dset->cacheable = (parent_file != nullptr) && path && path[0] != '\0';
+  /* Register with the file so Safe-mode flush/close can drain this dataset's
+     pending puts. Only cacheable datasets accumulate CTE puts. */
+  if (dset->cacheable) {
+    std::lock_guard<std::mutex> lk(parent_file->ds_mtx);
+    parent_file->open_datasets.insert(dset);
+  }
   return dset;
+}
+
+/* Block until every async CTE put for this dataset has completed, then release
+   the shared-memory buffers. Shared by dataset_close and Safe-mode flush/close. */
+static void drain_dataset_puts(iowarp_dataset_t *dset) {
+  for (auto &future : dset->pending_puts) {
+    future.Wait();
+  }
+  dset->pending_puts.clear();
+  dset->pending_buffers.clear();
 }
 
 /* VOL object-wrap context. HDF5 uses this during link/object iteration
@@ -321,6 +345,16 @@ static herr_t iowarp_file_specific(void *obj,
                                    H5VL_file_specific_args_t *args,
                                    hid_t dxpl_id, void **req) {
   auto *file = static_cast<iowarp_file_t *>(obj);
+  /* Safe mode: on H5Fflush, drain every open cacheable dataset's pending CTE
+     puts BEFORE delegating the flush to native. This makes the flush a real
+     durability barrier for the cache path (fail-closed: we only return once all
+     async puts have landed), with the native file remaining authoritative. */
+  if (args && args->op_type == H5VL_FILE_FLUSH) {
+    std::lock_guard<std::mutex> lk(file->ds_mtx);
+    for (auto *dset : file->open_datasets) {
+      drain_dataset_puts(dset);
+    }
+  }
   return H5VLfile_specific(file->obj.under_object, file->obj.under_vol_id,
                            args, dxpl_id, req);
 }
@@ -340,6 +374,15 @@ static herr_t iowarp_file_optional(void *obj, H5VL_optional_args_t *args,
 
 static herr_t iowarp_file_close(void *obj, hid_t dxpl_id, void **req) {
   auto *file = static_cast<iowarp_file_t *>(obj);
+  /* Safe mode: drain any datasets still open at file-close time (e.g. weak
+     close degree) so no async CTE put outlives the file. Datasets closed the
+     normal way have already drained and unregistered themselves. */
+  {
+    std::lock_guard<std::mutex> lk(file->ds_mtx);
+    for (auto *dset : file->open_datasets) {
+      drain_dataset_puts(dset);
+    }
+  }
   herr_t ret = H5VLfile_close(file->obj.under_object, file->obj.under_vol_id,
                                dxpl_id, req);
   delete file;
@@ -689,12 +732,15 @@ static herr_t iowarp_dataset_specific(void *obj,
 static herr_t iowarp_dataset_close(void *obj, hid_t dxpl_id, void **req) {
   auto *dset = static_cast<iowarp_dataset_t *>(obj);
 
-  /* Flush all pending async writes */
-  for (auto &future : dset->pending_puts) {
-    future.Wait();
+  /* Unregister from the file's Safe-mode set before draining, so a concurrent
+     flush/close does not touch this dataset while it is being torn down. */
+  if (dset->file && dset->cacheable) {
+    std::lock_guard<std::mutex> lk(dset->file->ds_mtx);
+    dset->file->open_datasets.erase(dset);
   }
-  dset->pending_puts.clear();
-  dset->pending_buffers.clear();
+
+  /* Flush all pending async writes */
+  drain_dataset_puts(dset);
 
   herr_t ret = H5VLdataset_close(dset->obj.under_object,
                                   dset->obj.under_vol_id, dxpl_id, req);

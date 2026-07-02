@@ -3,9 +3,15 @@
 A pass-through HDF5 VOL connector that transparently caches HDF5 data in the
 clio-core CTE (Context Transfer Engine) while preserving native HDF5 file
 semantics. It wraps a native under-VOL: every operation delegates to native, and
-whole-dataset `H5Dwrite`/`H5Dread` transfers are additionally mirrored to CTE via
-async `PutBlob`/`GetBlob`. Loaded transparently through the standard HDF5 plugin
-mechanism — no application source changes.
+whole-dataset `H5Dwrite`/`H5Dread` transfers of flat datatypes are additionally
+mirrored to CTE via async `PutBlob`/`GetBlob`. Loaded transparently through the
+standard HDF5 plugin mechanism — no application source changes.
+
+The native file is always written synchronously and remains authoritative;
+variable-length/reference datatypes and partial (hyperslab/point) selections
+delegate to native and are not CTE-cached. **Safe mode:** `H5Fflush` and `H5Fclose`
+drain all in-flight async CTE puts before returning, so a successful flush/close is
+a real durability barrier for the cache path (no async write outlives it).
 
 Files: `iowarp_vol.cc`, `iowarp_vol.h`. Connector name: **`iowarp`**.
 
@@ -50,19 +56,20 @@ ctest -R cte_hdf5_vol_compat_suite --output-on-failure
 python3 benchmarks/hdf5-ingest/vol_compat_suite.py --bin <build>/bin
 ```
 
-**The test runs in honest mode and currently FAILS** — that is intentional: it
-reports the connector's real compatibility state rather than masking gaps. For the
-authoritative, always-current status run the test; do not rely on numbers copied
-into prose. As of this writing it is broadly compatible for dataset I/O (signed/
-unsigned int, float, compound, enum, array-element, scalar datatypes; contiguous
-and chunked; shuffle/fletcher32 filters; whole-dataset, hyperslab, and point
-selections; extendible datasets with reopen+append) with these **known gaps**:
+The test runs in **honest mode** (no `--expect-fail` allowlist): it reports the
+connector's real compatibility state rather than masking gaps, so any future
+regression fails the test. For the authoritative, always-current status run the
+test; do not rely on numbers copied into prose. As of this writing it is **green
+(18/18)** — compatible for dataset I/O (signed/unsigned int, float, compound, enum,
+array-element, scalar, and variable-length string datatypes; contiguous and
+chunked; shuffle/fletcher32 filters; whole-dataset, hyperslab, and point
+selections; extendible datasets with reopen+append), attributes, group/link
+structure, modern-API iteration (C `H5Ovisit3`/`H5Literate2`), and Safe-mode
+`H5Fflush` durability.
 
-- **string datatypes (write)** — VOL-written string datasets are malformed
-- **attributes (write)** — VOL-written files carrying attributes are malformed
-- **groups/links (write fidelity)** — structure differs from native
-- **object iteration** — `visititems` / `H5Ovisit` / `H5Literate` fails
+Two feature areas are exercised only through the C API (h5py has poor non-native
+VOL support): iteration (`vol_c_iteration_test.c`) and Safe-mode flush
+(`vol_c_safeflush_test.c`), both run automatically by the suite.
 
-See `benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md` for the detailed matrix and
-method. Closing these gaps is the current VOL work; each removes one failing case
-from the suite until it goes green.
+See `benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md` for the detailed matrix,
+method, and the vlen/Safe-mode implementation notes.
