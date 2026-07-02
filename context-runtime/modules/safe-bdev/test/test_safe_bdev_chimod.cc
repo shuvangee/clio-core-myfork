@@ -927,11 +927,15 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
   const std::string log_path =
       (tmp_dir / ("safe_alog_" + std::to_string(getpid()) + ".alog")).string();
 
-  // Fresh start: remove any stale member files + alloc log.
+  // Fresh start: remove any stale member files + alloc log. Best-effort: use
+  // the non-throwing overload so a still-open handle (on Windows the in-process
+  // runtime keeps file-bdev members open; POSIX allows unlinking open files)
+  // does not abort the test.
+  std::error_code cleanup_ec;
   for (int i = 0; i < 4; ++i) {
-    std::filesystem::remove(member_file(i));
+    std::filesystem::remove(member_file(i), cleanup_ec);
   }
-  std::filesystem::remove(log_path);
+  std::filesystem::remove(log_path, cleanup_ec);
 
   // The safe-bdev pool id is STABLE across the restart so the recovered array
   // recognizes its own superblocks (reattach, not foreign).
@@ -1153,11 +1157,15 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
     destroy.Wait();
   }
 
-  // Cleanup backing files + log.
+  // Cleanup backing files + log. Best-effort (non-throwing): on Windows the
+  // still-running in-process runtime may hold the file-bdev member handles
+  // open, which would make a throwing remove() abort this otherwise-passing
+  // test; leftover temp files are pid-namespaced and harmless. (Reuses the
+  // cleanup_ec declared for the pre-test cleanup above.)
   for (int i = 0; i < 4; ++i) {
-    std::filesystem::remove(member_file(i));
+    std::filesystem::remove(member_file(i), cleanup_ec);
   }
-  std::filesystem::remove(log_path);
+  std::filesystem::remove(log_path, cleanup_ec);
   HLOG(kInfo, "safe_bdev alloc-log restart/recovery test PASSED");
 }
 
