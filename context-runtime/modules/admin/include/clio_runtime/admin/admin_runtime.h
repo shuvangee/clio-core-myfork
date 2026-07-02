@@ -260,12 +260,6 @@ public:
   clio::run::TaskResume ListContainers(clio::run::shared_ptr<ListContainersTask> &task);
 
   /**
-   * Handle ListContainers - Enumerate active pools/containers in this daemon.
-   * Fills the task's pool_names_ / pool_ids_ output vectors.
-   */
-  clio::run::TaskResume ListContainers(ctp::ipc::FullPtr<ListContainersTask> task, clio::run::RunContext &rctx);
-
-  /**
    * Handle AddNode - Register a new node with this runtime
    * Updates IpcManager's hostfile and calls Expand on all containers
    */
