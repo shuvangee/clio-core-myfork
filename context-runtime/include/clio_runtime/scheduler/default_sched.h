@@ -32,8 +32,8 @@
  */
 
 // Copyright 2024 IOWarp contributors
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_DEFAULT_SCHED_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_DEFAULT_SCHED_H_
+#ifndef CLIO_RUNTIME_INCLUDE_SCHEDULER_DEFAULT_SCHED_H_
+#define CLIO_RUNTIME_INCLUDE_SCHEDULER_DEFAULT_SCHED_H_
 
 #include <atomic>
 #include <vector>
@@ -61,9 +61,9 @@ class DefaultScheduler : public Scheduler {
   void DivideWorkers(WorkOrchestrator *work_orch) override;
   u32 ClientMapTask(IpcManager *ipc_manager, const Future<Task> &task) override;
   u32 RuntimeMapTask(Worker *worker, const Future<Task> &task,
-                     Container *container) override;
+                     ContainerHold container) override;
   void RebalanceWorker(Worker *worker) override;
-  void AdjustPolling(RunContext *run_ctx) override;
+  void AdjustPolling(const clio::run::shared_ptr<Task> &task) override;
   Worker *GetGpuWorker() const override { return gpu_worker_; }
   // Legacy alias — admin_runtime.cc:Create registers transport FDs with the
   // net worker's EventManager. The recv worker is the one that polls those
@@ -85,4 +85,4 @@ class DefaultScheduler : public Scheduler {
 
 }  // namespace clio::run
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_SCHEDULER_DEFAULT_SCHED_H_
+#endif  // CLIO_RUNTIME_INCLUDE_SCHEDULER_DEFAULT_SCHED_H_

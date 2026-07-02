@@ -54,11 +54,15 @@ hid_t setupVolEnvironment() {
   }
 
   // Small chunk size so the multi-chunk AsyncPutBlob loop is exercised even by
-  // a modest dataset (16 KiB / 4 KiB = 4 chunks).
+  // a modest dataset (16 KiB / 4 KiB = 4 chunks). setenv is POSIX-only.
+#ifdef _WIN32
+  _putenv_s("IOWARP_VOL_CHUNK_SIZE", "4096");
+#else
   setenv("IOWARP_VOL_CHUNK_SIZE", "4096", 1);
+#endif
 
-  REQUIRE(chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true));
-  SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+  REQUIRE(clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true));
+  SimpleTest::g_test_finalize = clio::run::CLIO_RUNTIME_FINALIZE;
   REQUIRE(clio::cte::core::CLIO_CTE_CLIENT_INIT());
 
   // Register a file-backed target into the default CTE pool so the connector's
@@ -67,8 +71,8 @@ hid_t setupVolEnvironment() {
   auto *cte_client = CLIO_CTE_CLIENT;
   auto reg_task = cte_client->AsyncRegisterTarget(
       kBackendFile, clio::run::bdev::BdevType::kFile,
-      static_cast<chi::u64>(64) * 1024 * 1024, chi::PoolQuery::Local(),
-      chi::PoolId(600, 0));
+      static_cast<clio::run::u64>(64) * 1024 * 1024, clio::run::PoolQuery::Local(),
+      clio::run::PoolId(600, 0));
   reg_task.Wait();
   REQUIRE(reg_task->GetReturnCode() == 0);
 

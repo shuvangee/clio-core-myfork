@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_IPC_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_IPC_MANAGER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_MANAGERS_IPC_MANAGER_H_
+#define CLIO_RUNTIME_INCLUDE_MANAGERS_IPC_MANAGER_H_
 
 #include <atomic>
 #include <chrono>
@@ -51,6 +51,7 @@
 #include "clio_ctp/util/gpu_intrinsics.h"
 #include "clio_runtime/manager.h"
 #include "clio_runtime/corwlock.h"
+#include "clio_runtime/batch_manager.h"
 #include "clio_runtime/scheduler/scheduler.h"
 #include "clio_runtime/task.h"
 #include "clio_runtime/task_archives.h"
@@ -64,6 +65,7 @@
 #include "clio_ctp/data_structures/serialization/serialize_common.h"
 #include "clio_ctp/lightbeam/transport_factory_impl.h"
 #include "clio_ctp/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/lightbeam/shm_mpsc_transport.h"
 #include "clio_runtime/gpu/gpu_info.h"
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
@@ -87,8 +89,8 @@ namespace gpu { class IpcManager; }
 // included after CLIO_IPC is defined at the bottom of this header.
 template <typename BufferT> class LocalSaveTaskArchive;
 template <typename BufferT> class LocalLoadTaskArchive;
-using DefaultSaveArchive = LocalSaveTaskArchive<chi::priv::vector<char>>;
-using DefaultLoadArchive = LocalLoadTaskArchive<chi::priv::vector<char>>;
+using DefaultSaveArchive = LocalSaveTaskArchive<clio::run::priv::vector<char>>;
+using DefaultLoadArchive = LocalLoadTaskArchive<clio::run::priv::vector<char>>;
 enum class LocalMsgType : uint8_t;
 
 /**
@@ -126,7 +128,7 @@ using NetQueue = ctp::ipc::multi_mpsc_ring_buffer<Future<Task>, CLIO_QUEUE_ALLOC
 /**
  * Typedef for worker queue type to simplify usage
  */
-using WorkQueue = chi::ipc::mpsc_ring_buffer<ctp::ipc::ShmPtr<TaskLane>>;
+using WorkQueue = clio::run::ipc::mpsc_ring_buffer<ctp::ipc::ShmPtr<TaskLane>>;
 
 /**
  * Metadata for client <-> server communication via lightbeam
@@ -151,7 +153,7 @@ struct ClientTaskMeta {
  * Used for registering client memory with the runtime
  */
 struct ClientShmInfo {
-  std::string shm_name;        // Shared memory name (chimaera_{pid}_{count})
+  std::string shm_name;        // Shared memory name (clio_{pid}_{count})
   pid_t owner_pid;             // PID of the owning process
   u32 shm_index;               // Index within the owner's shm segments
   size_t size;                 // Size of the shared memory segment
@@ -185,6 +187,41 @@ struct ClientShmInfo {
  * and priority queues for task processing.
  * Uses CTP global cross pointer variable singleton pattern.
  */
+/**
+ * Per-thread state for IpcManager, stored via CTP_THREAD_MODEL TLS and created
+ * lazily by IpcManager::GetTls() on first use per thread. Holds an EventManager
+ * whose AddSignalEvent() registers a named per-(pid,tid) signal event, so a
+ * task completer can wake this thread with EventManager::Signal(pid, tid)
+ * instead of the thread busy-polling FUTURE_COMPLETE.
+ */
+class IpcManagerTls {
+ public:
+  ctp::lbm::EventManager event_manager_;
+#if CTP_IS_HOST
+  // This thread's named MPSC SHM receive server "clio-<tid>" (issue #642).
+  // Producers (clients / other runtimes) connect to it by name to deliver task
+  // bytes; Worker::Run drains it with DONTWAIT. Host-only (drives OS shm).
+  ctp::lbm::ShmMpscTransport shm_server_;
+  bool shm_server_ok_ = false;
+#endif
+
+  IpcManagerTls() {
+    // Register the named signal event for the CURRENT thread's (pid, tid) so a
+    // remote completer can target it. Construction therefore must happen on the
+    // owning thread (it does — GetTls creates it on first call from that
+    // thread).
+    event_manager_.AddSignalEvent();
+#if CTP_IS_HOST
+    // pid+tid so a client thread's server can't collide with a runtime worker's
+    // that happens to share a tid in another process. Producers form the same
+    // name from the worker PIDs (Admin::ClientConnect) + the target tid.
+    shm_server_ok_ = shm_server_.ServerInit(
+        "clio-" + std::to_string(ctp::SystemInfo::GetPid()) + "-" +
+        std::to_string(ctp::SystemInfo::GetTid()));
+#endif
+  }
+};
+
 class IpcManager {
   friend struct IpcCpu2Self;
   friend struct IpcCpu2Cpu;
@@ -195,10 +232,29 @@ class IpcManager {
 
  public:
   /**
+   * Destructor. In leak-tracking builds it scans the runtime-owned allocators
+   * (see ReportRuntimeLeaks). Note the CLIO_IPC global is intentionally leaked
+   * (GetGlobalPtrVar new's it and never deletes), so this rarely runs in
+   * practice — ServerFinalize() is the guaranteed shutdown hook that performs
+   * the same scan. Declared so the scan still fires if the object is ever
+   * explicitly destroyed.
+   */
+  ~IpcManager();
+
+  /**
    * Get the run-to-run IPC manager (cross-node task transfer logic).
    * @return Pointer to the IpcManagerRun2Run instance owned by this IpcManager.
    */
   IpcManagerRun2Run *GetRun2Run() { return &run2run_; }
+
+  /**
+   * Get this thread's IpcManagerTls (its EventManager), creating it on first
+   * call from the thread. The EventManager registers a named signal event for
+   * the calling thread's (pid, tid), so a completer can wake it via
+   * EventManager::Signal. Pointer is owned by TLS and stays valid for the
+   * thread's lifetime.
+   */
+  IpcManagerTls *GetTls();
 
   /**
    * Initialize client components
@@ -254,6 +310,27 @@ class IpcManager {
     return main_allocator_;
   }
 
+  /** Pid-based allocator ids of this runtime's SHM segments (pid.1 main,
+   *  pid.2 queue). Reported to clients via ClientConnect so they attach the
+   *  right allocators instead of assuming (1,0)/(2,0). */
+  ctp::ipc::AllocatorId GetMainAllocatorId() const { return main_allocator_id_; }
+  ctp::ipc::AllocatorId GetQueueAllocatorId() const {
+    return queue_allocator_id_;
+  }
+
+  /**
+   * Bytes currently allocated-but-not-freed from the runtime's private heap
+   * (CTP_MALLOC). In runtime mode AllocateBuffer/NewObj/NewTask draw from this
+   * allocator, so this is the figure a leak test snapshots before/after a
+   * workload: a non-zero steady-state delta means a runtime-internal allocation
+   * was never freed (e.g. the server-side FutureShm leak in #560).
+   *
+   * Only meaningful when built with CLIO_CORE_ENABLE_LEAK_CHECK
+   * (CTP_ALLOC_TRACK_SIZE); returns 0 otherwise. Shared-memory allocator
+   * coverage (main_allocator_, alloc_map_) is a planned follow-up.
+   */
+  size_t GetRuntimeHeapAllocatedBytes() const;
+
   // GetIpcManagerGpuInfo / GetIpcManagerGpu were the orchestrator-info
   // accessors and have been removed. Use
   // GetGpuIpcManager()->GetGpuInfo(gpu_id) to obtain per-device info.
@@ -283,13 +360,21 @@ class IpcManager {
 
   /**
    * Create a task for client or orchestrator use.
+   *
+   * Returns an owning, reference-counted clio::run::shared_ptr carved from the
+   * private MallocAllocator via ctp::make_shared (header + task POD share one
+   * allocation; tasks are no longer stored in shared memory). The last
+   * shared_ptr owner frees the block automatically (RAII). Pass the result into
+   * Send (which moves it into the Future) or store it directly.
    */
   template <typename TaskT, typename... Args>
-  ctp::ipc::FullPtr<TaskT> NewTask(Args &&...args) {
-    TaskT *ptr = new TaskT(std::forward<Args>(args)...);
-    ptr->pod_size_ = static_cast<u32>(sizeof(TaskT));
-    ctp::ipc::FullPtr<TaskT> result(ptr);
-    return result;
+  clio::run::shared_ptr<TaskT> NewTask(Args &&...args) {
+    clio::run::shared_ptr<TaskT> sp =
+        ctp::make_shared<TaskT>(CTP_MALLOC, std::forward<Args>(args)...);
+    if (!sp.IsNull()) {
+      sp->fut_.task_size_ = static_cast<u32>(sizeof(TaskT));
+    }
+    return sp;
   }
 
   /**
@@ -298,23 +383,16 @@ class IpcManager {
    * Called by autogenerated AllocTaskImpl in LocalAllocLoadDeser.
    */
   template <typename TaskT, typename... Args>
-  ctp::ipc::FullPtr<TaskT> NewTaskExec(size_t stack_size,
-                                   Args &&...args) {
+  clio::run::shared_ptr<TaskT> NewTaskExec(size_t stack_size,
+                                           Args &&...args) {
     (void)stack_size;
     return NewTask<TaskT>(std::forward<Args>(args)...);
   }
 
-  /**
-   * Delete a task
-   * Destructor + operator delete
-   */
-  template <typename TaskT>
-  void DelTask(ctp::ipc::FullPtr<TaskT> task_ptr) {
-    if (task_ptr.IsNull()) return;
-    task_ptr.ptr_->~TaskT();
-    void *raw = static_cast<void *>(task_ptr.ptr_);
-    ::operator delete(raw);
-  }
+  // NOTE: There is no DelTask. Tasks are clio::run::shared_ptr handles and are
+  // freed automatically (RAII) when the last owner is destroyed. The control
+  // header carries a type-erased deleter so destruction is type-correct even
+  // through a base Task view.
 
   /**
    * Delete a heap-allocated object.
@@ -350,7 +428,7 @@ class IpcManager {
 
   // AllocateDeviceData / AllocateGpuBuffer were removed along with the
   // GPU runtime concept. Kernel-side buffer allocation now goes
-  // through chi::gpu::IpcManager::AllocateBuffer (carved out of the
+  // through clio::run::gpu::IpcManager::AllocateBuffer (carved out of the
   // gpu2cpu_copy_backend), and host-side device allocation uses
   // ctp::GpuApi::Malloc directly.
 
@@ -403,112 +481,11 @@ class IpcManager {
     return buffer.Cast<T>();
   }
 
-  /**
-   * Create Future by copying/serializing task
-   * Serializes the task into FutureShm's copy_space
-   *
-   * @tparam TaskT Task type (must derive from Task)
-   * @param task_ptr Task to serialize into Future
-   * @return Future<TaskT> with serialized task data
-   */
-  template <typename TaskT>
-  Future<TaskT> MakeCopyFuture(ctp::ipc::FullPtr<TaskT> task_ptr) {
-    if (task_ptr.IsNull()) {
-      return Future<TaskT>();
-    }
-
-    // Allocate FutureShm with copy_space (lightbeam handles the data transfer)
-    size_t copy_space_size = task_ptr->GetCopySpaceSize();
-    if (copy_space_size == 0) copy_space_size = KILOBYTES(4);
-    size_t alloc_size = sizeof(FutureShm) + copy_space_size;
-    ctp::ipc::FullPtr<char> buffer = AllocateBuffer(alloc_size);
-    if (buffer.IsNull()) {
-      return Future<TaskT>();
-    }
-
-    // Construct FutureShm in-place
-    FutureShm *future_shm_ptr = new (buffer.ptr_) FutureShm();
-    future_shm_ptr->pool_id_ = task_ptr->pool_id_;
-    future_shm_ptr->method_id_ = task_ptr->method_;
-    future_shm_ptr->origin_ = FutureShm::FUTURE_CLIENT_SHM;
-    future_shm_ptr->client_task_vaddr_ =
-        reinterpret_cast<uintptr_t>(task_ptr.ptr_);
-    future_shm_ptr->input_.copy_space_size_ = copy_space_size;
-    future_shm_ptr->flags_.SetBits(FutureShm::FUTURE_COPY_FROM_CLIENT);
-
-    // Create and return Future
-    ctp::ipc::ShmPtr<FutureShm> future_shm_shmptr =
-        buffer.shm_.template Cast<FutureShm>();
-    return Future<TaskT>(future_shm_shmptr, task_ptr);
-  }
-
-
-
-
-
-  /**
-   * Create Future by wrapping task pointer (runtime-only, no serialization)
-   * Used by runtime workers to avoid unnecessary copying
-   *
-   * @tparam TaskT Task type (must derive from Task)
-   * @param task_ptr Task to wrap in Future
-   * @return Future<TaskT> wrapping task pointer directly
-   */
-  template <typename TaskT>
-  Future<TaskT> MakePointerFuture(ctp::ipc::FullPtr<TaskT> task_ptr) {
-    // Check task_ptr validity
-    if (task_ptr.IsNull()) {
-      return Future<TaskT>();
-    }
-
-    // Allocate and construct FutureShm (no copy_space for runtime path)
-    ctp::ipc::FullPtr<FutureShm> future_shm = NewObj<FutureShm>();
-    if (future_shm.IsNull()) {
-      return Future<TaskT>();
-    }
-
-    // Initialize FutureShm fields
-    future_shm.ptr_->pool_id_ = task_ptr->pool_id_;
-    future_shm.ptr_->method_id_ = task_ptr->method_;
-    future_shm.ptr_->origin_ = FutureShm::FUTURE_CLIENT_SHM;
-    future_shm.ptr_->client_task_vaddr_ = 0;
-    // No copy_space in runtime path — ShmTransferInfo defaults are fine
-
-    // Create Future with ShmPtr and task_ptr (no serialization)
-    Future<TaskT> future(future_shm.shm_, task_ptr);
-    return future;
-  }
-
-  /**
-   * Create a Future for a task with optional serialization
-   * Used internally by Send and as a public interface for future creation
-   *
-   * Two execution paths:
-   * - Client thread (IsClientThread=true): Serialize the task into the Future
-   * - Runtime thread (IsClientThread=false): Wrap task_ptr directly without
-   * serialization
-   *
-   * @tparam TaskT Task type (must derive from Task)
-   * @param task_ptr Task to wrap in Future
-   * @return Future<TaskT> wrapping the task
-   */
-  template <typename TaskT>
-  Future<TaskT> MakeFuture(const ctp::ipc::FullPtr<TaskT> &task_ptr) {
-    bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
-    Worker *worker = CLIO_CUR_WORKER;
-
-    // Runtime path requires BOTH IsRuntime AND worker to be non-null
-    bool use_runtime_path = is_runtime && worker != nullptr;
-
-    if (!use_runtime_path) {
-      // CLIENT PATH: Use MakeCopyFuture to serialize the task
-      return MakeCopyFuture(task_ptr);
-    } else {
-      // RUNTIME PATH: Use MakePointerFuture to wrap pointer without
-      // serialization
-      return MakePointerFuture(task_ptr);
-    }
-  }
+  // MakeCopyFuture / MakePointerFuture / MakeFuture have been removed. Futures
+  // are now constructed directly via the parameterized Future constructor
+  // (Future(pool_id, method_id, task_ptr)), which make_shares the FutureShm;
+  // each transport then sets origin_ and the routing fields on
+  // future.GetFutureShm(). See the ipc_* transports (SendIn/RecvIn).
 
   /**
    * Send task asynchronously (serializes into Future)
@@ -526,63 +503,39 @@ class IpcManager {
    */
 
   template <typename TaskT>
-  Future<TaskT> Send(const ctp::ipc::FullPtr<TaskT> &task_ptr,
+  Future<TaskT> Send(clio::run::shared_ptr<TaskT> task_ptr,
                      bool awake_event = true) {
+    (void)awake_event;
     bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
-    Worker *worker = CLIO_CUR_WORKER;
 
     // Client TCP/IPC path
     if (!is_runtime && ipc_mode_ != IpcMode::kShm) {
-      return IpcCpu2CpuZmq::ClientSend(this, task_ptr, ipc_mode_);
+      return IpcCpu2CpuZmq::SendIn(this, task_ptr, ipc_mode_);
     }
 
     // Client SHM path
     if (!is_runtime) {
-      return IpcCpu2Cpu::ClientSend(this, task_ptr);
+      return IpcCpu2Cpu::SendIn(this, task_ptr);
     }
 
     // Runtime self-send: enqueue task by pointer (no serialization)
     Future<Task> base_future =
-        IpcCpu2Self::ClientSend(this, task_ptr.template Cast<Task>());
+        IpcCpu2Self::SendIn(this, task_ptr.template Cast<Task>());
     return base_future.Cast<TaskT>();
   }
 
 
-  /**
-   * Receive a task on the runtime side: deserialize from Future if needed.
-   * Handles origin-based dispatch (SHM, GPU2CPU, CPU2GPU, etc.).
-   *
-   * @param future Future containing the task
-   * @param container Container for deserialization
-   * @param method_id Method ID for task allocation
-   * @param recv_transport SHM transport for receiving serialized data
-   * @return FullPtr to the deserialized/retrieved task
-   */
-  ctp::ipc::FullPtr<Task> RecvRuntime(
-      Future<Task> &future, Container *container, u32 method_id,
-      ctp::lbm::Transport *recv_transport);
 
   /**
    * Send the runtime response back to the client after task execution.
    * Serializes outputs, completes futures, and handles cleanup for each
    * origin transport mode (SHM, TCP, IPC, GPU2CPU, CPU2GPU).
    *
-   * @param task_ptr Executed task
-   * @param run_ctx RunContext with future and execution state
-   * @param container Container for serialization
+   * @param task_ptr Executed task (its RunContext carries future/exec state)
    * @param send_transport SHM transport for sending serialized data
    */
-  void SendRuntime(const FullPtr<Task> &task_ptr, RunContext *run_ctx,
-                   Container *container,
+  void SendRuntime(const clio::run::shared_ptr<Task> &task_ptr,
                    ctp::lbm::Transport *send_transport);
-
-  /**
-   * Initialize RunContext for a task before routing.
-   * @param future Future containing the task
-   * @param container Container for the task (can be nullptr)
-   * @param lane Lane for the task (can be nullptr)
-   */
-  void BeginTask(Future<Task> &future, Container *container, TaskLane *lane);
 
   /** Route a task: resolve pool query, determine local vs global.
    * If force_enqueue is true, always enqueue to the destination worker's lane
@@ -592,7 +545,7 @@ class IpcManager {
   /** Resolve a pool query into concrete physical addresses */
   std::vector<PoolQuery> ResolvePoolQuery(const PoolQuery &query,
                                           PoolId pool_id,
-                                          const FullPtr<Task> &task_ptr);
+                                          const clio::run::shared_ptr<Task> &task_ptr);
 
   /** Check if task should be processed locally.
    *  @param originally_local True iff the user-facing API call was made
@@ -601,7 +554,7 @@ class IpcManager {
    *    DirectId → Local boundary-case rewrite) gets a chance to mutate
    *    the query. Lets CLIO_FORCE_NET honor explicit Local requests while
    *    pushing every other query through the network path. */
-  bool IsTaskLocal(const FullPtr<Task> &task_ptr,
+  bool IsTaskLocal(const clio::run::shared_ptr<Task> &task_ptr,
                    const std::vector<PoolQuery> &pool_queries,
                    bool originally_local);
 
@@ -612,6 +565,14 @@ class IpcManager {
   /** Route task globally via network */
   RouteResult RouteGlobal(Future<Task> &future,
                           const std::vector<PoolQuery> &pool_queries);
+
+  /**
+   * Route a ManyToOne task: forward to the neighborhood leader, or — if this
+   * node is the leader — park it in the BatchManager for collective
+   * batch+aggregate. Returns RouteResult::Local when parked (the worker takes
+   * no further action; completion happens later via the batch flush).
+   */
+  RouteResult RouteManyToOne(Future<Task> &future);
 
   // RouteToGpu / cpu→gpu dispatch removed along with the GPU runtime.
 
@@ -625,12 +586,12 @@ class IpcManager {
     if (is_runtime) return true;
 
     auto future_shm = future.GetFutureShm();
-    u32 origin = future_shm->origin_;
+    ClientOrigin origin = future_shm->origin_;
 
-    if (origin == FutureShm::FUTURE_CLIENT_SHM && server_alive_.load()) {
-      return IpcCpu2Cpu::ClientRecv(this, future, max_sec);
+    if (origin == ClientOrigin::kClientShm && server_alive_.load()) {
+      return IpcCpu2Cpu::RecvOut(this, future, max_sec);
     }
-    return IpcCpu2CpuZmq::ClientRecv(this, future, max_sec);
+    return IpcCpu2CpuZmq::RecvOut(this, future, max_sec);
   }
 
   /**
@@ -846,6 +807,17 @@ class IpcManager {
    */
   bool IsLeader() const;
 
+  /**
+   * Get the neighborhood leader for a given node: the lowest alive node_id in
+   * the window [base, base + N), base = floor(for_node / N) * N, N =
+   * GetNeighborhoodSize(). Used by ManyToOne routing. Deterministic across the
+   * neighborhood; falls back to for_node if no other alive members.
+   */
+  u64 GetNeighborhoodLeaderNodeId(u64 for_node) const;
+
+  /** Neighborhood leader for this node (GetNeighborhoodLeaderNodeId(self)). */
+  u64 GetNeighborhoodLeaderNodeId() const;
+
   struct DeadNodeEntry {
     u64 node_id;
     std::chrono::steady_clock::time_point detected_at;
@@ -1046,6 +1018,25 @@ class IpcManager {
   ctp::lbm::Transport *GetOrCreateClient(const std::string &addr, int port);
 
   /**
+   * Get or create a dial-back connection for returning a response to a client.
+   * The (key_id, port) pair forms the cache key (hash(key_id + ":" + port)); a
+   * cache miss opens a new ZeroMQ DEALER to dial_addr:port via GetOrCreateClient
+   * (which owns it) and records the raw pointer in client_conn_cache_. Used at
+   * RecvIn to populate RunContext::response_transport_.
+   * @param key_id Routing identity of the requesting client (e.g. ZMQ identity
+   *               or peer address) used together with port as the cache key.
+   * @param dial_addr Host/IP to connect the dial-back DEALER to.
+   * @param port Client's ephemeral response port (SaveTaskArchive::client_port_).
+   * @return Non-owning transport pointer, or nullptr on failure.
+   */
+  ctp::lbm::Transport *GetOrCreateClientByIdentity(const std::string &key_id,
+                                                   const std::string &dial_addr,
+                                                   int port);
+
+  /** Port of this process's client-side response listener (0 if none). */
+  int GetClientResponsePort() const { return client_response_port_; }
+
+  /**
    * Clear all cached client connections
    * Should be called during shutdown
    */
@@ -1114,7 +1105,7 @@ class IpcManager {
   /**
    * Get number of GPU→CPU queues (one per GPU device).
    * Forwards to gpu::IpcManager::per_gpu_devices_ — there is no longer a
-   * separate gpu_queues_ vector on chi::IpcManager.
+   * separate gpu_queues_ vector on clio::run::IpcManager.
    */
   size_t GetGpuQueueCount() const {
 #if CTP_IS_HOST && (CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL)
@@ -1154,10 +1145,13 @@ class IpcManager {
    */
   Scheduler *GetScheduler() { return scheduler_.get(); }
 
+  /** Get the ManyToOne batch/aggregation manager (leader-side). */
+  BatchManager *GetBatchManager() { return batch_manager_.get(); }
+
   /**
    * Register an existing shared memory segment into the IpcManager
    * Called by worker when encountering an unknown allocator in a FutureShm
-   * Derives shm_name from alloc_id: chimaera_{pid}_{index}
+   * Derives shm_name from alloc_id: clio_{pid}_{index}
    * @param alloc_id Allocator ID (major=pid, minor=index)
    * @return true if successful (or already registered), false on error
    */
@@ -1224,7 +1218,7 @@ class IpcManager {
 #endif
 
   /**
-   * Clear all memfd symlinks from the per-user chimaera directory.
+   * Clear all memfd symlinks from the per-user clio directory.
    *
    * Called during RuntimeInit to clean up leftover memfd symlinks
    * from previous runs or crashed processes. Since the directory is
@@ -1237,22 +1231,22 @@ class IpcManager {
  private:
   // Pool query resolution helpers
   std::vector<PoolQuery> ResolveLocalQuery(const PoolQuery &query,
-                                           const FullPtr<Task> &task_ptr);
+                                           const clio::run::shared_ptr<Task> &task_ptr);
   std::vector<PoolQuery> ResolveDirectIdQuery(const PoolQuery &query,
                                               PoolId pool_id,
-                                              const FullPtr<Task> &task_ptr);
+                                              const clio::run::shared_ptr<Task> &task_ptr);
   std::vector<PoolQuery> ResolveDirectHashQuery(const PoolQuery &query,
                                                 PoolId pool_id,
-                                                const FullPtr<Task> &task_ptr);
+                                                const clio::run::shared_ptr<Task> &task_ptr);
   std::vector<PoolQuery> ResolveRangeQuery(const PoolQuery &query,
                                            PoolId pool_id,
-                                           const FullPtr<Task> &task_ptr);
+                                           const clio::run::shared_ptr<Task> &task_ptr);
   std::vector<PoolQuery> ResolveBroadcastQuery(const PoolQuery &query,
                                                PoolId pool_id,
-                                               const FullPtr<Task> &task_ptr);
+                                               const clio::run::shared_ptr<Task> &task_ptr);
   std::vector<PoolQuery> ResolvePhysicalQuery(const PoolQuery &query,
                                               PoolId pool_id,
-                                              const FullPtr<Task> &task_ptr);
+                                              const clio::run::shared_ptr<Task> &task_ptr);
 
   /**
    * Initialize memory segments for server
@@ -1288,7 +1282,7 @@ class IpcManager {
   /**
    * Wait for local server to become available via lightbeam transport
    * Sends a ClientConnectTask and waits for response with timeout
-   * Uses CHI_WAIT_SERVER environment variable for timeout (default 30s)
+   * Uses CLIO_WAIT_SERVER environment variable for timeout (default 30s)
    * @return true if server responded, false on timeout
    */
   bool WaitForLocalServer();
@@ -1301,6 +1295,12 @@ class IpcManager {
    * @return true if server started successfully, false otherwise
    */
   bool TryStartMainServer(const std::string &hostname);
+
+  /**
+   * Effective runtime port for this IpcManager. Used on the client-init path for
+   * connect target + SHM segment names.
+   */
+  u32 GetEffectivePort() const { return CLIO_CONFIG_MANAGER->GetPort(); }
 
   bool is_initialized_ = false;
 
@@ -1355,6 +1355,25 @@ class IpcManager {
   // ClientInitQueues)
   u64 worker_queues_off_ = 0;
 
+  // #642: SHM-mode client → worker routing. worker_tids_ comes from
+  // ClientConnect; worker_conns_ caches one MPSC client connection per worker
+  // server ("clio-<runtime_pid_>-<worker_tid>").
+  std::vector<u32> worker_tids_;
+#if CTP_IS_HOST
+  // Cached MPSC client connections keyed by server name ("clio-<pid>-<tid>"):
+  // clients → worker servers, and the runtime → client servers for responses.
+  std::unordered_map<std::string, std::unique_ptr<ctp::lbm::ShmMpscTransport>>
+      shm_conns_;
+  std::mutex shm_conns_mutex_;
+
+ public:
+  /** Get (or lazily create) a cached MPSC client connection to `name`. Returns
+   *  nullptr if the named server cannot be attached. #642 */
+  ctp::lbm::ShmMpscTransport *GetOrCreateShmConn(const std::string &name);
+
+ private:
+#endif
+
   // Network queue for send operations (one lane, two priorities)
   ctp::ipc::FullPtr<NetQueue> net_queue_;
 
@@ -1379,12 +1398,19 @@ class IpcManager {
   std::mutex transport_shutdown_hooks_mutex_;
   std::vector<std::function<void()>> transport_shutdown_hooks_;
 
-  // IPC transport mode (TCP default, configurable via CHI_IPC_MODE)
+  // IPC transport mode (TCP default, configurable via CLIO_IPC_MODE)
   IpcMode ipc_mode_ = IpcMode::kTcp;
 
   // SHM lightbeam transport (for SendShm / RecvShm)
   ctp::lbm::TransportPtr shm_send_transport_;
   ctp::lbm::TransportPtr shm_recv_transport_;
+
+  // Per-thread IpcManagerTls (EventManager) accessed via GetTls(). The key is
+  // created once (guarded by ipc_tls_key_mutex_); each thread lazily allocates
+  // its own IpcManagerTls value on first GetTls() call.
+  ctp::ThreadLocalKey ipc_tls_key_;
+  bool ipc_tls_key_created_ = false;
+  std::mutex ipc_tls_key_mutex_;
 
   // Client-side: DEALER transport for sending tasks and receiving responses
   ctp::lbm::TransportPtr zmq_transport_;
@@ -1409,8 +1435,15 @@ class IpcManager {
   std::atomic<bool> heartbeat_running_{false};
   std::atomic<bool> server_alive_{true};
 
+  // A client-side in-flight async submission, tracked by net_key. The async
+  // recv thread marks the task complete (Task::is_complete_/is_new_data_) and
+  // wakes the waiter thread recorded on the FutureShm. Both pointers stay valid
+  // while the client's Future (which owns them) is alive.
+  struct PendingClientFuture {
+    Task *task = nullptr;  // waiter (task->fut_) + SetComplete()/SetNewData()
+  };
   // Pending futures (client-side, keyed by net_key)
-  std::unordered_map<size_t, FutureShm *> pending_zmq_futures_;
+  std::unordered_map<size_t, PendingClientFuture> pending_zmq_futures_;
   std::mutex pending_futures_mutex_;
 
   // Pending response archives (client-side, keyed by net_key)
@@ -1435,16 +1468,16 @@ class IpcManager {
   // Client-side server waiting configuration (from environment variables)
   // Semantics: 0 = fail immediately, -1 = wait forever, >0 = timeout in seconds
   float wait_server_timeout_ =
-      30.0f;  // CHI_WAIT_SERVER: timeout in seconds (default 30)
+      30.0f;  // CLIO_WAIT_SERVER: timeout in seconds (default 30)
   u32 poll_server_interval_ =
-      1;  // CHI_POLL_SERVER: poll interval in seconds (default 1)
+      1;  // CLIO_POLL_SERVER: poll interval in seconds (default 1)
 
   // Client-side retry configuration
   // Semantics: 0 = fail immediately, -1 = wait forever, >0 = timeout in seconds
   u64 client_generation_ = 0;  // Cached server generation at connect time
   float client_retry_timeout_ =
-      60.0f;                        // CHI_CLIENT_RETRY_TIMEOUT (default 60s)
-  int client_try_new_servers_ = 0;  // CHI_CLIENT_TRY_NEW_SERVERS (default 0)
+      60.0f;                        // CLIO_CLIENT_RETRY_TIMEOUT (default 60s)
+  int client_try_new_servers_ = 0;  // CLIO_CLIENT_TRY_NEW_SERVERS (default 0)
   std::atomic<bool> reconnecting_{false};  // Guards against recursive reconnect
 
   // Persistent ZeroMQ transport connection pool
@@ -1452,8 +1485,34 @@ class IpcManager {
   std::unordered_map<std::string, ctp::lbm::TransportPtr> client_pool_;
   mutable std::mutex client_pool_mutex_;  // Mutex for thread-safe pool access
 
+  // Dial-back connection cache for returning responses to clients.
+  // Keyed by hash(response-identity + client_port); value is a NON-owning raw
+  // Transport* (ownership stays in client_pool_, keyed by "addr:port"). Built
+  // at RecvIn from the requesting peer's transport identity and the archive's
+  // client_port_, then stashed in RunContext::response_transport_ so SendOut
+  // routes the response over a dedicated connection instead of the inbound
+  // socket. Self-locking (per-bucket RwLocks), so no external mutex needed.
+  // Host-only: the single-bucket-count unordered_map_ll constructor lives under
+  // CTP_IS_HOST (it pulls the global CTP_MALLOC), so nvcc's device pass has no
+  // matching constructor for this in-class initializer. The dial-back cache is
+  // host networking state used only from the host .cc, so guard the whole
+  // member out of the device pass.
+#if CTP_IS_HOST
+  static constexpr size_t kConnCacheBuckets = 1024;
+  ctp::priv::unordered_map_ll<size_t, ctp::lbm::Transport *> client_conn_cache_{
+      kConnCacheBuckets};
+#endif
+
+  // Client-side ephemeral ROUTER on which this process receives task responses.
+  // Bound to an OS-assigned port at client init; that port is advertised to the
+  // runtime via SaveTaskArchive::client_port_ so the runtime can dial back. The
+  // client recv thread reads completed responses from this listener.
+  ctp::lbm::TransportPtr client_response_listener_;
+  int client_response_port_ = 0;
+
   // Scheduler for task routing
   std::unique_ptr<Scheduler> scheduler_;
+  std::unique_ptr<BatchManager> batch_manager_;
 
   //============================================================================
   // Per-Process Shared Memory Management
@@ -1492,7 +1551,7 @@ class IpcManager {
    * Reader lock: for normal ToFullPtr lookups and allocation attempts
    * Writer lock: for IpcManager cleanup and memory increase operations
    */
-  chi::CoRwLock allocator_map_lock_;
+  clio::run::CoRwLock allocator_map_lock_;
 
 
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
@@ -1503,7 +1562,7 @@ class IpcManager {
 #else
   /** Layout placeholder — keeps struct size/offsets identical whether
    *  any GPU backend is enabled or not, preventing ODR violations when test
-   *  binaries link chimaera_cxx without GPU support. */
+   *  binaries link clio_run_cxx without GPU support. */
   void *gpu_ipc_placeholder_ = nullptr;
 #endif
 
@@ -1517,6 +1576,21 @@ class IpcManager {
    * @return true if successful, false otherwise
    */
   bool IncreaseClientShm(size_t size);
+
+  /**
+   * Leak scan over the runtime-owned allocators, tagged with \a phase. The
+   * per-process SHM segments in alloc_vector_ (where AllocateBuffer draws from)
+   * MUST be empty at shutdown, so any outstanding bytes there are logged as an
+   * ERROR-level leak -- this is the ONLY observation point for those
+   * placement-constructed allocators, whose C++ destructors never run (so the
+   * AllocatorLeakChecker destructor path cannot see them). CTP_MALLOC's private
+   * heap is only reported at INFO (it legitimately holds process-lifetime state
+   * at shutdown; real CTP_MALLOC leaks are caught by the MallocAllocator
+   * destructor at static teardown). Compiles to a no-op unless
+   * CTP_ALLOC_TRACK_SIZE is set (CLIO_CORE_ENABLE_LEAK_CHECK). Returns the total
+   * outstanding SHM bytes (the actionable leak signal).
+   */
+  size_t ReportRuntimeLeaks(const char *phase) const;
 
   /**
    * Vector of allocators owned by this process
@@ -1550,9 +1624,9 @@ class IpcManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for IPC manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::IpcManager, g_ipc_manager);
 
-#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 #define CLIO_CPU_IPC CLIO_IPC
 
 // Backward-compat aliases (clio_run rebrand). External code that still
@@ -1561,11 +1635,9 @@ CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::IpcManager, g_ipc_manager);
 // active in the current pass (host / GPU host pass / GPU device pass /
 // SYCL device pass), surviving any later #undef/#define cycle on
 // CLIO_IPC / CLIO_CPU_IPC further down in this file.
-#define CHI_IPC      CLIO_IPC
-#define CHI_CPU_IPC  CLIO_CPU_IPC
 
 // Include local_task_archives after CLIO_IPC is defined, since on GPU
-// CLIO_PRIV_ALLOC expands to chi::GetPrivAllocGpu() (defined below)
+// CLIO_PRIV_ALLOC expands to clio::run::GetPrivAllocGpu() (defined below)
 #include "clio_runtime/local_task_archives.h"
 
 // ================================================================
@@ -1587,7 +1659,7 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 
 // CLIO_IPC needs different expansions in nvcc/hipcc's two passes:
 //   - Device pass (CTP_IS_GPU=1): GetBlockIpcManager() — the per-block
-//     `__shared__` singleton initialized by CHIMAERA_GPU_INIT.
+//     `__shared__` singleton initialized by CLIO_GPU_INIT.
 //   - Host pass (CTP_IS_GPU=0): the global host pointer accessor —
 //     same as the non-GPU-compiler default. Host-only client code
 //     (bdev_client::AsyncCreate, etc.) gets compiled in this pass too
@@ -1595,12 +1667,12 @@ CTP_CROSS_FUN inline IpcManager *GetGpuIpcManager() {
 //     host IpcManager, not nullptr. Mirrors the SYCL two-form override.
 #undef CLIO_IPC
 #if CTP_IS_GPU
-#define CLIO_IPC (::chi::gpu::GetGpuIpcManager())
+#define CLIO_IPC (::clio::run::gpu::GetGpuIpcManager())
 #else
-#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 #endif
 #undef CLIO_CPU_IPC
-#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 
 namespace clio::run {
 // Producer-only model: kernels do not allocate. The legacy
@@ -1627,7 +1699,7 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
 // and DPC++ rejects function-local static variables in device code. The
 // CUDA path lets CLIO_IPC auto-resolve via a static method; the SYCL path
 // instead binds a kernel-scope local variable named `g_ipc_manager_ptr`
-// in the CHIMAERA_GPU_*_INIT macros (see gpu_ipc_manager.h), and CLIO_IPC
+// in the CLIO_GPU_*_INIT macros (see gpu_ipc_manager.h), and CLIO_IPC
 // is a macro that resolves to that local via plain C++ name lookup.
 //
 // Consequence: CLIO_IPC works inside the kernel body and inside any
@@ -1635,7 +1707,7 @@ CTP_GPU_FUN inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() {
 // in lexical scope (typically because the function takes it as a
 // parameter or is inlined into the kernel). Free functions that take
 // no parameters and reach for CLIO_IPC will not compile under SYCL —
-// pass the IpcManager pointer through explicitly. The chimaera runtime
+// pass the IpcManager pointer through explicitly. The clio runtime
 // follows this convention: chimod methods are called from the worker's
 // kernel body, where g_ipc_manager_ptr is in scope.
 //
@@ -1654,7 +1726,7 @@ inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() { return nullptr; }
 
 // Global-namespace fallback for `g_ipc_manager_ptr`. Code inside the
 // kernel scope shadows this with a local established by
-// CHIMAERA_GPU_*_INIT and gets the real IpcManager pointer; host-only
+// CLIO_GPU_*_INIT and gets the real IpcManager pointer; host-only
 // methods that get parsed (but never emitted) in the SYCL device pass —
 // e.g. bdev_client's AsyncMonitor — find this nullptr fallback so they
 // parse cleanly. They are never reachable from a kernel, so DPC++ does
@@ -1667,13 +1739,13 @@ inline ctp::ipc::RoundRobinAllocator *GetSharedAllocGpu() { return nullptr; }
 //
 // Declared `inline` so multiple TUs sharing this header don't generate
 // conflicting definitions.
-inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
+inline ::clio::run::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 
 // CLIO_IPC under SYCL needs different expansions in the two compilation
 // passes that DPC++ runs over a SYCL TU:
 //
 //   - Device pass (CTP_IS_SYCL_DEVICE=1): resolve to the kernel-scope
-//     local `g_ipc_manager_ptr` established by CHIMAERA_GPU_*_INIT, picked
+//     local `g_ipc_manager_ptr` established by CLIO_GPU_*_INIT, picked
 //     up via unqualified C++ name lookup from the enclosing function.
 //   - Host pass: keep using the global pointer accessor — host-only
 //     functions (e.g. bdev_client::AsyncMonitor) get compiled in this
@@ -1686,10 +1758,10 @@ inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 #if CTP_IS_SYCL_DEVICE
 #define CLIO_IPC (g_ipc_manager_ptr)
 #else
-#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 #endif
 #undef CLIO_CPU_IPC
-#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::chi::IpcManager, g_ipc_manager)
+#define CLIO_CPU_IPC CTP_GET_GLOBAL_PTR_VAR(::clio::run::IpcManager, g_ipc_manager)
 
 #endif  // CTP_IS_SYCL_COMPILER
 
@@ -1698,47 +1770,43 @@ inline ::chi::gpu::IpcManager *g_ipc_manager_ptr = nullptr;
 // ================================================================
 namespace clio::run {
 
-// ~Future() - frees resources if consumed (via Wait/await_resume)
+// ~Future() - cleans up the response archive if consumed (via
+// Wait/await_resume). The task itself is freed automatically by task_ptr_'s
+// shared_ptr destructor (host) when the last owner drops — no explicit free.
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN Future<TaskT, AllocT>::~Future() {
+CTP_HOST_FUN Future<TaskT, AllocT>::~Future() {
   if (consumed_) {
-    // Clean up zero-copy response archive (TCP/IPC only, never used on GPU)
-    if (!future_shm_.IsNull()) {
+    // Clean up zero-copy response archive (TCP/IPC only, never used on GPU).
+    // The FutureShm itself is owned by the host shared_ptr and freed
+    // automatically when the last Future owner is destroyed — no manual
+    // FreeBuffer here.
+    if (!FutureShmIsNull()) {
 #if CTP_IS_HOST
-      ctp::ipc::FullPtr<FutureShm> fs = CLIO_CPU_IPC->ToFullPtr(future_shm_);
-      if (!fs.IsNull() && (fs->origin_ == FutureShm::FUTURE_CLIENT_TCP ||
-                           fs->origin_ == FutureShm::FUTURE_CLIENT_IPC)) {
-        CLIO_CPU_IPC->CleanupResponseArchive(fs->client_task_vaddr_);
+      ctp::ipc::FullPtr<FutureT> fs = GetFutureShm();
+      TaskT *t = TaskRaw();
+      if (!fs.IsNull() && t != nullptr &&
+          (fs->origin_ == ClientOrigin::kClientTcp ||
+           fs->origin_ == ClientOrigin::kClientIpc)) {
+        // Response archive is keyed by the client's net_key (task vaddr).
+        CLIO_CPU_IPC->CleanupResponseArchive(t->task_id_.net_key_);
       }
-      // Free FutureShm (host only)
-      ctp::ipc::ShmPtr<char> buffer_shm = future_shm_.template Cast<char>();
-      CLIO_CPU_IPC->FreeBuffer(buffer_shm);
-      future_shm_.SetNull();
+      FutureShmSetNull();
 #endif
     }
-    // Auto-free the task (only when consumed to avoid double-free
-    // from runtime-internal Future copies in event queues / RunContext)
-    DelTask();
   }
 }
 
 // GetFutureShm() - converts internal ShmPtr to FullPtr
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN ctp::ipc::FullPtr<typename Future<TaskT, AllocT>::FutureT>
+CTP_HOST_FUN ctp::ipc::FullPtr<typename Future<TaskT, AllocT>::FutureT>
 Future<TaskT, AllocT>::GetFutureShm() const {
-  if (future_shm_.IsNull()) {
+  // The routing FutureShm is embedded in the task's RunContext (run_ctx_->route_);
+  // wrap it in a FullPtr with a null allocator. Requires an active RunContext.
+  TaskT* t = TaskRaw();
+  if (t == nullptr) {
     return ctp::ipc::FullPtr<FutureT>();
   }
-#if CTP_IS_GPU
-  // On device, ShmPtr::off_ already holds the resolved device-side address of
-  // the FutureShm (the host pre-built the task+FutureShm pair in a registered
-  // backend), so no allocator lookup / ToFullPtr is needed here — that path is
-  // host-only. Mirrors gpu::Future::GetFutureShmPtrRaw().
-  return ctp::ipc::FullPtr<FutureT>(
-      reinterpret_cast<FutureT *>(future_shm_.off_.load()));
-#else
-  return CLIO_CPU_IPC->ToFullPtr(future_shm_);
-#endif
+  return ctp::ipc::FullPtr<FutureT>(t->RunCtxPtr());
 }
 
 // ----------------------------------------------------------------
@@ -1746,26 +1814,18 @@ Future<TaskT, AllocT>::GetFutureShm() const {
 // ----------------------------------------------------------------
 
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN bool Future<TaskT, AllocT>::IsComplete() const {
-  if (future_shm_.IsNull()) {
+CTP_HOST_FUN bool Future<TaskT, AllocT>::IsComplete() const {
+  if (FutureShmIsNull()) {
     return false;
   }
 #if CTP_IS_GPU
   return IsCompleteGpu2Gpu();
 #else
-#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-  if (future_shm_.alloc_id_ == FutureShm::GetCpu2GpuAllocId()) {
-    return IsCompleteCpu2Gpu();
-  }
-#endif
   auto future_shm = GetFutureShm();
   if (future_shm.IsNull()) {
     return false;
   }
-  bool is_gpu_future =
-      future_shm->flags_.Any(FutureShm::FUTURE_COPY_FROM_CLIENT) &&
-      (future_shm->client_task_vaddr_ == 0);
-  if (is_gpu_future) {
+  if (future_shm->origin_ == ClientOrigin::kClientGpu2Cpu) {
     return IsCompleteGpu2Cpu();
   }
   return IsCompleteCpu2Cpu();
@@ -1774,48 +1834,37 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::IsComplete() const {
 
 template <typename TaskT, typename AllocT>
 CTP_HOST_FUN bool Future<TaskT, AllocT>::IsCompleteCpu2Cpu() const {
-  auto future_shm = GetFutureShm();
-  if (future_shm.IsNull()) {
-    return false;
-  }
-  return future_shm->flags_.Any(FutureShm::FUTURE_COMPLETE);
+  // CPU/host completion lives on the task (per-process), not RunContext::flags_.
+  TaskT *task = TaskRaw();
+  return task != nullptr && task->IsComplete();
 }
 
 template <typename TaskT, typename AllocT>
 CTP_HOST_FUN bool Future<TaskT, AllocT>::IsCompleteGpu2Cpu() const {
-  auto future_shm = GetFutureShm();
-  if (future_shm.IsNull()) {
-    return false;
-  }
-  return future_shm->flags_.AnySystem(FutureShm::FUTURE_COMPLETE);
+  // Producer-only gpu2cpu: the CPU GPU-worker marks the task complete
+  // (task->fut_.is_complete_) once it has written the outputs back to the
+  // device; the host waiter polls that, not a separate flag.
+  TaskT *t = TaskRaw();
+  return t != nullptr && t->IsComplete();
 }
 
 template <typename TaskT, typename AllocT>
 CTP_HOST_FUN bool Future<TaskT, AllocT>::IsCompleteCpu2Gpu() const {
-#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-  // ShmPtr offset points to pinned-host gpu::FutureShm
-  void *host_fshm = reinterpret_cast<void *>(future_shm_.off_.load());
-  u32 flags_val = 0;
-  size_t flags_offset = offsetof(gpu::FutureShm, flags_);
-  ctp::GpuApi::Memcpy(
-      &flags_val,
-      reinterpret_cast<u32 *>(
-          static_cast<char *>(host_fshm) + flags_offset),
-      sizeof(u32));
-  return (flags_val & gpu::FutureShm::FUTURE_COMPLETE) != 0;
-#else
-  return false;
-#endif
+  // The Task is its own completion record now (task->fut_.is_complete_); for the
+  // Cpu2Gpu path the task lives in host-readable pinned/UVM memory, so read its
+  // flag directly. (This path is vestigial under the producer-only GPU model and
+  // is reworked with the rest of the Future completion machinery in phase 3.)
+  TaskT *t = TaskRaw();
+  return t != nullptr && t->IsComplete();
 }
 
 #if CTP_IS_GPU_COMPILER
 template <typename TaskT, typename AllocT>
 CTP_GPU_FUN bool Future<TaskT, AllocT>::IsCompleteGpu2Gpu() const {
-  auto future_shm = GetFutureShm();
-  if (future_shm.IsNull()) {
-    return false;
-  }
-  return future_shm->flags_.AnyDevice(FutureShm::FUTURE_COMPLETE);
+  // Vestigial: the regular Future is host-only under the producer-only GPU
+  // model (device code uses gpu::Future). RunContext (and its routing state)
+  // does not exist on device, so there is nothing to poll here.
+  return false;
 }
 #endif
 
@@ -1824,18 +1873,18 @@ CTP_GPU_FUN bool Future<TaskT, AllocT>::IsCompleteGpu2Gpu() const {
 // ----------------------------------------------------------------
 
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
+CTP_HOST_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
                                                  bool reuse_task) {
 #if CTP_IS_GPU
   return WaitGpu2Gpu(max_sec, reuse_task);
 #else
-  if (task_ptr_.IsNull() || future_shm_.IsNull()) {
+  if (task_ptr_.IsNull() || FutureShmIsNull()) {
     return true;
   }
   // Fire-and-forget: return immediately without waiting.
   if (task_ptr_->task_flags_.Any(TASK_FIRE_AND_FORGET)) {
-    task_ptr_.SetNull();
-    future_shm_.SetNull();
+    TaskSetNull();
+    FutureShmSetNull();
     return true;
   }
 
@@ -1845,12 +1894,8 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
   // complete, fall through; the underlying recv will see the flag and
   // deserialize without blocking.
   if (max_sec == 0.0f) {
-    ctp::ipc::FullPtr<FutureShm> future_full_poll =
-        CLIO_CPU_IPC->ToFullPtr(future_shm_);
-    if (future_full_poll.IsNull()) {
-      return false;
-    }
-    if (!future_full_poll.ptr_->flags_.Any(FutureShm::FUTURE_COMPLETE)) {
+    // IsComplete() dispatches by origin (CPU → Task::is_complete_, GPU → flags_).
+    if (!IsComplete()) {
       return false;
     }
     // Complete -> fall through to normal wait path (cheap; flag is set).
@@ -1858,18 +1903,10 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
 
   bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
 
-#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-  // CPU→GPU POD path: sentinel allocator ID marks device pointers.
-  if (is_runtime &&
-      future_shm_.alloc_id_ == FutureShm::GetCpu2GpuAllocId()) {
-    return WaitCpu2Gpu(max_sec, reuse_task);
-  }
-#endif
-
-  // Resolve FutureShm for non-GPU paths
-  ctp::ipc::FullPtr<FutureShm> future_full = CLIO_CPU_IPC->ToFullPtr(future_shm_);
+  // Resolve the task's RunContext (routing state) for non-GPU paths
+  ctp::ipc::FullPtr<FutureT> future_full = GetFutureShm();
   if (future_full.IsNull()) {
-    HLOG(kError, "Future::Wait: ToFullPtr returned null");
+    HLOG(kError, "Future::Wait: GetFutureShm returned null");
     return false;
   }
 
@@ -1878,10 +1915,7 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
   }
 
   // Client path: detect GPU-originated futures
-  bool is_gpu_future =
-      future_full->flags_.Any(FutureShm::FUTURE_COPY_FROM_CLIENT) &&
-      (future_full->client_task_vaddr_ == 0);
-  if (is_gpu_future) {
+  if (future_full->origin_ == ClientOrigin::kClientGpu2Cpu) {
     return WaitGpu2Cpu(max_sec, reuse_task);
   }
   return WaitCpu2Cpu(max_sec, reuse_task);
@@ -1896,7 +1930,7 @@ CTP_CROSS_FUN bool Future<TaskT, AllocT>::Wait(float max_sec,
 template <typename TaskT, typename AllocT>
 CTP_GPU_FUN bool Future<TaskT, AllocT>::WaitGpu2Gpu(float max_sec,
                                                       bool reuse_task) {
-  // chi::Future should not be used for GPU-to-GPU paths.
+  // clio::run::Future should not be used for GPU-to-GPU paths.
   // Use gpu::Future::WaitGpu2Gpu instead.
   (void)max_sec; (void)reuse_task;
   return true;
@@ -1923,10 +1957,9 @@ CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitCpu2Cpu(float max_sec,
   bool is_runtime = CLIO_RUNTIME_MANAGER->IsRuntime();
   if (is_runtime) {
     // Runtime self-send: poll FUTURE_COMPLETE in SHM
-    ctp::ipc::FullPtr<FutureShm> future_full =
-        CLIO_CPU_IPC->ToFullPtr(future_shm_);
+    ctp::ipc::FullPtr<RunContext> future_full = GetFutureShm();
     if (future_full.IsNull()) return false;
-    bool ok = IpcCpu2Self::ClientRecv(*this, max_sec, future_full);
+    bool ok = IpcCpu2Self::RecvOut(*this, max_sec, future_full);
     if (!ok) return false;
   } else {
     // Client: SHM or ZMQ recv path
@@ -1935,7 +1968,7 @@ CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitCpu2Cpu(float max_sec,
       return false;
     }
   }
-  if (reuse_task) task_ptr_.SetNull();
+  if (reuse_task) TaskSetNull();
   Destroy(true);
   return true;
 }
@@ -1944,18 +1977,17 @@ template <typename TaskT, typename AllocT>
 CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitGpu2Cpu(float max_sec,
                                                        bool reuse_task) {
 #if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-  // Host-side polling path (test harness): polls chi::FutureShm with
-  // system-scope atomics. The GPU kernel uses IpcGpu2Cpu::ClientRecv
+  // Host-side polling path (test harness): polls clio::run::FutureShm with
+  // system-scope atomics. The GPU kernel uses IpcGpu2Cpu::RecvOut
   // (device-side) which polls gpu::FutureShm instead.
-  ctp::ipc::FullPtr<FutureShm> future_full =
-      CLIO_CPU_IPC->ToFullPtr(future_shm_);
+  ctp::ipc::FullPtr<RunContext> future_full = GetFutureShm();
   if (future_full.IsNull()) {
-    HLOG(kError, "Future::WaitGpu2Cpu: ToFullPtr returned null");
+    HLOG(kError, "Future::WaitGpu2Cpu: GetFutureShm returned null");
     return false;
   }
-  ctp::abitfield32_t &flags = future_full->flags_;
+  ctp::abitfield32_t &flags = future_full->gpu_flags_;
   auto start = std::chrono::steady_clock::now();
-  while (!flags.AnySystem(FutureShm::FUTURE_COMPLETE)) {
+  while (!flags.AnySystem(RunContext::FUTURE_COMPLETE)) {
     CTP_THREAD_MODEL->Yield();
     if (max_sec > 0) {
       float elapsed = std::chrono::duration<float>(
@@ -1968,20 +2000,13 @@ CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitGpu2Cpu(float max_sec,
     }
   }
 
-  // Deserialize output from ring buffer if present
-  if (future_full->output_.total_written_.load() > 0) {
-    ctp::lbm::LbmContext ctx;
-    ctx.copy_space = future_full->copy_space;
-    ctx.shm_info_ = &future_full->output_;
-    chi::priv::vector<char> load_buf(CLIO_PRIV_ALLOC);
-    load_buf.reserve(256);
-    DefaultLoadArchive load_ar(load_buf);
-    load_ar.SetMsgType(LocalMsgType::kSerializeOut);
-    ctp::lbm::ShmTransport::Recv(load_ar, ctx);
-    task_ptr_->SerializeOut(load_ar);
-  }
+  // NOTE: the legacy GPU->CPU output ring-buffer deserialization read from the
+  // FutureShm's inline copy_space, which has been removed (the MPSC SHM
+  // transport carries output bytes over the named server instead). This
+  // host-side polling path is part of the deleted GPU-runtime concept and is
+  // retained only for compilation; output deserialization is a no-op here.
 
-  if (reuse_task) task_ptr_.SetNull();
+  if (reuse_task) TaskSetNull();
   Destroy(true);
   return true;
 #else
@@ -1991,29 +2016,15 @@ CTP_HOST_FUN bool Future<TaskT, AllocT>::WaitGpu2Cpu(float max_sec,
 }
 
 // ----------------------------------------------------------------
-// Shared helpers (CTP_CROSS_FUN)
+// Shared helpers (CTP_HOST_FUN)
 // ----------------------------------------------------------------
 
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN void Future<TaskT, AllocT>::Destroy(bool post_wait) {
+CTP_HOST_FUN void Future<TaskT, AllocT>::Destroy(bool post_wait) {
   if (post_wait && !task_ptr_.IsNull()) {
     task_ptr_->PostWait();
   }
   consumed_ = true;
-}
-
-template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN void Future<TaskT, AllocT>::DelTask() {
-#if CTP_IS_GPU
-  // Producer-only model: kernels do not own/free tasks. The host owns
-  // the registered device-memory backend; just clear our handle.
-  task_ptr_.SetNull();
-#else
-  if (!task_ptr_.IsNull()) {
-    CLIO_CPU_IPC->DelTask(task_ptr_);
-    task_ptr_.SetNull();
-  }
-#endif
 }
 
 // ----------------------------------------------------------------
@@ -2021,7 +2032,7 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::DelTask() {
 // ----------------------------------------------------------------
 
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitPoll(float max_sec,
+CTP_HOST_FUN void Future<TaskT, AllocT>::WaitPoll(float max_sec,
                                                      bool reuse_task) {
   (void)max_sec; (void)reuse_task;
 #if CTP_IS_GPU
@@ -2031,7 +2042,7 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitPoll(float max_sec,
   auto *fshm = fshm_full.ptr_;
 
   // Spin-wait on FUTURE_COMPLETE (device-scope atomics)
-  while (!fshm->flags_.AnyDevice(FutureShm::FUTURE_COMPLETE)) {
+  while (!fshm->gpu_flags_.AnyDevice(RunContext::FUTURE_COMPLETE)) {
     CTP_THREAD_MODEL->Yield();
   }
   ctp::ipc::threadfence();
@@ -2039,7 +2050,7 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitPoll(float max_sec,
 }
 
 template <typename TaskT, typename AllocT>
-CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
+CTP_HOST_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
                                                      bool reuse_task) {
   (void)max_sec; (void)reuse_task;
 #if CTP_IS_GPU
@@ -2048,36 +2059,24 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
   if (fshm_full.IsNull()) return;
   auto *fshm = fshm_full.ptr_;
 
-  // Read output if any was written
-  size_t output_written = fshm->output_.total_written_.load_device();
-  if (output_written > 0) {
-    ctp::ipc::threadfence();
-
-    // Inline deserialization: create local buffer + archive
-    ctp::ipc::FullPtr<char> fp;
-    fp.ptr_ = fshm->copy_space;
-    fp.shm_.alloc_id_.SetNull();
-    fp.shm_.off_ = reinterpret_cast<size_t>(fp.ptr_);
-    ctp::priv::wrap_vector buffer;
-    buffer.set(fp, output_written);
-    buffer.resize(output_written);
-    GpuLoadTaskArchive load_ar(buffer);
-    load_ar.SetMsgType(LocalMsgType::kSerializeOut);
-    task_ptr_.ptr_->SerializeOut(load_ar);
-  }
+  // NOTE: the inline copy_space output buffer was removed from FutureShm; the
+  // device-side output deserialization that read from it is no longer
+  // applicable on clio::run::Future (gpu::Future handles the real GPU path).
+  // Retained only for compilation; reading output is a no-op here.
+  (void)fshm;
 
   // Cleanup
   Destroy(true);
   if (reuse_task) {
-    task_ptr_.SetNull();
+    TaskSetNull();
   }
 #endif
 }
 
-// gpu::Future is fully defined inline in chimaera/gpu/future.h after the
+// gpu::Future is fully defined inline in clio/gpu/future.h after the
 // producer-only redesign — no out-of-line method implementations needed.
-// gpu::Future::Wait() is defined in chimaera/ipc/ipc_gpu2cpu_impl.h
-// alongside IpcGpu2Cpu::ClientSend.
+// gpu::Future::Wait() is defined in clio/ipc/ipc_gpu2cpu_impl.h
+// alongside IpcGpu2Cpu::SendIn.
 
 }  // namespace clio::run
 
@@ -2085,4 +2084,4 @@ CTP_CROSS_FUN void Future<TaskT, AllocT>::WaitRecv(float max_sec,
 #include "clio_runtime/ipc/ipc_cpu2cpu_impl.h"
 #include "clio_runtime/ipc/ipc_cpu2cpu_zmq_impl.h"
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_IPC_MANAGER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_MANAGERS_IPC_MANAGER_H_

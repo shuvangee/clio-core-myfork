@@ -31,7 +31,7 @@
 /* transport_factory_impl.h provides the inline definitions of
    ctp::lbm::Transport::ClearRecvHandles / Send<...>. They are required
    when AsyncPutBlob template-instantiates here (it doesn't fire from
-   chimaera.h alone). Without this include the linker leaves the
+   clio.h alone). Without this include the linker leaves the
    templated symbols undefined in our .so. */
 #include <clio_ctp/lightbeam/transport_factory_impl.h>
 #include <clio_cte/core/core_client.h>
@@ -72,7 +72,7 @@ struct iowarp_dataset_t {
      name. */
   bool cacheable;
   /* Pending async writes flushed on close */
-  std::vector<chi::Future<clio::cte::core::PutBlobTask>> pending_puts;
+  std::vector<clio::run::Future<clio::cte::core::PutBlobTask>> pending_puts;
   std::vector<ctp::ipc::FullPtr<char>> pending_buffers;
 };
 
@@ -114,7 +114,7 @@ struct iowarp_wrap_ctx_t {
  * ======================================================================== */
 
 static clio::cte::core::Client *get_cte_client() {
-  /* Lazily attach this process to the running chimaera/CTE runtime on first
+  /* Lazily attach this process to the running clio/CTE runtime on first
      use. When HDF5 dlopen()s the connector via HDF5_VOL_CONNECTOR there is no
      LD_PRELOAD constructor to do it (the POSIX adapter inits in
      Filesystem::Filesystem -> CLIO_CTE_CLIENT_INIT()); without this the CTE
@@ -565,7 +565,7 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
     char *dst = static_cast<char *>(buf[d]);
 
     /* Hit test: a fully-populated cache always has a non-empty chunk_0. */
-    chi::u64 cached = 0;
+    clio::run::u64 cached = 0;
     {
       auto sz = cte_client->AsyncGetBlobSize(
           dataset->file->tag_id, dataset->dataset_path + "/chunk_0");
@@ -596,7 +596,7 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
       }
     } else {
       /* HIT — serve every chunk from the CTE tier. */
-      std::vector<chi::Future<clio::cte::core::GetBlobTask>> futures;
+      std::vector<clio::run::Future<clio::cte::core::GetBlobTask>> futures;
       std::vector<ctp::ipc::FullPtr<char>> buffers;
       for (size_t i = 0; i < num_chunks; ++i) {
         size_t offset = i * chunk_size;

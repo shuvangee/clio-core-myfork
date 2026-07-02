@@ -91,11 +91,11 @@ std::string CreateComposeConfig() {
  */
 TEST_CASE("PoolId::FromString parsing", "[compose]") {
   // Test valid pool ID formats
-  chi::PoolId pool_id1 = chi::PoolId::FromString("200.0");
+  clio::run::PoolId pool_id1 = clio::run::PoolId::FromString("200.0");
   REQUIRE(pool_id1.major_ == 200);
   REQUIRE(pool_id1.minor_ == 0);
 
-  chi::PoolId pool_id2 = chi::PoolId::FromString("123.456");
+  clio::run::PoolId pool_id2 = clio::run::PoolId::FromString("123.456");
   REQUIRE(pool_id2.major_ == 123);
   REQUIRE(pool_id2.minor_ == 456);
 
@@ -107,18 +107,18 @@ TEST_CASE("PoolId::FromString parsing", "[compose]") {
  */
 TEST_CASE("PoolQuery::FromString parsing", "[compose]") {
   // Test "local"
-  chi::PoolQuery query1 = chi::PoolQuery::FromString("local");
+  clio::run::PoolQuery query1 = clio::run::PoolQuery::FromString("local");
   REQUIRE(query1.IsLocalMode());
 
   // Test "dynamic"
-  chi::PoolQuery query2 = chi::PoolQuery::FromString("dynamic");
+  clio::run::PoolQuery query2 = clio::run::PoolQuery::FromString("dynamic");
   REQUIRE(query2.IsDynamicMode());
 
   // Test case insensitive
-  chi::PoolQuery query3 = chi::PoolQuery::FromString("LOCAL");
+  clio::run::PoolQuery query3 = clio::run::PoolQuery::FromString("LOCAL");
   REQUIRE(query3.IsLocalMode());
 
-  chi::PoolQuery query4 = chi::PoolQuery::FromString("Dynamic");
+  clio::run::PoolQuery query4 = clio::run::PoolQuery::FromString("Dynamic");
   REQUIRE(query4.IsDynamicMode());
 
   HIPRINT("PoolQuery::FromString tests passed");
@@ -131,14 +131,16 @@ TEST_CASE("Parse compose configuration", "[compose]") {
   // Create config file
   std::string config_path = CreateComposeConfig();
 
-  // Load configuration
-  auto* config_manager = CLIO_CONFIG_MANAGER;
-  REQUIRE(config_manager != nullptr);
-
-  REQUIRE(config_manager->LoadYaml(config_path));
+  // Load configuration into a LOCAL ConfigManager — exactly as the runtime
+  // parses compose files (admin_runtime.cc / manager.cc). Loading into the
+  // global CLIO_CONFIG_MANAGER would run LoadDefault() and reset the live
+  // runtime port (CLIO_PORT) to the 9413 default, which under force_net retargets
+  // every forward at a dead port.
+  clio::run::ConfigManager file_config;
+  REQUIRE(file_config.LoadYaml(config_path));
 
   // Get compose config
-  const auto& compose_config = config_manager->GetComposeConfig();
+  const auto& compose_config = file_config.GetComposeConfig();
 
   // Verify compose section was parsed - at least 1 pool should exist
   // (there may be more from server initialization)
@@ -169,18 +171,19 @@ TEST_CASE("Admin client Compose method", "[compose]") {
   // Create config file
   std::string config_path = CreateComposeConfig();
 
-  // Load configuration
-  auto* config_manager = CLIO_CONFIG_MANAGER;
-  REQUIRE(config_manager != nullptr);
-
-  REQUIRE(config_manager->LoadYaml(config_path));
+  // Load the compose file into a LOCAL ConfigManager (mirrors the runtime's
+  // admin_runtime.cc / manager.cc). Reloading the global CLIO_CONFIG_MANAGER
+  // here would reset the live runtime port via LoadDefault() and break force_net
+  // routing (forwards would target the 9413 default instead of CLIO_PORT).
+  clio::run::ConfigManager file_config;
+  REQUIRE(file_config.LoadYaml(config_path));
 
   // Get admin client
   auto* admin_client = CLIO_ADMIN;
   REQUIRE(admin_client != nullptr);
 
   // Get compose config
-  const auto& compose_config = config_manager->GetComposeConfig();
+  const auto& compose_config = file_config.GetComposeConfig();
   REQUIRE(!compose_config.pools_.empty());
 
   // Call AsyncCompose for each pool - tasks auto-freed when Future goes out of scope
@@ -192,11 +195,11 @@ TEST_CASE("Admin client Compose method", "[compose]") {
   }
 
   // Verify pool was created by checking if we can access it
-  chi::PoolId bdev_pool_id(200, 0);
+  clio::run::PoolId bdev_pool_id(200, 0);
   clio::run::bdev::Client bdev_client(bdev_pool_id);
 
   // Try to allocate blocks to verify the pool exists and is functional
-  auto alloc_task = bdev_client.AsyncAllocateBlocks(chi::PoolQuery::Local(), 1024);
+  auto alloc_task = bdev_client.AsyncAllocateBlocks(clio::run::PoolQuery::Local(), 1024);
   alloc_task.Wait();
   std::vector<clio::run::bdev::Block> blocks;
   for (size_t i = 0; i < alloc_task->blocks_.size(); ++i) {
@@ -215,9 +218,9 @@ int main(int argc, char **argv) {
   (void)argv;
 
   // Initialize runtime
-  HIPRINT("Initializing Chimaera runtime...");
-  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true)) {
-    HLOG(kError, "Failed to initialize Chimaera runtime");
+  HIPRINT("Initializing Clio runtime...");
+  if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true)) {
+    HLOG(kError, "Failed to initialize Clio runtime");
     return 1;
   }
 

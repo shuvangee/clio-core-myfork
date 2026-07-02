@@ -53,12 +53,10 @@ BinaryFileAssimilator::BinaryFileAssimilator(
     std::shared_ptr<clio::cte::core::Client> cte_client)
     : cte_client_(cte_client) {}
 
-chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
+clio::run::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
                                                 int& error_code) {
-#ifdef __NVCOMPILER
-  thread_local chi::RunContext _fb_rctx;
-  chi::RunContext* _fp = chi::GetCurrentRunContextFromWorker();
-  chi::RunContext& rctx = _fp ? *_fp : _fb_rctx;
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
 #endif
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug,
@@ -231,7 +229,7 @@ chi::TaskResume BinaryFileAssimilator::Schedule(const AssimilationCtx& ctx,
   HLOG(kDebug, "BinaryFileAssimilator: Starting chunk processing");
   size_t chunk_idx = 0;
   size_t bytes_processed = 0;
-  std::vector<chi::Future<clio::cte::core::PutBlobTask>> active_tasks;
+  std::vector<clio::run::Future<clio::cte::core::PutBlobTask>> active_tasks;
 
   while (bytes_processed < total_size) {
     // Submit tasks up to the parallel limit

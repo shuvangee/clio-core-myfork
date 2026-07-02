@@ -37,7 +37,7 @@
  * Contains the server-side task processing logic.
  */
 
-#include "../include/chimaera/MOD_NAME/MOD_NAME_runtime.h"
+#include "../include/clio_runtime/MOD_NAME/MOD_NAME_runtime.h"
 
 #include <chrono>
 #include <clio_ctp/serialize/msgpack_wrapper.h>
@@ -46,13 +46,13 @@ namespace clio::run::MOD_NAME {
 
 // Method implementations for Runtime class
 
-// Virtual method implementations (Init, Run, Del, SaveTask, LoadTask, NewCopy, Aggregate) now in autogen/MOD_NAME_lib_exec.cc
+// Virtual method implementations (Init, Run, Del, SaveTask, LoadTask, NewCopy, AggregateOut) now in autogen/MOD_NAME_lib_exec.cc
 
 //===========================================================================
 // Method implementations
 //===========================================================================
 
-chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing Create task for pool {}", task->pool_id_);
 
@@ -64,12 +64,11 @@ chi::TaskResume Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunCont
         "MOD_NAME: Container created and initialized for pool: {} (ID: {}, "
         "count: {})",
         pool_name_, task->pool_id_, create_count_);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Custom(ctp::ipc::FullPtr<CustomTask> task, chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::Custom(clio::run::shared_ptr<CustomTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing Custom task with data: {}",
         task->data_.c_str());
@@ -80,12 +79,22 @@ chi::TaskResume Runtime::Custom(ctp::ipc::FullPtr<CustomTask> task, chi::RunCont
   // In a real implementation, this would perform the custom operation
 
   HLOG(kDebug, "MOD_NAME: Custom completed (count: {})", custom_count_);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::ManyToOneSum(clio::run::shared_ptr<ManyToOneSumTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  // On the neighborhood leader the batch was folded into this aggregate task by
+  // AggregateIn, so value_ already holds the sum of every member's input. Echo
+  // it into the OUT field; the engine broadcasts sum_ back to all submitters.
+  task->sum_ = task->value_;
+  HLOG(kDebug, "MOD_NAME: ManyToOneSum total={}", task->sum_);
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing Destroy task - Pool ID: {}",
         task->target_pool_id_);
@@ -97,12 +106,11 @@ chi::TaskResume Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunCo
   // In a real implementation, this would clean up MOD_NAME-specific resources
   // For now, just mark as successful
   HLOG(kDebug, "MOD_NAME: Container destroyed successfully");
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::u64 Runtime::GetWorkRemaining() const {
+clio::run::u64 Runtime::GetWorkRemaining() const {
   // Template container implementation returns 0 (no work tracking)
   return 0;
 }
@@ -111,14 +119,13 @@ chi::u64 Runtime::GetWorkRemaining() const {
 // Task Serialization Method Implementations now in autogen/MOD_NAME_lib_exec.cc
 //===========================================================================
 
-chi::TaskResume Runtime::CoMutexTest(ctp::ipc::FullPtr<CoMutexTestTask> task,
-                          chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::CoMutexTest(clio::run::shared_ptr<CoMutexTestTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing CoMutexTest task {} (hold: {}ms)",
         task->test_id_, task->hold_duration_ms_);
 
   // Use actual CoMutex synchronization primitive
-  chi::ScopedCoMutex lock(test_comutex_);
+  clio::run::ScopedCoMutex lock(test_comutex_);
 
   // Hold the mutex for the specified duration
   if (task->hold_duration_ms_ > 0) {
@@ -136,13 +143,11 @@ chi::TaskResume Runtime::CoMutexTest(ctp::ipc::FullPtr<CoMutexTestTask> task,
 
   task->return_code_ = 0; // Success (0 means success in most conventions)
   HLOG(kDebug, "MOD_NAME: CoMutexTest {} completed", task->test_id_);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::CoRwLockTest(ctp::ipc::FullPtr<CoRwLockTestTask> task,
-                           chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::CoRwLockTest(clio::run::shared_ptr<CoRwLockTestTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing CoRwLockTest task {} ({}, hold: {}ms)",
         task->test_id_, (task->is_writer_ ? "writer" : "reader"),
@@ -150,7 +155,7 @@ chi::TaskResume Runtime::CoRwLockTest(ctp::ipc::FullPtr<CoRwLockTestTask> task,
 
   // Use actual CoRwLock synchronization primitive with appropriate lock type
   if (task->is_writer_) {
-    chi::ScopedCoRwWriteLock lock(test_corwlock_);
+    clio::run::ScopedCoRwWriteLock lock(test_corwlock_);
 
     // Hold the write lock for the specified duration
     if (task->hold_duration_ms_ > 0) {
@@ -166,7 +171,7 @@ chi::TaskResume Runtime::CoRwLockTest(ctp::ipc::FullPtr<CoRwLockTestTask> task,
       }
     }
   } else {
-    chi::ScopedCoRwReadLock lock(test_corwlock_);
+    clio::run::ScopedCoRwReadLock lock(test_corwlock_);
 
     // Hold the read lock for the specified duration
     if (task->hold_duration_ms_ > 0) {
@@ -185,13 +190,11 @@ chi::TaskResume Runtime::CoRwLockTest(ctp::ipc::FullPtr<CoRwLockTestTask> task,
 
   task->return_code_ = 0; // Success (0 means success in most conventions)
   HLOG(kDebug, "MOD_NAME: CoRwLockTest {} completed", task->test_id_);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::WaitTest(ctp::ipc::FullPtr<WaitTestTask> task,
-                                  chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::WaitTest(clio::run::shared_ptr<WaitTestTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug,
         "MOD_NAME: Executing WaitTest task {} (depth: {}, current_depth: {})",
@@ -208,11 +211,11 @@ chi::TaskResume Runtime::WaitTest(ctp::ipc::FullPtr<WaitTestTask> task,
 
     // Use the client API for recursive calls - this tests the co_await
     // functionality properly. Create a subtask with remaining depth
-    chi::u32 remaining_depth = task->depth_ - task->current_depth_;
+    clio::run::u32 remaining_depth = task->depth_ - task->current_depth_;
     auto subtask = client_.AsyncWaitTest(
         task->pool_query_, remaining_depth, task->test_id_);
     CLIO_CO_AWAIT(subtask);
-    chi::u32 origin_task_final_depth = subtask->current_depth_;
+    clio::run::u32 origin_task_final_depth = subtask->current_depth_;
     (void)origin_task_final_depth;
 
     // The subtask returns the final depth it reached, so we set our depth to
@@ -231,8 +234,7 @@ chi::TaskResume Runtime::WaitTest(ctp::ipc::FullPtr<WaitTestTask> task,
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::TestLargeOutput(ctp::ipc::FullPtr<TestLargeOutputTask> task,
-                                         chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::TestLargeOutput(clio::run::shared_ptr<TestLargeOutputTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing TestLargeOutput task");
 
@@ -247,13 +249,11 @@ chi::TaskResume Runtime::TestLargeOutput(ctp::ipc::FullPtr<TestLargeOutputTask> 
 
   HLOG(kDebug, "MOD_NAME: TestLargeOutput completed with {}KB output",
        kOutputSize / 1024);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::GpuSubmit(ctp::ipc::FullPtr<GpuSubmitTask> task,
-                                   chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::GpuSubmit(clio::run::shared_ptr<GpuSubmitTask> &task) {
   CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing GpuSubmit task from GPU {}, test_value={}",
        task->gpu_id_, task->test_value_);
@@ -264,23 +264,21 @@ chi::TaskResume Runtime::GpuSubmit(ctp::ipc::FullPtr<GpuSubmitTask> task,
 
   HLOG(kDebug, "MOD_NAME: GpuSubmit completed, result_value={}",
        task->result_value_);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::SubtaskTest(ctp::ipc::FullPtr<SubtaskTestTask> task,
-                                     chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::SubtaskTest(clio::run::shared_ptr<SubtaskTestTask> &task) {
+  CLIO_TASK_BODY_BEGIN
   HLOG(kDebug, "MOD_NAME: Executing SubtaskTest task with test_value={}",
        task->test_value_);
   task->result_value_ = task->test_value_ + 1;
   task->return_code_ = 0;
-  (void)rctx;
-  co_return;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
-chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
-                                 chi::RunContext &rctx) {
+clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task) {
   CLIO_TASK_BODY_BEGIN
   // Generate test data: a vector of MonitorData structs
   msgpack::sbuffer sbuf;
@@ -297,14 +295,13 @@ chi::TaskResume Runtime::Monitor(ctp::ipc::FullPtr<MonitorTask> task,
 
   task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   task->SetReturnCode(0);
-  (void)rctx;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
 
 // Static member definitions
-chi::CoMutex Runtime::test_comutex_;
-chi::CoRwLock Runtime::test_corwlock_;
+clio::run::CoMutex Runtime::test_comutex_;
+clio::run::CoRwLock Runtime::test_corwlock_;
 
 } // namespace clio::run::MOD_NAME
 

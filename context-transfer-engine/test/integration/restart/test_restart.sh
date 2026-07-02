@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Use BIN_DIR from environment, or fall back to /workspace/build/bin
 BIN_DIR="${BIN_DIR:-/workspace/build/bin}"
 COMPOSE_CONFIG="${SCRIPT_DIR}/test_restart_compose.yaml"
-CONF_DIR="/tmp/chimaera_restart_test"
+CONF_DIR="/tmp/clio_run_restart_test"
 
 echo "=== CTE Restart Integration Test ==="
 echo "BIN_DIR: $BIN_DIR"
@@ -30,14 +30,14 @@ stop_runtime() {
 cleanup() {
     stop_runtime
     sleep 1
-    rm -f /dev/shm/chimaera_*
+    rm -f /dev/shm/clio_*
     rm -rf "$CONF_DIR"
     rm -rf /tmp/cte_restart_ram
 }
 trap cleanup EXIT
 
 # Clean slate
-rm -f /dev/shm/chimaera_*
+rm -f /dev/shm/clio_*
 rm -rf "$CONF_DIR"
 rm -rf /tmp/cte_restart_ram
 
@@ -61,7 +61,7 @@ stop_runtime
 sleep 1
 
 # Clear SHM but keep persistent files
-rm -f /dev/shm/chimaera_*
+rm -f /dev/shm/clio_*
 
 echo "Phase 1 complete. Persistent files in $CONF_DIR:"
 ls -la "$CONF_DIR"/restart/ 2>/dev/null || echo "  (no restart dir yet)"

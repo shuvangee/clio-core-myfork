@@ -12,8 +12,8 @@ if(CLIO_CORE_ENABLE_CUDA)
             ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
             ${CMAKE_SOURCE_DIR}/context-transfer-engine/adapter/gpu_vector/include
         LINK_LIBS
-            chimaera_cxx
-            chimaera_cxx_gpu
+            clio_run_cxx
+            clio_run_cxx_gpu
             clio_admin_client
             clio_bdev_client
             clio_cte_core_client
@@ -29,7 +29,7 @@ if(CLIO_CORE_ENABLE_CUDA)
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
     set_tests_properties(cte_gpu_vector_cuda PROPERTIES
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
         TIMEOUT 120
         LABELS "gpu;cuda;cte;gpu_vector"
     )
@@ -60,8 +60,8 @@ if(CLIO_CORE_ENABLE_ROCM)
         ${CMAKE_SOURCE_DIR}/context-transfer-engine/adapter/gpu_vector/include
     )
     target_link_libraries(test_gpu_vector PUBLIC
-        chimaera_cxx
-        chimaera_cxx_gpu
+        clio_run_cxx
+        clio_run_cxx_gpu
         clio_admin_client
         clio_bdev_client
         clio_cte_core_client
@@ -77,7 +77,7 @@ if(CLIO_CORE_ENABLE_ROCM)
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
     set_tests_properties(cte_gpu_vector_rocm PROPERTIES
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
         TIMEOUT 120
         LABELS "gpu;rocm;cte;gpu_vector"
     )

@@ -31,8 +31,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_POOL_QUERY_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_POOL_QUERY_H_
+#ifndef CLIO_RUNTIME_INCLUDE_POOL_QUERY_H_
+#define CLIO_RUNTIME_INCLUDE_POOL_QUERY_H_
+
+#include <type_traits>
 
 #include "clio_runtime/types.h"
 
@@ -50,7 +52,11 @@ enum class RoutingMode {
   Physical,       /**< Route to specific physical node by ID */
   Dynamic,        /**< Dynamic routing with cache optimization (routes to Monitor) */
   ToLocalCpu,     /**< GPU → CPU direction (the only GPU-related mode) */
-  Null            /**< Do nothing */
+  Null,           /**< Do nothing */
+  ManyToOne,      /**< Batch+aggregate matching tasks at the neighborhood leader */
+  AllToOne        /**< Like ManyToOne, but the aggregate runs only once tasks
+                       from ALL containers in the pool have arrived (a collective
+                       barrier), instead of after a time window */
 };
 
 /**
@@ -79,44 +85,16 @@ class PoolQuery {
       : routing_mode_(RoutingMode::Local), hash_value_(0),
         container_id_(kInvalidContainerId),
         range_offset_(0), range_count_(0), node_id_(0), ret_node_(0),
-        net_timeout_(-1.0f), parallelism_(32) {}
+        net_timeout_(-1.0f), ttl_(-1.0f), parallelism_(32),
+        batch_key_(0), batch_for_ns_(0) {}
 
-  /**
-   * Copy constructor
-   */
-  CTP_CROSS_FUN PoolQuery(const PoolQuery& other)
-      : routing_mode_(other.routing_mode_),
-        hash_value_(other.hash_value_),
-        container_id_(other.container_id_),
-        range_offset_(other.range_offset_),
-        range_count_(other.range_count_),
-        node_id_(other.node_id_),
-        ret_node_(other.ret_node_),
-        net_timeout_(other.net_timeout_),
-        parallelism_(other.parallelism_) {}
-
-  /**
-   * Assignment operator
-   */
-  CTP_CROSS_FUN PoolQuery& operator=(const PoolQuery& other) {
-    if (this != &other) {
-      routing_mode_ = other.routing_mode_;
-      hash_value_ = other.hash_value_;
-      container_id_ = other.container_id_;
-      range_offset_ = other.range_offset_;
-      range_count_ = other.range_count_;
-      node_id_ = other.node_id_;
-      ret_node_ = other.ret_node_;
-      net_timeout_ = other.net_timeout_;
-      parallelism_ = other.parallelism_;
-    }
-    return *this;
-  }
-
-  /**
-   * Destructor
-   */
-  CTP_CROSS_FUN ~PoolQuery() {}
+  // Copy/move/destructor are intentionally left implicit (compiler-generated)
+  // so PoolQuery stays *trivially copyable*. It is raw-byte serialized and
+  // compared (e.g. the CTE transaction log WriteRaw/ReadRaw over
+  // sizeof(PoolQuery) and a memcmp roundtrip check), and is bytewise-copied
+  // across the GPU/host boundary. A hand-written field-wise copy would NOT
+  // copy padding, so two "equal" queries could differ in padding bytes and
+  // fail those raw-byte comparisons. (see static_assert below the class)
 
   // Static factory methods to create different types of PoolQuery
 
@@ -180,6 +158,47 @@ class PoolQuery {
    * @return PoolQuery configured for dynamic routing with cache optimization
    */
   static PoolQuery Dynamic(float net_timeout = -1);
+
+  /**
+   * Create a many-to-one collective routing pool query.
+   *
+   * Routes the task to the neighborhood leader, which briefly batches all
+   * tasks sharing the same (pool_id, method, container_hash, batch_key) for
+   * a batch_for window, aggregates them into a single task, runs it once,
+   * and broadcasts the result back to every batched task.
+   *
+   * @param container_hash Logical container key (stored in hash_value_);
+   *        also selects the container the aggregate task executes on.
+   * @param batch_key Sub-key to separate concurrent collectives on the same
+   *        (pool_id, method, container_hash). Default 0.
+   * @param batch_for_ns Batching window in nanoseconds. Default 10000 (10us).
+   * @return PoolQuery configured for many-to-one batch aggregation
+   */
+  static PoolQuery ManyToOne(u32 container_hash, u64 batch_key = 0,
+                             u64 batch_for_ns = 10000);
+
+  /**
+   * Create an all-to-one collective routing pool query.
+   *
+   * Identical to ManyToOne except for the flush condition: the neighborhood
+   * leader batches all tasks sharing the same (pool_id, method, container_hash,
+   * batch_key) and does NOT run the aggregate until tasks from EVERY container
+   * in the pool have arrived (a collective barrier). The aggregate tracks how
+   * many tasks have been combined into it; when that count reaches the pool's
+   * container count, it runs once and the result is broadcast back to every
+   * batched task (same 1->N result path as ManyToOne).
+   *
+   * Use this when the "one" must observe the contribution of all "many" before
+   * it can compute (e.g. a global reduction / barrier); use ManyToOne when a
+   * best-effort time-windowed batch is sufficient.
+   *
+   * @param container_hash Logical container key (stored in hash_value_); also
+   *        selects the container the aggregate task executes on.
+   * @param batch_key Sub-key to separate concurrent collectives on the same
+   *        (pool_id, method, container_hash). Default 0.
+   * @return PoolQuery configured for all-to-one barrier aggregation
+   */
+  static PoolQuery AllToOne(u32 container_hash, u64 batch_key = 0);
 
   /**
    * Create a pool query for GPU → CPU direction
@@ -362,6 +381,22 @@ class PoolQuery {
   CTP_CROSS_FUN void SetNetTimeout(float t) { net_timeout_ = t; }
 
   /**
+   * Get the task time-to-live: a hard upper bound on how long the origin
+   * waits for this (cross-node) task before completing it with a timeout RC,
+   * independent of node liveness (issue #628).
+   * @return TTL in seconds, or < 0 for infinity (the default) -- no hard cap;
+   *         liveness is then governed solely by the periodic QueryTaskProgress
+   *         check (GetTaskProgressIntervalMs).
+   */
+  CTP_CROSS_FUN float GetTtl() const { return ttl_; }
+
+  /**
+   * Set the task time-to-live in seconds. Negative = infinity (default).
+   * Overridable on any PoolQuery regardless of routing mode.
+   */
+  CTP_CROSS_FUN void SetTtl(float t) { ttl_ = t; }
+
+  /**
    * Get the parallelism level for GPU task dispatch
    * @return Number of threads (1 = lane 0 only, 32 = full warp, >32 = multi-warp)
    */
@@ -371,13 +406,60 @@ class PoolQuery {
   CTP_CROSS_FUN void SetParallelism(u32 parallelism) { parallelism_ = parallelism; }
 
   /**
+   * Check if pool query is in ManyToOne routing mode
+   * @return true if routing mode is ManyToOne
+   */
+  CTP_CROSS_FUN bool IsManyToOneMode() const {
+    return routing_mode_ == RoutingMode::ManyToOne;
+  }
+
+  /**
+   * Check if pool query is in AllToOne routing mode
+   * @return true if routing mode is AllToOne
+   */
+  CTP_CROSS_FUN bool IsAllToOneMode() const {
+    return routing_mode_ == RoutingMode::AllToOne;
+  }
+
+  /**
+   * Check if pool query is in any collective batch+aggregate mode
+   * (ManyToOne or AllToOne). Both route to the neighborhood leader and park in
+   * the BatchManager; they differ only in the flush condition.
+   * @return true if routing mode is ManyToOne or AllToOne
+   */
+  CTP_CROSS_FUN bool IsCollectiveMode() const {
+    return routing_mode_ == RoutingMode::ManyToOne ||
+           routing_mode_ == RoutingMode::AllToOne;
+  }
+
+  /**
+   * Get the container hash (ManyToOne). Aliases the hash value: it both
+   * keys the batch and selects the container the aggregate runs on.
+   * @return Container hash for many-to-one batching
+   */
+  CTP_CROSS_FUN u32 GetContainerHash() const { return hash_value_; }
+
+  /**
+   * Get the batch sub-key (ManyToOne)
+   * @return Batch key separating concurrent collectives
+   */
+  CTP_CROSS_FUN u64 GetBatchKey() const { return batch_key_; }
+
+  /**
+   * Get the batching window in nanoseconds (ManyToOne)
+   * @return Batch window in ns
+   */
+  CTP_CROSS_FUN u64 GetBatchForNs() const { return batch_for_ns_; }
+
+  /**
    * Serialization support for any archive type
    * @param ar Archive for serialization
    */
   template <class Archive>
   CTP_CROSS_FUN void serialize(Archive& ar) {
     ar.range(routing_mode_, hash_value_, container_id_, range_offset_,
-             range_count_, node_id_, ret_node_, net_timeout_, parallelism_);
+             range_count_, node_id_, ret_node_, net_timeout_, ttl_, parallelism_,
+             batch_key_, batch_for_ns_);
   }
 
  private:
@@ -389,10 +471,19 @@ class PoolQuery {
   u32 node_id_;              /**< Node ID for physical routing */
   u32 ret_node_;             /**< Return node ID for distributed responses */
   float net_timeout_;        /**< Per-task network timeout in seconds (-1 = use default) */
+  float ttl_;                /**< #628: task TTL in seconds; <0 = infinity (no hard cap) */
   u32 parallelism_;          /**< GPU parallelism: 1 (lane 0), 32 (full warp), >32 (multi-warp) */
+  u64 batch_key_;            /**< ManyToOne: batch sub-key */
+  u64 batch_for_ns_;         /**< ManyToOne: batch window in nanoseconds */
 };
 
+// PoolQuery is raw-byte serialized and memcmp-compared (CTE transaction log,
+// GPU/host bytewise task copies). Keep it trivially copyable so copies preserve
+// every byte (including padding) — a hand-written field-wise copy would not,
+// breaking those raw-byte roundtrips.
+static_assert(std::is_trivially_copyable<PoolQuery>::value,
+              "PoolQuery must remain trivially copyable (raw-byte serialized)");
 
 }  // namespace clio::run
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_POOL_QUERY_H_
+#endif  // CLIO_RUNTIME_INCLUDE_POOL_QUERY_H_

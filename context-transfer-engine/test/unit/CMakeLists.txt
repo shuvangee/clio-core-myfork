@@ -27,7 +27,7 @@ add_executable(test_cte_config_dpe
 )
 
 # Create single version of test_core_functionality that uses environment variable
-# CHI_WITH_RUNTIME to control whether runtime is initialized (default: yes)
+# CLIO_WITH_RUNTIME to control whether runtime is initialized (default: yes)
 add_executable(test_core_functionality
     test_core_functionality.cc
 )
@@ -72,6 +72,12 @@ add_executable(test_blob_block_reuse
 # Create test_reorganize_blob executable for ReorganizeBlob API tests
 add_executable(test_reorganize_blob
     test_reorganize_blob.cc
+)
+
+# BDEV leak stress: PutBlob/DelBlob loop for a wall-clock minute, then assert
+# the bdev used capacity is 0 and the runtime leak-checker heap counter is flat.
+add_executable(test_bdev_leak_stress
+    test_bdev_leak_stress.cc
 )
 
 # GPU-runtime-era CUDA tests were removed when the GPU runtime concept
@@ -136,10 +142,10 @@ target_include_directories(test_reorganize_blob PRIVATE
 target_link_libraries(cte_core_unit_tests
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -147,10 +153,10 @@ target_link_libraries(cte_core_unit_tests
 target_link_libraries(cte_core_functionality_simple_tests
     clio_cte_core_runtime
     clio_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT}
 )
@@ -159,10 +165,10 @@ target_link_libraries(cte_core_functionality_simple_tests
 target_link_libraries(test_core_functionality
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -171,10 +177,10 @@ target_link_libraries(test_core_functionality
 target_link_libraries(test_cte_config_dpe
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -183,10 +189,10 @@ target_link_libraries(test_cte_config_dpe
 target_link_libraries(test_query
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -195,10 +201,10 @@ target_link_libraries(test_query
 target_link_libraries(test_tag_operations
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -207,10 +213,10 @@ target_link_libraries(test_tag_operations
 target_link_libraries(test_core_client_config
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -219,10 +225,10 @@ target_link_libraries(test_core_client_config
 target_link_libraries(test_core_runtime_coverage
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -231,10 +237,10 @@ target_link_libraries(test_core_runtime_coverage
 target_link_libraries(test_tiered_storage_stress
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -243,10 +249,10 @@ target_link_libraries(test_tiered_storage_stress
 target_link_libraries(test_tiered_storage_dram_default
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum + policy helper
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum + policy helper
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -255,10 +261,10 @@ target_link_libraries(test_tiered_storage_dram_default
 target_link_libraries(test_blob_block_reuse
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -267,10 +273,22 @@ target_link_libraries(test_blob_block_reuse
 target_link_libraries(test_reorganize_blob
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
+    ctp::cxx                    # ClioCtp library
+    ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+# Link test_bdev_leak_stress - using simple_test.h framework (NOT Catch2)
+target_link_libraries(test_bdev_leak_stress
+    clio_cte_core_runtime         # CTE core runtime library
+    clio_cte_core_client          # CTE core client library
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -404,7 +422,7 @@ add_test(NAME cte_tag_edge
 
 # Single-process runs of test_core_client_config / test_core_runtime_coverage.
 # Previously each Catch2 SECTION was registered as a standalone ctest entry
-# (27 + 19), which serialized via RESOURCE_LOCK but multiplied chimaera
+# (27 + 19), which serialized via RESOURCE_LOCK but multiplied clio_run
 # init/finalize cycles and exposed shutdown ZMQ races.
 add_test(NAME cte_client_config_all
     COMMAND test_core_client_config)
@@ -441,7 +459,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "functional;core;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -460,7 +478,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout for each test
         LABELS "query;core;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(
@@ -476,7 +494,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout for each test
         LABELS "unit;tag;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 set_tests_properties(cte_client_config_all PROPERTIES
@@ -488,7 +506,18 @@ set_tests_properties(cte_client_config_all PROPERTIES
 set_tests_properties(cte_runtime_coverage_all PROPERTIES
     TIMEOUT 600
     LABELS "unit;core;cte;runtime;coverage"
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+)
+
+# BDEV leak stress: a 1-minute PutBlob/DelBlob churn that asserts the bdev used
+# capacity returns to 0 and the runtime leak-checker heap counter stays flat.
+# Name contains "leak" so the Leak Check CI (-R "leak|...force_net") runs it.
+add_test(NAME cte_bdev_leak_stress
+    COMMAND test_bdev_leak_stress)
+set_tests_properties(cte_bdev_leak_stress PROPERTIES
+    TIMEOUT 180
+    LABELS "unit;cte;bdev;leak;stress;msan_skip"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;CTE_LEAK_STRESS_SECONDS=60"
 )
 
 # Add tiered storage stress tests
@@ -503,7 +532,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "stress;tiered;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Stresses the "0g" -> 80% DRAM RAM-tier default through the CTE tiering
@@ -517,7 +546,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "stress;tiered;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Regression: blocks freed by DelBlob return to their bdev partition.
@@ -529,7 +558,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "regression;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # Add reorganize blob tests
@@ -544,7 +573,7 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "unit;reorganize;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
 # ---------------------------------------------------------------------------
@@ -555,7 +584,7 @@ set_tests_properties(
 # pure-stress binaries are intentionally excluded.
 # ---------------------------------------------------------------------------
 set(_cte_fn_env_basic "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1")
-set(_cte_fn_env_data "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1")
+set(_cte_fn_env_data "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1")
 clio_add_force_net_test(NAME cte_core_unit_force_net
     COMMAND cte_core_unit_tests ENVIRONMENT "${_cte_fn_env_basic}")
 clio_add_force_net_test(NAME cte_core_simple_force_net
@@ -581,6 +610,12 @@ clio_add_force_net_test(NAME cte_client_config_force_net
     COMMAND test_core_client_config ENVIRONMENT "${_cte_fn_env_basic}" TIMEOUT 600)
 clio_add_force_net_test(NAME cte_config_dpe_force_net
     COMMAND test_cte_config_dpe ENVIRONMENT "${_cte_fn_env_basic}")
+# BDEV leak stress over the loopback net path. Each Put/Del round-trips the net
+# transport (far slower than in-process), so use a shorter window — still enough
+# churn to expose a per-op leak, while keeping the CI job bounded.
+clio_add_force_net_test(NAME cte_bdev_leak_stress_force_net
+    COMMAND test_bdev_leak_stress
+    ENVIRONMENT "${_cte_fn_env_data};CTE_LEAK_STRESS_SECONDS=20" TIMEOUT 180)
 
 # NOTE: the legacy GPU CTE tests cte_gpu_coroutine / cte_gpu_core_all /
 # cte_gpu_create were removed — their executables (test_cte_gpu_coroutine /
@@ -589,7 +624,7 @@ clio_add_force_net_test(NAME cte_config_dpe_force_net
 # executable"). The current GPU CTE test is cte_devmem_putget_cuda
 # (test_cte_devmem_putget, defined below).
 
-# Mark all CTE tests as msan_skip (they use ZMQ via chimaera runtime which is uninstrumented)
+# Mark all CTE tests as msan_skip (they use ZMQ via clio_run runtime which is uninstrumented)
 set_tests_properties(
     cte_core_pool_creation
     cte_core_target_registration
@@ -638,9 +673,9 @@ set_tests_properties(
     PROPERTIES LABELS "msan_skip"
 )
 
-# Tests that start a full CLIO Runtime runtime share /tmp/chimaera_iowarp SHM
+# Tests that start a full CLIO Runtime runtime share /tmp/clio_iowarp SHM
 # segments and TCP/IPC ports, so they must NOT run in parallel. They also
-# need the chimaera cleanup fixture so a previous runtime process holding
+# need the clio_run cleanup fixture so a previous runtime process holding
 # 0.0.0.0:9416 doesn't break the next test's `IpcManager::ServerInit` with
 # "Address in use" (especially on Windows, where TIME_WAIT can hang on for
 # minutes and SIMPLE_TEST_PROCESS_EXIT skips libzmq's own socket close).
@@ -674,8 +709,8 @@ set_tests_properties(
     cte_block_reuse_all
     cte_reorganize_all
     PROPERTIES
-        RESOURCE_LOCK "chimaera_runtime"
-        FIXTURES_REQUIRED "chimaera_test_cleanup_fixture"
+        RESOURCE_LOCK "clio_runtime"
+        FIXTURES_REQUIRED "clio_test_cleanup_fixture"
         # Move the runtime off port 9413 (and its derivatives 9414/9416) onto
         # a high range so that an IDE / random local server squatting on the
         # default port doesn't break the test run. libzmq's Windows socket
@@ -685,7 +720,7 @@ set_tests_properties(
         ENVIRONMENT "CLIO_PORT=10500"
 )
 # All cte_functional_* tests run test_core_functionality (9 test cases, each
-# initializing and finalizing the full chimaera runtime).  After multiple
+# initializing and finalizing the full clio_run runtime).  After multiple
 # runtime init/finalize cycles, ZMQ background threads fire callbacks on
 # already-freed runtime memory, producing non-deterministic heap-use-after-free
 # defects under ASan.  The same uninstrumented-runtime category caused all CTE
@@ -734,8 +769,8 @@ if(CLIO_CORE_ENABLE_CUDA)
       ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
       ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
     LINK_LIBS
-      chimaera_cxx
-      chimaera_cxx_gpu
+      clio_run_cxx
+      clio_run_cxx_gpu
       clio_admin_client
       clio_bdev_client
       clio_cte_core_client
@@ -750,7 +785,7 @@ if(CLIO_CORE_ENABLE_CUDA)
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
   set_tests_properties(cte_devmem_putget_cuda PROPERTIES
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1"
     TIMEOUT 120
     LABELS "gpu;cuda;cte;devmem;putblob"
   )
@@ -776,8 +811,8 @@ if(CLIO_CORE_ENABLE_ROCM)
     ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
   )
   target_link_libraries(test_cte_devmem_putget PUBLIC
-    chimaera_cxx
-    chimaera_cxx_gpu
+    clio_run_cxx
+    clio_run_cxx_gpu
     clio_admin_client
     clio_bdev_client
     clio_cte_core_client
@@ -789,7 +824,7 @@ if(CLIO_CORE_ENABLE_ROCM)
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
   set_tests_properties(cte_devmem_putget_rocm PROPERTIES
-    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1"
     TIMEOUT 120
     LABELS "gpu;rocm;cte;devmem;putblob"
   )
@@ -819,10 +854,10 @@ add_executable(test_cte_transaction_log
 target_link_libraries(test_cte_transaction_log
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    chimaera::admin_runtime      # Admin module runtime (required for runtime mode)
-    chimaera::admin_client       # Admin module client
-    chimaera::bdev_runtime       # Bdev module runtime (required for runtime mode)
-    chimaera::bdev_client        # Bdev client for BdevType enum
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
 )
@@ -852,10 +887,10 @@ add_executable(test_cte_gpu_metadata_cache
 target_link_libraries(test_cte_gpu_metadata_cache
     clio_cte_core_runtime
     clio_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT}
 )
@@ -885,10 +920,10 @@ add_executable(test_cte_config_errors
 target_link_libraries(test_cte_config_errors
     clio_cte_core_runtime
     clio_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT}
 )

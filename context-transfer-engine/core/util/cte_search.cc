@@ -324,7 +324,7 @@ static Mode DetermineMode(const Args &a) {
 }
 
 static int RunSearch(clio::cte::core::Client *client, const Args &a) {
-  auto pool_query = chi::PoolQuery::Broadcast();
+  auto pool_query = clio::run::PoolQuery::Broadcast();
   Mode mode = DetermineMode(a);
 
   if (mode == Mode::kTemporal) {
@@ -406,8 +406,8 @@ static int RunSearch(clio::cte::core::Client *client, const Args &a) {
 int main(int argc, char **argv) {
   Args args = ParseArgs(argc, argv);
 
-  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
-    std::cerr << "error: failed to initialize Chimaera runtime\n";
+  if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false)) {
+    std::cerr << "error: failed to initialize Clio runtime\n";
     return 1;
   }
   struct Finalizer {

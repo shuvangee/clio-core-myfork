@@ -10,6 +10,7 @@ add_subdirectory(allocator)
 add_subdirectory(backend)
 add_subdirectory(data_structures)
 add_subdirectory(introspect)
+add_subdirectory(search)
 add_subdirectory(util)
 # Following test directories disabled - depend on deleted code:
 # add_subdirectory(types)
@@ -36,3 +37,11 @@ if(CLIO_CORE_ENABLE_CUDA OR CLIO_CORE_ENABLE_ROCM OR CLIO_CORE_ENABLE_SYCL)
 endif()
 
 add_subdirectory(lightbeam)
+
+if(CLIO_ENABLE_AMAZON_DRIVE)
+    add_subdirectory(amazon_s3)
+endif()
+
+if(CLIO_ENABLE_GOOGLE_CLOUD)
+    add_subdirectory(google_cloud)
+endif()

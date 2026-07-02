@@ -43,7 +43,7 @@
 #include "clio_runtime/container.h"
 
 // Global pointer variable definition for Module manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(chi::ModuleManager, g_module_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::ModuleManager, g_module_manager);
 
 namespace clio::run {
 
@@ -152,8 +152,8 @@ ChiModInfo *ModuleManager::GetChiMod(const std::string &chimod_name) {
   // The table is checked only on cache miss, so the rename does not slow
   // down the hot path. See docs/deprecation-notes.md for the public list.
   static const std::pair<const char *, const char *> kAliases[] = {
-      {"chimaera_bdev", "clio_bdev"},   // renamed 2026
-      {"chimaera_admin", "clio_admin"}, // renamed 2026
+      {"clio_bdev", "clio_bdev"},   // renamed 2026
+      {"clio_admin", "clio_admin"}, // renamed 2026
   };
   for (const auto &alias : kAliases) {
     if (chimod_name == alias.first) {
@@ -229,8 +229,8 @@ std::vector<std::string> ModuleManager::GetScanDirectories() const {
     directories.push_back(module_dir);
   }
 
-  // Get CHI_REPO_PATH
-  const char *chi_repo_path = chi::env::GetCompat("REPO_PATH");
+  // Get CLIO_REPO_PATH
+  const char *chi_repo_path = clio::run::env::GetCompat("REPO_PATH");
   if (chi_repo_path) {
     std::string path_str(chi_repo_path);
     // Split by colon (Unix) or semicolon (Windows)

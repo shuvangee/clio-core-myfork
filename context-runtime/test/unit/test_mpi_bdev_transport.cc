@@ -48,6 +48,7 @@
 #include <mpi.h>
 
 #ifndef _WIN32
+#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -67,41 +68,65 @@
 #include <clio_runtime/bdev/bdev_client.h>
 #include <clio_runtime/bdev/bdev_tasks.h>
 
-using namespace chi;
+using namespace clio::run;
 
 // --- Helpers ---
 
-inline chi::priv::vector<clio::run::bdev::Block> WrapBlock(
+inline clio::run::priv::vector<clio::run::bdev::Block> WrapBlock(
     const clio::run::bdev::Block& block) {
-  chi::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
+  clio::run::priv::vector<clio::run::bdev::Block> blocks(CTP_MALLOC);
   blocks.push_back(block);
   return blocks;
 }
 
-bool WaitForServer(int max_attempts = 100) {
+// The runtime suffixes its SHM segment names with the server port
+// (GetSharedMemorySegmentName: "<base>_<port>") so multiple runtimes on one node
+// do not collide. The exact port is not known here (the client ranks probe
+// before their own CLIO_INIT), so match the base name as a prefix and accept any
+// port suffix. Returns the matched full path, or "" if none yet.
+static std::string FindMainSegment() {
   const char* user = std::getenv("USER");
-  std::string memfd_path = std::string("/tmp/chimaera_") +
-                           (user ? user : "unknown") +
-                           "/chi_main_segment_" + (user ? user : "");
+  std::string user_s = user ? user : "unknown";
+  std::string dir = std::string("/tmp/clio_") + user_s;
+  std::string prefix = std::string("chi_main_segment_") + user_s;
+  DIR* d = opendir(dir.c_str());
+  if (d == nullptr) {
+    return "";
+  }
+  std::string found;
+  struct dirent* ent;
+  while ((ent = readdir(d)) != nullptr) {
+    std::string name(ent->d_name);
+    if (name.rfind(prefix, 0) == 0) {  // name starts with prefix
+      found = dir + "/" + name;
+      break;
+    }
+  }
+  closedir(d);
+  return found;
+}
 
+bool WaitForServer(int max_attempts = 100) {
   for (int i = 0; i < max_attempts; ++i) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    int fd = open(memfd_path.c_str(), O_RDONLY);
-    if (fd >= 0) {
-      close(fd);
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      return true;
+    std::string seg = FindMainSegment();
+    if (!seg.empty()) {
+      int fd = open(seg.c_str(), O_RDONLY);
+      if (fd >= 0) {
+        close(fd);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        return true;
+      }
     }
   }
   return false;
 }
 
 void CleanupSharedMemory() {
-  const char* user = std::getenv("USER");
-  std::string memfd_path = std::string("/tmp/chimaera_") +
-                           (user ? user : "unknown") +
-                           "/chi_main_segment_" + (user ? user : "");
-  unlink(memfd_path.c_str());
+  std::string seg = FindMainSegment();
+  if (!seg.empty()) {
+    unlink(seg.c_str());
+  }
 }
 
 /**
@@ -109,17 +134,17 @@ void CleanupSharedMemory() {
  * Returns true on success, false on failure.
  */
 bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
-  const chi::u64 kRamSize = 16 * 1024 * 1024;  // 16MB pool
-  const chi::u64 kBlockSize = io_size;
+  const clio::run::u64 kRamSize = 16 * 1024 * 1024;  // 16MB pool
+  const clio::run::u64 kBlockSize = io_size;
 
   // Rank-specific pool to avoid conflicts
-  chi::PoolId pool_id(9000 + rank, 0);
+  clio::run::PoolId pool_id(9000 + rank, 0);
   clio::run::bdev::Client client(pool_id);
   std::string pool_name = "mpi_bdev_" + mode_name + "_rank" + std::to_string(rank);
 
   // Create pool
   auto create_task = client.AsyncCreate(
-      chi::PoolQuery::Dynamic(), pool_name, pool_id,
+      clio::run::PoolQuery::Dynamic(), pool_name, pool_id,
       clio::run::bdev::BdevType::kRam, kRamSize);
   create_task.Wait();
   if (create_task->return_code_ != 0) {
@@ -130,7 +155,7 @@ bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
 
   // Allocate blocks
   auto alloc_task = client.AsyncAllocateBlocks(
-      chi::PoolQuery::Local(), kBlockSize);
+      clio::run::PoolQuery::Local(), kBlockSize);
   alloc_task.Wait();
   if (alloc_task->return_code_ != 0 || alloc_task->blocks_.size() == 0) {
     HLOG(kError, "[Rank {}] AllocateBlocks failed", rank);
@@ -152,7 +177,7 @@ bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
   }
   memcpy(write_buffer.ptr_, write_data.data(), write_data.size());
   auto write_task = client.AsyncWrite(
-      chi::PoolQuery::Local(), WrapBlock(block),
+      clio::run::PoolQuery::Local(), WrapBlock(block),
       write_buffer.shm_.template Cast<void>().template Cast<void>(),
       write_data.size());
   write_task.Wait();
@@ -171,7 +196,7 @@ bool RunBdevIoTest(int rank, const std::string& mode_name, size_t io_size) {
     return false;
   }
   auto read_task = client.AsyncRead(
-      chi::PoolQuery::Local(), WrapBlock(block),
+      clio::run::PoolQuery::Local(), WrapBlock(block),
       read_buffer.shm_.template Cast<void>().template Cast<void>(),
       io_size);
   read_task.Wait();
@@ -253,15 +278,15 @@ int main(int argc, char* argv[]) {
 
   if (rank == 0) {
     // --- Server rank ---
-    HLOG(kInfo, "[Rank 0] Starting Chimaera server...");
+    HLOG(kInfo, "[Rank 0] Starting Clio server...");
 
     // Cleanup stale shared memory
     CleanupSharedMemory();
 
     setenv("CLIO_WITH_RUNTIME", "1", 1);
-    bool success = CHIMAERA_INIT(ChimaeraMode::kServer, true);
+    bool success = CLIO_INIT(RuntimeMode::kServer, true);
     if (!success) {
-      HLOG(kError, "[Rank 0] CHIMAERA_INIT(kServer) failed!");
+      HLOG(kError, "[Rank 0] CLIO_INIT(kServer) failed!");
       MPI_Abort(MPI_COMM_WORLD, 1);
       return 1;
     }
@@ -288,7 +313,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Cleanup
-    chi::CHIMAERA_FINALIZE();
+    clio::run::CLIO_RUNTIME_FINALIZE();
     CleanupSharedMemory();
     MPI_Finalize();
     return (global_pass == 1) ? 0 : 1;
@@ -312,9 +337,9 @@ int main(int argc, char* argv[]) {
 
     HLOG(kInfo, "[Rank {}] Connecting as {} client...", rank, mode_name);
 
-    bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
+    bool success = CLIO_INIT(RuntimeMode::kClient, false);
     if (!success) {
-      HLOG(kError, "[Rank {}] CHIMAERA_INIT(kClient) failed!", rank);
+      HLOG(kError, "[Rank {}] CLIO_INIT(kClient) failed!", rank);
       MPI_Abort(MPI_COMM_WORLD, 1);
       return 1;
     }
@@ -339,7 +364,7 @@ int main(int argc, char* argv[]) {
     MPI_Reduce(&local_pass, &global_pass, 1, MPI_INT, MPI_MIN,
                0, MPI_COMM_WORLD);
 
-    chi::CHIMAERA_FINALIZE();
+    clio::run::CLIO_RUNTIME_FINALIZE();
     MPI_Finalize();
     return (local_pass == 1) ? 0 : 1;
   }

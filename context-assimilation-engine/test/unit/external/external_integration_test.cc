@@ -40,10 +40,10 @@ public:
 
         try {
             // Step 1: Initialize CLIO Runtime (runtime + client)
-            HLOG(kInfo, "1. Initializing Chimaera...");
-            bool chimaera_init = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
-            if (!chimaera_init) {
-                HLOG(kError, "Failed to initialize Chimaera");
+            HLOG(kInfo, "1. Initializing Clio...");
+            bool clio_init = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
+            if (!clio_init) {
+                HLOG(kError, "Failed to initialize Clio");
                 return false;
             }
 
@@ -56,7 +56,7 @@ public:
             clio::cae::core::CreateParams create_params;
 
             try {
-                cae_client_->Create(ctp::ipc::MemContext(), chi::PoolQuery::Dynamic(),
+                cae_client_->Create(ctp::ipc::MemContext(), clio::run::PoolQuery::Dynamic(),
                                    "cae_test_pool",
                                    clio::cae::core::kCaePoolId, create_params);
                 HLOG(kSuccess, "CAE container created successfully");

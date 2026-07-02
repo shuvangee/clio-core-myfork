@@ -59,10 +59,20 @@ start_docker_cluster() {
 
     # Auto-detect Docker image: use nvidia image if binary requires CUDA
     if [ -z "${IOWARP_DOCKER_IMAGE:-}" ]; then
-        CHIMAERA_BIN="/workspace/build/bin/chimaera"
-        [ ! -f "$CHIMAERA_BIN" ] && CHIMAERA_BIN="${IOWARP_CORE_ROOT:-/workspace}/build/bin/chimaera"
-        if [ -f "$CHIMAERA_BIN" ] && ldd "$CHIMAERA_BIN" 2>/dev/null | grep -q "libcudart"; then
+        CLIO_BIN="/workspace/build/bin/clio_run"
+        [ ! -f "$CLIO_BIN" ] && CLIO_BIN="${IOWARP_CORE_ROOT:-/workspace}/build/bin/clio_run"
+        if [ -f "$CLIO_BIN" ] && ldd "$CLIO_BIN" 2>/dev/null | grep -q "libcudart"; then
             export IOWARP_DOCKER_IMAGE="iowarp/deps-nvidia:latest"
+            # The host build links a CUDA runtime (libcudart.so.N) whose version
+            # the deps-nvidia image may not carry. The containers run with no GPU
+            # driver, so clio_run only needs the runtime lib to LOAD (IsDevicePointer
+            # falls back to the CPU path when no device is present). Stage the exact
+            # libcudart the binary links into build/bin, which every node mounts and
+            # puts first on LD_LIBRARY_PATH. No-op for a CPU build (no libcudart).
+            _bindir="$(dirname "$CLIO_BIN")"
+            ldd "$CLIO_BIN" 2>/dev/null | awk '/libcudart/{print $3}' | while read -r _lib; do
+                { [ -n "$_lib" ] && [ -f "$_lib" ] && cp -Lu "$_lib" "$_bindir/" 2>/dev/null; } || true
+            done
         else
             export IOWARP_DOCKER_IMAGE="iowarp/deps-cpu:latest"
         fi
@@ -91,7 +101,7 @@ run_single_test() {
     local filter="$1"
     docker exec iowarp-leader-elect-node1 bash -c "
         export CLIO_WITH_RUNTIME=0
-        chimaera_leader_elect_tests '$filter'
+        clio_run_leader_elect_tests '$filter'
     "
 }
 
@@ -107,7 +117,7 @@ check_cluster_status() {
         running=$(docker inspect -f '{{.State.Running}}' "$cname" 2>/dev/null || echo "gone")
         if [ "$running" = "true" ]; then
             local procs
-            procs=$(docker exec "$cname" pgrep -a chimaera 2>/dev/null || echo "(none)")
+            procs=$(docker exec "$cname" pgrep -a clio_run 2>/dev/null || echo "(none)")
             log_info "  $cname: UP  runtime=$procs"
         else
             log_warning "  $cname: DOWN ($running)"

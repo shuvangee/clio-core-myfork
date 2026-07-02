@@ -65,7 +65,7 @@ namespace fs = std::filesystem;
  */
 class CoreClientConfigFixture {
  public:
-  static constexpr chi::u64 kTestTargetSize = 1024 * 1024 * 10;  // 10MB
+  static constexpr clio::run::u64 kTestTargetSize = 1024 * 1024 * 10;  // 10MB
   static constexpr size_t kTestDataSize = 4096;                  // 4KB
 
   std::string test_storage_path_;
@@ -84,7 +84,7 @@ class CoreClientConfigFixture {
 
     // Clean up existing files. Non-throwing form: on Windows the previous
     // test case's bdev runtime still holds the storage file open (same
-    // CHIMAERA singleton, persists across fixtures), so fs::remove throws
+    // CLIO singleton, persists across fixtures), so fs::remove throws
     // a sharing-violation. Best-effort removal is what we want — if the
     // file's open, leaving it in place is harmless because the runtime
     // already truncates/reuses it on the next pool create.
@@ -94,11 +94,11 @@ class CoreClientConfigFixture {
 
     // Initialize CLIO Runtime and CTE once
     if (!g_initialized) {
-      bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+      bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
       REQUIRE(success);
 
       // Drain ZMQ background threads in main() before static dtors fire.
-      SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+      SimpleTest::g_test_finalize = clio::run::CLIO_RUNTIME_FINALIZE;
 
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -113,7 +113,7 @@ class CoreClientConfigFixture {
       // Create CTE core pool
       clio::cte::core::CreateParams params;
       auto create_task = cte_client->AsyncCreate(
-          chi::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
+          clio::run::PoolQuery::Dynamic(), clio::cte::core::kCtePoolName,
           clio::cte::core::kCtePoolId, params);
       create_task.Wait();
       REQUIRE(create_task->GetReturnCode() == 0);
@@ -133,7 +133,7 @@ class CoreClientConfigFixture {
     // implicitly noexcept, so a throw here calls std::terminate (which
     // surfaces as 0xC0000409 / STATUS_STACK_BUFFER_OVERRUN). Best-effort
     // cleanup is correct here — leftover files are scrubbed by the
-    // chimaera_test_cleanup_fixture between test binaries.
+    // clio_test_cleanup_fixture between test binaries.
     std::error_code ec;
     fs::remove(test_storage_path_, ec);
     fs::remove(test_config_path_, ec);
@@ -150,10 +150,10 @@ class CoreClientConfigFixture {
     auto *cte_client = CLIO_CTE_CLIENT;
 
     // Create bdev pool
-    chi::PoolId bdev_pool_id(900, 0);
+    clio::run::PoolId bdev_pool_id(900, 0);
     clio::run::bdev::Client bdev_client(bdev_pool_id);
     auto create_task =
-        bdev_client.AsyncCreate(chi::PoolQuery::Dynamic(), test_storage_path_,
+        bdev_client.AsyncCreate(clio::run::PoolQuery::Dynamic(), test_storage_path_,
                                 bdev_pool_id, clio::run::bdev::BdevType::kFile);
     create_task.Wait();
 
@@ -162,7 +162,7 @@ class CoreClientConfigFixture {
     // Register target
     auto reg_task = cte_client->AsyncRegisterTarget(
         test_storage_path_, clio::run::bdev::BdevType::kFile, kTestTargetSize,
-        chi::PoolQuery::Local(), bdev_pool_id);
+        clio::run::PoolQuery::Local(), bdev_pool_id);
     reg_task.Wait();
     REQUIRE(reg_task->GetReturnCode() == 0);
 
@@ -205,7 +205,7 @@ TEST_CASE("Config - Default Construction", "[core][config]") {
   INFO("Default config constructed successfully");
 }
 
-TEST_CASE("Config - Load from Valid YAML File", "[core][config]") {
+TEST_CASE("Config - Load from Valid YAML File", "[core][config][noleak]") {
   CoreClientConfigFixture fixture;
 
   // Create valid config file
@@ -521,7 +521,7 @@ TEST_CASE("Client - AsyncDelBlob", "[core][client][blob]") {
   INFO("AsyncDelBlob completed with code: " << del_task->GetReturnCode());
 }
 
-TEST_CASE("Client - AsyncReorganizeBlob Direct", "[core][client][blob]") {
+TEST_CASE("Client - AsyncReorganizeBlob Direct", "[core][client][blob][noleak]") {
   CoreClientConfigFixture fixture;
   fixture.SetupTarget();
 

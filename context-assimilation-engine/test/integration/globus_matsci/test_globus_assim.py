@@ -8,7 +8,7 @@ local filesystem using the Content Assimilation Engine (CAE).
 The script:
   1. Reads Globus tokens from the environment or /tmp/globus_tokens.sh
   2. Writes a temporary OMNI YAML describing the transfer
-  3. Starts the Chimaera runtime (CTE + CAE compose) in the background
+  3. Starts the Clio runtime (CTE + CAE compose) in the background
   4. Calls ``clio_cae <omni.yaml>`` to drive the transfer
   5. Verifies the output files exist
   6. Stops the runtime
@@ -63,7 +63,7 @@ networking:
   neighborhood_size: 1
 logging:
   level: info
-  file: /tmp/chimaera_globus_test.log
+  file: /tmp/clio_run_globus_test.log
 runtime:
   num_threads: 4
   queue_depth: 1024
@@ -222,14 +222,14 @@ def run_globus_assim_test(output_dir: str | None = None) -> int:
     rc = 1
     try:
         # Start runtime
-        print("Starting Chimaera runtime...")
+        print("Starting Clio runtime...")
         runtime_proc = subprocess.Popen(
             ["clio_run", "runtime", "start"],
             env=env,
         )
 
         # Wait for IPC socket
-        ipc_socket = f"/tmp/chimaera_{os.environ.get('USER', 'user')}/chimaera_9413.ipc"
+        ipc_socket = f"/tmp/clio_{os.environ.get('USER', 'user')}/clio_9413.ipc"
         print(f"Waiting for runtime socket ({ipc_socket})...", end="", flush=True)
         for _ in range(60):
             if os.path.exists(ipc_socket):

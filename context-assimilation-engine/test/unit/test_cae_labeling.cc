@@ -51,19 +51,19 @@ bool ShouldSkip() {
 }
 
 /**
- * Lazy chimaera bring-up. Multiple TEST_CASEs in the same binary share
- * one runtime — CHIMAERA_INIT is internally guarded but we also avoid
+ * Lazy clio bring-up. Multiple TEST_CASEs in the same binary share
+ * one runtime — CLIO_INIT is internally guarded but we also avoid
  * the post-init sleep on subsequent calls.
  */
-void EnsureChimaera() {
+void EnsureClio() {
   static bool s_initialized = false;
   if (s_initialized) return;
   fs::path config_path = fs::path(__FILE__).parent_path() /
                           "test_cae_labeling_config.yaml";
   ctp::SystemInfo::Setenv("CLIO_SERVER_CONF", config_path.string(), 1);
-  bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer);
+  bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kServer);
   REQUIRE(success);
-  SimpleTest::g_test_finalize = chi::CHIMAERA_FINALIZE;
+  SimpleTest::g_test_finalize = clio::run::CLIO_RUNTIME_FINALIZE;
   std::this_thread::sleep_for(1s);
   auto *cte_client = CLIO_CTE_CLIENT;
   cte_client->Init(clio::cte::core::kCtePoolId);
@@ -110,7 +110,7 @@ TEST_CASE("CAE transparent labeling via Ollama writes {name}_label",
     INFO("CAE_LABEL_TEST_SKIP=1 set; skipping");
     return;
   }
-  EnsureChimaera();
+  EnsureClio();
   auto *cte_client = CLIO_CTE_CLIENT;
 
   // ".txt" tag → first YAML rule with context_length 4096 (single shot).
@@ -155,7 +155,7 @@ TEST_CASE("CAE transparent labeling chunks oversized blobs",
     INFO("CAE_LABEL_TEST_SKIP=1 set; skipping");
     return;
   }
-  EnsureChimaera();
+  EnsureClio();
   auto *cte_client = CLIO_CTE_CLIENT;
 
   // ".chunked" tag → YAML rule with context_length=512. Chunking math
