@@ -444,37 +444,36 @@ static bool iowarp_is_collective(hid_t dxpl_id) {
 }
 
 /**
- * Helper: true when the datatype's in-memory representation is a flat, fixed-size
- * byte layout that can be safely linear-copied into the CTE chunk cache.
- * Variable-length strings, variable-length sequences (hvl_t), and references hold
- * POINTERS in the transfer buffer, not the data itself — a raw memcpy into a CTE
- * blob would cache pointer values, not content, and corrupt the round-trip. Such
- * transfers are delegated to the native VOL only (the native file still holds the
- * real data; it is simply not mirrored into CTE). Recurses into compound/array
- * member types so a vlen/reference nested inside a compound also bypasses.
+ * Helper: true when the datatype's in-memory transfer buffer is a flat byte image
+ * IDENTICAL to what HDF5 stores on disk, so a raw memcpy into the linear CTE chunk
+ * cache faithfully mirrors the file and can be served back (whole or via
+ * selection) without diverging from native.
+ *
+ * Restricted to ATOMIC classes (integer, float, enum, bitfield, fixed-length
+ * string). Excluded:
+ *   - vlen strings / vlen sequences (hvl_t) / references — the buffer holds
+ *     POINTERS, not content; caching them would store pointer values.
+ *   - compound and array datatypes — their memory image can differ from the
+ *     on-disk element image (member padding, subarray semantics), so the cached
+ *     write buffer may diverge from what HDF5 actually stores. Observed with a
+ *     subarray datatype whose file image was zero-filled while the write buffer
+ *     was not: serving that from cache returned data native never wrote.
+ * Excluded types are delegated to the native VOL only (the native file still holds
+ * the real data; it is simply not mirrored into CTE).
  */
-static bool iowarp_type_is_flat(hid_t type_id) {
+static bool iowarp_type_is_cacheable(hid_t type_id) {
   if (type_id < 0) return false;
   if (H5Tis_variable_str(type_id) > 0) return false;
-  H5T_class_t cls = H5Tget_class(type_id);
-  if (cls == H5T_VLEN || cls == H5T_REFERENCE) return false;
-  if (cls == H5T_COMPOUND) {
-    int n = H5Tget_nmembers(type_id);
-    for (int i = 0; i < n; ++i) {
-      hid_t mt = H5Tget_member_type(type_id, i);
-      bool flat = iowarp_type_is_flat(mt);
-      H5Tclose(mt);
-      if (!flat) return false;
-    }
-    return true;
+  switch (H5Tget_class(type_id)) {
+    case H5T_INTEGER:
+    case H5T_FLOAT:
+    case H5T_ENUM:
+    case H5T_BITFIELD:
+    case H5T_STRING:   /* vlen strings already excluded above */
+      return true;
+    default:           /* compound, array, vlen, reference, opaque, time */
+      return false;
   }
-  if (cls == H5T_ARRAY) {
-    hid_t bt = H5Tget_super(type_id);
-    bool flat = iowarp_type_is_flat(bt);
-    H5Tclose(bt);
-    return flat;
-  }
-  return true;  /* integer, float, fixed-length string, enum, bitfield, opaque */
 }
 
 static void *iowarp_dataset_create(void *obj,
@@ -534,12 +533,21 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
        write under a whole-dataset key would poison a later whole read. */
     if (!dataset->file || !dataset->cacheable ||
         !iowarp_is_whole_read(mem_space_id[d], file_space_id[d]) ||
-        !iowarp_type_is_flat(mem_type_id[d]) ||
+        !iowarp_type_is_cacheable(mem_type_id[d]) ||
         iowarp_is_collective(dxpl_id)) {
       H5VLdataset_write(1, &dataset->obj.under_object,
                          dataset->obj.under_vol_id,
                          &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                          dxpl_id, &buf[d], req);
+      /* This write did NOT refresh the whole linear image, so any cached image
+         is now stale. Invalidate it (drop the chunk_0 hit-test key) so later
+         whole/selection reads miss and re-stage fresh data from native. Without
+         this, a partial write followed by a cached read returns pre-write data. */
+      if (dataset->file && dataset->cacheable) {
+        auto del = cte_client->AsyncDelBlob(
+            dataset->file->tag_id, dataset->dataset_path + "/chunk_0");
+        del.Wait();
+      }
       continue;
     }
 
@@ -594,6 +602,124 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
   return 0;
 }
 
+/* True when the dataset's linear chunk cache is populated (a fully-staged cache
+   always has a non-empty chunk_0, the hit-test key). */
+static bool iowarp_cache_populated(iowarp_dataset_t *dataset) {
+  auto *cte_client = get_cte_client();
+  auto sz = cte_client->AsyncGetBlobSize(dataset->file->tag_id,
+                                         dataset->dataset_path + "/chunk_0");
+  sz.Wait();
+  return sz->size_ > 0;
+}
+
+/* Reassemble the full linear dataset image from its CTE chunk blobs into dst
+   (which must hold total_size bytes). Returns true on success. Shared by the
+   whole-read hit path and selection serving. */
+static bool iowarp_read_cached_image(iowarp_dataset_t *dataset,
+                                     size_t total_size, char *dst) {
+  auto *cte_client = get_cte_client();
+  size_t chunk_size = dataset->file->chunk_size;
+  size_t num_chunks = (total_size + chunk_size - 1) / chunk_size;
+  std::vector<clio::run::Future<clio::cte::core::GetBlobTask>> futures;
+  std::vector<ctp::ipc::FullPtr<char>> buffers;
+  futures.reserve(num_chunks);
+  buffers.reserve(num_chunks);
+  for (size_t i = 0; i < num_chunks; ++i) {
+    size_t offset = i * chunk_size;
+    size_t this_size = std::min(chunk_size, total_size - offset);
+    auto buffer = CLIO_IPC->AllocateBuffer(this_size);
+    if (buffer.IsNull()) return false;
+    ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
+    std::string blob_name = dataset->dataset_path + "/chunk_" +
+                            std::to_string(i);
+    futures.push_back(cte_client->AsyncGetBlob(dataset->file->tag_id, blob_name,
+                                               offset, this_size, 0, blob_data));
+    buffers.push_back(std::move(buffer));
+  }
+  for (size_t i = 0; i < futures.size(); ++i) {
+    futures[i].Wait();
+    size_t offset = i * chunk_size;
+    size_t this_size = std::min(chunk_size, total_size - offset);
+    std::memcpy(dst + offset, buffers[i].ptr_, this_size);
+  }
+  return true;
+}
+
+/* H5Dscatter source callback: hand the whole gathered selection to HDF5 in one
+   shot. dst_space selects exactly as many elements as we provide, so HDF5
+   consumes it in a single call. */
+struct iowarp_scatter_ctx {
+  const void *buf;
+  size_t nbytes;
+};
+static herr_t iowarp_scatter_cb(const void **src_buf, size_t *src_bytes,
+                                void *op) {
+  auto *ctx = static_cast<iowarp_scatter_ctx *>(op);
+  *src_buf = ctx->buf;
+  *src_bytes = ctx->nbytes;
+  return 0;
+}
+
+/* Selection-aware READ serving (serve-only, no prefetch). When a hyperslab/point
+   read hits a dataset whose linear chunk cache is already populated, satisfy it
+   from the CTE tier instead of native: materialize the full image, then use
+   HDF5's own gather/scatter to extract the file-space selection into the user
+   buffer per the mem-space selection. Returns true if served from cache, false
+   on a cache miss or any failure (caller then falls back to native).
+   The whole linear image is materialized per call; range-limited fetch of only
+   the touched chunks is a future optimization. */
+static bool iowarp_serve_selection(iowarp_dataset_t *dataset, hid_t mem_type_id,
+                                   hid_t mem_space_id, hid_t file_space_id,
+                                   hid_t dxpl_id, void *buf) {
+  if (!iowarp_cache_populated(dataset)) return false;  /* serve-only: no prefetch */
+
+  H5VL_dataset_get_args_t ga;
+  ga.op_type = H5VL_DATASET_GET_SPACE;
+  ga.args.get_space.space_id = H5I_INVALID_HID;
+  if (H5VLdataset_get(dataset->obj.under_object, dataset->obj.under_vol_id, &ga,
+                      dxpl_id, nullptr) < 0)
+    return false;
+  hid_t full_space = ga.args.get_space.space_id;
+  if (full_space < 0) return false;
+
+  bool ok = false;
+  do {
+    hssize_t total_nelem = H5Sget_simple_extent_npoints(full_space);
+    size_t type_size = H5Tget_size(mem_type_id);
+    if (total_nelem <= 0 || type_size == 0) break;
+    size_t total_size = static_cast<size_t>(total_nelem) * type_size;
+
+    std::vector<char> full(total_size);
+    if (!iowarp_read_cached_image(dataset, total_size, full.data())) break;
+
+    /* Gather the file-space selection into a contiguous buffer. H5S_ALL file
+       space means the whole image is selected. */
+    hid_t fspace = (file_space_id == H5S_ALL) ? full_space : file_space_id;
+    hssize_t nsel = H5Sget_select_npoints(fspace);
+    if (nsel <= 0) break;
+    size_t sel_size = static_cast<size_t>(nsel) * type_size;
+    std::vector<char> sel(sel_size);
+    if (H5Dgather(fspace, full.data(), mem_type_id, sel_size, sel.data(),
+                  nullptr, nullptr) < 0)
+      break;
+
+    /* Place the gathered elements into the user buffer. H5S_ALL mem space means
+       a contiguous buffer of the selected elements; otherwise scatter per the
+       mem-space selection. */
+    if (mem_space_id == H5S_ALL) {
+      std::memcpy(buf, sel.data(), sel_size);
+      ok = true;
+    } else {
+      iowarp_scatter_ctx ctx{sel.data(), sel_size};
+      ok = (H5Dscatter(iowarp_scatter_cb, &ctx, mem_type_id, mem_space_id,
+                       buf) >= 0);
+    }
+  } while (false);
+
+  H5Sclose(full_space);
+  return ok;
+}
+
 /**
  * Dataset read — CTE read-through cache.
  *
@@ -618,13 +744,27 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
     auto *dataset = static_cast<iowarp_dataset_t *>(dset[d]);
     if (!dataset || !buf[d]) continue;
 
-    /* Native passthrough when there is no file reference, the selection is
-       partial, or the read is collective. The native VOL always produces
-       correct data; only the whole/independent case is cacheable. */
-    if (!dataset->file || !dataset->cacheable ||
-        !iowarp_is_whole_read(mem_space_id[d], file_space_id[d]) ||
-        !iowarp_type_is_flat(mem_type_id[d]) ||
-        iowarp_is_collective(dxpl_id)) {
+    /* Native passthrough when there is no file reference, the type is not flat,
+       or the read is collective. The native VOL always produces correct data. */
+    bool cacheable_flat = dataset->file && dataset->cacheable &&
+                          iowarp_type_is_cacheable(mem_type_id[d]) &&
+                          !iowarp_is_collective(dxpl_id);
+    if (!cacheable_flat) {
+      H5VLdataset_read(1, &dataset->obj.under_object,
+                        dataset->obj.under_vol_id,
+                        &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
+                        dxpl_id, &buf[d], req);
+      continue;
+    }
+
+    /* Partial (hyperslab/point) selection → serve from the CTE tier when the
+       linear cache is already populated (serve-only). On a miss, fall back to
+       native (unchanged). */
+    if (!iowarp_is_whole_read(mem_space_id[d], file_space_id[d])) {
+      if (iowarp_serve_selection(dataset, mem_type_id[d], mem_space_id[d],
+                                 file_space_id[d], dxpl_id, buf[d])) {
+        continue;
+      }
       H5VLdataset_read(1, &dataset->obj.under_object,
                         dataset->obj.under_vol_id,
                         &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
@@ -687,27 +827,8 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
         fut.Wait();
       }
     } else {
-      /* HIT — serve every chunk from the CTE tier. */
-      std::vector<clio::run::Future<clio::cte::core::GetBlobTask>> futures;
-      std::vector<ctp::ipc::FullPtr<char>> buffers;
-      for (size_t i = 0; i < num_chunks; ++i) {
-        size_t offset = i * chunk_size;
-        size_t this_size = std::min(chunk_size, total_size - offset);
-        auto buffer = CLIO_IPC->AllocateBuffer(this_size);
-        if (buffer.IsNull()) return -1;
-        ctp::ipc::ShmPtr<> blob_data = buffer.shm_.template Cast<void>();
-        std::string blob_name = dataset->dataset_path + "/chunk_" +
-                                std::to_string(i);
-        futures.push_back(cte_client->AsyncGetBlob(
-            dataset->file->tag_id, blob_name, offset, this_size, 0, blob_data));
-        buffers.push_back(std::move(buffer));
-      }
-      for (size_t i = 0; i < futures.size(); ++i) {
-        futures[i].Wait();
-        size_t offset = i * chunk_size;
-        size_t this_size = std::min(chunk_size, total_size - offset);
-        std::memcpy(dst + offset, buffers[i].ptr_, this_size);
-      }
+      /* HIT — serve the whole image from the CTE tier. */
+      if (!iowarp_read_cached_image(dataset, total_size, dst)) return -1;
     }
   }
 

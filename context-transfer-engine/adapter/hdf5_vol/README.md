@@ -3,15 +3,19 @@
 A pass-through HDF5 VOL connector that transparently caches HDF5 data in the
 clio-core CTE (Context Transfer Engine) while preserving native HDF5 file
 semantics. It wraps a native under-VOL: every operation delegates to native, and
-whole-dataset `H5Dwrite`/`H5Dread` transfers of flat datatypes are additionally
+whole-dataset `H5Dwrite`/`H5Dread` transfers of atomic datatypes are additionally
 mirrored to CTE via async `PutBlob`/`GetBlob`. Loaded transparently through the
 standard HDF5 plugin mechanism — no application source changes.
 
-The native file is always written synchronously and remains authoritative;
-variable-length/reference datatypes and partial (hyperslab/point) selections
-delegate to native and are not CTE-cached. **Safe mode:** `H5Fflush` and `H5Fclose`
-drain all in-flight async CTE puts before returning, so a successful flush/close is
-a real durability barrier for the cache path (no async write outlives it).
+The native file is always written synchronously and remains authoritative. Only
+atomic datatypes (integer, float, enum, bitfield, fixed-length string) are cached —
+compound/array (mem/file layout can differ) and vlen/reference (pointers, not bytes)
+delegate to native. **Selection-aware reads:** hyperslab/point reads are served from
+the cached linear image via HDF5 gather/scatter when it is already populated
+(serve-only; a miss falls back to native). A non-whole write invalidates the cache
+so reads never see stale data. **Safe mode:** `H5Fflush` and `H5Fclose` drain all
+in-flight async CTE puts before returning, so a successful flush/close is a real
+durability barrier for the cache path (no async write outlives it).
 
 Files: `iowarp_vol.cc`, `iowarp_vol.h`. Connector name: **`iowarp`**.
 
@@ -60,16 +64,17 @@ The test runs in **honest mode** (no `--expect-fail` allowlist): it reports the
 connector's real compatibility state rather than masking gaps, so any future
 regression fails the test. For the authoritative, always-current status run the
 test; do not rely on numbers copied into prose. As of this writing it is **green
-(18/18)** — compatible for dataset I/O (signed/unsigned int, float, compound, enum,
+(19/19)** — compatible for dataset I/O (signed/unsigned int, float, compound, enum,
 array-element, scalar, and variable-length string datatypes; contiguous and
 chunked; shuffle/fletcher32 filters; whole-dataset, hyperslab, and point
 selections; extendible datasets with reopen+append), attributes, group/link
-structure, modern-API iteration (C `H5Ovisit3`/`H5Literate2`), and Safe-mode
-`H5Fflush` durability.
+structure, modern-API iteration (C `H5Ovisit3`/`H5Literate2`), selection-aware read
+caching, and Safe-mode `H5Fflush` durability.
 
-Two feature areas are exercised only through the C API (h5py has poor non-native
-VOL support): iteration (`vol_c_iteration_test.c`) and Safe-mode flush
-(`vol_c_safeflush_test.c`), both run automatically by the suite.
+Three feature areas are exercised only through the C API (h5py has poor non-native
+VOL support): iteration (`vol_c_iteration_test.c`), Safe-mode flush
+(`vol_c_safeflush_test.c`), and selection caching + partial-write invalidation
+(`vol_c_selection_test.c`), all run automatically by the suite.
 
 See `benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md` for the detailed matrix,
 method, and the vlen/Safe-mode implementation notes.
