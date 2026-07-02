@@ -14,9 +14,8 @@ void PrintUsage() {
   std::cerr << "Usage: " << g_progname << " <command> [options]\n"
             << "\n"
             << "Commands:\n"
-            << "  start           Start the Clio runtime server (persistent;\n"
-            << "                  recovers saved state. Use --ephemeral for a\n"
-            << "                  fresh session)\n"
+            << "  start           Start the Clio runtime server\n"
+            << "  restart         Restart the Clio runtime (WAL replay)\n"
             << "  stop            Stop the Clio runtime server\n"
             << "  migrate         Migrate a container to a different node\n"
             << "  monitor         Monitor worker statistics\n"
@@ -25,7 +24,7 @@ void PrintUsage() {
             << "  refresh         Autogenerate ChiMod method files\n"
             << "\n"
             << "Legacy nested forms (still supported):\n"
-            << "  runtime <start|stop>\n"
+            << "  runtime <start|restart|stop>\n"
             << "  repo refresh\n"
             << "\n"
             << "Run '" << g_progname
@@ -62,6 +61,8 @@ int main(int argc, char* argv[]) {
 
     if (cmd == "start") {
       return RuntimeStart(new_argc, new_argv);
+    } else if (cmd == "restart") {
+      return RuntimeRestart(new_argc, new_argv);
     } else if (cmd == "stop") {
       return RuntimeStop(new_argc, new_argv);
     } else if (cmd == "refresh") {
@@ -81,9 +82,9 @@ int main(int argc, char* argv[]) {
   if (cmd == "runtime") {
     if (argc < 3) {
       std::cerr << "Usage: " << g_progname
-                << " runtime <start|stop> [options]\n"
+                << " runtime <start|restart|stop> [options]\n"
                 << "Hint: the canonical flat form is `" << g_progname
-                << " <start|stop>`.\n";
+                << " <start|restart|stop>`.\n";
       return 1;
     }
 
@@ -94,12 +95,14 @@ int main(int argc, char* argv[]) {
 
     if (subcmd == "start") {
       return RuntimeStart(new_argc, new_argv);
+    } else if (subcmd == "restart") {
+      return RuntimeRestart(new_argc, new_argv);
     } else if (subcmd == "stop") {
       return RuntimeStop(new_argc, new_argv);
     } else {
       std::cerr << "Unknown runtime subcommand: " << subcmd << "\n";
       std::cerr << "Usage: " << g_progname
-                << " runtime <start|stop> [options]\n";
+                << " runtime <start|restart|stop> [options]\n";
       return 1;
     }
   }
