@@ -448,8 +448,16 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
           dir, clio::cte::core::TagId::GetNull(), clio::run::PoolQuery::Local());
       CLIO_CO_AWAIT(tag);
       task->ino_ = InoFromTag(tag->tag_id_);
-      // Directory ctime is intentionally left at 0: fetching it needs an extra
-      // GetTagSize per dir-stat (the ctime xfstests are file-level). (#603)
+      // Directories are tags too, so they carry ctime/mtime/atime. Surface them
+      // (one extra GetTagSize) so e.g. mv-into-dir shows up as a dir mtime/ctime
+      // change (generic/309). Child-modifying ops bump the parent dir's tag.
+      auto ds = cte_.AsyncGetTagSize(tag->tag_id_, clio::run::PoolQuery::Local());
+      CLIO_CO_AWAIT(ds);
+      if (ds->GetReturnCode() == 0) {
+        task->ctime_ = ds->ctime_;
+        task->mtime_ = ds->mtime_;
+        task->atime_ = ds->atime_;
+      }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }

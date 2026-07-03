@@ -1336,6 +1336,17 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     blob_info_ptr->last_read_ = now;
     num_blocks = blob_info_ptr->blocks_.size();
 
+    // A data read also advances the TAG's access time (atime), so a later stat
+    // reflects real reads and not just metadata queries. last_read_ is a plain
+    // timestamp; the read lock only guards the map lookup.
+    {
+      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
+      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      if (tag_info_ptr != nullptr) {
+        tag_info_ptr->last_read_ = now;
+      }
+    }
+
     // Log telemetry and success messages after releasing lock
     LogTelemetry(CteOp::kGetBlob, offset, size, tag_id,
                  blob_info_ptr->last_modified_, now);
@@ -2461,11 +2472,16 @@ TagId Runtime::GetOrAssignTagId(const std::string &tag_name,
     tag_id = GenerateNewTagId();
   }
 
-  // Create tag info (use default constructor, allocator not used in struct)
+  // Create tag info (use default constructor, allocator not used in struct).
+  // Stamp all three timestamps at creation so a fresh tag (file OR directory)
+  // reports mtime == ctime == atime == creation time instead of a zero mtime.
   TagInfo tag_info;
   tag_info.tag_name_ = tag_name;
   tag_info.tag_id_ = tag_id;
-  tag_info.last_changed_ = GetCurrentTimeNs();  // ctime at creation
+  auto creation_now = GetCurrentTimeNs();
+  tag_info.last_changed_ = creation_now;   // ctime
+  tag_info.last_modified_ = creation_now;  // mtime
+  tag_info.last_read_ = creation_now;      // atime
 
   // Store mappings
   tag_name_to_id_.insert_or_assign(tag_name, tag_id);
