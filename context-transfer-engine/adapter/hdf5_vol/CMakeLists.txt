@@ -36,10 +36,10 @@ target_include_directories(iowarp_hdf5_vol PRIVATE
 target_link_libraries(iowarp_hdf5_vol
     clio_cte_core_client
     clio_cte_core_runtime
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
     ctp::cxx
     ${HDF5_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
@@ -50,6 +50,9 @@ set_target_properties(iowarp_hdf5_vol PROPERTIES
     CXX_STANDARD_REQUIRED ON
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    # Export all symbols so the DLL exposes H5VL_iowarp_register (and friends)
+    # to tests/consumers on Windows, where symbols are hidden by default.
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
 install(TARGETS iowarp_hdf5_vol

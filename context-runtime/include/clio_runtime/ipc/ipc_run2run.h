@@ -45,6 +45,7 @@
 #include <clio_runtime/task.h>
 #include <clio_runtime/task_archives.h>
 #include <clio_ctp/data_structures/priv/unordered_map_ll.h>
+#include <clio_ctp/lightbeam/event_manager.h>
 
 namespace ctp::lbm { class Transport; }
 
@@ -59,16 +60,35 @@ static constexpr int kRun2RunNetworkTimeoutRC = -1000;
  * marker — doing so silently drops every task targeting node 0, which under
  * CLIO_FORCE_NET=1 on a single-node deployment is *every* task.
  */
-static constexpr chi::u64 kInvalidNodeId = ~chi::u64(0);
+static constexpr clio::run::u64 kInvalidNodeId = ~clio::run::u64(0);
 
 /** How long (seconds) to keep a task in the retry queue before failing it */
 static constexpr float kRun2RunRetryTimeoutSec = 30.0f;
 
 /** Entry in a retry queue for tasks that could not be sent */
 struct RetryEntry {
-  ctp::ipc::FullPtr<chi::Task> task;
-  chi::u64 target_node_id;
+  clio::run::shared_ptr<clio::run::Task> task;
+  clio::run::u64 target_node_id;
   std::chrono::steady_clock::time_point enqueued_at;
+};
+
+/** Per-replica progress state for an in-flight cross-node origin (issue #628). */
+struct ReplicaProgress {
+  clio::run::u64 target_node_id = kInvalidNodeId;
+  bool accounted = false;  // response received, or the replica was declared lost
+};
+
+/** Per-origin progress state, keyed by net_key in progress_map_ (issue #628). */
+struct OriginProgress {
+  std::chrono::steady_clock::time_point enqueue_time;
+  std::vector<ReplicaProgress> replicas;  // indexed by replica_id
+};
+
+/** A replica the origin is still waiting on, to be probed via QueryTaskProgress. */
+struct StuckReplica {
+  clio::run::u64 net_key;
+  clio::run::u32 replica_id;
+  clio::run::u64 target_node_id;
 };
 
 /**
@@ -89,14 +109,14 @@ class IpcManagerRun2Run {
    * per replica, serializes, and sends via Lightbeam.  Dead/unreachable nodes
    * are queued in send_in_retry_ for later retry.
    */
-  void SendIn(ctp::ipc::FullPtr<chi::Task> origin_task);
+  void SendIn(clio::run::shared_ptr<clio::run::Task> origin_task);
 
   /**
    * Send task outputs back to the originating node.
    * Reads the return-node from pool_query_, serializes via Lightbeam, then
-   * calls DelTask on success.  Failures are queued in send_out_retry_.
+   * drops the task (RAII) on success.  Failures are queued in send_out_retry_.
    */
-  void SendOut(ctp::ipc::FullPtr<chi::Task> origin_task);
+  void SendOut(clio::run::shared_ptr<clio::run::Task> origin_task);
 
   /**
    * Receive task inputs from a remote node (inbound kSerializeIn messages).
@@ -104,7 +124,7 @@ class IpcManagerRun2Run {
    * onto a worker lane.
    * @return 0 on success, non-zero on error.
    */
-  int RecvIn(chi::LoadTaskArchive &archive, ctp::lbm::Transport *lbm_transport);
+  int RecvIn(clio::run::LoadTaskArchive &archive, ctp::lbm::Transport *lbm_transport);
 
   /**
    * Receive task outputs from a remote node (inbound kSerializeOut messages).
@@ -113,7 +133,7 @@ class IpcManagerRun2Run {
    * the origin when all replicas are done.
    * @return 0 on success, non-zero on error.
    */
-  int RecvOut(chi::LoadTaskArchive &archive, ctp::lbm::Transport *lbm_transport);
+  int RecvOut(clio::run::LoadTaskArchive &archive, ctp::lbm::Transport *lbm_transport);
 
   /**
    * Process the send_in_retry_ and send_out_retry_ queues.
@@ -135,7 +155,7 @@ class IpcManagerRun2Run {
    * alive again (restarted node).  Prevents stale tasks from the previous
    * incarnation being re-sent to a fresh runtime.
    */
-  void FlushStaleStateForNode(chi::u64 node_id);
+  void FlushStaleStateForNode(clio::run::u64 node_id);
 
   /**
    * Spawn the dedicated peer-recv and client-recv threads.
@@ -161,27 +181,63 @@ class IpcManagerRun2Run {
     return recv_map_.size();
   }
 
+  /**
+   * Whether this node currently holds the replica task identified by an
+   * origin's (net_key, replica_id) -- i.e. it was received in RecvIn and has
+   * not yet been responded to in SendOut (issue #628). Backs the
+   * QueryTaskProgress admin method's kRunning/kGone answer.
+   */
+  bool HasRecvTask(clio::run::u64 net_key, clio::run::u32 replica_id) const {
+    size_t recv_key = static_cast<size_t>(net_key) ^
+                      (static_cast<size_t>(replica_id) * 0x9e3779b97f4a7c15ULL);
+    std::lock_guard<std::mutex> lk(recv_map_mutex_);
+    return recv_map_.find(recv_key) != nullptr;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cross-node task-progress tracking (issue #628). The origin periodically
+  // asks each still-outstanding replica's node whether it is still alive; a
+  // Gone answer means the response will never come (lost / node restarted),
+  // so the origin completes the collective instead of hanging forever.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Collect replicas the origin has been waiting on beyond interval_ms, to be
+   * probed via QueryTaskProgress. Only replicas whose target node is currently
+   * alive are returned (a dead target is handled by the dead-node timeout
+   * path). Throttled internally to at most once per interval_ms.
+   */
+  std::vector<StuckReplica> CollectStuckReplicas(clio::run::u32 interval_ms);
+
+  /**
+   * Record the result of a QueryTaskProgress probe. When gone is true and the
+   * replica is still outstanding, mark it lost and, once every replica is
+   * accounted for, complete the origin with a network-timeout RC (partial
+   * results from the replicas that did answer are preserved).
+   */
+  void HandleTaskProgressResult(clio::run::u64 net_key,
+                                clio::run::u32 replica_id, bool gone);
+
  private:
   // ---------------------------------------------------------------------------
   // SendIn sub-functions
   // ---------------------------------------------------------------------------
 
   /** Resolve the target node_id for one pool query. Returns 0 to skip. */
-  chi::u64 SendInResolveTargetNode(chi::IpcManager *ipc_manager,
-                                    chi::PoolManager *pool_manager,
-                                    ctp::ipc::FullPtr<chi::Task> origin_task,
-                                    const chi::PoolQuery &query);
+  clio::run::u64 SendInResolveTargetNode(clio::run::IpcManager *ipc_manager,
+                                    clio::run::PoolManager *pool_manager,
+                                    clio::run::shared_ptr<clio::run::Task> origin_task,
+                                    const clio::run::PoolQuery &query);
 
   /**
    * Serialize task_copy and transmit it to target_node_id.
    * On failure marks the node dead (if appropriate) and queues in
    * send_in_retry_.
    */
-  void SendInTransmitReplica(chi::Container *container,
-                              chi::IpcManager *ipc_manager,
-                              ctp::ipc::FullPtr<chi::Task> task_copy,
-                              chi::u64 target_node_id,
-                              ctp::ipc::FullPtr<chi::Task> origin_task);
+  void SendInTransmitReplica(clio::run::IpcManager *ipc_manager,
+                              clio::run::shared_ptr<clio::run::Task> task_copy,
+                              clio::run::u64 target_node_id,
+                              clio::run::shared_ptr<clio::run::Task> origin_task);
 
   // ---------------------------------------------------------------------------
   // SendOut sub-functions
@@ -191,11 +247,10 @@ class IpcManagerRun2Run {
    * Serialize origin_task (out-direction) and send to target_node_id.
    * Queues in send_out_retry_ on failure.  Returns the Lightbeam rc.
    */
-  int SendOutTransmit(chi::Container *container,
-                      chi::IpcManager *ipc_manager,
-                      ctp::ipc::FullPtr<chi::Task> origin_task,
-                      chi::u64 target_node_id,
-                      const chi::Host *target_host);
+  int SendOutTransmit(clio::run::IpcManager *ipc_manager,
+                      clio::run::shared_ptr<clio::run::Task> origin_task,
+                      clio::run::u64 target_node_id,
+                      const clio::run::Host *target_host);
 
   // ---------------------------------------------------------------------------
   // RecvIn sub-functions
@@ -205,10 +260,10 @@ class IpcManagerRun2Run {
    * Deserialize, register, and dispatch one inbound task.
    * Returns false if the task could not be loaded or dispatched.
    */
-  bool RecvInHandleOne(chi::IpcManager *ipc_manager,
-                       chi::PoolManager *pool_manager,
-                       const chi::TaskInfo &task_info,
-                       chi::LoadTaskArchive &archive,
+  bool RecvInHandleOne(clio::run::IpcManager *ipc_manager,
+                       clio::run::PoolManager *pool_manager,
+                       const clio::run::TaskInfo &task_info,
+                       clio::run::LoadTaskArchive &archive,
                        ctp::lbm::Transport *lbm_transport);
 
   // ---------------------------------------------------------------------------
@@ -219,38 +274,37 @@ class IpcManagerRun2Run {
    * First pass: load output data from archive into each replica task.
    * Returns non-zero on hard error.
    */
-  int RecvOutDeserialize(chi::PoolManager *pool_manager,
-                         const std::vector<chi::TaskInfo> &task_infos,
-                         chi::LoadTaskArchive &archive);
+  int RecvOutDeserialize(clio::run::PoolManager *pool_manager,
+                         const std::vector<clio::run::TaskInfo> &task_infos,
+                         clio::run::LoadTaskArchive &archive);
 
   /**
    * Second pass: aggregate each replica into its origin task; complete the
    * origin when all replicas have been received.
    * Returns non-zero on hard error.
    */
-  int RecvOutAggregate(const std::vector<chi::TaskInfo> &task_infos);
+  int RecvOutAggregate(const std::vector<clio::run::TaskInfo> &task_infos);
 
   /**
    * Finalize an origin task once all its replicas have been aggregated:
    * delete replica tasks, remove from send_map_, and call EndTask.
    */
   void RecvOutCompleteOriginTask(size_t net_key,
-                                  ctp::ipc::FullPtr<chi::Task> origin_task,
-                                  chi::RunContext *origin_rctx);
+                                  clio::run::shared_ptr<clio::run::Task> origin_task);
 
   // ---------------------------------------------------------------------------
   // Retry helpers
   // ---------------------------------------------------------------------------
 
   /** Attempt to (re-)send a retry entry's task to node_id via Lightbeam. */
-  bool RetrySendToNode(RetryEntry &entry, chi::u64 node_id);
+  bool RetrySendToNode(RetryEntry &entry, clio::run::u64 node_id);
 
   /**
    * Re-resolve the target node for a retry entry whose original target is dead.
    * Consults the current address_map_ via pool_manager.
    * @return New node ID, or 0 if resolution fails.
    */
-  chi::u64 RerouteRetryEntry(RetryEntry &entry);
+  clio::run::u64 RerouteRetryEntry(RetryEntry &entry);
 
   // -------------------------------------------------------------------------
   // Dedicated recv threads
@@ -258,6 +312,16 @@ class IpcManagerRun2Run {
   std::atomic<bool> recv_shutdown_{false};
   std::thread peer_recv_thread_;
   std::thread client_recv_thread_;
+
+  // EventManager for the client recv thread's IPC (unix-socket) transport,
+  // letting it block on socket readability (epoll on Linux, WSAEventSelect on
+  // Windows) instead of spin-polling. ZMQ transports (peer + client TCP) can't
+  // use this -- ZMQ_FD isn't WSAEventSelect-able on Windows -- so they block via
+  // Transport::PollRecv (native zmq_poll) instead. The thread calls
+  // UnregisterEventManager() on exit -- before this member destructs and while
+  // StopRecvThreads() (run from the transport-shutdown hook) still holds the
+  // transport alive -- so the transport never retains a stale EventManager*.
+  ctp::lbm::EventManager client_recv_em_;
 
   // -------------------------------------------------------------------------
   // Maps for in-flight tasks
@@ -272,8 +336,27 @@ class IpcManagerRun2Run {
   static constexpr size_t kNumMapBuckets = 1024;
   mutable std::mutex send_map_mutex_;
   mutable std::mutex recv_map_mutex_;
-  ctp::priv::unordered_map_ll<size_t, ctp::ipc::FullPtr<chi::Task>> send_map_;
-  ctp::priv::unordered_map_ll<size_t, ctp::ipc::FullPtr<chi::Task>> recv_map_;
+  ctp::priv::unordered_map_ll<size_t, clio::run::shared_ptr<clio::run::Task>> send_map_;
+  ctp::priv::unordered_map_ll<size_t, clio::run::shared_ptr<clio::run::Task>> recv_map_;
+
+  // Per-origin cross-node progress state, keyed by net_key (issue #628).
+  // Guarded by send_map_mutex_ (updated in lock-step with send_map_).
+  std::unordered_map<size_t, OriginProgress> progress_map_;
+  // Throttle: last time CollectStuckReplicas actually ran a scan pass.
+  std::chrono::steady_clock::time_point last_progress_scan_{};
+
+  /** Register an origin's replicas for progress tracking (called from SendIn). */
+  void RegisterOriginProgress(size_t net_key,
+                              const std::vector<clio::run::u64> &replica_targets);
+  /**
+   * Mark a replica as accounted for (a response arrived, or it was declared
+   * lost). Returns whether the caller should count it toward completion:
+   * true if this call transitioned the replica to accounted, or the origin is
+   * untracked (admin tasks -- preserve the pre-#628 unconditional count);
+   * false if the replica was already accounted (avoids double-counting when a
+   * real response races a Gone verdict).
+   */
+  bool MarkReplicaAccounted(size_t net_key, clio::run::u32 replica_id);
 
   // Retry queues for tasks that could not be sent due to dead / unreachable
   // nodes.  Guarded by retry_queues_mutex_.

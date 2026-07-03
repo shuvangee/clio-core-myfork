@@ -6,6 +6,7 @@
 #include <iomanip>
 
 #include <clio_ctp/serialize/msgpack_wrapper.h>
+#include <clio_ctp/thread/thread_model_manager.h>
 
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/singletons.h"
@@ -25,7 +26,7 @@ struct MonitorOptions {
 };
 
 void PrintMonitorUsage() {
-  HIPRINT("Usage: chimaera monitor [OPTIONS]");
+  HIPRINT("Usage: clio monitor [OPTIONS]");
   HIPRINT("");
   HIPRINT("Options:");
   HIPRINT("  -h, --help        Show this help message");
@@ -71,9 +72,9 @@ bool ParseMonitorArgs(int argc, char* argv[], MonitorOptions& opts) {
  * Decode msgpack worker_stats from MonitorTask results into WorkerStats vector.
  * Returns empty vector on decode failure.
  */
-std::vector<chi::WorkerStats> DecodeWorkerStats(
+std::vector<clio::run::WorkerStats> DecodeWorkerStats(
     const clio::run::admin::MonitorTask& task) {
-  std::vector<chi::WorkerStats> result;
+  std::vector<clio::run::WorkerStats> result;
 
   // Merge all container results (admin typically has one container)
   for (const auto& [container_id, blob] : task.results_) {
@@ -85,7 +86,7 @@ std::vector<chi::WorkerStats> DecodeWorkerStats(
     for (uint32_t i = 0; i < obj.via.array.size; ++i) {
       const msgpack::object& item = obj.via.array.ptr[i];
       if (item.type != msgpack::type::MAP) continue;
-      chi::WorkerStats stats;
+      clio::run::WorkerStats stats;
       for (uint32_t j = 0; j < item.via.map.size; ++j) {
         const auto& kv = item.via.map.ptr[j];
         std::string key;
@@ -107,7 +108,7 @@ std::vector<chi::WorkerStats> DecodeWorkerStats(
   return result;
 }
 
-void PrintStats(const std::vector<chi::WorkerStats>& workers) {
+void PrintStats(const std::vector<clio::run::WorkerStats>& workers) {
   HIPRINT("\033[2J\033[H");
 
   auto now = std::chrono::system_clock::now();
@@ -115,14 +116,14 @@ void PrintStats(const std::vector<chi::WorkerStats>& workers) {
   std::ostringstream time_ss;
   time_ss << std::put_time(std::localtime(&now_t), "%Y-%m-%d %H:%M:%S");
   HIPRINT("==================================================");
-  HIPRINT("        Chimaera Worker Monitor");
+  HIPRINT("        Clio Worker Monitor");
   HIPRINT("        {}", time_ss.str());
   HIPRINT("==================================================");
   HIPRINT("");
 
-  chi::u32 total_queued = 0;
-  chi::u32 total_blocked = 0;
-  chi::u32 total_periodic = 0;
+  clio::run::u32 total_queued = 0;
+  clio::run::u32 total_blocked = 0;
+  clio::run::u32 total_periodic = 0;
 
   for (const auto& stats : workers) {
     total_queued += stats.num_queued_tasks_;
@@ -176,12 +177,12 @@ int Monitor(int argc, char* argv[]) {
   }
 
   if (opts.verbose) {
-    HLOG(kInfo, "Initializing Chimaera client...");
+    HLOG(kInfo, "Initializing Clio client...");
   }
 
-  if (!chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false)) {
-    HLOG(kError, "Failed to initialize Chimaera client");
-    HLOG(kError, "Make sure the Chimaera runtime is running");
+  if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false)) {
+    HLOG(kError, "Failed to initialize Clio client");
+    HLOG(kError, "Make sure the Clio runtime is running");
     return 1;
   }
 
@@ -198,7 +199,7 @@ int Monitor(int argc, char* argv[]) {
     try {
       HLOG(kInfo, "Sending AsyncMonitor(worker_stats) request...");
       auto future = admin_client->AsyncMonitor(
-          chi::PoolQuery::Local(), "worker_stats");
+          clio::run::PoolQuery::Local(), "worker_stats");
       future.Wait();
 
       if (future->GetReturnCode() != 0) {
@@ -237,7 +238,7 @@ int Monitor(int argc, char* argv[]) {
       if (opts.once) break;
 
       for (int i = 0; i < opts.interval_sec && g_monitor_running; ++i) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        CTP_THREAD_MODEL->SleepForUs(1000000);
       }
 
     } catch (const std::exception& e) {

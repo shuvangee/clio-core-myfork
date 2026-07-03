@@ -17,10 +17,10 @@ target_include_directories(test_fuse_adapter PRIVATE
 target_link_libraries(test_fuse_adapter
     clio_cte_core_runtime
     clio_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT}
 )
@@ -65,9 +65,9 @@ set_tests_properties(
     fuse_cte_cross_page
     fuse_integration
     PROPERTIES
-        TIMEOUT 60
+        TIMEOUT 300
         LABELS "unit;adapter;fuse"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=19413"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
 )
 
 # ------------------------------------------------------------------------------
@@ -85,10 +85,10 @@ target_include_directories(test_fuse_copy_workspace PRIVATE
 target_link_libraries(test_fuse_copy_workspace
     clio_cte_core_runtime
     clio_cte_core_client
-    chimaera::admin_runtime
-    chimaera::admin_client
-    chimaera::bdev_runtime
-    chimaera::bdev_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT}
 )
@@ -106,10 +106,10 @@ add_test(NAME fuse_copy_workspace
 set_tests_properties(
     fuse_copy_workspace
     PROPERTIES
-        TIMEOUT 120
+        TIMEOUT 600
         LABELS "unit;adapter;fuse;copy_workspace"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=19413"
-        RESOURCE_LOCK "chimaera_runtime"
+        ENVIRONMENT "CLIO_WITH_RUNTIME=1;CTP_LOG_LEVEL=error;CLIO_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/cte_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+        RESOURCE_LOCK "clio_runtime"
 )
 
 install(TARGETS test_fuse_adapter test_fuse_copy_workspace RUNTIME DESTINATION bin)

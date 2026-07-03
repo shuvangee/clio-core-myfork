@@ -56,10 +56,10 @@
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/ipc_manager.h"
 
-using namespace chi;
+using namespace clio::run;
 
-// The runtime server is launched out-of-process via chi::test::RuntimeServer
-// (clio_run start) instead of fork()+CHIMAERA_INIT(kServer): fork-without-exec
+// The runtime server is launched out-of-process via clio::run::test::RuntimeServer
+// (clio_run start) instead of fork()+CLIO_INIT(kServer): fork-without-exec
 // deadlocks on macOS when the child dlopen()s ChiMods (and nondeterministically
 // leaks a port-holding process). The client children below are real fork()s --
 // client mode does not dlopen, so they remain macOS-safe.
@@ -69,7 +69,7 @@ using namespace chi;
  */
 void CleanupSharedMemory() {
   const char *user = std::getenv("USER");
-  std::string memfd_path = std::string("/tmp/chimaera_") +
+  std::string memfd_path = std::string("/tmp/clio_") +
                            (user ? user : "unknown") +
                            "/chi_main_segment_" + (user ? user : "");
   unlink(memfd_path.c_str());
@@ -81,13 +81,13 @@ void CleanupSharedMemory() {
 
 TEST_CASE("ExternalClient - Basic Connection", "[external_client][ipc]") {
   // Start the runtime daemon out-of-process
-  chi::test::RuntimeServer server;
+  clio::run::test::RuntimeServer server;
   REQUIRE(server.Start());
   REQUIRE(server.WaitForReady());
 
   // Now connect as EXTERNAL CLIENT (not integrated server+client)
   setenv("CLIO_WITH_RUNTIME", "0", 1);  // Force client-only mode
-  bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
+  bool success = CLIO_INIT(RuntimeMode::kClient, false);
   REQUIRE(success);
 
   // Verify client initialized successfully
@@ -113,7 +113,7 @@ TEST_CASE("ExternalClient - Basic Connection", "[external_client][ipc]") {
 
 TEST_CASE("ExternalClient - Multiple Clients", "[external_client][ipc]") {
   // Start the runtime daemon out-of-process
-  chi::test::RuntimeServer server;
+  clio::run::test::RuntimeServer server;
   REQUIRE(server.Start());
   REQUIRE(server.WaitForReady());
 
@@ -130,7 +130,7 @@ TEST_CASE("ExternalClient - Multiple Clients", "[external_client][ipc]") {
 
       // Child process: Connect as client
       setenv("CLIO_WITH_RUNTIME", "0", 1);
-      bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
+      bool success = CLIO_INIT(RuntimeMode::kClient, false);
       if (!success) {
         _exit(1);
       }
@@ -175,19 +175,19 @@ TEST_CASE("ExternalClient - Connection Without Server",
 
   // This should fail gracefully (not crash)
   // Note: May succeed if a stale server from another test is still running
-  bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
+  bool success = CLIO_INIT(RuntimeMode::kClient, false);
   (void)success;  // Just verify it doesn't crash
 }
 
 TEST_CASE("ExternalClient - Client Operations", "[external_client][ipc]") {
   // Start the runtime daemon out-of-process
-  chi::test::RuntimeServer server;
+  clio::run::test::RuntimeServer server;
   REQUIRE(server.Start());
   REQUIRE(server.WaitForReady());
 
   // Connect as client
   setenv("CLIO_WITH_RUNTIME", "0", 1);
-  bool success = CHIMAERA_INIT(ChimaeraMode::kClient, false);
+  bool success = CLIO_INIT(RuntimeMode::kClient, false);
   REQUIRE(success);
 
   auto *ipc = CLIO_IPC;

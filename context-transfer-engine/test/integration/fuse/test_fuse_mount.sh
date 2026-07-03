@@ -11,7 +11,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOUNT_POINT="/tmp/cte_fuse_test_mount"
 FUSE_BIN="${FUSE_BIN:-/workspace/build/bin/clio_cte_fuse}"
-RUNTIME_BIN="${RUNTIME_BIN:-/workspace/build/bin/chimaera}"
+RUNTIME_BIN="${RUNTIME_BIN:-/workspace/build/bin/clio_run}"
 CONFIG_FILE="${SCRIPT_DIR}/clio_config.yaml"
 FUSE_PID=""
 RUNTIME_PID=""
@@ -76,23 +76,26 @@ if [ ! -c /dev/fuse ]; then
     exit 1
 fi
 
-# Start CLIO Runtime runtime
-info "Starting Chimaera runtime..."
+# Start CLIO Runtime runtime. Force the runtime on (CLIO_WITH_RUNTIME=1) so this
+# process owns the server that clio_cte_fuse (a pure client below) attaches to.
+info "Starting Clio runtime..."
 export CLIO_SERVER_CONF="$CONFIG_FILE"
-"$RUNTIME_BIN" runtime start &
+CLIO_WITH_RUNTIME=1 "$RUNTIME_BIN" runtime start &
 RUNTIME_PID=$!
 sleep 3
 
 if ! kill -0 "$RUNTIME_PID" 2>/dev/null; then
-    fail "Chimaera runtime failed to start"
+    fail "Clio runtime failed to start"
     exit 1
 fi
-pass "Chimaera runtime started (PID $RUNTIME_PID)"
+pass "Clio runtime started (PID $RUNTIME_PID)"
 
-# Create mount point and start FUSE daemon
+# Create mount point and start FUSE daemon. It must attach to the runtime above
+# as a pure client (CLIO_WITH_RUNTIME=0); otherwise CLIO_INIT(kClient, true)
+# defaults to starting its own runtime and collides on the same port.
 mkdir -p "$MOUNT_POINT"
 info "Mounting FUSE filesystem at $MOUNT_POINT..."
-"$FUSE_BIN" "$MOUNT_POINT" -f &
+CLIO_WITH_RUNTIME=0 "$FUSE_BIN" "$MOUNT_POINT" -f &
 FUSE_PID=$!
 sleep 2
 

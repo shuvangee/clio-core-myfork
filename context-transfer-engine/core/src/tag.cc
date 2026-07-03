@@ -40,7 +40,7 @@
 
 namespace clio::cte::core {
 
-// Aggregate timing for Tag::PutBlob(const char*) — broken down into the
+// AggregateOut timing for Tag::PutBlob(const char*) — broken down into the
 // four steps that path performs per call (alloc shm, memcpy, sync RPC,
 // free). Counters are flushed by FlushPutBlobTiming(); the POSIX adapter
 // calls that at the end of each Filesystem::Write so we get one summary
@@ -143,7 +143,7 @@ void Tag::PutBlob(const std::string &blob_name, const ctp::ipc::ShmPtr<> &data, 
   auto *cte_client = CLIO_CTE_CLIENT;
   auto task = cte_client->AsyncPutBlob(tag_id_, blob_name,
                                        off, data_size, data, score, context, 0,
-                                       chi::PoolQuery::Dynamic());
+                                       clio::run::PoolQuery::Dynamic());
   task.Wait();
 
   if (task->GetReturnCode() != 0) {
@@ -167,7 +167,7 @@ void Tag::PutBlob(const std::string &blob_name, const ctp::ipc::ShmPtr<> &data, 
 // 3. Calling: AsyncPutBlob(blob_name, shm_ptr.shm_, data_size, off, score);
 // 4. Keeping shm_ptr alive until task completes
 
-chi::Future<PutBlobTask> Tag::AsyncPutBlob(const std::string &blob_name, const ctp::ipc::ShmPtr<> &data,
+clio::run::Future<PutBlobTask> Tag::AsyncPutBlob(const std::string &blob_name, const ctp::ipc::ShmPtr<> &data,
                                              size_t data_size, size_t off, float score,
                                              const Context &context) {
   auto *cte_client = CLIO_CTE_CLIENT;
@@ -237,12 +237,12 @@ float Tag::GetBlobScore(const std::string &blob_name) {
   return score;
 }
 
-chi::u64 Tag::GetBlobSize(const std::string &blob_name) {
+clio::run::u64 Tag::GetBlobSize(const std::string &blob_name) {
   auto *cte_client = CLIO_CTE_CLIENT;
   auto task = cte_client->AsyncGetBlobSize(tag_id_, blob_name);
   task.Wait();
 
-  chi::u64 size = task->size_;
+  clio::run::u64 size = task->size_;
   return size;
 }
 

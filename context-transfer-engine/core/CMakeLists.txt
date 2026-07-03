@@ -9,7 +9,7 @@ add_clio_module_runtime(
     src/autogen/core_lib_exec.cc
     # GPU runtime concept removed — kernels submit tasks to the CPU runtime
     # via gpu2cpu_queue and the CPU executes them through the standard
-    # chi::Container dispatch path.
+    # clio::run::Container dispatch path.
 )
 
 # Surface the GPU backend flags into the runtime library so the
@@ -47,7 +47,7 @@ if(TARGET clio_cte_core_client)
   target_compile_definitions(clio_cte_core_client PRIVATE CLIO_CTE_CORE_BUILDING_DLL=1)
 endif()
 
-# Note: Cross-namespace dependencies (chimaera admin and bdev) are automatically
-# linked by add_chimod_* functions in ChimaeraCommon.cmake for non-chimaera namespaces
+# Note: Cross-namespace dependencies (clio_run admin and bdev) are automatically
+# linked by add_chimod_* functions in ClioCoreCommon.cmake for non-clio_run namespaces
 
 add_subdirectory(util)

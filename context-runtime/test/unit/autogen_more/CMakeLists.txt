@@ -7,7 +7,7 @@
 # preset used for the conda GPU package).
 if(CLIO_CORE_ENABLE_CAE)
 
-set(AUTOGEN_SWEEP_TEST_TARGET chimaera_autogen_sweep_tests)
+set(AUTOGEN_SWEEP_TEST_TARGET clio_run_autogen_sweep_tests)
 
 add_executable(${AUTOGEN_SWEEP_TEST_TARGET}
   test_autogen_methods_sweep.cc
@@ -22,8 +22,8 @@ target_include_directories(${AUTOGEN_SWEEP_TEST_TARGET} PRIVATE
 )
 
 target_link_libraries(${AUTOGEN_SWEEP_TEST_TARGET}
-  chimaera_MOD_NAME_runtime
-  chimaera_MOD_NAME_client
+  clio_MOD_NAME_runtime
+  clio_MOD_NAME_client
   clio_cte_core_runtime
   clio_cte_core_client
   clio_cae_core_runtime
@@ -32,7 +32,7 @@ target_link_libraries(${AUTOGEN_SWEEP_TEST_TARGET}
   clio_admin_runtime
   clio_bdev_client
   clio_admin_client
-  chimaera_cxx
+  clio_run_cxx
   ctp::cxx
   ${CMAKE_THREAD_LIBS_INIT}
 )
@@ -50,7 +50,7 @@ if(CLIO_CORE_ENABLE_TESTS)
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
   set_tests_properties(cr_autogen_sweep_tests PROPERTIES
-    ENVIRONMENT "CHI_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10597"
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10597"
     TIMEOUT 120
     LABELS "msan_skip"
   )

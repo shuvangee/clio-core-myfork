@@ -31,8 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_MODULE_MANAGER_H_
-#define CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_MODULE_MANAGER_H_
+#ifndef CLIO_RUNTIME_INCLUDE_MANAGERS_MODULE_MANAGER_H_
+#define CLIO_RUNTIME_INCLUDE_MANAGERS_MODULE_MANAGER_H_
 
 #include <map>
 #include <string>
@@ -76,7 +76,7 @@ struct ChiModInfo {
  * 
  * Handles discovery and loading of ChiMod shared libraries from:
  * - LD_LIBRARY_PATH directories
- * - CHI_REPO_PATH directories
+ * - CLIO_REPO_PATH directories
  * 
  * Each ChiMod provides functions to query name and allocate ChiContainers.
  * Uses CTP SharedLibrary for cross-platform dynamic loading.
@@ -217,12 +217,11 @@ class ModuleManager {
 }  // namespace clio::run
 
 // Global pointer variable declaration for Module manager singleton
-CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(chi::ModuleManager, g_module_manager);
+CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_H(clio::run::ModuleManager, g_module_manager);
 
 // Macro for accessing the Module manager singleton using global pointer variable
-#define CLIO_MODULE_MANAGER CTP_GET_GLOBAL_PTR_VAR(::chi::ModuleManager, g_module_manager)
+#define CLIO_MODULE_MANAGER CTP_GET_GLOBAL_PTR_VAR(::clio::run::ModuleManager, g_module_manager)
 // Backward-compat alias (clio_run rebrand). External code that still
 // uses the legacy CHI_* spelling keeps working unchanged.
-#define CHI_MODULE_MANAGER  CLIO_MODULE_MANAGER
 
-#endif  // CHIMAERA_INCLUDE_CHIMAERA_MANAGERS_MODULE_MANAGER_H_
+#endif  // CLIO_RUNTIME_INCLUDE_MANAGERS_MODULE_MANAGER_H_

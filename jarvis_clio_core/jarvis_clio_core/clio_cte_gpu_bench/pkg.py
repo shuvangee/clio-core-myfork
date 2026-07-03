@@ -3,7 +3,7 @@ CTE GPU Benchmark Package
 
 Benchmarks GPU-initiated I/O operations through the Content Transfer
 Engine (CTE) and compares against BaM page cache and baselines.
-clio_cte_gpu_bench is self-contained: it starts its own Chimaera runtime
+clio_cte_gpu_bench is self-contained: it starts its own Clio runtime
 internally, so no clio_runtime package is needed.
 
 Supported test cases:
@@ -160,9 +160,9 @@ class ClioCteGpuBench(Application):
             self.log(f"  Targets:        (default: hbm:256m)")
 
     def _kill_stale_processes(self):
-        """Kill any leftover clio_cte_gpu_bench or chimaera processes and
+        """Kill any leftover clio_cte_gpu_bench or clio_run processes and
         free port 9413 so the next run can start cleanly."""
-        for proc_name in ['clio_cte_gpu_bench', 'chimaera']:
+        for proc_name in ['clio_cte_gpu_bench', 'clio_run']:
             try:
                 subprocess.run(
                     ['pkill', '-9', '-f', proc_name],

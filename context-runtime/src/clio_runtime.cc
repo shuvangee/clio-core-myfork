@@ -43,7 +43,7 @@
 
 namespace clio::run {
 
-bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
+bool ClioInitImpl(RuntimeMode mode, bool default_with_runtime,
                   bool is_restart) {
   // Static guard to prevent double initialization
   static bool s_initialized = false;
@@ -54,9 +54,9 @@ bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
   auto* runtime_manager = CLIO_RUNTIME_MANAGER;
   runtime_manager->is_restart_ = is_restart;
 
-  // Check environment variable CHI_WITH_RUNTIME
+  // Check environment variable CLIO_WITH_RUNTIME
   bool with_runtime = default_with_runtime;
-  const char* env_val = chi::env::GetCompat("WITH_RUNTIME");
+  const char* env_val = clio::run::env::GetCompat("WITH_RUNTIME");
   if (env_val != nullptr) {
     with_runtime = (std::strcmp(env_val, "1") == 0 ||
                    std::strcmp(env_val, "true") == 0 ||
@@ -67,7 +67,7 @@ bool ClioInitImpl(ChimaeraMode mode, bool default_with_runtime,
   bool init_runtime = false;
   bool init_client = false;
 
-  if (mode == ChimaeraMode::kServer || mode == ChimaeraMode::kRuntime) {
+  if (mode == RuntimeMode::kServer || mode == RuntimeMode::kRuntime) {
     // Server/Runtime mode: always start runtime
     init_runtime = true;
     init_client = true;  // Runtime also needs client components

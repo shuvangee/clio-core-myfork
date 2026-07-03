@@ -1,14 +1,14 @@
 #-----------------------------------------------------------------------------
 # gpu_vector performance benchmark.
 #
-# Drives a Vector<chi::u32> through write/flush/read and prints
+# Drives a Vector<clio::run::u32> through write/flush/read and prints
 # bandwidth + latency. Knobs: --blocks, --pages-per-block, --page-size,
 # --ratio, --total-bytes, --cache-period-ms, --iters, --no-read,
 # --bdev-capacity-mib, --gpu-id.
 #-----------------------------------------------------------------------------
 
 if(CLIO_CORE_ENABLE_CUDA)
-    # Baseline cudaMemcpy bench (pure CUDA runtime; no chimaera deps).
+    # Baseline cudaMemcpy bench (pure CUDA runtime; no clio_run deps).
     add_cuda_executable(clio_memcpy_d2h_bench FALSE
         clio_memcpy_d2h_bench.cc
         LINK_LIBS
@@ -41,8 +41,8 @@ if(CLIO_CORE_ENABLE_CUDA)
             ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
             ${CMAKE_SOURCE_DIR}/context-transfer-engine/adapter/gpu_vector/include
         LINK_LIBS
-            chimaera_cxx
-            chimaera_cxx_gpu
+            clio_run_cxx
+            clio_run_cxx_gpu
             clio_admin_client
             clio_bdev_client
             clio_cte_core_client
@@ -64,7 +64,7 @@ if(CLIO_CORE_ENABLE_CUDA)
             ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
             ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
         LINK_LIBS
-            chimaera_cxx
+            clio_run_cxx
             clio_admin_client
             clio_bdev_client
             clio_cte_core_client
@@ -85,7 +85,7 @@ if(CLIO_CORE_ENABLE_CUDA)
             ${CMAKE_SOURCE_DIR}/context-runtime/modules/admin/include
             ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
         LINK_LIBS
-            chimaera_cxx
+            clio_run_cxx
             clio_admin_client
             clio_bdev_client
             clio_cte_core_client
@@ -137,8 +137,8 @@ if(CLIO_CORE_ENABLE_ROCM)
         ${CMAKE_SOURCE_DIR}/context-transfer-engine/adapter/gpu_vector/include
     )
     target_link_libraries(clio_cte_gpu_vector_bench PUBLIC
-        chimaera_cxx
-        chimaera_cxx_gpu
+        clio_run_cxx
+        clio_run_cxx_gpu
         clio_admin_client
         clio_bdev_client
         clio_cte_core_client
@@ -168,7 +168,7 @@ if(CLIO_CORE_ENABLE_ROCM)
         ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
     )
     target_link_libraries(clio_traditional_oom_bench PUBLIC
-        chimaera_cxx
+        clio_run_cxx
         clio_admin_client
         clio_bdev_client
         clio_cte_core_client
@@ -197,7 +197,7 @@ if(CLIO_CORE_ENABLE_ROCM)
         ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
     )
     target_link_libraries(clio_uvm_bench PUBLIC
-        chimaera_cxx
+        clio_run_cxx
         clio_admin_client
         clio_bdev_client
         clio_cte_core_client

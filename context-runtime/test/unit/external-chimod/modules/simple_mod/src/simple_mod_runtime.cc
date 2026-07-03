@@ -51,14 +51,7 @@
 namespace external_test::simple_mod {
 
 // Method implementations for Runtime class
-
-void Runtime::Init(const chi::PoolId &pool_id, const std::string &pool_name) {
-  // Call base class Init to set pool_id_ and pool_name_
-  chi::Container::Init(pool_id, pool_name))
-
-  // Initialize the client for this ChiMod
-  client_ = Client(pool_id);
-}
+// Init is provided by autogen/simple_mod_lib_exec.cc (3-arg override).
 
 // Virtual method implementations now in autogen/simple_mod_lib_exec.cc
 
@@ -66,7 +59,7 @@ void Runtime::Init(const chi::PoolId &pool_id, const std::string &pool_name) {
 // Method implementations
 //===========================================================================
 
-void Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &rctx) {
+void Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   // Simple mod container creation logic
   HLOG(kInfo, "SimpleMod: Initializing simple_mod container");
 
@@ -84,7 +77,7 @@ void Runtime::Create(ctp::ipc::FullPtr<CreateTask> task, chi::RunContext &rctx) 
        pool_name_, task->pool_id_, create_count_);
 }
 
-void Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &rctx) {
+void Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task) {
   HLOG(kInfo, "SimpleMod: Executing Destroy task - Pool ID: {}", task->target_pool_id_);
 
   // Initialize output values
@@ -100,14 +93,14 @@ void Runtime::Destroy(ctp::ipc::FullPtr<DestroyTask> task, chi::RunContext &rctx
 
   } catch (const std::exception &e) {
     task->return_code_ = 99;
-    task->error_message_ = chi::priv::string(
+    task->error_message_ = clio::run::priv::string(
         CTP_MALLOC,
         std::string("Exception during simple_mod destruction: ") + e.what());
     HLOG(kError, "SimpleMod: Destruction failed with exception: {}", e.what());
   }
 }
 
-void Runtime::Flush(ctp::ipc::FullPtr<FlushTask> task, chi::RunContext &rctx) {
+void Runtime::Flush(clio::run::shared_ptr<FlushTask> &task) {
   HLOG(kInfo, "SimpleMod: Executing Flush task");
 
   // Simple flush implementation - just report no work remaining
@@ -117,7 +110,7 @@ void Runtime::Flush(ctp::ipc::FullPtr<FlushTask> task, chi::RunContext &rctx) {
   HLOG(kSuccess, "SimpleMod: Flush completed - work done: {}", task->total_work_done_);
 }
 
-chi::u64 Runtime::GetWorkRemaining() const {
+clio::run::u64 Runtime::GetWorkRemaining() const {
   // Simple mod typically has no pending work, returns 0
   return 0;
 }

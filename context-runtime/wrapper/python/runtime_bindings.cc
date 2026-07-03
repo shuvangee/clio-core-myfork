@@ -46,7 +46,7 @@ using namespace nb::literals;
  * binary-serialized data (e.g. msgpack blobs).
  */
 static nb::dict results_to_dict(
-    const std::unordered_map<chi::ContainerId, std::string>& results) {
+    const std::unordered_map<clio::run::ContainerId, std::string>& results) {
   nb::dict d;
   for (const auto& [k, v] : results) {
     d[nb::int_(k)] = nb::bytes(v.data(), v.size());
@@ -54,20 +54,20 @@ static nb::dict results_to_dict(
   return d;
 }
 
-NB_MODULE(chimaera_runtime_ext, m) {
-  m.doc() = "Python bindings for Chimaera runtime monitoring";
+NB_MODULE(clio_runtime_ext, m) {
+  m.doc() = "Python bindings for Clio runtime monitoring";
 
-  m.def("chimaera_init", &py_chimaera_init, "mode"_a,
-        "Initialize the Chimaera runtime. mode: 0=kClient.");
+  m.def("clio_init", &py_clio_init, "mode"_a,
+        "Initialize the Clio runtime. mode: 0=kClient.");
 
-  m.def("chimaera_finalize", &py_chimaera_finalize,
-        "Finalize the Chimaera runtime.");
+  m.def("clio_finalize", &py_clio_finalize,
+        "Finalize the Clio runtime.");
 
   nb::class_<PyMonitorTask>(m, "MonitorTask")
       .def("wait", [](PyMonitorTask& self, float max_sec) -> nb::dict {
         // Release the GIL so Flask / timeout threads can run while
         // the C++ Wait() blocks on ZMQ Recv().
-        std::unordered_map<chi::ContainerId, std::string> results;
+        std::unordered_map<clio::run::ContainerId, std::string> results;
         {
           nb::gil_scoped_release release;
           results = self.wait(max_sec);

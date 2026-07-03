@@ -16,7 +16,7 @@
  * mode's full code path, results are expected to be empty.
  *
  * Environment Variables:
- * - INIT_CHIMAERA: If set to "1", initializes CLIO Runtime runtime
+ * - INIT_CLIO: If set to "1", initializes CLIO Runtime runtime
  */
 
 #include <clio_cee/api/context_interface.h>
@@ -105,16 +105,16 @@ int main() {
   HLOG(kInfo, "========================================");
 
   try {
-    const char* init_chimaera = std::getenv("INIT_CHIMAERA");
-    if (init_chimaera && std::strcmp(init_chimaera, "1") == 0) {
-      HLOG(kInfo, "Initializing Chimaera (INIT_CHIMAERA=1)...");
-      chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
-      HLOG(kSuccess, "Chimaera initialized");
+    const char* init_clio = std::getenv("INIT_CLIO");
+    if (init_clio && std::strcmp(init_clio, "1") == 0) {
+      HLOG(kInfo, "Initializing Clio (INIT_CLIO=1)...");
+      clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
+      HLOG(kSuccess, "Clio initialized");
     }
 
     auto* ipc_manager = CLIO_IPC;
     if (!ipc_manager) {
-      HLOG(kError, "Chimaera IPC not initialized. Is the runtime running?");
+      HLOG(kError, "Clio IPC not initialized. Is the runtime running?");
       ctp::SystemInfo::TerminateProcessNow(1);
       return 1;
     }

@@ -75,9 +75,9 @@ public:
       INFO("=== Initializing CAE Test Environment ===");
 
       // Step 1: Initialize CLIO Runtime runtime
-      bool success = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+      bool success = clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true);
       if (!success) {
-        throw std::runtime_error("CHIMAERA_INIT failed");
+        throw std::runtime_error("CLIO_INIT failed");
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -94,7 +94,7 @@ public:
       // Step 4: Create CTE core pool
       clio::cte::core::CreateParams cte_params;
       auto cte_create = cte_client->AsyncCreate(
-          chi::PoolQuery::Dynamic(),
+          clio::run::PoolQuery::Dynamic(),
           clio::cte::core::kCtePoolName,
           clio::cte::core::kCtePoolId,
           cte_params);
@@ -130,7 +130,7 @@ public:
     clio::cae::core::Client cae_client;
     clio::cae::core::CreateParams cae_params;
     auto cae_create = cae_client.AsyncCreate(
-        chi::PoolQuery::Local(),
+        clio::run::PoolQuery::Local(),
         "test_cae_pool",
         clio::cae::core::kCaePoolId,
         cae_params);
@@ -360,7 +360,7 @@ TEST_CASE("CAE - ProcessHdf5Dataset Basic", "[cae][hdf5]") {
 
   // Process HDF5 dataset
   auto task = cae_client.AsyncProcessHdf5Dataset(
-      chi::PoolQuery::Local(),
+      clio::run::PoolQuery::Local(),
       fixture.test_hdf5_file_,
       "/data",
       "cae_hdf5_test");
@@ -377,7 +377,7 @@ TEST_CASE("CAE - ProcessHdf5Dataset NonExistent File", "[cae][hdf5][error]") {
 
   // Try to process non-existent file
   auto task = cae_client.AsyncProcessHdf5Dataset(
-      chi::PoolQuery::Local(),
+      clio::run::PoolQuery::Local(),
       "/nonexistent/file.h5",
       "/data",
       "cae_hdf5_error_test");
@@ -396,7 +396,7 @@ TEST_CASE("CAE - ProcessHdf5Dataset Empty Dataset Path", "[cae][hdf5][error]") {
 
   // Try with empty dataset path
   auto task = cae_client.AsyncProcessHdf5Dataset(
-      chi::PoolQuery::Local(),
+      clio::run::PoolQuery::Local(),
       fixture.test_hdf5_file_,
       "",
       "cae_hdf5_empty_path_test");
