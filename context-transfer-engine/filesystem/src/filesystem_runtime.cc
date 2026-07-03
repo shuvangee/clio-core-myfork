@@ -346,6 +346,12 @@ clio::run::TaskResume Runtime::Write(clio::run::shared_ptr<WriteTask> &task) {
   clio::run::u64 old = fi->size_.load();
   while (end > old && !fi->size_.compare_exchange_weak(old, end)) {
   }
+  // A write re-establishes the natural mtime/ctime, so drop any utimens
+  // overrides (fast unlocked check keeps this off the hot path when unused).
+  if (fi->set_atime_ || fi->set_mtime_ || fi->set_ctime_) {
+    std::lock_guard<std::mutex> g(meta_mu_);
+    fi->set_atime_ = 0; fi->set_mtime_ = 0; fi->set_ctime_ = 0;
+  }
   task->bytes_written_ = done;
   task->new_size_ = fi->size_.load();
   task->return_code_ = ok ? 0 : EIO;
@@ -437,6 +443,7 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     bool tracked = false;
     clio::run::u64 live_size = 0;
     clio::cte::core::TagId h_tag = clio::cte::core::TagId::GetNull();
+    clio::run::u64 ov_atime = 0, ov_mtime = 0, ov_ctime = 0;
     {
       std::lock_guard<std::mutex> g(meta_mu_);
       auto it = by_path_.find(path);
@@ -444,6 +451,9 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
         tracked = true;
         live_size = it->second->size_.load();
         h_tag = it->second->tag_id_;
+        ov_atime = it->second->set_atime_;
+        ov_mtime = it->second->set_mtime_;
+        ov_ctime = it->second->set_ctime_;
       }
     }
     if (tracked) {
@@ -461,6 +471,11 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
           task->atime_ = s->atime_;
         }
       }
+      // utimens overrides win over the natural tag timestamps until the next
+      // write/truncate clears them.
+      if (ov_ctime != 0) task->ctime_ = ov_ctime;
+      if (ov_mtime != 0) task->mtime_ = ov_mtime;
+      if (ov_atime != 0) task->atime_ = ov_atime;
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
@@ -539,6 +554,10 @@ clio::run::TaskResume Runtime::Truncate(clio::run::shared_ptr<TruncateTask> &tas
       old_size = it->second->size_.load();
       it->second->size_.store(new_size);
       tracked = !tag_id.IsNull();
+      // A truncate re-establishes natural mtime/ctime — drop utimens overrides.
+      it->second->set_atime_ = 0;
+      it->second->set_mtime_ = 0;
+      it->second->set_ctime_ = 0;
     }
   }
 
@@ -870,6 +889,71 @@ clio::run::TaskResume Runtime::Link(clio::run::shared_ptr<LinkTask> &task) {
   } else {
     task->return_code_ = ENOENT;
   }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Utimens(clio::run::shared_ptr<UtimensTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+  // flags: bit0 = explicit atime, bit1 = explicit mtime, bit2 = atime UTIME_NOW,
+  // bit3 = mtime UTIME_NOW. A field with no bit set is UTIME_OMIT (left alone).
+  // UTIME_NOW is resolved HERE (server) so the value shares the tag clock.
+  const bool a_set = (task->flags_ & 0x1u) != 0;
+  const bool m_set = (task->flags_ & 0x2u) != 0;
+  const bool a_now = (task->flags_ & 0x4u) != 0;
+  const bool m_now = (task->flags_ & 0x8u) != 0;
+  const clio::run::u64 now = clio::cte::core::GetCurrentTimeNs();
+
+  // A directory isn't tracked in by_path_ (that map holds files, which getattr
+  // reports as regular). For a dir, just bump its tag's ctime/mtime via a touch
+  // (no exact-value override); files below get per-path overrides.
+  {
+    std::string child_re = "^" + EscapeExact(path) + "/[^/]+$";
+    auto q = cte_.AsyncTagQuery(child_re, 1, clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(q);
+    if (q->GetReturnCode() == 0 && !q->results_.empty()) {
+      CLIO_FS_TOUCH_DIR(path);
+      task->return_code_ = 0;
+      CLIO_CO_RETURN;
+    }
+  }
+
+  // Regular file: resolve its tag (utimens may target a not-yet-opened file),
+  // then record the requested atime/mtime as overrides that getattr honors.
+  // ctime always advances (metadata changed).
+  clio::cte::core::TagId tag_id;
+  {
+    std::lock_guard<std::mutex> g(meta_mu_);
+    auto it = by_path_.find(path);
+    if (it != by_path_.end()) tag_id = it->second->tag_id_;
+  }
+  if (tag_id.IsNull()) {
+    auto t = cte_.AsyncGetOrCreateTag(path, clio::cte::core::TagId::GetNull(),
+                                      clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(t);
+    if (t->GetReturnCode() != 0) { task->return_code_ = EIO; CLIO_CO_RETURN; }
+    tag_id = t->tag_id_;
+  }
+  {
+    std::lock_guard<std::mutex> g(meta_mu_);
+    auto it = by_path_.find(path);
+    std::shared_ptr<FileInfo> fi;
+    if (it != by_path_.end()) {
+      fi = it->second;
+    } else {
+      fi = std::make_shared<FileInfo>();
+      fi->tag_id_ = tag_id;
+      fi->path_ = path;
+      by_path_[path] = fi;
+    }
+    if (a_now) fi->set_atime_ = now;
+    else if (a_set) fi->set_atime_ = task->atime_ns_;
+    if (m_now) fi->set_mtime_ = now;
+    else if (m_set) fi->set_mtime_ = task->mtime_ns_;
+    fi->set_ctime_ = now;  // utimens always advances ctime
+  }
+  task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }

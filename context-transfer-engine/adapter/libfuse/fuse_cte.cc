@@ -270,11 +270,42 @@ static int cte_fuse_getattr(const char *path, cte_stat_t *stbuf,
 
 static int cte_fuse_utimens(const char *path, const cte_timespec_t tv[2],
                             struct fuse_file_info *fi) {
-  (void)path;
-  (void)tv;
   (void)fi;
-  // CTE timestamps are managed internally; accept silently
-  return 0;
+  // Translate the POSIX (atime, mtime) timespec pair into the chimod's flag
+  // encoding: bit0/bit1 = explicit atime/mtime, bit2/bit3 = UTIME_NOW (resolved
+  // server-side so it shares the tag clock). UTIME_OMIT leaves a field alone.
+  clio::run::u32 flags = 0;
+  clio::run::u64 atime_ns = 0, mtime_ns = 0;
+#if defined(UTIME_NOW) && defined(UTIME_OMIT)
+  if (tv != nullptr) {
+    if (tv[0].tv_nsec == UTIME_NOW) {
+      flags |= 0x4u;
+    } else if (tv[0].tv_nsec != UTIME_OMIT) {
+      flags |= 0x1u;
+      atime_ns = static_cast<clio::run::u64>(tv[0].tv_sec) * 1000000000ULL +
+                 static_cast<clio::run::u64>(tv[0].tv_nsec);
+    }
+    if (tv[1].tv_nsec == UTIME_NOW) {
+      flags |= 0x8u;
+    } else if (tv[1].tv_nsec != UTIME_OMIT) {
+      flags |= 0x2u;
+      mtime_ns = static_cast<clio::run::u64>(tv[1].tv_sec) * 1000000000ULL +
+                 static_cast<clio::run::u64>(tv[1].tv_nsec);
+    }
+  } else {
+    // NULL tv means "set both to now".
+    flags |= 0x4u | 0x8u;
+  }
+#else
+  // Platform without UTIME_NOW/OMIT: treat as set-both-to-now.
+  (void)tv;
+  flags |= 0x4u | 0x8u;
+#endif
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncUtimens(std::string(path), atime_ns, mtime_ns, flags);
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  return rc == 0 ? 0 : -rc;
 }
 
 // ============================================================================

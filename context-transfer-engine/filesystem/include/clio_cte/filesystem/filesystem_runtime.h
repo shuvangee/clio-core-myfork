@@ -47,6 +47,7 @@ class Runtime : public clio::run::Container {
   clio::run::TaskResume Rmdir(clio::run::shared_ptr<RmdirTask> &task);
   clio::run::TaskResume Rename(clio::run::shared_ptr<RenameTask> &task);
   clio::run::TaskResume Link(clio::run::shared_ptr<LinkTask> &task);
+  clio::run::TaskResume Utimens(clio::run::shared_ptr<UtimensTask> &task);
   clio::run::TaskResume Readdir(clio::run::shared_ptr<ReaddirTask> &task);
   clio::run::TaskResume StatSize(clio::run::shared_ptr<StatSizeTask> &task);
   // ---- deferred-append pipeline ----
@@ -99,6 +100,12 @@ class Runtime : public clio::run::Container {
     clio::cte::core::TagId tag_id_;
     std::string path_;
     std::atomic<clio::run::u64> size_{0};  // logical size
+    // utimens overrides (ns; 0 = not set, defer to the core tag's timestamp).
+    // Guarded by meta_mu_. Cleared by a later write/truncate (content change
+    // re-establishes the natural mtime) so the override never goes stale.
+    clio::run::u64 set_atime_{0};
+    clio::run::u64 set_mtime_{0};
+    clio::run::u64 set_ctime_{0};
   };
   std::mutex meta_mu_;
   std::unordered_map<clio::run::u64, std::shared_ptr<FileInfo>> handles_;  // handle -> file
