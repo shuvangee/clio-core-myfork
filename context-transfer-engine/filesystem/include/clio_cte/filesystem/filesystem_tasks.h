@@ -286,6 +286,34 @@ struct TruncateTask : public clio::run::Task {
   template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
 };
 
+/** Utimens: set a file's atime/mtime (ns). flags bit0=set atime, bit1=set
+ *  mtime; a cleared bit means UTIME_OMIT (leave that stamp). ctime always
+ *  bumps. UTIME_NOW is resolved to a concrete ns value by the adapter. */
+struct UtimensTask : public clio::run::Task {
+  IN clio::run::priv::string path_;
+  IN clio::run::u64 atime_ns_;
+  IN clio::run::u64 mtime_ns_;
+  IN clio::run::u32 flags_;  // bit0: set atime, bit1: set mtime
+  UtimensTask()
+      : clio::run::Task(), path_(CTP_MALLOC), atime_ns_(0), mtime_ns_(0),
+        flags_(0) {}
+  explicit UtimensTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                       const clio::run::PoolQuery &pool_query, const std::string &path,
+                       clio::run::u64 atime_ns, clio::run::u64 mtime_ns,
+                       clio::run::u32 flags)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kUtimens),
+        path_(CTP_MALLOC, path), atime_ns_(atime_ns), mtime_ns_(mtime_ns),
+        flags_(flags) {}
+  void Copy(const ctp::ipc::FullPtr<UtimensTask>& o) {
+    path_ = o->path_; atime_ns_ = o->atime_ns_; mtime_ns_ = o->mtime_ns_;
+    flags_ = o->flags_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(path_, atime_ns_, mtime_ns_, flags_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
+};
+
 /** A single-path task body shared by unlink/mkdir/rmdir. */
 #define CLIO_FS_PATH_TASK(NAME, METHOD)                                        \
   struct NAME : public clio::run::Task {                                             \

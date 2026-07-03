@@ -1,0 +1,26 @@
+# Storage capacity config for xfstests: the embedded FUSE runtime otherwise
+# defaults to a tiny (~100 MB) DRAM tier, which starves large-write tests
+# (fsx/fstest torture, generic/074/091/...). 2 GB is ample for the suite while
+# staying modest on RAM. No networking section, so CLIO_PORT/defaults still win.
+compose:
+  - mod_name: clio_bdev
+    pool_name: "ram::chi_default_bdev"
+    pool_query: local
+    pool_id: "301.0"
+    bdev_type: ram
+    capacity: "2g"
+  - mod_name: clio_cte_core
+    pool_name: cte_main
+    pool_query: local
+    pool_id: "512.0"
+    storage:
+      - path: "ram::cte_ram_tier1"
+        bdev_type: "ram"
+        capacity_limit: "2g"
+        score: 1.0
+    dpe:
+      dpe_type: "max_bw"
+    targets:
+      neighborhood: 1
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
