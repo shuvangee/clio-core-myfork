@@ -308,6 +308,24 @@ static int cte_fuse_utimens(const char *path, const cte_timespec_t tv[2],
   return rc == 0 ? 0 : -rc;
 }
 
+// clio files are tags without a stored POSIX mode (getattr synthesizes 0644 for
+// files / 0755 for dirs), so chmod is accepted as a best-effort no-op rather
+// than failing with ENOSYS. Programs that chmod-then-proceed (e.g. mount's mtab
+// updater in generic/089) need the call to succeed; the exact bits are not
+// persisted. Validate existence so chmod of a missing path still returns ENOENT.
+static int cte_fuse_chmod(const char *path, cte_mode_t mode,
+                          struct fuse_file_info *fi) {
+  (void)mode;
+  (void)fi;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncGetattr(std::string(path));
+  t.Wait();
+  if (t->GetReturnCode() != 0 || t->exists_ == 0) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
 // ============================================================================
 // Directory operations
 // ============================================================================
@@ -661,6 +679,7 @@ static const struct fuse_operations cte_fuse_ops = {
     .rmdir = cte_fuse_rmdir,
     .rename = cte_fuse_rename,
     .link = cte_fuse_link,
+    .chmod = cte_fuse_chmod,
     .truncate = cte_fuse_truncate,
     .open = cte_fuse_open,
     .read = cte_fuse_read,

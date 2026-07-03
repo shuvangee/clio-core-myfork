@@ -37,8 +37,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <mutex>
 #include <regex>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -68,9 +70,13 @@ namespace ctp::search {
  * Match semantics: a key matches when std::regex_match(key, pattern) is true
  * (the whole key must match), using the ECMAScript grammar (std::regex default).
  *
- * Thread-safety: NOT internally synchronized. Callers that mutate and query
- * concurrently must provide external synchronization. References returned by a
- * SearchResult are valid only while the engine is unmodified.
+ * Thread-safety: internally synchronized with a shared_mutex — mutators
+ * (Insert/Delete/Rename/Clear) take it exclusively, queries (Search/Contains/
+ * Find/Size/Empty) take it shared. Search returns a SNAPSHOT of the matching
+ * keys (SearchResult::keys()), so callers can iterate keys() safely without
+ * external locking. NOTE: the value-yielding SearchResult iterator fetches
+ * values live via Find() and is NOT safe against concurrent deletes — use
+ * keys() under concurrency.
  */
 template <typename ValueT>
 class RegexSearchEngine {
@@ -82,6 +88,19 @@ class RegexSearchEngine {
    * @return true if a new key was added, false if an existing one was updated.
    */
   bool Insert(const std::string &key, const ValueT &value) {
+    std::unique_lock<std::shared_mutex> lk(mtx_);
+    return InsertLocked(key, value);
+  }
+
+  /** Remove `key`. @return true if it existed. */
+  bool Delete(const std::string &key) {
+    std::unique_lock<std::shared_mutex> lk(mtx_);
+    return DeleteLocked(key);
+  }
+
+ private:
+  /** Insert body; caller must hold mtx_ exclusively. */
+  bool InsertLocked(const std::string &key, const ValueT &value) {
     auto res = entries_.insert_or_assign(key, value);
     const bool is_new = res.second;
     if (is_new) {
@@ -99,8 +118,8 @@ class RegexSearchEngine {
     return is_new;
   }
 
-  /** Remove `key`. @return true if it existed. */
-  bool Delete(const std::string &key) {
+  /** Delete body; caller must hold mtx_ exclusively. */
+  bool DeleteLocked(const std::string &key) {
     auto it = entries_.find(key);
     if (it == entries_.end()) {
       return false;
@@ -128,7 +147,9 @@ class RegexSearchEngine {
    * `new_key` already exists its value is overwritten by the moved one.
    * @return false if `old_key` does not exist.
    */
+ public:
   bool Rename(const std::string &old_key, const std::string &new_key) {
+    std::unique_lock<std::shared_mutex> lk(mtx_);
     auto it = entries_.find(old_key);
     if (it == entries_.end()) {
       return false;
@@ -137,25 +158,35 @@ class RegexSearchEngine {
       return true;
     }
     ValueT moved = std::move(it->second);
-    Delete(old_key);
-    Insert(new_key, moved);
+    DeleteLocked(old_key);
+    InsertLocked(new_key, moved);
     return true;
   }
 
   bool Contains(const std::string &key) const {
+    std::shared_lock<std::shared_mutex> lk(mtx_);
     return entries_.find(key) != entries_.end();
   }
 
-  /** @return pointer to the value bound to `key`, or nullptr if absent. */
+  /** @return pointer to the value bound to `key`, or nullptr if absent. NOTE:
+   *  the pointer is only stable while no concurrent mutation occurs. */
   const ValueT *Find(const std::string &key) const {
+    std::shared_lock<std::shared_mutex> lk(mtx_);
     auto it = entries_.find(key);
     return it == entries_.end() ? nullptr : &it->second;
   }
 
-  size_t Size() const { return entries_.size(); }
-  bool Empty() const { return entries_.empty(); }
+  size_t Size() const {
+    std::shared_lock<std::shared_mutex> lk(mtx_);
+    return entries_.size();
+  }
+  bool Empty() const {
+    std::shared_lock<std::shared_mutex> lk(mtx_);
+    return entries_.empty();
+  }
 
   void Clear() {
+    std::unique_lock<std::shared_mutex> lk(mtx_);
     entries_.clear();
     index_.clear();
   }
@@ -209,6 +240,7 @@ class RegexSearchEngine {
    * @throws std::regex_error if `pattern` is not a valid ECMAScript regex.
    */
   SearchResult Search(const std::string &pattern) const {
+    std::shared_lock<std::shared_mutex> lk(mtx_);
     std::regex re(pattern);  // compiled once per query; throws on bad pattern
 
     std::vector<std::string> required;
@@ -408,6 +440,8 @@ class RegexSearchEngine {
   // copies, to keep the index small for long keys.
   std::unordered_map<std::string, std::unordered_set<const std::string *>>
       index_;
+  // Guards entries_ + index_: exclusive for mutators, shared for queries.
+  mutable std::shared_mutex mtx_;
 };
 
 }  // namespace ctp::search

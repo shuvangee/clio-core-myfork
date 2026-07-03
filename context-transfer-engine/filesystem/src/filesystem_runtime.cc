@@ -103,6 +103,13 @@ inline std::string EscapeExact(const std::string &s) {
   }
   return out;
 }
+/** Anchored exact-match pattern for a single path. Anchoring with ^...$ makes
+ *  the query an exact match (not a substring/`regex_search`), which is what
+ *  getattr/lookup/rename want; it also lets the CTE core serve it from the
+ *  O(1) tag-name hash instead of compiling a std::regex per call (#680). */
+inline std::string ExactRe(const std::string &s) {
+  return "^" + EscapeExact(s) + "$";
+}
 /** Stable inode = packed TagId ((major<<32)|minor). A tag's id is fixed for its
  *  lifetime and unique, so this is a stable, collision-free inode; hard-link
  *  aliases share the TagId and thus correctly share an inode. 0 maps to 1 since
@@ -167,7 +174,7 @@ clio::run::TaskResume Runtime::Open(clio::run::shared_ptr<OpenTask> &task) {
   // Did the tag already exist (so we can report created_)?
   bool existed = false;
   {
-    auto q = cte_.AsyncTagQuery(EscapeExact(path), 1, clio::run::PoolQuery::Local());
+    auto q = cte_.AsyncTagQuery(ExactRe(path), 1, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(q);
     existed = (q->GetReturnCode() == 0 && !q->results_.empty());
   }
@@ -481,12 +488,15 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     }
   }
 
-  // Directory? Any tag with at least one direct child is a directory (real
-  // children for populated dirs, the hidden marker child for empty ones).
+  // Directory? Every mkdir'd directory carries the hidden marker child for its
+  // whole lifetime (the emptiness checks skip it but never delete it), so an
+  // O(1) exact lookup of the marker decides dir-ness -- identical result to the
+  // old "^dir/[^/]+$" child scan for files/empty dirs/populated dirs, but
+  // without compiling a std::regex on every getattr (#680; the stat hot path).
   std::string dir = StripTrailingSlash(path);
   {
-    std::string child_re = "^" + EscapeExact(dir) + "/[^/]+$";
-    auto q = cte_.AsyncTagQuery(child_re, 1, clio::run::PoolQuery::Local());
+    auto q = cte_.AsyncTagQuery(ExactRe(dir + "/" + kDirMarker), 1,
+                                clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(q);
     if (q->GetReturnCode() == 0 && !q->results_.empty()) {
       task->exists_ = 1; task->is_dir_ = 1; task->size_ = 0;
@@ -511,17 +521,20 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
   }
 
   // Regular file: an exact tag with no children. Fall back to physical size.
-  auto q = cte_.AsyncTagQuery(EscapeExact(path), 1, clio::run::PoolQuery::Local());
+  auto q = cte_.AsyncTagQuery(ExactRe(path), 1, clio::run::PoolQuery::Local());
   CLIO_CO_AWAIT(q);
   if (q->GetReturnCode() == 0 && !q->results_.empty()) {
     task->exists_ = 1; task->is_dir_ = 0;
-    auto tag = cte_.AsyncGetOrCreateTag(path, clio::cte::core::TagId::GetNull(),
-                                        clio::run::PoolQuery::Local());
-    CLIO_CO_AWAIT(tag);
-    auto s = cte_.AsyncGetTagSize(tag->tag_id_, clio::run::PoolQuery::Local());
+    // The exact query already resolved the tag id (result_ids_), so read the
+    // size/timestamps directly instead of a redundant GetOrCreateTag round-trip
+    // -- one fewer sequential RPC on the stat hot path (#680).
+    clio::run::u64 packed = q->result_ids_.empty() ? 0 : q->result_ids_[0];
+    clio::cte::core::TagId tid(static_cast<clio::run::u32>(packed >> 32),
+                               static_cast<clio::run::u32>(packed & 0xffffffffULL));
+    auto s = cte_.AsyncGetTagSize(tid, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(s);
     task->size_ = (s->GetReturnCode() == 0) ? s->tag_size_ : 0;
-    task->ino_ = InoFromTag(tag->tag_id_);
+    task->ino_ = InoFromPacked(packed);
     if (s->GetReturnCode() == 0) {
       task->ctime_ = s->ctime_;
       task->mtime_ = s->mtime_;
@@ -669,7 +682,7 @@ clio::run::TaskResume Runtime::Mkdir(clio::run::shared_ptr<MkdirTask> &task) {
     }
   }
   {
-    auto q = cte_.AsyncTagQuery(EscapeExact(path), 1, clio::run::PoolQuery::Local());
+    auto q = cte_.AsyncTagQuery(ExactRe(path), 1, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(q);
     if (q->GetReturnCode() == 0 && !q->results_.empty()) {
       task->return_code_ = EEXIST;
@@ -751,7 +764,7 @@ clio::run::TaskResume Runtime::Rename(clio::run::shared_ptr<RenameTask> &task) {
     }
   }
   if (src_tag.IsNull()) {
-    auto q = cte_.AsyncTagQuery(EscapeExact(src), 1, clio::run::PoolQuery::Local());
+    auto q = cte_.AsyncTagQuery(ExactRe(src), 1, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(q);
     if (q->GetReturnCode() == 0 && !q->results_.empty()) {
       auto t = cte_.AsyncGetOrCreateTag(src, clio::cte::core::TagId::GetNull(),
@@ -798,7 +811,7 @@ clio::run::TaskResume Runtime::Rename(clio::run::shared_ptr<RenameTask> &task) {
     } else {
       // No children: a regular file if an exact tag exists, else nonexistent.
       auto qf =
-          cte_.AsyncTagQuery(EscapeExact(dst), 1, clio::run::PoolQuery::Local());
+          cte_.AsyncTagQuery(ExactRe(dst), 1, clio::run::PoolQuery::Local());
       CLIO_CO_AWAIT(qf);
       dst_state =
           (qf->GetReturnCode() == 0 && !qf->results_.empty()) ? 1 : 0;
@@ -865,7 +878,7 @@ clio::run::TaskResume Runtime::Link(clio::run::shared_ptr<LinkTask> &task) {
 
   // A hard link must not land on an existing name.
   {
-    auto q = cte_.AsyncTagQuery(EscapeExact(link), 1, clio::run::PoolQuery::Local());
+    auto q = cte_.AsyncTagQuery(ExactRe(link), 1, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(q);
     if (q->GetReturnCode() == 0 && !q->results_.empty()) {
       task->return_code_ = EEXIST;
@@ -1001,7 +1014,7 @@ clio::run::TaskResume Runtime::StatSize(clio::run::shared_ptr<StatSizeTask> &tas
       CLIO_CO_RETURN;
     }
   }
-  auto qy = cte_.AsyncTagQuery(EscapeExact(path), 1, clio::run::PoolQuery::Local());
+  auto qy = cte_.AsyncTagQuery(ExactRe(path), 1, clio::run::PoolQuery::Local());
   CLIO_CO_AWAIT(qy);
   if (qy->GetReturnCode() == 0 && !qy->results_.empty()) {
     task->exists_ = 1;

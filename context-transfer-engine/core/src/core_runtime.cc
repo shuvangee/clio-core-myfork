@@ -105,6 +105,41 @@ bool IsHierPath(const std::string &name) {
   return !name.empty() && name[0] == '/';
 }
 
+// If `re` is an anchored literal pattern ("^...$" whose body is only literal
+// characters and backslash-escaped metacharacters), decode the literal string
+// it matches into `*literal` and return true. This lets TagQuery serve exact
+// lookups (getattr/lookup/rename) from the O(1) name hash + hierarchy walk
+// instead of compiling a std::regex per call (#680). Patterns with real
+// metacharacters (e.g. the readdir child glob "^dir/[^/]+$") return false and
+// fall back to the trigram regex search index.
+bool TryParseAnchoredLiteral(const std::string &re, std::string *literal) {
+  if (re.size() < 2 || re.front() != '^' || re.back() != '$') {
+    return false;
+  }
+  std::string out;
+  out.reserve(re.size());
+  for (size_t i = 1; i + 1 < re.size(); ++i) {
+    char c = re[i];
+    if (c == '\\') {
+      // A backslash must escape a body char, not the closing '$' anchor.
+      if (i + 2 >= re.size()) {
+        return false;
+      }
+      out += re[++i];
+      continue;
+    }
+    // Any unescaped regex metacharacter means this is not a pure literal.
+    if (c == '.' || c == '[' || c == ']' || c == '(' || c == ')' ||
+        c == '{' || c == '}' || c == '+' || c == '*' || c == '?' ||
+        c == '^' || c == '$' || c == '|') {
+      return false;
+    }
+    out += c;
+  }
+  *literal = std::move(out);
+  return true;
+}
+
 // Build the relative stored form for a child of `parent` with leaf `leaf`.
 std::string MakeRelativeName(const TagId &parent, const std::string &leaf) {
   return std::string(kTagRefPrefix) + std::to_string(parent.major_) + "." +
@@ -254,9 +289,9 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
       ctp::priv::unordered_map_ll<std::string, clio::run::PoolId>(kTargetMapSize);
   tag_name_to_id_ =
       ctp::priv::unordered_map_ll<std::string, TagId>(kTagMapSize);
-  tag_id_to_info_ = ctp::priv::unordered_map_ll<TagId, TagInfo>(kTagMapSize);
+  tag_id_to_info_ = ctp::priv::unordered_map_ll<TagId, std::shared_ptr<TagInfo>>(kTagMapSize);
   tag_blob_name_to_info_ =
-      ctp::priv::unordered_map_ll<std::string, BlobInfo>(kBlobMapSize);
+      ctp::priv::unordered_map_ll<std::string, std::shared_ptr<BlobInfo>>(kBlobMapSize);
 
   // Initialize lock vectors for concurrent access
   target_locks_.reserve(kMaxLocks);
@@ -410,7 +445,6 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
     // Both paths populate the tag table directly (bypassing GetOrAssignTagId's
     // per-insert indexing), so rebuild the regex search index once from the
     // final tag set (#598).
-    clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
     RebuildTagSearchIndexLocked();
   }
 
@@ -562,7 +596,6 @@ clio::run::PoolQuery Runtime::ScheduleTask(const clio::run::shared_ptr<clio::run
       std::string tag_name = typed->tag_name_.str();
       bool tag_exists = false;
       {
-        clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
         tag_exists = (tag_name_to_id_.find(tag_name) != nullptr);
       }
       if (tag_exists) {
@@ -935,7 +968,6 @@ clio::run::TaskResume Runtime::GetOrCreateTag(
         (preferred_id.major_ != 0 && preferred_id.major_ != local_node_id);
 
     if (is_remote_tag) {
-      clio::run::ScopedCoRwWriteLock write_lock(tag_map_lock_);
       TagId *existing_tag_id_ptr = tag_name_to_id_.find(tag_name);
       if (existing_tag_id_ptr == nullptr) {
         tag_name_to_id_.insert_or_assign(tag_name, preferred_id);
@@ -957,8 +989,7 @@ clio::run::TaskResume Runtime::GetOrCreateTag(
 
     auto now = GetCurrentTimeNs();
     {
-      clio::run::ScopedCoRwWriteLock write_lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr != nullptr) {
         tag_info_ptr->last_read_ = now;
         LogTelemetry(CteOp::kGetOrCreateTag, 0, 0, tag_id,
@@ -1111,7 +1142,7 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     }
 
     // Check if blob exists and resolve score
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     bool blob_found = (blob_info_ptr != nullptr);
     if (blob_score < 0.0f) {
       blob_score = blob_found ? blob_info_ptr->score_ : 1.0f;
@@ -1240,8 +1271,7 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
       // tag-owning container saw total_size_ = 0 (no PutBlobs hashed
       // to it) and the blob-owning container had no TagInfo at all
       // (rc=1, tag_size_=0). stat() then returned 0 after writes.
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr == nullptr) {
         // No prior local accounting; seed an entry. tag_name_ stays
         // empty -- the canonical name<->id binding lives on the
@@ -1252,8 +1282,8 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
         seed.last_read_ = now;
         seed.last_changed_ = now;
         seed.total_size_ = 0;
-        auto ins = tag_id_to_info_.insert_or_assign(tag_id, seed);
-        tag_info_ptr = ins.value;
+        tag_info_ptr = std::make_shared<TagInfo>(seed);
+        tag_id_to_info_.insert_or_assign(tag_id, tag_info_ptr);
       }
       if (tag_info_ptr) {
         tag_info_ptr->last_modified_ = now;
@@ -1309,7 +1339,7 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     }
 
     // Step 1: Check if blob exists
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
 
     // If blob doesn't exist, error
     if (blob_info_ptr == nullptr) {
@@ -1340,8 +1370,7 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     // reflects real reads and not just metadata queries. last_read_ is a plain
     // timestamp; the read lock only guards the map lookup.
     {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr != nullptr) {
         tag_info_ptr->last_read_ = now;
       }
@@ -1387,7 +1416,7 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
         config.performance_.score_difference_threshold_;
 
     // Step 1: Get blob info directly from table
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     if (blob_info_ptr == nullptr) {
       task->return_code_ = 3;  // Blob not found
       CLIO_CO_RETURN;
@@ -1516,7 +1545,7 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
     }
 
     // Step 1: Check if blob exists
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
 
     if (blob_info_ptr == nullptr) {
       task->return_code_ = 1;  // Blob not found
@@ -1539,8 +1568,7 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
 
     // Step 3: Update tag's total_size_
     {
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr != nullptr) {
         if (blob_size <= tag_info_ptr->total_size_) {
           tag_info_ptr->total_size_ -= blob_size;
@@ -1557,7 +1585,6 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
 
     // Step 5: Remove blob from tag_blob_name_to_info_ map
     {
-      clio::run::ScopedCoRwWriteLock lock(blob_map_lock_);
       std::string compound_key = std::to_string(tag_id.major_) + "." +
                                  std::to_string(tag_id.minor_) + "." +
                                  blob_name;
@@ -1602,14 +1629,13 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
       CLIO_CO_RETURN;
     }
 
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     if (blob_info_ptr == nullptr) {
       // A missing blob is already "empty" — no data to truncate. But a truncate
       // is still a modification of the tag (the filesystem adapter also uses a
       // truncate of a not-yet-materialized page to stamp timestamps on a
       // truncate-up, which reserves no storage), so bump mtime/ctime.
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr != nullptr) {
         auto now = GetCurrentTimeNs();
         tag_info_ptr->last_modified_ = now;
@@ -1633,8 +1659,7 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
 
     // Update the tag's total_size_ by the delta.
     {
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr != nullptr) {
         if (final_size >= old_size) {
           tag_info_ptr->total_size_ += (final_size - old_size);
@@ -1733,7 +1758,6 @@ clio::run::TaskResume Runtime::RenameTag(clio::run::shared_ptr<RenameTagTask> &t
       // no gap, serializes overlapping renames and keeps tag_name_to_id_ and the
       // per-tag canonical name in agreement. See issue #596.
       {
-        clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
         if (tag_id.IsNull()) {
           tag_id = ResolvePathToIdLocked(old_name);
         }
@@ -1741,7 +1765,7 @@ clio::run::TaskResume Runtime::RenameTag(clio::run::shared_ptr<RenameTagTask> &t
           task->return_code_ = 1;  // source path not found
           CLIO_CO_RETURN;
         }
-        TagInfo *info = tag_id_to_info_.find(tag_id);
+        std::shared_ptr<TagInfo> info = tag_id_to_info_.get(tag_id);
         if (info == nullptr) {
           task->return_code_ = 1;  // source tag has no metadata
           CLIO_CO_RETURN;
@@ -1783,7 +1807,6 @@ clio::run::TaskResume Runtime::RenameTag(clio::run::shared_ptr<RenameTagTask> &t
 
     // ---- Flat rename (non-path tags): move the verbatim name binding. ----
     // Broadcast: each container moves the name->id binding it happens to hold.
-    clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
     TagId *idp = tag_name_to_id_.find(old_name);
     if (idp != nullptr) {
       TagId bound = *idp;
@@ -1794,7 +1817,7 @@ clio::run::TaskResume Runtime::RenameTag(clio::run::shared_ptr<RenameTagTask> &t
       tag_name_to_id_.insert_or_assign(new_name, bound);
     }
     if (!tag_id.IsNull()) {
-      TagInfo *info = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> info = tag_id_to_info_.get(tag_id);
       if (info != nullptr) {
         info->tag_name_ = clio::run::priv::string(CLIO_PRIV_ALLOC, new_name);
         info->last_modified_ = GetCurrentTimeNs();
@@ -1829,7 +1852,6 @@ clio::run::TaskResume Runtime::GetOrCreateTagAlias(
     // Phase A: resolve + verify the target tag exists. The target may be given
     // by id or by name (absolute paths are walked through the hierarchy).
     {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
       if (tag_id.IsNull() && !existing_name.empty()) {
         if (IsHierPath(existing_name)) {
           tag_id = ResolvePathToIdLocked(existing_name);
@@ -1839,7 +1861,7 @@ clio::run::TaskResume Runtime::GetOrCreateTagAlias(
           if (p != nullptr) tag_id = *p;
         }
       }
-      if (tag_id.IsNull() || tag_id_to_info_.find(tag_id) == nullptr) {
+      if (tag_id.IsNull() || !tag_id_to_info_.contains(tag_id)) {
         task->found_ = 0;
         task->tag_id_ = TagId::GetNull();
         task->return_code_ = 0;  // found_ conveys "target missing"; not an error
@@ -1868,7 +1890,6 @@ clio::run::TaskResume Runtime::GetOrCreateTagAlias(
     // alias shares the target's id and therefore all of its blobs). GetOrCreate:
     // if the key is already bound, return whatever it points at unchanged.
     {
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
       TagId *existing_alias = tag_name_to_id_.find(alias_key);
       if (existing_alias != nullptr) {
         tag_id = *existing_alias;
@@ -1880,7 +1901,7 @@ clio::run::TaskResume Runtime::GetOrCreateTagAlias(
         tag_search_.Insert(ResolveTagName(alias_key), tag_id);
         // Record the alias key on the target so DelTag cascades to it when the
         // canonical tag is deleted. The canonical name is never added here.
-        TagInfo *info = tag_id_to_info_.find(tag_id);
+        std::shared_ptr<TagInfo> info = tag_id_to_info_.get(tag_id);
         if (info != nullptr) {
           bool present = (alias_key == info->tag_name_.str());
           for (size_t i = 0; !present && i < info->aliases_.size(); ++i) {
@@ -1918,7 +1939,6 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     // deleting an alias (a non-canonical name) from deleting the tag itself.
     std::string resolved_key;
     if (tag_id.IsNull() && !tag_name.empty()) {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
       if (IsHierPath(tag_name)) {
         std::string parent_path, leaf;
         if (tag_name == "/") {
@@ -1953,8 +1973,7 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     std::string canonical;
     std::string del_abs;
     {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr == nullptr) {
         task->return_code_ = 1;  // Tag not found by ID
         CLIO_CO_RETURN;
@@ -1973,7 +1992,6 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     // pruned here.
     std::vector<TagId> ancestor_chain;
     {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
       TagId root_id;
       TagId *rp = tag_name_to_id_.find(std::string("/"));
       if (rp != nullptr) root_id = *rp;
@@ -1982,7 +2000,7 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
       std::string leaf;
       while (ParseTagRef(name, parent, leaf)) {
         if (!root_id.IsNull() && parent == root_id) break;  // never prune root
-        TagInfo *pinfo = tag_id_to_info_.find(parent);
+        std::shared_ptr<TagInfo> pinfo = tag_id_to_info_.get(parent);
         if (pinfo == nullptr) break;
         ancestor_chain.push_back(parent);
         name = pinfo->tag_name_.str();
@@ -1995,12 +2013,11 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     // through the canonical name, falls through to a full recursive delete that
     // cascades to every alias below.
     if (!resolved_key.empty() && resolved_key != canonical) {
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
       tag_name_to_id_.erase(resolved_key);
       // Drop just this alias name from the search index; the tag and its other
       // names (canonical + remaining aliases) stay. (#598)
       tag_search_.Delete(ResolveTagName(resolved_key));
-      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
       if (tag_info_ptr != nullptr) {
         for (size_t i = 0; i < tag_info_ptr->aliases_.size(); ++i) {
           if (tag_info_ptr->aliases_[i].str() == resolved_key) {
@@ -2015,19 +2032,45 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
       CLIO_CO_RETURN;
     }
 
+    // Unlinking the CANONICAL name while hard-link aliases still exist must NOT
+    // destroy the file: POSIX keeps the inode alive until the last link is
+    // removed. Promote a surviving alias to be the new canonical name and drop
+    // only the unlinked name; the tag, its blobs, and remaining links stay.
+    // (#680: without this, `link(a,b); unlink(a)` also destroyed b, which spun
+    // t_mtab's lock loop forever -- the real cause of the generic/089 "hang".)
+    {
+      std::shared_ptr<TagInfo> tinfo = tag_id_to_info_.get(tag_id);
+      if (!resolved_key.empty() && resolved_key == canonical &&
+          tinfo != nullptr && !tinfo->aliases_.empty()) {
+        std::string new_canonical = tinfo->aliases_[0].str();
+        tinfo->aliases_.erase(tinfo->aliases_.begin());
+        // Remove ONLY the old canonical name binding (name hash + search index);
+        // the promoted alias is already bound under its own key, so the tag stays
+        // fully resolvable under its new canonical and any other aliases.
+        tag_name_to_id_.erase(resolved_key);
+        tag_search_.Delete(del_abs);
+        tinfo->tag_name_ = clio::run::priv::string(CLIO_PRIV_ALLOC, new_canonical);
+        tinfo->last_changed_ = GetCurrentTimeNs();   // unlink => ctime
+        tinfo->last_modified_ = GetCurrentTimeNs();
+        task->return_code_ = 0;
+        CLIO_CO_RETURN;
+      }
+    }
+
     // Full recursive delete: remove this tag and its whole subtree from the
     // search index (#598), using the absolute path captured before any deletion.
     // O(subtree) via the index's trigram-prefiltered prefix search.
     {
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
+      // The self entry is keyed by exactly del_abs, so delete it directly --
+      // no need to compile a std::regex to rediscover a key we already hold
+      // (#680; this runs on every unlink/rmdir). Delete() is a no-op if absent.
+      tag_search_.Delete(del_abs);
+      // Descendants still need the trigram-prefiltered prefix search; a leaf
+      // (the common case for file unlink) matches nothing and returns fast.
       std::string esc = EscapeRegexLiteral(del_abs);
-      auto self_hit = tag_search_.Search("^" + esc + "$");
       auto descendants = tag_search_.Search("^" + esc + "/.*");
       // keys() is a snapshot independent of the engine's maps, so deleting from
       // the engine while iterating it is safe.
-      for (const auto &k : self_hit.keys()) {
-        tag_search_.Delete(k);
-      }
       for (const auto &k : descendants.keys()) {
         tag_search_.Delete(k);
       }
@@ -2046,15 +2089,14 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     // remove those from the search index too. (#598)
     std::vector<std::string> dead_alias_abs;
     {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
       std::unordered_map<TagId, std::vector<TagId>> children;
-      tag_id_to_info_.for_each([&](const TagId &id, const TagInfo &info) {
+      tag_id_to_info_.for_each([&](const TagId &id, const std::shared_ptr<TagInfo> &info_sp) { const TagInfo &info = *info_sp; (void)info;
         TagId parent;
         std::string leaf;
         if (ParseTagRef(info.tag_name_.str(), parent, leaf)) {
           children[parent].push_back(id);
         }
-      });
+      }, ctp::priv::ForEachLock::kShared);
       std::vector<TagId> frontier{tag_id};
       while (!frontier.empty()) {
         TagId cur = frontier.back();
@@ -2062,7 +2104,7 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
         to_delete.push_back(cur);
         prefix_to_id[std::to_string(cur.major_) + "." +
                      std::to_string(cur.minor_) + "."] = cur;
-        TagInfo *cinfo = tag_id_to_info_.find(cur);
+        std::shared_ptr<TagInfo> cinfo = tag_id_to_info_.get(cur);
         if (cinfo != nullptr) {
           for (size_t i = 0; i < cinfo->aliases_.size(); ++i) {
             dead_alias_abs.push_back(ResolveTagName(cinfo->aliases_[i].str()));
@@ -2075,7 +2117,6 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
       }
     }
     if (!dead_alias_abs.empty()) {
-      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
       for (const auto &a : dead_alias_abs) {
         tag_search_.Delete(a);
       }
@@ -2093,16 +2134,19 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     };
     std::vector<std::pair<TagId, std::string>> blobs_to_delete;
     {
-      clio::run::ScopedCoRwReadLock lock(blob_map_lock_);
+      // tag_blob_name_to_info_ is self-locking (unordered_map_ll); no outer
+      // map lock is needed. The removed blob_map_lock_ let coroutines hold a
+      // reader across suspension while for_each took the map's exclusive lock,
+      // which deadlocked under concurrency (issue #680: 089/100/208/323).
       tag_blob_name_to_info_.for_each(
-          [&](const std::string &compound_key, const BlobInfo &blob_info) {
+          [&](const std::string &compound_key, const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
             (void)blob_info;
             auto it = prefix_to_id.find(compound_prefix(compound_key));
             if (it != prefix_to_id.end()) {
               blobs_to_delete.emplace_back(
                   it->second, compound_key.substr(it->first.size()));
             }
-          });
+          }, ctp::priv::ForEachLock::kShared);
     }
 
     // Step 5: delete blobs in bounded-concurrency batches.
@@ -2129,15 +2173,14 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
 
     // Step 6: erase blob-name mappings for all deleted tags.
     {
-      clio::run::ScopedCoRwWriteLock lock(blob_map_lock_);
       std::vector<std::string> keys_to_erase;
       tag_blob_name_to_info_.for_each(
-          [&](const std::string &compound_key, const BlobInfo &blob_info) {
+          [&](const std::string &compound_key, const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
             (void)blob_info;
             if (prefix_to_id.count(compound_prefix(compound_key)) != 0) {
               keys_to_erase.push_back(compound_key);
             }
-          });
+          }, ctp::priv::ForEachLock::kShared);
       for (const auto &key : keys_to_erase) {
         tag_blob_name_to_info_.erase(key);
       }
@@ -2152,8 +2195,7 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     for (const TagId &del_id : to_delete) {
       std::string del_name;
       {
-        clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-        TagInfo *info = tag_id_to_info_.find(del_id);
+        std::shared_ptr<TagInfo> info = tag_id_to_info_.get(del_id);
         if (info != nullptr) {
           total_size += info->total_size_;
           del_name = info->tag_name_.str();
@@ -2174,7 +2216,6 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
         tag_txn_logs_[wid % tag_txn_logs_.size()]->Log(TxnType::kDelTag, txn);
       }
       {
-        clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
         tag_id_to_info_.erase(del_id);
       }
       GpuCacheOnDelTag(del_id);
@@ -2187,11 +2228,10 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     for (const TagId &anc : ancestor_chain) {
       bool has_child = false;
       {
-        clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
-        if (tag_id_to_info_.find(anc) == nullptr) {
+        if (!tag_id_to_info_.contains(anc)) {
           continue;  // already removed (e.g. part of the deleted subtree)
         }
-        tag_id_to_info_.for_each([&](const TagId &id, const TagInfo &info) {
+        tag_id_to_info_.for_each([&](const TagId &id, const std::shared_ptr<TagInfo> &info_sp) { const TagInfo &info = *info_sp; (void)info;
           (void)id;
           if (has_child) return;
           TagId cparent;
@@ -2200,15 +2240,14 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
               cparent == anc) {
             has_child = true;
           }
-        });
+        }, ctp::priv::ForEachLock::kShared);
       }
       if (has_child) {
         break;  // non-empty directory: this and all higher ancestors persist
       }
       std::string anc_name;
       {
-        clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-        TagInfo *info = tag_id_to_info_.find(anc);
+        std::shared_ptr<TagInfo> info = tag_id_to_info_.get(anc);
         if (info == nullptr) continue;
         anc_name = info->tag_name_.str();
         std::string anc_abs = ResolveTagName(anc_name);  // parent chain intact
@@ -2256,8 +2295,7 @@ clio::run::TaskResume Runtime::GetTagName(clio::run::shared_ptr<GetTagNameTask> 
     std::string stored;
     bool found = false;
     {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
-      TagInfo *info = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> info = tag_id_to_info_.get(tag_id);
       if (info != nullptr) {
         stored = info->tag_name_.str();
         found = true;
@@ -2285,8 +2323,7 @@ clio::run::TaskResume Runtime::GetTagSize(clio::run::shared_ptr<GetTagSizeTask> 
     TagId tag_id = task->tag_id_;
 
     // Find the tag
-    clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
-    TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+    std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
     if (tag_info_ptr == nullptr) {
       task->return_code_ = 1;  // Tag not found
       task->tag_size_ = 0;
@@ -2357,7 +2394,6 @@ clio::run::TaskResume Runtime::GetNumAliases(
     task->num_aliases_ = 0;
     task->found_ = 0;
 
-    clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
 
     // Resolve the tag id: prefer an explicit id, else resolve the name the same
     // way DelTag does — hierarchical "$tagid{parent}/leaf" key first, then a
@@ -2389,7 +2425,7 @@ clio::run::TaskResume Runtime::GetNumAliases(
     }
 
     if (!tag_id.IsNull()) {
-      TagInfo *info = tag_id_to_info_.find(tag_id);
+      std::shared_ptr<TagInfo> info = tag_id_to_info_.get(tag_id);
       if (info != nullptr) {
         task->num_aliases_ = static_cast<clio::run::u32>(info->aliases_.size());
         task->found_ = 1;
@@ -2455,7 +2491,6 @@ clio::run::bdev::PersistenceLevel Runtime::GetPersistenceLevelForTarget(
 
 TagId Runtime::GetOrAssignTagId(const std::string &tag_name,
                                 const TagId &preferred_id) {
-  clio::run::ScopedCoRwWriteLock write_lock(tag_map_lock_);
 
   // Check if tag already exists
   TagId *existing_tag_id_ptr = tag_name_to_id_.find(tag_name);
@@ -2485,7 +2520,7 @@ TagId Runtime::GetOrAssignTagId(const std::string &tag_name,
 
   // Store mappings
   tag_name_to_id_.insert_or_assign(tag_name, tag_id);
-  tag_id_to_info_.insert_or_assign(tag_id, tag_info);
+  tag_id_to_info_.insert_or_assign(tag_id, std::make_shared<TagInfo>(tag_info));
 
   // Index the new tag's ABSOLUTE name for regex TagQuery (#598). The parent
   // chain is already created (GetOrCreateTagChain builds parents first), so
@@ -2517,7 +2552,7 @@ std::string Runtime::ResolveTagName(const std::string &stored_name,
     // Flat name, root "/", or a legacy absolute name stored verbatim.
     return stored_name;
   }
-  TagInfo *pinfo = tag_id_to_info_.find(parent);
+  std::shared_ptr<TagInfo> pinfo = tag_id_to_info_.get(parent);
   if (pinfo == nullptr) {
     // Dangling parent (e.g. partially-replayed metadata). Best effort: present
     // the leaf as a top-level name so the result is still a usable path.
@@ -2551,7 +2586,7 @@ void Runtime::RebuildTagSearchIndexLocked() {
   // yields the full path. Used after WAL/metadata restore, where tags are
   // inserted directly (bypassing GetOrAssignTagId's per-insert indexing).
   tag_search_.Clear();
-  tag_id_to_info_.for_each([&](const TagId & /*id*/, const TagInfo &info) {
+  tag_id_to_info_.for_each([&](const TagId & /*id*/, const std::shared_ptr<TagInfo> &info_sp) { const TagInfo &info = *info_sp; (void)info;
     std::string abs = ResolveTagName(info.tag_name_.str());
     if (!abs.empty()) {
       tag_search_.Insert(abs, info.tag_id_);
@@ -2604,7 +2639,7 @@ clio::run::TaskResume Runtime::FlushMetadata(clio::run::shared_ptr<FlushMetadata
     }
 
     // Write TagInfo entries (entry_type 0)
-    tag_id_to_info_.for_each([&](const TagId &id, const TagInfo &info) {
+    tag_id_to_info_.for_each([&](const TagId &id, const std::shared_ptr<TagInfo> &info_sp) { const TagInfo &info = *info_sp; (void)info;
       uint8_t entry_type = 0;
       uint32_t name_len = static_cast<uint32_t>(info.tag_name_.size());
       clio::run::u64 total_size = info.total_size_;
@@ -2620,7 +2655,7 @@ clio::run::TaskResume Runtime::FlushMetadata(clio::run::shared_ptr<FlushMetadata
 
     // Write BlobInfo entries (entry_type 1)
     tag_blob_name_to_info_.for_each([&](const std::string &key,
-                                        const BlobInfo &blob_info) {
+                                        const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
       uint8_t entry_type = 1;
       uint32_t key_len = static_cast<uint32_t>(key.size());
       uint32_t blob_name_len =
@@ -2747,7 +2782,7 @@ clio::run::TaskResume Runtime::FlushData(clio::run::shared_ptr<FlushDataTask> &t
   {
     clio::run::ScopedCoRwReadLock read_lock(target_lock_);
     tag_blob_name_to_info_.for_each([&](const std::string &key,
-                                        const BlobInfo &blob_info) {
+                                        const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
       if (blob_info.blocks_.empty()) return;
 
       bool has_volatile_blocks = false;
@@ -2788,7 +2823,7 @@ clio::run::TaskResume Runtime::FlushData(clio::run::shared_ptr<FlushDataTask> &t
 
   // Flush each blob: read data, free volatile blocks, re-put with persistence
   for (const auto &entry : blobs_to_flush) {
-    BlobInfo *blob_info_ptr = tag_blob_name_to_info_.find(entry.composite_key);
+    std::shared_ptr<BlobInfo> blob_info_ptr = tag_blob_name_to_info_.get(entry.composite_key);
     if (!blob_info_ptr || blob_info_ptr->blocks_.empty()) continue;
 
     clio::run::u64 total_size = entry.total_size;
@@ -2946,7 +2981,7 @@ void Runtime::RestoreMetadataFromLog() {
       tag_name_to_id_.insert_or_assign(tag_name, tag_id);
       TagInfo tag_info(tag_name, tag_id);
       tag_info.total_size_ = total_size;
-      tag_id_to_info_.insert_or_assign(tag_id, tag_info);
+      tag_id_to_info_.insert_or_assign(tag_id, std::make_shared<TagInfo>(tag_info));
 
       if (tag_id.minor_ >= max_minor) {
         max_minor = tag_id.minor_ + 1;
@@ -3024,7 +3059,7 @@ void Runtime::RestoreMetadataFromLog() {
         blob_info.blocks_.push_back(block);
       }
 
-      tag_blob_name_to_info_.insert_or_assign(composite_key, blob_info);
+      tag_blob_name_to_info_.insert_or_assign(composite_key, std::make_shared<BlobInfo>(blob_info));
       blobs_restored++;
 
     } else {
@@ -3070,7 +3105,7 @@ void Runtime::ReplayTransactionLogs() {
         TagId tag_id{txn.tag_major_, txn.tag_minor_};
         tag_name_to_id_.insert_or_assign(txn.tag_name_, tag_id);
         TagInfo tag_info(txn.tag_name_, tag_id);
-        tag_id_to_info_.insert_or_assign(tag_id, tag_info);
+        tag_id_to_info_.insert_or_assign(tag_id, std::make_shared<TagInfo>(tag_info));
         if (tag_id.minor_ >= max_minor) max_minor = tag_id.minor_ + 1;
         tags_replayed++;
       } else if (type == TxnType::kDelTag) {
@@ -3084,7 +3119,7 @@ void Runtime::ReplayTransactionLogs() {
         std::vector<std::string> keys_to_erase;
         tag_blob_name_to_info_.for_each(
             [&tag_prefix, &keys_to_erase](const std::string &key,
-                                          const BlobInfo &) {
+                                          const std::shared_ptr<BlobInfo> &) {
               if (key.compare(0, tag_prefix.length(), tag_prefix) == 0) {
                 keys_to_erase.push_back(key);
               }
@@ -3118,7 +3153,7 @@ void Runtime::ReplayTransactionLogs() {
         BlobInfo blob_info;
         blob_info.blob_name_ = txn.blob_name_;
         blob_info.score_ = txn.score_;
-        tag_blob_name_to_info_.insert_or_assign(composite_key, blob_info);
+        tag_blob_name_to_info_.insert_or_assign(composite_key, std::make_shared<BlobInfo>(blob_info));
         blobs_replayed++;
 
       } else if (type == TxnType::kExtendBlob) {
@@ -3127,7 +3162,7 @@ void Runtime::ReplayTransactionLogs() {
         std::string composite_key = std::to_string(tag_id.major_) + "." +
                                     std::to_string(tag_id.minor_) + "." +
                                     txn.blob_name_;
-        BlobInfo *blob_info_ptr = tag_blob_name_to_info_.find(composite_key);
+        std::shared_ptr<BlobInfo> blob_info_ptr = tag_blob_name_to_info_.get(composite_key);
         if (blob_info_ptr) {
           // Replace blocks with replayed blocks (full replacement semantics)
           blob_info_ptr->blocks_.clear();
@@ -3160,7 +3195,7 @@ void Runtime::ReplayTransactionLogs() {
         std::string composite_key = std::to_string(tag_id.major_) + "." +
                                     std::to_string(tag_id.minor_) + "." +
                                     txn.blob_name_;
-        BlobInfo *blob_info_ptr = tag_blob_name_to_info_.find(composite_key);
+        std::shared_ptr<BlobInfo> blob_info_ptr = tag_blob_name_to_info_.get(composite_key);
         if (blob_info_ptr) {
           blob_info_ptr->blocks_.clear();
         }
@@ -3179,13 +3214,13 @@ void Runtime::ReplayTransactionLogs() {
   }
 
   // Phase 3: Recompute tag total_size_ from blob blocks
-  tag_id_to_info_.for_each([&](const TagId &tag_id, TagInfo &tag_info) {
+  tag_id_to_info_.for_each([&](const TagId &tag_id, std::shared_ptr<TagInfo> &tag_info_sp) { TagInfo &tag_info = *tag_info_sp; (void)tag_info;
     clio::run::u64 total = 0;
     std::string tag_prefix = std::to_string(tag_id.major_) + "." +
                              std::to_string(tag_id.minor_) + ".";
     tag_blob_name_to_info_.for_each(
         [&tag_prefix, &total](const std::string &key,
-                              const BlobInfo &blob_info) {
+                              const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
           if (key.compare(0, tag_prefix.length(), tag_prefix) == 0) {
             total += blob_info.GetTotalSize();
           }
@@ -3274,8 +3309,8 @@ template clio::run::TaskResume Runtime::GetOrCreateTag<CreateParams>(
     clio::run::shared_ptr<GetOrCreateTagTask<CreateParams>> &task);
 
 // Blob management helper functions
-BlobInfo *Runtime::CheckBlobExists(const std::string &blob_name,
-                                   const TagId &tag_id) {
+std::shared_ptr<BlobInfo> Runtime::CheckBlobExists(
+    const std::string &blob_name, const TagId &tag_id) {
   // Validate that blob name is provided
   if (blob_name.empty()) {
     return nullptr;
@@ -3285,17 +3320,13 @@ BlobInfo *Runtime::CheckBlobExists(const std::string &blob_name,
   std::string composite_key = std::to_string(tag_id.major_) + "." +
                               std::to_string(tag_id.minor_) + "." + blob_name;
 
-  // Acquire read lock for map lookup (single lock for map-wide safety)
-  clio::run::ScopedCoRwReadLock lock(blob_map_lock_);
-
-  // Search by composite key in tag_blob_name_to_info_
-  BlobInfo *blob_info_ptr = tag_blob_name_to_info_.find(composite_key);
-
-  // Return result (lock released automatically at scope exit)
-  return blob_info_ptr;
+  // get() copies the shared_ptr under the map's read lock, so the returned
+  // handle survives a concurrent erase (delete drops the map's reference; the
+  // pointee lives until the last handle does). nullptr if absent.
+  return tag_blob_name_to_info_.get(composite_key);
 }
 
-BlobInfo *Runtime::CreateNewBlob(const std::string &blob_name,
+std::shared_ptr<BlobInfo> Runtime::CreateNewBlob(const std::string &blob_name,
                                  const TagId &tag_id, float blob_score) {
   // Validate that blob name is provided
   if (blob_name.empty()) {
@@ -3304,23 +3335,19 @@ BlobInfo *Runtime::CreateNewBlob(const std::string &blob_name,
 
   // Prepare blob info structure BEFORE acquiring lock
   // Use default constructor (allocator not used in struct)
-  BlobInfo new_blob_info;
-  new_blob_info.blob_name_ = blob_name;
-  new_blob_info.score_ = blob_score;
+  auto new_blob_info = std::make_shared<BlobInfo>();
+  new_blob_info->blob_name_ = blob_name;
+  new_blob_info->score_ = blob_score;
 
   // Construct composite key for blob storage
   std::string composite_key = std::to_string(tag_id.major_) + "." +
                               std::to_string(tag_id.minor_) + "." + blob_name;
 
-  // Acquire write lock for map insertion (single lock for map-wide safety)
-  BlobInfo *blob_info_ptr = nullptr;
+  // Store the shared_ptr; the map holds its own reference while we keep our
+  // copy as the returned handle (safe against a concurrent erase).
+  std::shared_ptr<BlobInfo> blob_info_ptr = new_blob_info;
   {
-    clio::run::ScopedCoRwWriteLock lock(blob_map_lock_);
-
-    // Store blob info directly in tag_blob_name_to_info_
-    auto insert_result =
-        tag_blob_name_to_info_.insert_or_assign(composite_key, new_blob_info);
-    blob_info_ptr = insert_result.value;
+    tag_blob_name_to_info_.insert_or_assign(composite_key, new_blob_info);
   }  // Release lock immediately after insertion
 
   // WAL: log blob creation
@@ -4105,7 +4132,7 @@ clio::run::TaskResume Runtime::GetBlobScore(clio::run::shared_ptr<GetBlobScoreTa
     }
 
     // Step 1: Check if blob exists
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
 
     if (blob_info_ptr == nullptr) {
       task->return_code_ = 1;  // Blob not found
@@ -4150,7 +4177,7 @@ clio::run::TaskResume Runtime::GetBlobSize(clio::run::shared_ptr<GetBlobSizeTask
     }
 
     // Step 1: Check if blob exists
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     if (blob_info_ptr == nullptr) {
       task->return_code_ = 1;  // Blob not found
       CLIO_CO_RETURN;
@@ -4194,7 +4221,7 @@ clio::run::TaskResume Runtime::GetBlobInfo(clio::run::shared_ptr<GetBlobInfoTask
     }
 
     // Step 1: Check if blob exists
-    BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
+    std::shared_ptr<BlobInfo> blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     if (blob_info_ptr == nullptr) {
       task->return_code_ = 2;  // Blob not found
       CLIO_CO_RETURN;
@@ -4241,7 +4268,7 @@ clio::run::TaskResume Runtime::GetContainedBlobs(
     TagId tag_id = task->tag_id_;
 
     // Validate tag exists
-    TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+    std::shared_ptr<TagInfo> tag_info_ptr = tag_id_to_info_.get(tag_id);
     if (tag_info_ptr == nullptr) {
       task->return_code_ = 1;  // Tag not found
       CLIO_CO_RETURN;
@@ -4257,7 +4284,7 @@ clio::run::TaskResume Runtime::GetContainedBlobs(
     // Iterate through tag_blob_name_to_info_ and filter by prefix
     tag_blob_name_to_info_.for_each(
         [&prefix, &task](const std::string &composite_key,
-                         const BlobInfo &blob_info) {
+                         const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
           // Check if composite key starts with the tag prefix
           if (composite_key.rfind(prefix, 0) == 0) {
             // Extract blob name (everything after the prefix)
@@ -4299,8 +4326,30 @@ clio::run::TaskResume Runtime::TagQuery(clio::run::shared_ptr<TagQueryTask> &tas
     task->results_.clear();
     task->result_ids_.clear();
     size_t total = 0;
-    {
-      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
+    std::string exact;
+    if (TryParseAnchoredLiteral(tag_regex, &exact)) {
+      // Exact-match query (getattr/lookup/rename): resolve through the O(1) name
+      // hash (walking the hierarchy for absolute paths) instead of compiling a
+      // std::regex over the whole index per call -- the dominant metadata cost
+      // under concurrent workloads (#680). Aliases/hard links resolve too since
+      // they are stored under their own relative key in tag_name_to_id_.
+      TagId id = TagId::GetNull();
+      if (IsHierPath(exact)) {
+        id = ResolvePathToIdLocked(exact);
+      } else {
+        TagId *p = tag_name_to_id_.find(exact);
+        if (p != nullptr) {
+          id = *p;
+        }
+      }
+      if (!id.IsNull()) {
+        task->results_.push_back(exact);
+        task->result_ids_.push_back(
+            (static_cast<clio::run::u64>(id.major_) << 32) |
+            static_cast<clio::run::u64>(id.minor_));
+        total = 1;
+      }
+    } else {
       auto result = tag_search_.Search(tag_regex);
       total = result.size();
       // Iterate (name, TagId) pairs so each result carries a packed id, used by
@@ -4370,7 +4419,7 @@ clio::run::TaskResume Runtime::BlobQuery(clio::run::shared_ptr<BlobQueryTask> &t
       // Iterate and collect matching blobs for this tag
       tag_blob_name_to_info_.for_each(
           [&prefix, &blob_pattern, &tag_name, &task](
-              const std::string &composite_key, const BlobInfo &blob_info) {
+              const std::string &composite_key, const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
             (void)blob_info;
             if (composite_key.rfind(prefix, 0) == 0) {
               std::string blob_name = composite_key.substr(prefix.length());
@@ -4487,7 +4536,7 @@ clio::run::TaskResume Runtime::SemanticSearch(
                          std::to_string(tag_id.minor_) + ".";
     tag_blob_name_to_info_.for_each(
         [&prefix, &blob_pattern, &tag_id, &tag_name, &candidates](
-            const std::string &composite_key, const BlobInfo &blob_info) {
+            const std::string &composite_key, const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
           (void)blob_info;
           if (composite_key.rfind(prefix, 0) != 0) return;
           std::string blob_name = composite_key.substr(prefix.length());
@@ -4509,7 +4558,7 @@ clio::run::TaskResume Runtime::SemanticSearch(
   std::vector<SemSearchDoc> docs;
   docs.reserve(candidates.size());
   for (auto &cand : candidates) {
-    BlobInfo *info = CheckBlobExists(cand.blob_name, cand.tag_id);
+    std::shared_ptr<BlobInfo> info = CheckBlobExists(cand.blob_name, cand.tag_id);
     if (info == nullptr) continue;
     clio::run::u64 total = info->GetTotalSize();
     if (total == 0) continue;
@@ -4651,7 +4700,7 @@ clio::run::TaskResume Runtime::TemporalSearch(
     std::string prefix = std::to_string(tag_id.major_) + "." +
                          std::to_string(tag_id.minor_) + ".";
     tag_blob_name_to_info_.for_each(
-        [&](const std::string &composite_key, const BlobInfo &blob_info) {
+        [&](const std::string &composite_key, const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
           if (composite_key.rfind(prefix, 0) != 0) return;
           std::string blob_name = composite_key.substr(prefix.length());
           if (!std::regex_match(blob_name, blob_pattern)) return;

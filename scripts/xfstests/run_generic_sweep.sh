@@ -49,7 +49,11 @@ trap 'teardown; exit 0' EXIT
 
 mount_fresh() {
   teardown; sleep 0.4
-  CLIO_REPO_PATH="${BUILD_BIN}" LD_LIBRARY_PATH="${BUILD_BIN}:${HOME}/.local/lib:${LD_LIBRARY_PATH:-}" \
+  # Load the same 2g DRAM-tier config the real runner uses; otherwise the daemon
+  # falls back to a ~100 MB default tier that starves large-write/O_DIRECT tests
+  # with ENOSPC (a sweep-only false failure). Matches run_clio_xfstests.sh.
+  CLIO_SERVER_CONF="${CLIO_SERVER_CONF:-${SCRIPT_DIR}/clio_xfstests_config.yaml}" \
+    CLIO_REPO_PATH="${BUILD_BIN}" LD_LIBRARY_PATH="${BUILD_BIN}:${HOME}/.local/lib:${LD_LIBRARY_PATH:-}" \
     CLIO_WITH_RUNTIME=1 CLIO_BIND_ADDR=127.0.0.1 \
     "${FUSE_BIN}" "${TEST_DIR}" -o fsname=clio_test -f >/dev/null 2>&1 &
   for _ in $(seq 1 50); do mountpoint -q "${TEST_DIR}" && return 0; sleep 0.2; done
