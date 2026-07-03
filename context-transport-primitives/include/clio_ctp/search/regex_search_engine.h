@@ -240,48 +240,59 @@ class RegexSearchEngine {
    * @throws std::regex_error if `pattern` is not a valid ECMAScript regex.
    */
   SearchResult Search(const std::string &pattern) const {
-    std::shared_lock<std::shared_mutex> lk(mtx_);
-    std::regex re(pattern);  // compiled once per query; throws on bad pattern
+    // Compile the regex OUTSIDE the lock -- it touches no shared state and is
+    // ~50-100us, which would otherwise be held under the shared lock on every
+    // query and starve writers (#680: 3 tight-loop searchers vs 8 writers hung
+    // the parallel test intermittently under load).
+    std::regex re(pattern);  // throws on bad pattern
 
     std::vector<std::string> required;
     const bool prefilterable = ExtractRequiredTrigrams(pattern, required);
 
-    std::vector<std::string> matches;
-    if (!prefilterable || required.empty()) {
-      // No usable prefilter: verify the regex against every key.
-      for (const auto &kv : entries_) {
-        if (std::regex_match(kv.first, re)) {
-          matches.push_back(kv.first);
-        }
-      }
-    } else {
-      // Candidates = keys present in the posting lists of ALL required
-      // trigrams. Walk the smallest posting list and test membership in the
-      // others; this is a superset of the true matches.
-      const std::unordered_set<const std::string *> *smallest = nullptr;
-      for (const auto &t : required) {
-        auto it = index_.find(t);
-        if (it == index_.end()) {
-          // Some required trigram indexes no key at all => no match possible.
-          return SearchResult(std::vector<std::string>(), this);
-        }
-        if (smallest == nullptr || it->second.size() < smallest->size()) {
-          smallest = &it->second;
-        }
-      }
-      for (const std::string *kp : *smallest) {
-        bool in_all = true;
+    // Snapshot candidate key strings under the shared lock, then RELEASE it and
+    // run the expensive std::regex_match over the copies. Copying is far cheaper
+    // than matching, so the lock is held briefly -- writers no longer starve.
+    // A snapshot (copied strings) also makes SearchResult stable under
+    // concurrent mutation, matching the documented "live subset" semantics.
+    std::vector<std::string> candidates;
+    {
+      std::shared_lock<std::shared_mutex> lk(mtx_);
+      if (!prefilterable || required.empty()) {
+        // No usable prefilter: every key is a candidate.
+        candidates.reserve(entries_.size());
+        for (const auto &kv : entries_) candidates.push_back(kv.first);
+      } else {
+        // Candidates = keys present in the posting lists of ALL required
+        // trigrams. Walk the smallest posting list and test membership in the
+        // others; this is a superset of the true matches.
+        const std::unordered_set<const std::string *> *smallest = nullptr;
         for (const auto &t : required) {
-          const auto &posting = index_.find(t)->second;
-          if (posting.find(kp) == posting.end()) {
-            in_all = false;
-            break;
+          auto it = index_.find(t);
+          if (it == index_.end()) {
+            // Some required trigram indexes no key => no match possible.
+            return SearchResult(std::vector<std::string>(), this);
+          }
+          if (smallest == nullptr || it->second.size() < smallest->size()) {
+            smallest = &it->second;
           }
         }
-        if (in_all && std::regex_match(*kp, re)) {
-          matches.push_back(*kp);
+        for (const std::string *kp : *smallest) {
+          bool in_all = true;
+          for (const auto &t : required) {
+            const auto &posting = index_.find(t)->second;
+            if (posting.find(kp) == posting.end()) {
+              in_all = false;
+              break;
+            }
+          }
+          if (in_all) candidates.push_back(*kp);  // copy under the lock
         }
       }
+    }  // shared lock released before matching
+
+    std::vector<std::string> matches;
+    for (auto &c : candidates) {
+      if (std::regex_match(c, re)) matches.push_back(std::move(c));
     }
 
     std::sort(matches.begin(), matches.end());
