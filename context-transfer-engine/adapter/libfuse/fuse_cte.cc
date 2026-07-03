@@ -216,9 +216,12 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
     stbuf->st_ctim.tv_sec = static_cast<time_t>(t->ctime_ / 1000000000ULL);
     stbuf->st_ctim.tv_nsec = static_cast<long>(t->ctime_ % 1000000000ULL);
   }
-  if (t->mtime_ != 0) {
-    stbuf->st_mtim.tv_sec = static_cast<time_t>(t->mtime_ / 1000000000ULL);
-    stbuf->st_mtim.tv_nsec = static_cast<long>(t->mtime_ % 1000000000ULL);
+  // Fall back to ctime when mtime is unknown, so a valid file never reports
+  // mtime at the epoch while it has a real ctime (merged from #680).
+  clio::run::u64 mtime_ns = (t->mtime_ != 0) ? t->mtime_ : t->ctime_;
+  if (mtime_ns != 0) {
+    stbuf->st_mtim.tv_sec = static_cast<time_t>(mtime_ns / 1000000000ULL);
+    stbuf->st_mtim.tv_nsec = static_cast<long>(mtime_ns % 1000000000ULL);
   }
   if (t->atime_ != 0) {
     stbuf->st_atim.tv_sec = static_cast<time_t>(t->atime_ / 1000000000ULL);
