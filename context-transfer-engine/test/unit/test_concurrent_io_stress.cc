@@ -138,6 +138,39 @@ TEST_CASE("ConcurrentIoStress - many threads Put/Get/Free hammer the shared "
   // crashes without memset too, the corruption is pure alloc/free bookkeeping.
   const bool kDoMemset = FromEnv("STRESS_MEMSET", 1) != 0;
 
+  // STRESS_POOL=N: single-threaded pool mode. Keep up to N buffers outstanding
+  // and free them in a NON-LIFO order, reproducing the many-outstanding-buffers
+  // allocation pattern that concurrency produces — but single-threaded and
+  // DETERMINISTIC, to get a debuggable repro of the buddy corruption (#680).
+  const int kPool = FromEnv("STRESS_POOL", 0);
+  if (kPool > 0) {
+    auto *ipc = CLIO_IPC;
+    std::vector<ctp::ipc::FullPtr<char>> slots(kPool);
+    for (int i = 0; i < kPool; ++i) slots[i] = ctp::ipc::FullPtr<char>::GetNull();
+    std::vector<clio::run::u64> szs(kPool, 0);
+    std::mt19937 rng(20260703u);
+    std::uniform_int_distribution<clio::run::u64> sizedist(1, kMaxBlob);
+    std::uniform_int_distribution<int> slotdist(0, kPool - 1);
+    const long kTotal = static_cast<long>(kIters) * kThreads;  // same op budget
+    for (long i = 0; i < kTotal; ++i) {
+      int s = slotdist(rng);
+      if (slots[s].IsNull()) {
+        clio::run::u64 sz = sizedist(rng);
+        slots[s] = ipc->AllocateBuffer(sz);
+        if (slots[s].IsNull()) { REQUIRE(false); }
+        szs[s] = sz;
+        if (kDoMemset) std::memset(slots[s].ptr_, static_cast<int>(i), sz);
+      } else {
+        ipc->FreeBuffer(slots[s]);
+        slots[s] = ctp::ipc::FullPtr<char>::GetNull();
+      }
+    }
+    for (int s = 0; s < kPool; ++s)
+      if (!slots[s].IsNull()) ipc->FreeBuffer(slots[s]);
+    REQUIRE(true);
+    return;
+  }
+
   std::atomic<bool> failed{false};
   std::atomic<long> total_ops{0};
 
