@@ -62,6 +62,34 @@ inline std::string StripTrailingSlash(std::string p) {
   if (p.size() > 1 && p.back() == '/') p.pop_back();
   return p;
 }
+/** Parent directory of an absolute path ("/a/b/c" -> "/a/b", "/a" -> "/"). */
+inline std::string ParentDir(const std::string &p) {
+  std::string s = StripTrailingSlash(p);
+  auto slash = s.find_last_of('/');
+  if (slash == std::string::npos || slash == 0) return "/";
+  return s.substr(0, slash);
+}
+// A blob name used only to stamp a tag's timestamps: it is never a real page
+// (pages are named by number), so a TruncateBlob of it finds the blob missing
+// and just bumps the tag's mtime/ctime without touching any data.
+inline const char *TsTouchBlob() { return "__clio_ts_touch__"; }
+
+// Bump a directory's mtime/ctime after a child is added or removed (POSIX
+// updates the parent dir's times on create/unlink/rename/mkdir/rmdir/link).
+// Resolves the dir's tag and stamps it via a no-op truncate of a sentinel blob
+// (see TsTouchBlob). Uses the local cte_ client; must be used in a task body.
+#define CLIO_FS_TOUCH_DIR(dirpath)                                          \
+  do {                                                                       \
+    auto _tp = cte_.AsyncGetOrCreateTag(                                     \
+        (dirpath), clio::cte::core::TagId::GetNull(),                        \
+        clio::run::PoolQuery::Local());                                      \
+    CLIO_CO_AWAIT(_tp);                                                      \
+    if (_tp->GetReturnCode() == 0) {                                         \
+      auto _tt = cte_.AsyncTruncateBlob(_tp->tag_id_, TsTouchBlob(), 0,      \
+                                        clio::run::PoolQuery::Local());       \
+      CLIO_CO_AWAIT(_tt);                                                    \
+    }                                                                        \
+  } while (0)
 /** Escape regex metacharacters for an exact TagQuery match (from libfuse). */
 inline std::string EscapeExact(const std::string &s) {
   std::string out;
@@ -197,6 +225,10 @@ clio::run::TaskResume Runtime::Open(clio::run::shared_ptr<OpenTask> &task) {
   task->handle_ = handle;
   task->size_ = size;
   task->created_ = existed ? 0u : 1u;
+  // Creating a new file updates its parent directory's mtime/ctime.
+  if (!existed) {
+    CLIO_FS_TOUCH_DIR(ParentDir(path));
+  }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -419,11 +451,15 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
       task->is_dir_ = 0;
       task->size_ = live_size;
       task->ino_ = InoFromTag(h_tag);
-      // ctime from the tag (mutex released before this RPC).
+      // Timestamps (ctime/mtime/atime) from the tag (mutex released before RPC).
       if (!h_tag.IsNull()) {
         auto s = cte_.AsyncGetTagSize(h_tag, clio::run::PoolQuery::Local());
         CLIO_CO_AWAIT(s);
-        task->ctime_ = (s->GetReturnCode() == 0) ? s->ctime_ : 0;
+        if (s->GetReturnCode() == 0) {
+          task->ctime_ = s->ctime_;
+          task->mtime_ = s->mtime_;
+          task->atime_ = s->atime_;
+        }
       }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
@@ -444,8 +480,16 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
           dir, clio::cte::core::TagId::GetNull(), clio::run::PoolQuery::Local());
       CLIO_CO_AWAIT(tag);
       task->ino_ = InoFromTag(tag->tag_id_);
-      // Directory ctime is intentionally left at 0: fetching it needs an extra
-      // GetTagSize per dir-stat (the ctime xfstests are file-level). (#603)
+      // Directories are tags too, so they carry ctime/mtime/atime. Surface them
+      // (one extra GetTagSize) so e.g. mv-into-dir shows up as a dir mtime/ctime
+      // change (generic/309). Child-modifying ops bump the parent dir's tag.
+      auto ds = cte_.AsyncGetTagSize(tag->tag_id_, clio::run::PoolQuery::Local());
+      CLIO_CO_AWAIT(ds);
+      if (ds->GetReturnCode() == 0) {
+        task->ctime_ = ds->ctime_;
+        task->mtime_ = ds->mtime_;
+        task->atime_ = ds->atime_;
+      }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
@@ -463,7 +507,11 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     CLIO_CO_AWAIT(s);
     task->size_ = (s->GetReturnCode() == 0) ? s->tag_size_ : 0;
     task->ino_ = InoFromTag(tag->tag_id_);
-    task->ctime_ = (s->GetReturnCode() == 0) ? s->ctime_ : 0;
+    if (s->GetReturnCode() == 0) {
+      task->ctime_ = s->ctime_;
+      task->mtime_ = s->mtime_;
+      task->atime_ = s->atime_;
+    }
   } else {
     task->exists_ = 0; task->is_dir_ = 0; task->size_ = 0;
   }
@@ -528,7 +576,8 @@ clio::run::TaskResume Runtime::Truncate(clio::run::shared_ptr<TruncateTask> &tas
   if (!tag_id.IsNull() && new_size < old_size) {
     clio::run::u64 boundary_page = new_size / kFsPageSize;
     clio::run::u64 boundary_off = new_size % kFsPageSize;
-    // Trim the boundary page to its surviving prefix (frees the tail).
+    // Trim the boundary page to its surviving prefix (frees the tail). This also
+    // bumps the tag's mtime/ctime (truncate is a modification).
     auto tb = cte_.AsyncTruncateBlob(tag_id, std::to_string(boundary_page),
                                      boundary_off, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(tb);
@@ -539,6 +588,16 @@ clio::run::TaskResume Runtime::Truncate(clio::run::shared_ptr<TruncateTask> &tas
                                  clio::run::PoolQuery::Local());
       CLIO_CO_AWAIT(d);
     }
+  } else if (!tag_id.IsNull()) {
+    // Grow (or same-size) truncate does no blob work, but POSIX still updates
+    // mtime and ctime. Reserve no storage — stamp the tag's timestamps by
+    // truncating the first page strictly beyond the new EOF, which never holds
+    // data (writes only create pages up to EOF, and shrink deletes past it), so
+    // TruncateBlob finds it missing and only bumps mtime/ctime.
+    clio::run::u64 touch_page = new_size / kFsPageSize + 1;
+    auto tb = cte_.AsyncTruncateBlob(tag_id, std::to_string(touch_page),
+                                     0, clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(tb);
   }
 
   task->return_code_ = 0;
@@ -569,6 +628,7 @@ clio::run::TaskResume Runtime::Unlink(clio::run::shared_ptr<UnlinkTask> &task) {
     std::lock_guard<std::mutex> g(meta_mu_);
     by_path_.erase(path);
   }
+  CLIO_FS_TOUCH_DIR(ParentDir(path));  // child removed => parent mtime/ctime
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -605,7 +665,12 @@ clio::run::TaskResume Runtime::Mkdir(clio::run::shared_ptr<MkdirTask> &task) {
                                     clio::cte::core::TagId::GetNull(),
                                     clio::run::PoolQuery::Local());
   CLIO_CO_AWAIT(t);
-  task->return_code_ = (t->GetReturnCode() == 0) ? 0 : EIO;
+  if (t->GetReturnCode() == 0) {
+    CLIO_FS_TOUCH_DIR(ParentDir(path));  // new subdir => parent mtime/ctime
+    task->return_code_ = 0;
+  } else {
+    task->return_code_ = EIO;
+  }
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
@@ -641,6 +706,7 @@ clio::run::TaskResume Runtime::Rmdir(clio::run::shared_ptr<RmdirTask> &task) {
   // Empty directory: recursive DelTag removes its tag and the marker child.
   auto d = cte_.AsyncDelTag(path, clio::run::PoolQuery::Local());
   CLIO_CO_AWAIT(d);
+  CLIO_FS_TOUCH_DIR(ParentDir(path));  // subdir removed => parent mtime/ctime
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -762,6 +828,12 @@ clio::run::TaskResume Runtime::Rename(clio::run::shared_ptr<RenameTask> &task) {
       by_path_.erase(it);
     }
   }
+  // A rename changes both the source and destination directories (generic/309).
+  CLIO_FS_TOUCH_DIR(ParentDir(src));
+  std::string dst_parent = ParentDir(dst);
+  if (dst_parent != ParentDir(src)) {
+    CLIO_FS_TOUCH_DIR(dst_parent);
+  }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -792,7 +864,12 @@ clio::run::TaskResume Runtime::Link(clio::run::shared_ptr<LinkTask> &task) {
     task->return_code_ = EIO;
     CLIO_CO_RETURN;
   }
-  task->return_code_ = (a->found_ == 1) ? 0 : ENOENT;
+  if (a->found_ == 1) {
+    CLIO_FS_TOUCH_DIR(ParentDir(link));  // new link => parent dir mtime/ctime
+    task->return_code_ = 0;
+  } else {
+    task->return_code_ = ENOENT;
+  }
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }

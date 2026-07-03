@@ -1336,6 +1336,17 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     blob_info_ptr->last_read_ = now;
     num_blocks = blob_info_ptr->blocks_.size();
 
+    // A data read also advances the TAG's access time (atime), so a later stat
+    // reflects real reads and not just metadata queries. last_read_ is a plain
+    // timestamp; the read lock only guards the map lookup.
+    {
+      clio::run::ScopedCoRwReadLock lock(tag_map_lock_);
+      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      if (tag_info_ptr != nullptr) {
+        tag_info_ptr->last_read_ = now;
+      }
+    }
+
     // Log telemetry and success messages after releasing lock
     LogTelemetry(CteOp::kGetBlob, offset, size, tag_id,
                  blob_info_ptr->last_modified_, now);
@@ -1536,7 +1547,11 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
         } else {
           tag_info_ptr->total_size_ = 0;
         }
-        tag_info_ptr->last_changed_ = GetCurrentTimeNs();  // size change => ctime
+        // Deleting page-blobs is part of a truncate-down: bump BOTH mtime
+        // (content shrank) and ctime (metadata changed).
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_modified_ = now;
+        tag_info_ptr->last_changed_ = now;
       }
     }
 
@@ -1589,7 +1604,17 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
 
     BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     if (blob_info_ptr == nullptr) {
-      // A missing blob is already "empty" — nothing to truncate.
+      // A missing blob is already "empty" — no data to truncate. But a truncate
+      // is still a modification of the tag (the filesystem adapter also uses a
+      // truncate of a not-yet-materialized page to stamp timestamps on a
+      // truncate-up, which reserves no storage), so bump mtime/ctime.
+      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
+      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      if (tag_info_ptr != nullptr) {
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_modified_ = now;
+        tag_info_ptr->last_changed_ = now;
+      }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
@@ -1619,7 +1644,11 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
               (d <= tag_info_ptr->total_size_) ? tag_info_ptr->total_size_ - d
                                                : 0;
         }
-        tag_info_ptr->last_changed_ = GetCurrentTimeNs();  // truncate => ctime
+        // Truncate changes file content and size, so POSIX bumps BOTH mtime
+        // (last_modified_) and ctime (last_changed_).
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_modified_ = now;
+        tag_info_ptr->last_changed_ = now;
       }
     }
 
@@ -2264,12 +2293,17 @@ clio::run::TaskResume Runtime::GetTagSize(clio::run::shared_ptr<GetTagSizeTask> 
       CLIO_CO_RETURN;
     }
 
-    // Update timestamp and return the total size
+    // Surface the tag's timestamps to getattr. Read last_read_ (atime) BEFORE
+    // bumping it below, so a stat reports the prior access time rather than the
+    // instant of the stat itself.
+    task->tag_size_ = tag_info_ptr->total_size_;
+    task->ctime_ = tag_info_ptr->last_changed_;   // ctime  (metadata change)
+    task->mtime_ = tag_info_ptr->last_modified_;  // mtime  (content change)
+    task->atime_ = tag_info_ptr->last_read_;      // atime  (last access)
+
+    // Update access timestamp and return the total size
     auto now = GetCurrentTimeNs();
     tag_info_ptr->last_read_ = now;
-
-    task->tag_size_ = tag_info_ptr->total_size_;
-    task->ctime_ = tag_info_ptr->last_changed_;  // surface ctime to getattr
     task->return_code_ = 0;
 
     // Log telemetry for GetTagSize operation
@@ -2438,11 +2472,16 @@ TagId Runtime::GetOrAssignTagId(const std::string &tag_name,
     tag_id = GenerateNewTagId();
   }
 
-  // Create tag info (use default constructor, allocator not used in struct)
+  // Create tag info (use default constructor, allocator not used in struct).
+  // Stamp all three timestamps at creation so a fresh tag (file OR directory)
+  // reports mtime == ctime == atime == creation time instead of a zero mtime.
   TagInfo tag_info;
   tag_info.tag_name_ = tag_name;
   tag_info.tag_id_ = tag_id;
-  tag_info.last_changed_ = GetCurrentTimeNs();  // ctime at creation
+  auto creation_now = GetCurrentTimeNs();
+  tag_info.last_changed_ = creation_now;   // ctime
+  tag_info.last_modified_ = creation_now;  // mtime
+  tag_info.last_read_ = creation_now;      // atime
 
   // Store mappings
   tag_name_to_id_.insert_or_assign(tag_name, tag_id);
