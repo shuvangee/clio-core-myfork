@@ -108,9 +108,22 @@ fi
 rm -f "${PRIV_XFS}/local.config"; rm -rf "${PRIV_XFS}/results"; mkdir -p "${PRIV_XFS}/results"
 : > "${RESULTS}"
 
+# Each namespace's persistent runtime is held by a "keeper" FUSE mount rather
+# than `clio_run start`: only the co-located runtime path (CLIO_WITH_RUNTIME=1)
+# accepts the 2 GB DRAM capacity config -- `clio_run start` + that config aborts
+# with "Container not found for pool PoolId(1,0)". The default ~100 MB tier
+# fills up over a long sweep (scratch mkfs doesn't reclaim), wedging the daemon
+# into HANGs; 2 GB avoids that. The keeper stays mounted for the whole run and
+# xfstests' TEST/SCRATCH client mounts attach to it (their unmounts don't tear
+# the runtime down). Override the config via CLIO_SCRATCH_SERVER_CONF.
+KEEP_TEST="${PRIV}/keeper_test"; KEEP_SCRATCH="${PRIV}/keeper_scratch"
+mkdir -p "${KEEP_TEST}" "${KEEP_SCRATCH}"
+CAP_CONF="${CLIO_SCRATCH_SERVER_CONF:-${SCRIPT_DIR}/clio_xfstests_config.yaml}"
+
 RTT=""; RTS=""
 cleanup() {
-  fusermount3 -u "${TEST_DIR}" 2>/dev/null; fusermount3 -u "${SCRATCH_MNT}" 2>/dev/null
+  fusermount3 -u "${TEST_DIR}" 2>/dev/null;  fusermount3 -u "${SCRATCH_MNT}" 2>/dev/null
+  fusermount3 -u "${KEEP_TEST}" 2>/dev/null; fusermount3 -u "${KEEP_SCRATCH}" 2>/dev/null
   [ -n "${RTT}" ] && kill -9 "${RTT}" 2>/dev/null
   [ -n "${RTS}" ] && kill -9 "${RTS}" 2>/dev/null
   # Only our uniquely-named procs -- never a broad clio_run/clio_cte_fuse pkill.
@@ -118,16 +131,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-start_runtime() {  # $1=port  $2=logfile -> echoes pid
-  env CLIO_PORT="$1" CLIO_WITH_RUNTIME=1 "${CLR}" start >"$2" 2>&1 &
-  echo $!
+start_runtime() {  # $1=port  $2=keeper_mnt  $3=logfile -> echoes keeper pid
+  fusermount3 -u "$2" 2>/dev/null
+  env CLIO_PORT="$1" CLIO_WITH_RUNTIME=1 CLIO_SERVER_CONF="${CAP_CONF}" \
+    "${CLF}" "$2" -o fsname=keeper -f >"$3" 2>&1 &
+  local pid=$!
+  for _ in $(seq 1 40); do mountpoint -q "$2" && break; sleep 0.25; done
+  echo "${pid}"
 }
-echo "[scratch-xfs] starting runtimes: TEST=${TEST_PORT} SCRATCH=${SCRATCH_PORT}"
-RTT="$(start_runtime "${TEST_PORT}"    "${PRIV}/rt_test.log")"
-RTS="$(start_runtime "${SCRATCH_PORT}" "${PRIV}/rt_scratch.log")"
-sleep 8
-kill -0 "${RTT}" 2>/dev/null || { echo "ERROR: TEST runtime failed"    >&2; tail -5 "${PRIV}/rt_test.log"    >&2; exit 1; }
-kill -0 "${RTS}" 2>/dev/null || { echo "ERROR: SCRATCH runtime failed" >&2; tail -5 "${PRIV}/rt_scratch.log" >&2; exit 1; }
+echo "[scratch-xfs] starting keeper runtimes (${CAP_CONF##*/}): TEST=${TEST_PORT} SCRATCH=${SCRATCH_PORT}"
+RTT="$(start_runtime "${TEST_PORT}"    "${KEEP_TEST}"    "${PRIV}/rt_test.log")"
+RTS="$(start_runtime "${SCRATCH_PORT}" "${KEEP_SCRATCH}" "${PRIV}/rt_scratch.log")"
+mountpoint -q "${KEEP_TEST}"    || { echo "ERROR: TEST runtime keeper failed"    >&2; tail -6 "${PRIV}/rt_test.log"    >&2; exit 1; }
+mountpoint -q "${KEEP_SCRATCH}" || { echo "ERROR: SCRATCH runtime keeper failed" >&2; tail -6 "${PRIV}/rt_scratch.log" >&2; exit 1; }
 
 # --- xfstests native fuse config --------------------------------------------
 cat > "${PRIV_XFS}/local.config" <<EOF
@@ -149,10 +165,16 @@ mapfile -t LIST < <(./check -n "${RAW[@]}" 2>/dev/null | grep -E '^[a-z_]+/[0-9]
 echo "[scratch-xfs] running ${#LIST[@]} scratch test(s)"
 
 # --- run, one test at a time, with per-test timeout + runtime recovery ------
-pass=0; fail=0; notrun=0; hang=0; failed_list=""
+pass=0; fail=0; notrun=0; hang=0; failed_list=""; restart=0
+restart_keepers() {  # rebuild both runtimes from scratch (fresh fs, clears wedges)
+  fusermount3 -u "${TEST_DIR}" 2>/dev/null;  fusermount3 -u "${SCRATCH_MNT}" 2>/dev/null
+  kill -9 "${RTT}" "${RTS}" 2>/dev/null; pkill -9 -x "clf_${SUBTYP}" 2>/dev/null; sleep 1
+  RTT="$(start_runtime "${TEST_PORT}"    "${KEEP_TEST}"    "${PRIV}/rt_test.log")"
+  RTS="$(start_runtime "${SCRATCH_PORT}" "${KEEP_SCRATCH}" "${PRIV}/rt_scratch.log")"
+}
 for t in "${LIST[@]}"; do
-  kill -0 "${RTT}" 2>/dev/null || { RTT="$(start_runtime "${TEST_PORT}"    "${PRIV}/rt_test.log")";    sleep 5; }
-  kill -0 "${RTS}" 2>/dev/null || { RTS="$(start_runtime "${SCRATCH_PORT}" "${PRIV}/rt_scratch.log")"; sleep 5; }
+  # Ensure both keeper runtimes are up (a prior wedge/HANG may have killed one).
+  { mountpoint -q "${KEEP_TEST}" && mountpoint -q "${KEEP_SCRATCH}"; } || restart_keepers
   out="$(timeout "${PERTEST}" ./check "${t}" 2>/dev/null)"; rc=$?
   # Order matters: a notrun test still prints "Passed all 0/1 tests", so the
   # "Not run:" check MUST precede the "Passed all" check.
@@ -162,6 +184,11 @@ for t in "${LIST[@]}"; do
   else                                             st=FAIL;   fail=$((fail+1));   failed_list+=" ${t}"; fi
   echo "${t}: ${st}"; echo "${t}: ${st}" >>"${RESULTS}"
   fusermount3 -u "${TEST_DIR}" 2>/dev/null; fusermount3 -u "${SCRATCH_MNT}" 2>/dev/null
+  # A HANG means the daemon likely wedged and/or the fs filled -- rebuild both
+  # runtimes so the next test starts from a clean, non-wedged 2 GB fs. Also do a
+  # periodic refresh so slow capacity creep can't accumulate across the sweep.
+  if [ "${st}" = "HANG" ]; then restart_keepers; fi
+  restart=$((restart+1)); if [ "${restart}" -ge 40 ]; then restart_keepers; restart=0; fi
 done
 
 echo "===================================================================="
