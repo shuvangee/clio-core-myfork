@@ -488,17 +488,31 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     }
   }
 
-  // Directory? Every mkdir'd directory carries the hidden marker child for its
-  // whole lifetime (the emptiness checks skip it but never delete it), so an
-  // O(1) exact lookup of the marker decides dir-ness -- identical result to the
-  // old "^dir/[^/]+$" child scan for files/empty dirs/populated dirs, but
-  // without compiling a std::regex on every getattr (#680; the stat hot path).
+  // Directory? A tag with any direct child is a directory. Two-step probe
+  // (#680): (1) the hidden marker child of a mkdir'd dir via an O(1) exact
+  // lookup -- this covers every FUSE directory and, crucially, avoids an
+  // O(children) child scan on a populated dir (getattr is the stat hot path;
+  // t_mtab keeps 1000s of files in one dir, so the scan made generic/100 ~5x
+  // slower). (2) Fallback for a dir created IMPLICITLY as the parent of a
+  // descendant file (no marker): match any child. This is cheap for files and
+  // empty dirs (no children => empty result); only markerless populated dirs
+  // pay the scan, which the FUSE path never produces (it always mkdir's).
   std::string dir = StripTrailingSlash(path);
   {
-    auto q = cte_.AsyncTagQuery(ExactRe(dir + "/" + kDirMarker), 1,
-                                clio::run::PoolQuery::Local());
-    CLIO_CO_AWAIT(q);
-    if (q->GetReturnCode() == 0 && !q->results_.empty()) {
+    bool is_directory = false;
+    {
+      auto qm = cte_.AsyncTagQuery(ExactRe(dir + "/" + kDirMarker), 1,
+                                   clio::run::PoolQuery::Local());
+      CLIO_CO_AWAIT(qm);
+      is_directory = (qm->GetReturnCode() == 0 && !qm->results_.empty());
+    }
+    if (!is_directory) {
+      std::string child_re = "^" + EscapeExact(dir) + "/[^/]+$";
+      auto qc = cte_.AsyncTagQuery(child_re, 1, clio::run::PoolQuery::Local());
+      CLIO_CO_AWAIT(qc);
+      is_directory = (qc->GetReturnCode() == 0 && !qc->results_.empty());
+    }
+    if (is_directory) {
       task->exists_ = 1; task->is_dir_ = 1; task->size_ = 0;
       // Resolve the directory's own tag to give it a stable inode.
       auto tag = cte_.AsyncGetOrCreateTag(
@@ -653,8 +667,11 @@ clio::run::TaskResume Runtime::Unlink(clio::run::shared_ptr<UnlinkTask> &task) {
   }
 
   // DelTag is hierarchy-aware: a hard-link (alias) path unlinks only that name;
-  // the canonical path removes the file and all its remaining links + blobs.
-  auto d = cte_.AsyncDelTag(path, clio::run::PoolQuery::Local());
+  // for the canonical name it promotes a surviving alias so the file lives until
+  // its last link is removed. posix_unlink=true selects POSIX unlink semantics
+  // (#680) instead of the core's cascade-delete-all-aliases behavior.
+  auto d = cte_.AsyncDelTag(path, clio::run::PoolQuery::Local(),
+                            /*posix_unlink=*/true);
   CLIO_CO_AWAIT(d);
   {
     std::lock_guard<std::mutex> g(meta_mu_);
@@ -837,9 +854,11 @@ clio::run::TaskResume Runtime::Rename(clio::run::shared_ptr<RenameTask> &task) {
     }
   }
 
-  // POSIX rename overwrites an existing destination: drop dst's tag first.
+  // POSIX rename overwrites an existing destination: unlink dst's name (POSIX
+  // semantics, #680 -- a surviving hard link to dst must live on).
   {
-    auto d = cte_.AsyncDelTag(dst, clio::run::PoolQuery::Local());
+    auto d = cte_.AsyncDelTag(dst, clio::run::PoolQuery::Local(),
+                              /*posix_unlink=*/true);
     CLIO_CO_AWAIT(d);
   }
   // Rename the tag in place (keeps TagId + blobs).

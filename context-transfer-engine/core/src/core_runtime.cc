@@ -2038,7 +2038,9 @@ clio::run::TaskResume Runtime::DelTag(clio::run::shared_ptr<DelTagTask> &task) {
     // only the unlinked name; the tag, its blobs, and remaining links stay.
     // (#680: without this, `link(a,b); unlink(a)` also destroyed b, which spun
     // t_mtab's lock loop forever -- the real cause of the generic/089 "hang".)
-    {
+    // Only when the caller requested POSIX unlink (the FUSE/filesystem layer);
+    // a direct core "delete tag" (posix_unlink_==0) still cascades to all names.
+    if (task->posix_unlink_ != 0) {
       std::shared_ptr<TagInfo> tinfo = tag_id_to_info_.get(tag_id);
       if (!resolved_key.empty() && resolved_key == canonical &&
           tinfo != nullptr && !tinfo->aliases_.empty()) {

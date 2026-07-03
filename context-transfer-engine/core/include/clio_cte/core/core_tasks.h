@@ -1930,6 +1930,12 @@ struct TruncateBlobTask : public clio::run::Task {
 struct DelTagTask : public clio::run::Task {
   INOUT TagId tag_id_;             // Tag ID to delete (input or lookup result)
   IN clio::run::priv::string tag_name_;  // Tag name for lookup (optional)
+  // POSIX-unlink semantics (#680): when 1, deleting a tag's canonical NAME while
+  // hard-link aliases remain promotes a surviving alias and keeps the tag/blobs
+  // alive (the file survives until its last link is removed). When 0 (default),
+  // deleting the canonical name/id cascade-deletes the tag and all its aliases.
+  // The FUSE/filesystem unlink+rename set this; direct core "delete tag" does not.
+  IN clio::run::u32 posix_unlink_ = 0;
 
   // SHM constructor
   DelTagTask()
@@ -1971,7 +1977,7 @@ struct DelTagTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeIn(Archive &ar) {
     Task::SerializeIn(ar);
-    ar(tag_id_, tag_name_);
+    ar(tag_id_, tag_name_, posix_unlink_);
   }
 
   /**
@@ -1991,6 +1997,7 @@ struct DelTagTask : public clio::run::Task {
     Task::Copy(other.template Cast<Task>());
     tag_id_ = other->tag_id_;
     tag_name_ = other->tag_name_;
+    posix_unlink_ = other->posix_unlink_;
   }
 
   /**
