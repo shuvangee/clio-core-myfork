@@ -68,6 +68,14 @@ RESULTS="${PRIV}/results.txt"
 
 export LD_LIBRARY_PATH="${BUILD_BIN}:${HOME}/.local/lib:${LD_LIBRARY_PATH:-}"
 export CLIO_REPO_PATH="${BUILD_BIN}" CLIO_BIND_ADDR=127.0.0.1
+# NOTE: the 2 GB DRAM compose config (scripts/xfstests/clio_xfstests_config.yaml)
+# used by run_clio_xfstests.sh is NOT applied here -- it's written for the
+# co-located runtime path and fails when loaded by a standalone `clio_run start`
+# ("Container not found for pool PoolId(1,0)" during compose). So each runtime
+# uses the ~100 MB DRAM default; a handful of large-write scratch tests
+# (generic/074, 091, ...) will ENOSPC. Threading capacity into `clio_run start`
+# is a separate follow-up (CLIO_SCRATCH_SERVER_CONF hook left for it).
+[ -n "${CLIO_SCRATCH_SERVER_CONF:-}" ] && export CLIO_SERVER_CONF="${CLIO_SCRATCH_SERVER_CONF}"
 
 # --- root re-exec: install the mount helper (needs real root) BEFORE the
 #     user namespace, where /sbin is read-only; then re-exec under unshare -rm.
