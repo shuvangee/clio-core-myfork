@@ -126,6 +126,8 @@ distro repos).
 | Redis bench            | `CLIO_CORE_ENABLE_REDIS=ON`          | Builds the head-to-head Redis comparison benchmark. `libhiredis-dev` / `hiredis-devel`. |
 | LLM hooks (llama.cpp)  | `CLIO_CORE_ENABLE_LLAMA=ON`          | Integrates the bundled `external/llama.cpp` submodule.             |
 | Globus transfer (CAE)  | `CAE_ENABLE_GLOBUS=ON`               | Globus toolkit installed and on PATH.                              |
+| S3 import (CAE)        | `CAE_ENABLE_S3=ON`                   | Imports `s3://bucket/key` into CTE. Requires the AWS SDK for C++ (`aws-sdk-cpp`, component `s3`). OFF by default; self-disables with a warning if the SDK is not found. |
+| GCS import (CAE)       | `CAE_ENABLE_GCS=ON`                  | Imports `gs://bucket/object` into CTE. Requires `google-cloud-cpp` (storage component). OFF by default; self-disables with a warning if the SDK is not found. |
 
 ### Testing + diagnostics
 
@@ -225,6 +227,8 @@ Misc
 [ ] CLIO_CORE_ENABLE_REDIS=ON         Redis comparison benchmark (hiredis)
 [ ] CLIO_CORE_ENABLE_LLAMA=ON         llama.cpp LLM hooks
 [ ] CAE_ENABLE_GLOBUS=ON              Globus transfers in CAE
+[ ] CAE_ENABLE_S3=ON                  S3 (s3://) imports in CAE (aws-sdk-cpp)
+[ ] CAE_ENABLE_GCS=ON                 GCS (gs://) imports in CAE (google-cloud-cpp)
 
 Build profiles (mutually exclusive)
 ─────────────────────────────────
