@@ -1,32 +1,37 @@
-# xfstests baseline: tests expected to PASS against the clio FUSE filesystem.
+# xfstests baseline: the MAXIMUM set of generic/* tests that pass against the
+# clio FUSE filesystem. This is the CI gate -- CI runs ONLY these and every one
+# must pass (scripts/xfstests/run_ci_xfstests.sh).
 #
-# One `generic/NNN` per line ('#' comments and blank lines ignored). This is
-# the regression gate for CI (scripts/xfstests/run_ci_xfstests.sh): every test
-# listed here must pass; a regression fails the job. Tests NOT listed here are
-# run informationally -- a listed-elsewhere failure won't fail CI, but a test
-# that starts passing should be promoted into this file.
+# How this list was produced (not hand-curated): the full generic/* group (793
+# tests) was run against the clio FUSE fs; 702 are notrun (require SCRATCH_DEV,
+# which the fs can't provide), leaving 91 that actually execute. Of those, these
+# passed a discovery run AND two independent verification runs. Flaky tests
+# (e.g. generic/013, fsstress-driven) are excluded on purpose.
 #
-# Baseline established 2026-07-02 (issue #677): 46/55 of the curated generic
-# list. The 9 currently-failing tests and their root causes are tracked in the
-# issue; see scripts/xfstests/ci_known_fail.txt.
+# Failing/hanging tests are tracked, with root causes, in issue #680 (they are
+# NOT run in CI). Established 2026-07-03.
 generic/001
 generic/002
 generic/006
 generic/007
 generic/011
 generic/028
+generic/036
 generic/113
 generic/131
 generic/207
+generic/209
 generic/210
 generic/212
 generic/236
+generic/239
 generic/245
 generic/246
 generic/248
 generic/249
 generic/257
 generic/263
+generic/285
 generic/308
 generic/362
 generic/364

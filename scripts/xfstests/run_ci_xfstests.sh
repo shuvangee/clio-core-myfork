@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
 #
-# CI regression gate for the clio FUSE filesystem xfstests conformance suite.
+# CI gate for the clio FUSE filesystem xfstests conformance suite.
 #
-# Runs the curated generic/* list (the union of the expected-pass baseline and
-# the known-failure list) via run_clio_xfstests.sh, then compares the outcome
-# against scripts/xfstests/ci_baseline_pass.txt:
+# Runs ONLY the tests known to pass (scripts/xfstests/ci_baseline_pass.txt --
+# the maximum passing set discovered across the whole generic/* group) against
+# the clio FUSE fs via run_clio_xfstests.sh. Every listed test must pass; any
+# non-pass (FAIL / notrun / HANG / missing from the run) fails the job.
 #
-#   * A baseline test that regresses (no longer 'pass')      -> FAIL the job.
-#   * A test missing from the run output (didn't execute)    -> FAIL the job.
-#   * A known-failure that now passes                        -> report, don't
-#                                                               fail; promote it
-#                                                               into the baseline.
-#
-# This keeps CI green at the recorded baseline while surfacing both regressions
-# and improvements. See issue #677.
+# The currently-failing tests are intentionally NOT run here -- they are
+# tracked, with root causes, in issue #680.
 #
 # Usage:
 #   scripts/xfstests/run_ci_xfstests.sh
@@ -23,69 +18,45 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 BASELINE_FILE="${SCRIPT_DIR}/ci_baseline_pass.txt"
-KNOWN_FAIL_FILE="${SCRIPT_DIR}/ci_known_fail.txt"
 RUNNER="${SCRIPT_DIR}/run_clio_xfstests.sh"
 
-[ -r "${BASELINE_FILE}" ]   || { echo "ERROR: missing ${BASELINE_FILE}" >&2; exit 2; }
-[ -x "${RUNNER}" ] || [ -r "${RUNNER}" ] || { echo "ERROR: missing ${RUNNER}" >&2; exit 2; }
+[ -r "${BASELINE_FILE}" ] || { echo "ERROR: missing ${BASELINE_FILE}" >&2; exit 2; }
+[ -r "${RUNNER}" ]        || { echo "ERROR: missing ${RUNNER}" >&2; exit 2; }
 
-# --- read test lists (strip comments / blanks) ------------------------------
-read_list() { grep -oE '^generic/[0-9]+' "$1" 2>/dev/null | sort -u; }
-mapfile -t BASELINE   < <(read_list "${BASELINE_FILE}")
-mapfile -t KNOWN_FAIL < <(read_list "${KNOWN_FAIL_FILE}")
-
+# --- read the expected-pass list (strip comments / blanks) ------------------
+mapfile -t BASELINE < <(grep -oE '^generic/[0-9]+' "${BASELINE_FILE}" | sort -u)
 [ "${#BASELINE[@]}" -gt 0 ] || { echo "ERROR: baseline is empty" >&2; exit 2; }
 
-# Union = everything we want to run this cycle.
-mapfile -t ALL < <(printf '%s\n' "${BASELINE[@]}" "${KNOWN_FAIL[@]}" | sort -u)
-
-echo "[ci-xfs] baseline(pass)=${#BASELINE[@]} known-fail=${#KNOWN_FAIL[@]} total=${#ALL[@]}"
+echo "[ci-xfs] running ${#BASELINE[@]} baseline test(s) (all must pass)"
 
 # --- run the conformance driver, capture per-test outcomes ------------------
 RUN_LOG="$(mktemp)"
 trap 'rm -f "${RUN_LOG}"' EXIT
-TESTS="${ALL[*]}" bash "${RUNNER}" 2>&1 | tee "${RUN_LOG}"
+TESTS="${BASELINE[*]}" bash "${RUNNER}" 2>&1 | tee "${RUN_LOG}"
 
-# Outcome lines look like: 'generic/001 : pass' / 'generic/013 : FAIL' / notrun / HANG
 status_of() {  # $1 = test id -> prints pass|FAIL|notrun|HANG|MISSING
   local s
   s="$(grep -oE "^$1 : [a-zA-Z]+" "${RUN_LOG}" | tail -1 | awk '{print $NF}')"
   [ -n "${s}" ] && echo "${s}" || echo "MISSING"
 }
 
-# --- evaluate baseline (the regression gate) --------------------------------
-regressions=()
+# --- every baseline test must pass ------------------------------------------
+failures=()
 for t in "${BASELINE[@]}"; do
   st="$(status_of "${t}")"
-  [ "${st}" = "pass" ] || regressions+=("${t}(${st})")
-done
-
-# --- evaluate known-failures (informational: did any start passing?) --------
-unexpected_pass=()
-for t in "${KNOWN_FAIL[@]}"; do
-  st="$(status_of "${t}")"
-  [ "${st}" = "pass" ] && unexpected_pass+=("${t}")
+  [ "${st}" = "pass" ] || failures+=("${t}(${st})")
 done
 
 echo "===================================================================="
-echo "[ci-xfs] SUMMARY"
-echo "[ci-xfs]   baseline size       : ${#BASELINE[@]}"
-echo "[ci-xfs]   regressions         : ${#regressions[@]}"
-echo "[ci-xfs]   newly passing (info): ${#unexpected_pass[@]}"
+echo "[ci-xfs] SUMMARY: baseline=${#BASELINE[@]} not-passing=${#failures[@]}"
 
-if [ "${#unexpected_pass[@]}" -gt 0 ]; then
-  echo "[ci-xfs] NOTE: known-failures now passing -- promote into ci_baseline_pass.txt:"
-  printf '[ci-xfs]   + %s\n' "${unexpected_pass[@]}"
-fi
-
-if [ "${#regressions[@]}" -gt 0 ]; then
-  echo "[ci-xfs] FAIL: ${#regressions[@]} baseline test(s) regressed:"
-  printf '[ci-xfs]   - %s\n' "${regressions[@]}"
+if [ "${#failures[@]}" -gt 0 ]; then
+  echo "[ci-xfs] FAIL: ${#failures[@]} baseline test(s) did not pass:"
+  printf '[ci-xfs]   - %s\n' "${failures[@]}"
   exit 1
 fi
 
-echo "[ci-xfs] OK: all ${#BASELINE[@]} baseline tests still pass."
+echo "[ci-xfs] OK: all ${#BASELINE[@]} baseline tests passed."
 exit 0

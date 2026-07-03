@@ -88,10 +88,11 @@ jobs:
               # Live end-to-end mount smoke (real libfuse3 mount + I/O).
               chmod +x CI/fuse_mount_smoke.sh
               CI/fuse_mount_smoke.sh build-adapters
-              # xfstests conformance regression gate (issue #677): install
-              # xfstests + its runtime deps, then run the curated generic/*
-              # list against the clio FUSE fs. Fails the job only if a
-              # known-passing test regresses; known-failures stay informational.
+              # xfstests conformance gate (issue #677): install xfstests + its
+              # runtime deps, then run ONLY the tests known to pass against the
+              # clio FUSE fs (scripts/xfstests/ci_baseline_pass.txt -- the max
+              # passing set). Every baseline test must pass or the job fails.
+              # Currently-failing tests are tracked in a GitHub issue, not run.
               bash scripts/xfstests/install_deps.sh
               CLIO_BUILD_DIR="$PWD/build-adapters" \
                 bash scripts/xfstests/run_ci_xfstests.sh
