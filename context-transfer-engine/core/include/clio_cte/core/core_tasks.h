@@ -2206,10 +2206,12 @@ struct GetTagSizeTask : public clio::run::Task {
   IN TagId tag_id_;      // Tag ID to query
   OUT size_t tag_size_;  // Total size of all blobs in tag
   OUT clio::run::u64 ctime_;   // Tag change-time (last_changed_), ns; 0 if unknown
+  OUT clio::run::u64 mtime_;   // Tag modify-time (last_modified_), ns; 0 if unknown
 
   // SHM constructor
   GetTagSizeTask()
-      : clio::run::Task(), tag_id_(TagId::GetNull()), tag_size_(0), ctime_(0) {}
+      : clio::run::Task(), tag_id_(TagId::GetNull()), tag_size_(0), ctime_(0),
+        mtime_(0) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit GetTagSizeTask(const clio::run::TaskId &task_id,
@@ -2219,7 +2221,8 @@ struct GetTagSizeTask : public clio::run::Task {
       : clio::run::Task(task_id, pool_id, pool_query, Method::kGetTagSize),
         tag_id_(tag_id),
         tag_size_(0),
-        ctime_(0) {
+        ctime_(0),
+        mtime_(0) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kGetTagSize;
@@ -2242,7 +2245,7 @@ struct GetTagSizeTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(tag_size_, ctime_);
+    ar(tag_size_, ctime_, mtime_);
   }
 
   /**
@@ -2254,6 +2257,7 @@ struct GetTagSizeTask : public clio::run::Task {
     tag_id_ = other->tag_id_;
     tag_size_ = other->tag_size_;
     ctime_ = other->ctime_;
+    mtime_ = other->mtime_;
   }
 
   /**

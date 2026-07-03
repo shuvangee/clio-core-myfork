@@ -424,6 +424,7 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
         auto s = cte_.AsyncGetTagSize(h_tag, clio::run::PoolQuery::Local());
         CLIO_CO_AWAIT(s);
         task->ctime_ = (s->GetReturnCode() == 0) ? s->ctime_ : 0;
+        task->mtime_ = (s->GetReturnCode() == 0) ? s->mtime_ : 0;
       }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
@@ -464,6 +465,7 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     task->size_ = (s->GetReturnCode() == 0) ? s->tag_size_ : 0;
     task->ino_ = InoFromTag(tag->tag_id_);
     task->ctime_ = (s->GetReturnCode() == 0) ? s->ctime_ : 0;
+    task->mtime_ = (s->GetReturnCode() == 0) ? s->mtime_ : 0;
   } else {
     task->exists_ = 0; task->is_dir_ = 0; task->size_ = 0;
   }

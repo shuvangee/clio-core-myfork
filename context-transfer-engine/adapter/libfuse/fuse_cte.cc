@@ -211,6 +211,14 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
     stbuf->st_ctim.tv_sec = static_cast<time_t>(t->ctime_ / 1000000000ULL);
     stbuf->st_ctim.tv_nsec = static_cast<long>(t->ctime_ % 1000000000ULL);
   }
+  // Modify time (mtime): the tag's last_modified_, bumped on write/truncate.
+  // Fall back to ctime when unknown so a valid file never reports mtime at the
+  // epoch while it has a real ctime.
+  clio::run::u64 mtime_ns = (t->mtime_ != 0) ? t->mtime_ : t->ctime_;
+  if (mtime_ns != 0) {
+    stbuf->st_mtim.tv_sec = static_cast<time_t>(mtime_ns / 1000000000ULL);
+    stbuf->st_mtim.tv_nsec = static_cast<long>(mtime_ns % 1000000000ULL);
+  }
   return 0;
 }
 

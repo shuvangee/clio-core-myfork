@@ -1619,7 +1619,9 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
               (d <= tag_info_ptr->total_size_) ? tag_info_ptr->total_size_ - d
                                                : 0;
         }
-        tag_info_ptr->last_changed_ = GetCurrentTimeNs();  // truncate => ctime
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_changed_ = now;   // truncate => ctime bump
+        tag_info_ptr->last_modified_ = now;  // truncate resizes content => mtime
       }
     }
 
@@ -2269,7 +2271,8 @@ clio::run::TaskResume Runtime::GetTagSize(clio::run::shared_ptr<GetTagSizeTask> 
     tag_info_ptr->last_read_ = now;
 
     task->tag_size_ = tag_info_ptr->total_size_;
-    task->ctime_ = tag_info_ptr->last_changed_;  // surface ctime to getattr
+    task->ctime_ = tag_info_ptr->last_changed_;   // surface ctime to getattr
+    task->mtime_ = tag_info_ptr->last_modified_;  // surface mtime to getattr
     task->return_code_ = 0;
 
     // Log telemetry for GetTagSize operation
