@@ -389,6 +389,18 @@ static int cte_fuse_rmdir(const char *path) {
 // would make the kernel return ENODEV for any mmap of an O_DIRECT fd, breaking
 // programs that both O_DIRECT and mmap the same file, e.g. fsx -Z; see #597.)
 
+// Honor O_TRUNC: the chimod open resolves the tag but does not truncate, so an
+// open/creat of an existing file with O_TRUNC would keep its old page-blobs
+// (leaving stale data an app expects to be gone — e.g. reads of a re-created
+// file's holes). Clear it to zero length here, which frees those blobs.
+static inline void MaybeTruncateOnOpen(clio::cte::filesystem::Client *cfs,
+                                       const std::string &p, int flags) {
+  if (flags & O_TRUNC) {
+    auto tr = cfs->AsyncTruncate(p, 0);
+    tr.Wait();
+  }
+}
+
 static int cte_fuse_create(const char *path, cte_mode_t mode,
                            struct fuse_file_info *fi) {
   std::string p(path);
@@ -401,6 +413,7 @@ static int cte_fuse_create(const char *path, cte_mode_t mode,
   handle->fh = t->handle_;
   handle->path = p;
   fi->fh = reinterpret_cast<uint64_t>(handle);
+  MaybeTruncateOnOpen(cfs, p, fi->flags);
   return 0;
 }
 
@@ -418,6 +431,7 @@ static int cte_fuse_open(const char *path, struct fuse_file_info *fi) {
   handle->fh = t->handle_;
   handle->path = p;
   fi->fh = reinterpret_cast<uint64_t>(handle);
+  MaybeTruncateOnOpen(cfs, p, fi->flags);
   return 0;
 }
 
