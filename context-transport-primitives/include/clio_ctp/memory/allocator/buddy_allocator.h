@@ -666,7 +666,13 @@ class _BuddyAllocator : public Allocator {
       size_t offset = FindFirstFit(list_idx, arena_size);
       if (offset != 0) {
         PageT *page = OffsetToPage(offset);
-        size_t page_total_size = page->size_ + sizeof(PageT);
+        // Use GetSize() to mask off kFreeMask (bit 63). FindFirstFit pops the
+        // page but leaves it MarkFree'd, so reading page->size_ raw carries the
+        // free flag into the arithmetic: page_total_size explodes to ~2^63 and
+        // AddRemainderToFreeList below emplaces a bogus multi-GB "remainder"
+        // that runs off the real page into live memory, corrupting the free
+        // list. Every other size read here already uses GetSize().
+        size_t page_total_size = page->GetSize() + sizeof(PageT);
 
         small_arena_.Init(offset, offset + arena_size);
 

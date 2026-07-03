@@ -80,6 +80,10 @@ add_executable(test_bdev_leak_stress
     test_bdev_leak_stress.cc
 )
 
+add_executable(test_concurrent_io_stress
+    test_concurrent_io_stress.cc
+)
+
 # GPU-runtime-era CUDA tests were removed when the GPU runtime concept
 # was retired. The kernel→CPU submission path is now exercised by:
 #   - context-runtime/test/unit/gpu/test_gpu_kernel_stress_*
@@ -291,6 +295,22 @@ target_link_libraries(test_bdev_leak_stress
     clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+# Link test_concurrent_io_stress (#680 concurrency repro) - same deps as the
+# leak stress test (embedded runtime + CTE core + bdev + threads).
+target_link_libraries(test_concurrent_io_stress
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+target_include_directories(test_concurrent_io_stress PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
 )
 
 # GPU-runtime-era link rules removed.
@@ -519,6 +539,13 @@ set_tests_properties(cte_bdev_leak_stress PROPERTIES
     LABELS "unit;cte;bdev;leak;stress;msan_skip"
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;CTE_LEAK_STRESS_SECONDS=60"
 )
+
+# Concurrent I/O stress: many threads hammer the shared per-process allocator
+# via AllocateBuffer/FreeBuffer (+ optional Put/Get) to reproduce the #680
+# multi-threaded buffer/task race without fsx/FUSE. NOT registered with add_test
+# yet: it still fails until the shared_ptr<Task>/Future completion race in the
+# client-submit -> worker-process path is fixed (TSan-confirmed root cause). Run
+# it manually as a repro: build/bin/test_concurrent_io_stress.
 
 # Add tiered storage stress tests
 # NOTE: These tests are chained (Put -> Reorganize -> Integrity -> Cleanup)
