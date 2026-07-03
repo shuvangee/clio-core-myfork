@@ -3192,13 +3192,17 @@ RouteResult IpcManager::RouteLocal(Future<Task> &future, bool force_enqueue) {
     return RouteResult::ExecHere;
   }
 
-  // Enqueue to the destination worker's lane
+  // Enqueue to the destination worker's lane, then ALWAYS signal. Gating the
+  // wakeup on was_empty is the exact lost-wakeup race AwakenWorker's own
+  // comment warns against: the consumer can drain the lane and park in
+  // epoll_pwait2 in the window between our Empty() check and Push, so a
+  // "non-empty" observation skips a wakeup the worker actually needed. The
+  // extra SIGUSR1 is absorbed harmlessly by signalfd if the worker is already
+  // awake. (Surfaced as a permanent hang in generic/208 aio-dio once self-sent
+  // subtasks began routing to otherwise-idle I/O workers.)
   auto &dest_lane = worker_queues_->GetLane(dest_worker_id, 0);
-  bool was_empty = dest_lane.Empty();
   dest_lane.Push(future);
-  if (was_empty) {
-    AwakenWorker(&dest_lane);
-  }
+  AwakenWorker(&dest_lane);
   return RouteResult::Local;
 }
 
