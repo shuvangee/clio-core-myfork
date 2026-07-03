@@ -1536,7 +1536,11 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
         } else {
           tag_info_ptr->total_size_ = 0;
         }
-        tag_info_ptr->last_changed_ = GetCurrentTimeNs();  // size change => ctime
+        // Deleting page-blobs is part of a truncate-down: bump BOTH mtime
+        // (content shrank) and ctime (metadata changed).
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_modified_ = now;
+        tag_info_ptr->last_changed_ = now;
       }
     }
 
@@ -1589,7 +1593,17 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
 
     BlobInfo *blob_info_ptr = CheckBlobExists(blob_name, tag_id);
     if (blob_info_ptr == nullptr) {
-      // A missing blob is already "empty" — nothing to truncate.
+      // A missing blob is already "empty" — no data to truncate. But a truncate
+      // is still a modification of the tag (the filesystem adapter also uses a
+      // truncate of a not-yet-materialized page to stamp timestamps on a
+      // truncate-up, which reserves no storage), so bump mtime/ctime.
+      clio::run::ScopedCoRwWriteLock lock(tag_map_lock_);
+      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      if (tag_info_ptr != nullptr) {
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_modified_ = now;
+        tag_info_ptr->last_changed_ = now;
+      }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
@@ -1619,7 +1633,11 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
               (d <= tag_info_ptr->total_size_) ? tag_info_ptr->total_size_ - d
                                                : 0;
         }
-        tag_info_ptr->last_changed_ = GetCurrentTimeNs();  // truncate => ctime
+        // Truncate changes file content and size, so POSIX bumps BOTH mtime
+        // (last_modified_) and ctime (last_changed_).
+        auto now = GetCurrentTimeNs();
+        tag_info_ptr->last_modified_ = now;
+        tag_info_ptr->last_changed_ = now;
       }
     }
 
@@ -2264,12 +2282,17 @@ clio::run::TaskResume Runtime::GetTagSize(clio::run::shared_ptr<GetTagSizeTask> 
       CLIO_CO_RETURN;
     }
 
-    // Update timestamp and return the total size
+    // Surface the tag's timestamps to getattr. Read last_read_ (atime) BEFORE
+    // bumping it below, so a stat reports the prior access time rather than the
+    // instant of the stat itself.
+    task->tag_size_ = tag_info_ptr->total_size_;
+    task->ctime_ = tag_info_ptr->last_changed_;   // ctime  (metadata change)
+    task->mtime_ = tag_info_ptr->last_modified_;  // mtime  (content change)
+    task->atime_ = tag_info_ptr->last_read_;      // atime  (last access)
+
+    // Update access timestamp and return the total size
     auto now = GetCurrentTimeNs();
     tag_info_ptr->last_read_ = now;
-
-    task->tag_size_ = tag_info_ptr->total_size_;
-    task->ctime_ = tag_info_ptr->last_changed_;  // surface ctime to getattr
     task->return_code_ = 0;
 
     // Log telemetry for GetTagSize operation

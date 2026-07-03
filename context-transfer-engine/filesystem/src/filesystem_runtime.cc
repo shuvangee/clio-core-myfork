@@ -419,11 +419,15 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
       task->is_dir_ = 0;
       task->size_ = live_size;
       task->ino_ = InoFromTag(h_tag);
-      // ctime from the tag (mutex released before this RPC).
+      // Timestamps (ctime/mtime/atime) from the tag (mutex released before RPC).
       if (!h_tag.IsNull()) {
         auto s = cte_.AsyncGetTagSize(h_tag, clio::run::PoolQuery::Local());
         CLIO_CO_AWAIT(s);
-        task->ctime_ = (s->GetReturnCode() == 0) ? s->ctime_ : 0;
+        if (s->GetReturnCode() == 0) {
+          task->ctime_ = s->ctime_;
+          task->mtime_ = s->mtime_;
+          task->atime_ = s->atime_;
+        }
       }
       task->return_code_ = 0;
       CLIO_CO_RETURN;
@@ -463,7 +467,11 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     CLIO_CO_AWAIT(s);
     task->size_ = (s->GetReturnCode() == 0) ? s->tag_size_ : 0;
     task->ino_ = InoFromTag(tag->tag_id_);
-    task->ctime_ = (s->GetReturnCode() == 0) ? s->ctime_ : 0;
+    if (s->GetReturnCode() == 0) {
+      task->ctime_ = s->ctime_;
+      task->mtime_ = s->mtime_;
+      task->atime_ = s->atime_;
+    }
   } else {
     task->exists_ = 0; task->is_dir_ = 0; task->size_ = 0;
   }
@@ -528,7 +536,8 @@ clio::run::TaskResume Runtime::Truncate(clio::run::shared_ptr<TruncateTask> &tas
   if (!tag_id.IsNull() && new_size < old_size) {
     clio::run::u64 boundary_page = new_size / kFsPageSize;
     clio::run::u64 boundary_off = new_size % kFsPageSize;
-    // Trim the boundary page to its surviving prefix (frees the tail).
+    // Trim the boundary page to its surviving prefix (frees the tail). This also
+    // bumps the tag's mtime/ctime (truncate is a modification).
     auto tb = cte_.AsyncTruncateBlob(tag_id, std::to_string(boundary_page),
                                      boundary_off, clio::run::PoolQuery::Local());
     CLIO_CO_AWAIT(tb);
@@ -539,6 +548,16 @@ clio::run::TaskResume Runtime::Truncate(clio::run::shared_ptr<TruncateTask> &tas
                                  clio::run::PoolQuery::Local());
       CLIO_CO_AWAIT(d);
     }
+  } else if (!tag_id.IsNull()) {
+    // Grow (or same-size) truncate does no blob work, but POSIX still updates
+    // mtime and ctime. Reserve no storage — stamp the tag's timestamps by
+    // truncating the first page strictly beyond the new EOF, which never holds
+    // data (writes only create pages up to EOF, and shrink deletes past it), so
+    // TruncateBlob finds it missing and only bumps mtime/ctime.
+    clio::run::u64 touch_page = new_size / kFsPageSize + 1;
+    auto tb = cte_.AsyncTruncateBlob(tag_id, std::to_string(touch_page),
+                                     0, clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(tb);
   }
 
   task->return_code_ = 0;

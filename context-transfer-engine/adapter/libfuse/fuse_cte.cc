@@ -40,6 +40,9 @@
 #include <cerrno>                 // errno
 #include <cstdio>                 // snprintf, fprintf
 #include <fcntl.h>                // O_CREAT, O_RDWR
+#ifdef __linux__
+#include <linux/falloc.h>         // FALLOC_FL_* (fallocate mode flags)
+#endif
 
 #ifndef _WIN32
 #include <sys/statvfs.h>          // struct statvfs (statfs op)
@@ -205,11 +208,21 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
     // cte_off_t is off_t on Linux; the WinFsp shim maps it for Windows.
     stbuf->st_size = static_cast<cte_off_t>(t->size_);
   }
-  // Change time (ctime): the tag's last_changed_, in ns since the epoch. Tags
-  // only; 0 means the chimod had no value (leave st_ctim at the epoch).
+  // Timestamps come from the tag as ns since the epoch (0 means the chimod had
+  // no value, so leave that field at the epoch): ctime = last metadata change
+  // (last_changed_), mtime = last content change (last_modified_), atime = last
+  // access (last_read_). All three are surfaced from the same GetTagSize query.
   if (t->ctime_ != 0) {
     stbuf->st_ctim.tv_sec = static_cast<time_t>(t->ctime_ / 1000000000ULL);
     stbuf->st_ctim.tv_nsec = static_cast<long>(t->ctime_ % 1000000000ULL);
+  }
+  if (t->mtime_ != 0) {
+    stbuf->st_mtim.tv_sec = static_cast<time_t>(t->mtime_ / 1000000000ULL);
+    stbuf->st_mtim.tv_nsec = static_cast<long>(t->mtime_ % 1000000000ULL);
+  }
+  if (t->atime_ != 0) {
+    stbuf->st_atim.tv_sec = static_cast<time_t>(t->atime_ / 1000000000ULL);
+    stbuf->st_atim.tv_nsec = static_cast<long>(t->atime_ % 1000000000ULL);
   }
   return 0;
 }
@@ -334,6 +347,13 @@ static int cte_fuse_rmdir(const char *path) {
 // ============================================================================
 // File lifecycle
 // ============================================================================
+
+// O_DIRECT needs no special handling: we deliberately do NOT set the per-file
+// direct_io flag. Our read/write handlers already work at arbitrary offsets and
+// sizes, so an O_DIRECT open flows through the exact same buffered page-cache
+// path as a regular open — it is never rejected. (Enabling per-file direct_io
+// would make the kernel return ENODEV for any mmap of an O_DIRECT fd, breaking
+// programs that both O_DIRECT and mmap the same file, e.g. fsx -Z; see #597.)
 
 static int cte_fuse_create(const char *path, cte_mode_t mode,
                            struct fuse_file_info *fi) {
@@ -481,6 +501,43 @@ static int cte_fuse_truncate(const char *path, cte_off_t size,
   return t->GetReturnCode() == 0 ? 0 : -EIO;
 }
 
+#ifdef __linux__
+// fallocate — implemented as an ftruncate-grow. We never reserve storage ahead
+// of time: page-blobs are created lazily on write and holes read back as zeros,
+// so preallocating blocks is unnecessary. A plain fallocate(mode=0) therefore
+// reduces to "ensure the file is at least offset+length bytes"; it only ever
+// grows (fallocate never shrinks). FALLOC_FL_KEEP_SIZE is a no-op success (the
+// caller wants blocks reserved without moving EOF, and we don't reserve). Modes
+// that rewrite data layout — punch hole, collapse/insert range, zero range —
+// are not supported and return EOPNOTSUPP so callers fall back cleanly.
+static int cte_fuse_fallocate(const char *path, int mode, cte_off_t offset,
+                              cte_off_t length, struct fuse_file_info *fi) {
+  const int kSupportedModes = FALLOC_FL_KEEP_SIZE;
+  if (mode & ~kSupportedModes) {
+    return -EOPNOTSUPP;  // punch/collapse/insert/zero-range: layout-changing
+  }
+  if (offset < 0 || length <= 0) {
+    return -EINVAL;
+  }
+  if (mode & FALLOC_FL_KEEP_SIZE) {
+    return 0;  // no size change requested, and there is nothing to reserve
+  }
+
+  // mode == 0: extend EOF to offset+length if the file is currently shorter.
+  cte_stat_t st;
+  int rc = cte_fuse_getattr_stat(path, &st, fi);
+  if (rc != 0) return rc;
+  cte_off_t need = offset + length;
+  if (need <= st.st_size) return 0;  // already large enough; never shrink
+
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncTruncate(std::string(path),
+                              static_cast<clio::run::u64>(need));
+  t.Wait();
+  return t->GetReturnCode() == 0 ? 0 : -EIO;
+}
+#endif  // __linux__
+
 static int cte_fuse_link(const char *from, const char *to) {
   // Hard link `to` -> existing file `from`. The chimod binds both names to the
   // same CTE tag (a tag-level alias), so they share all data.
@@ -569,6 +626,9 @@ static const struct fuse_operations cte_fuse_ops = {
     .destroy = cte_fuse_destroy,
     .create = cte_fuse_create,
     .utimens = cte_fuse_utimens,
+#ifdef __linux__
+    .fallocate = cte_fuse_fallocate,
+#endif
 };
 
 #ifndef _WIN32
