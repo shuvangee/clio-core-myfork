@@ -122,8 +122,9 @@ CAP_CONF="${CLIO_SCRATCH_SERVER_CONF:-${SCRIPT_DIR}/clio_xfstests_config.yaml}"
 
 RTT=""; RTS=""
 cleanup() {
-  fusermount3 -u "${TEST_DIR}" 2>/dev/null;  fusermount3 -u "${SCRATCH_MNT}" 2>/dev/null
-  fusermount3 -u "${KEEP_TEST}" 2>/dev/null; fusermount3 -u "${KEEP_SCRATCH}" 2>/dev/null
+  for m in "${TEST_DIR}" "${SCRATCH_MNT}" "${KEEP_TEST}" "${KEEP_SCRATCH}"; do
+    fusermount3 -uz "$m" 2>/dev/null
+  done
   [ -n "${RTT}" ] && kill -9 "${RTT}" 2>/dev/null
   [ -n "${RTS}" ] && kill -9 "${RTS}" 2>/dev/null
   # Only our uniquely-named procs -- never a broad clio_run/clio_cte_fuse pkill.
@@ -167,15 +168,21 @@ echo "[scratch-xfs] running ${#LIST[@]} scratch test(s)"
 # --- run, one test at a time, with per-test timeout + runtime recovery ------
 pass=0; fail=0; notrun=0; hang=0; failed_list=""; restart=0
 restart_keepers() {  # rebuild both runtimes from scratch (fresh fs, clears wedges)
-  fusermount3 -u "${TEST_DIR}" 2>/dev/null;  fusermount3 -u "${SCRATCH_MNT}" 2>/dev/null
-  kill -9 "${RTT}" "${RTS}" 2>/dev/null; pkill -9 -x "clf_${SUBTYP}" 2>/dev/null; sleep 1
+  # Lazy-unmount (-uz) releases any D-state processes blocked on a wedged daemon
+  # so the SIGKILL below can actually reap it (a plain -u/-9 can't touch D-state).
+  for m in "${TEST_DIR}" "${SCRATCH_MNT}" "${KEEP_TEST}" "${KEEP_SCRATCH}"; do
+    fusermount3 -uz "$m" 2>/dev/null
+  done
+  kill -9 "${RTT}" "${RTS}" 2>/dev/null; pkill -9 -x "clf_${SUBTYP}" 2>/dev/null; sleep 2
   RTT="$(start_runtime "${TEST_PORT}"    "${KEEP_TEST}"    "${PRIV}/rt_test.log")"
   RTS="$(start_runtime "${SCRATCH_PORT}" "${KEEP_SCRATCH}" "${PRIV}/rt_scratch.log")"
 }
 for t in "${LIST[@]}"; do
   # Ensure both keeper runtimes are up (a prior wedge/HANG may have killed one).
   { mountpoint -q "${KEEP_TEST}" && mountpoint -q "${KEEP_SCRATCH}"; } || restart_keepers
-  out="$(timeout "${PERTEST}" ./check "${t}" 2>/dev/null)"; rc=$?
+  # -k 15: if a hard FUSE wedge leaves ./check unresponsive to SIGTERM, SIGKILL
+  # it 15s later so `timeout` can't itself hang forever waiting on the child.
+  out="$(timeout -k 15 "${PERTEST}" ./check "${t}" 2>/dev/null)"; rc=$?
   # Order matters: a notrun test still prints "Passed all 0/1 tests", so the
   # "Not run:" check MUST precede the "Passed all" check.
   if   [ "${rc}" -eq 124 ];                   then st=HANG;   hang=$((hang+1));   failed_list+=" ${t}(hang)"
