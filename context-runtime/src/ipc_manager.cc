@@ -689,11 +689,11 @@ void IpcManager::AwakenWorker(TaskLane *lane) {
 IpcManagerTls *IpcManager::GetTls() {
   // One-time key registration (double-checked under the mutex). The key is
   // process-wide; the per-thread value below is what differs per thread.
-  if (!ipc_tls_key_created_) {
+  if (!ipc_tls_key_created_.load(std::memory_order_acquire)) {
     std::lock_guard<std::mutex> lk(ipc_tls_key_mutex_);
-    if (!ipc_tls_key_created_) {
+    if (!ipc_tls_key_created_.load(std::memory_order_relaxed)) {
       CTP_THREAD_MODEL->CreateTls<IpcManagerTls>(ipc_tls_key_, nullptr);
-      ipc_tls_key_created_ = true;
+      ipc_tls_key_created_.store(true, std::memory_order_release);
     }
   }
   // Lazily allocate this thread's IpcManagerTls. Its EventManager ctor runs on
