@@ -1,0 +1,48 @@
+# xfstests SCRATCH baseline: generic/* tests that require a SCRATCH device and
+# pass against the clio FUSE filesystem. CI runs ONLY these via
+# scripts/xfstests/run_ci_scratch_xfstests.sh and every one must pass.
+#
+# These are complementary to ci_baseline_pass.txt: those tests use only
+# TEST_DIR, while these need a second, independently-formattable scratch fs.
+# The clio FUSE fs can't be reformatted (no mkfs), and a single runtime serves
+# one global namespace, so the scratch driver instead brings up TWO isolated
+# persistent runtimes (one backs TEST_DIR, one SCRATCH_MNT) and wires xfstests'
+# native fuse mount-helper support so ./check mounts/unmounts each device
+# itself. No clio adapter changes are required for the harness.
+#
+# How this list was produced (not hand-curated): all 527 scratch-requiring
+# generic/* tests were swept against the clio FUSE fs on the merged build
+# (fallocate + mtime/atime + O_TRUNC fixes; runtimes given a 2 GB DRAM tier).
+# 482 are notrun (fuse feature gaps: shutdown, dm targets, symlinks-on-fuse,
+# ...), 9 FAIL and 11 HANG. The 25 below passed a discovery run AND two
+# independent verification runs.
+#
+# Failing/hanging scratch tests (tracked, not run in CI):
+#   FAIL: 003 120 344 346 403 452 460 519 615
+#   HANG: 069 129 339 345 347 464 476 551 642 707 750
+# Established 2026-07-03.
+generic/029
+generic/030
+generic/071
+generic/084
+generic/098
+generic/124
+generic/130
+generic/132
+generic/135
+generic/141
+generic/169
+generic/340
+generic/354
+generic/393
+generic/406
+generic/412
+generic/422
+generic/524
+generic/525
+generic/565
+generic/604
+generic/634
+generic/732
+generic/749
+generic/761

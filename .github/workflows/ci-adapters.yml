@@ -96,6 +96,13 @@ jobs:
               bash scripts/xfstests/install_deps.sh
               CLIO_BUILD_DIR="$PWD/build-adapters" \
                 bash scripts/xfstests/run_ci_xfstests.sh
+              # SCRATCH xfstests gate (issue #677): the tests above use only
+              # TEST_DIR; these need a second, isolated scratch device. The
+              # scratch driver provides it via two persistent clio runtimes +
+              # xfstests native fuse mount-helper support (no adapter changes).
+              # Runs only the committed passing scratch baseline; all must pass.
+              CLIO_BUILD_DIR="$PWD/build-adapters" \
+                bash scripts/xfstests/run_ci_scratch_xfstests.sh
             '
 
   # ---- macOS: hdf5_vol -------------------------------------------------------

@@ -34,7 +34,8 @@ TESTS="${BASELINE[*]}" bash "${RUNNER}" 2>&1 | tee "${RUN_LOG}"
 # run_clio_scratch_xfstests.sh prints one "<test>: <status>" line per test.
 status_of() {  # $1 = test id -> pass|FAIL|notrun|HANG|MISSING
   local s
-  s="$(grep -oE "^$1: [A-Za-z]+" "${RUN_LOG}" | tail -1 | awk '{print $NF}')"
+  # Tolerate an optional space before the colon ("<id>: x" or "<id> : x").
+  s="$(grep -oE "^$1 ?: [A-Za-z]+" "${RUN_LOG}" | tail -1 | awk '{print $NF}')"
   [ -n "${s}" ] && echo "${s}" || echo "MISSING"
 }
 

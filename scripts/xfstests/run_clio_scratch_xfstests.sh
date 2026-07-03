@@ -161,7 +161,9 @@ cd "${PRIV_XFS}" || exit 1
 if [ "$#" -gt 0 ]; then RAW=("$@")
 elif [ -n "${TESTS:-}" ]; then RAW=(${TESTS})  # shellcheck disable=SC2206
 else RAW=(generic/013 generic/029 generic/030); fi
-mapfile -t LIST < <(./check -n "${RAW[@]}" 2>/dev/null | grep -E '^[a-z_]+/[0-9]+')
+# -oE prints ONLY the matched test id (no trailing whitespace from ./check -n),
+# so the "<id>: <status>" lines below parse cleanly for the CI wrapper.
+mapfile -t LIST < <(./check -n "${RAW[@]}" 2>/dev/null | grep -oE '^[a-z_]+/[0-9]+')
 [ "${#LIST[@]}" -eq 0 ] && LIST=("${RAW[@]}")
 echo "[scratch-xfs] running ${#LIST[@]} scratch test(s)"
 
