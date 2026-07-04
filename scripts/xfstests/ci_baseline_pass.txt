@@ -124,3 +124,32 @@ generic/754
 generic/772
 generic/779
 generic/780
+# 2026-07-04 update: xattr support added (commit 40afd1e3) unblocks 27 more
+# previously-notrun _require_attrs tests, all passing across two runs.
+generic/020
+generic/037
+generic/066
+generic/070
+generic/077
+generic/093
+generic/103
+generic/117
+generic/270
+generic/337
+generic/377
+generic/403
+generic/425
+generic/449
+generic/454
+generic/486
+generic/489
+generic/513
+generic/523
+generic/611
+generic/618
+generic/675
+generic/688
+generic/700
+generic/727
+generic/745
+generic/748
