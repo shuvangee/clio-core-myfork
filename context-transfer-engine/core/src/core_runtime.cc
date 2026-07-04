@@ -1190,14 +1190,14 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     // a prior holder, it may have grown the blob while we were suspended, so this
     // must be read here — never hoisted above the acquire.
     old_blob_size = blob_info_ptr->GetTotalSize();
-    // Block count BEFORE the extend below. For a tail write (offset >=
-    // old_blob_size) that goes through ExtendBlob — which only push_backs new
-    // blocks, leaving blocks[0..old_num_blocks) untouched — the written region
-    // starts at block index old_num_blocks, whose first byte is at blob offset
-    // old_blob_size. ModifyExistingData can then skip rescanning the existing
-    // blocks (the O(N^2) source for millions of tiny appends, generic/069). NOT
-    // valid for kCtePutReplace, which rebuilds blocks_ wholesale via ResizeBlob.
+    // State BEFORE the extend, for the tail-write scan hint (see below). Capture
+    // the last block's index and its start offset in the blob (blocks' sizes sum
+    // to old_blob_size, so the last block starts at old_blob_size - its size).
     const size_t old_num_blocks = blob_info_ptr->blocks_.size();
+    const clio::run::u64 old_last_blk_size =
+        (old_num_blocks > 0)
+            ? blob_info_ptr->blocks_[old_num_blocks - 1].size_
+            : 0;
 
     // Step 1+2: size the blob to fit the write.
     //  - default (partial modify): grow to cover [offset, offset+size) but
@@ -1224,14 +1224,20 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     }
 
     // Tail-write fast path: a write landing at/after the pre-extend end went
-    // through the append-only ExtendBlob, so ModifyExistingData may start its
-    // block walk at (old_num_blocks, old_blob_size) instead of block 0. The
-    // hole-fill and data writes below both target [old_blob_size, ...), so the
-    // same hint serves both. (0,0) preserves the full-scan default otherwise.
+    // through ExtendBlob (append/grow), so ModifyExistingData may start its block
+    // walk near the tail instead of block 0. Start at the LAST EXISTING block —
+    // not old_num_blocks — because ExtendBlob's spare-capacity fill can grow that
+    // block in place, so the write may land inside it rather than in a brand-new
+    // block. Its start offset is old_blob_size - old_last_blk_size. The hole-fill
+    // and data writes below both target [old_blob_size, ...), so the same hint
+    // serves both. (0,0) preserves the full-scan default (overwrites, replace).
     const bool tail_write =
         !(task->flags_ & kCtePutReplace) && offset >= old_blob_size;
-    const size_t hint_idx = tail_write ? old_num_blocks : 0;
-    const size_t hint_off = tail_write ? old_blob_size : 0;
+    const size_t hint_idx =
+        (tail_write && old_num_blocks > 0) ? (old_num_blocks - 1) : 0;
+    const clio::run::u64 hint_off =
+        (tail_write && old_num_blocks > 0) ? (old_blob_size - old_last_blk_size)
+                                           : 0;
 
     // WAL: log all current blocks (full replacement semantics)
     if (!blob_txn_logs_.empty() && !blob_info_ptr->blocks_.empty()) {
@@ -3473,6 +3479,30 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
 
   clio::run::u64 additional_size = required_size - current_blob_size;
 
+  // Spare-capacity fast path: fill the unused physical slack of the LAST block
+  // before allocating anything new. The bdev rounds each allocation up to a 4 KB
+  // slab, and new blocks below deliberately claim a whole slab, so back-to-back
+  // appends grow this one block's size_ into its capacity_ instead of pushing a
+  // fresh block+slab per write. This is what collapses generic/069's million
+  // tiny appends from a million blocks (O(N^2) read/write scans + slab-per-write
+  // ENOSPC) to ~one block per slab. No bdev call and no remaining_space_ debit:
+  // the slab was already charged when the block was created.
+  if (!blob_info.blocks_.empty()) {
+    BlobBlock &last = blob_info.blocks_.back();
+    if (last.capacity_ > last.size_) {
+      clio::run::u64 fill =
+          std::min(last.capacity_ - last.size_, additional_size);
+      last.size_ += fill;
+      additional_size -= fill;
+    }
+  }
+  if (additional_size == 0) {
+    // Entirely satisfied from spare capacity; no allocation needed.
+    blob_info.total_size_cache_ = required_size;
+    error_code = 0;
+    CLIO_CO_RETURN;
+  }
+
   // Snapshot available targets for the DPE. target_list_ is the contiguous
   // mirror of registered_targets_ — copying it under the read lock is O(N_live)
   // with no map iteration over empty slots.
@@ -3541,27 +3571,41 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
     // are transparent to the data path. AllocateFromTarget decrements the copy's
     // remaining_space_ by reference, so the loop condition drains naturally.
     constexpr clio::run::u64 kMaxBlockChunk = 65536;  // 64 KB
+    constexpr clio::run::u64 kAppendSlab = 4096;      // bdev slab granularity
     while (remaining_to_allocate > 0 && target_info_copy.remaining_space_ > 0) {
-      clio::run::u64 allocate_size =
+      // Logical bytes this block carries.
+      clio::run::u64 logical =
           std::min(std::min(remaining_to_allocate,
                             target_info_copy.remaining_space_),
                    kMaxBlockChunk);
+      // Physical bytes to request: round the logical UP to a whole slab so a
+      // small append leaves reusable spare capacity for the next append (the
+      // spare-fill path above). The request stays <=64 KB-ish, so the
+      // small-block anti-fragmentation property 074/521/522 rely on holds. If
+      // rounding up would exceed the target's free space, take exactly logical.
+      clio::run::u64 physical =
+          ((logical + kAppendSlab - 1) / kAppendSlab) * kAppendSlab;
+      if (physical > target_info_copy.remaining_space_) {
+        physical = logical;
+      }
 
       clio::run::u64 allocated_offset;
       bool alloc_success = false;
-      CLIO_CO_AWAIT(AllocateFromTarget(target_info_copy, allocate_size,
+      CLIO_CO_AWAIT(AllocateFromTarget(target_info_copy, physical,
                                   allocated_offset, alloc_success));
       if (!alloc_success) {
         break;  // this target can't satisfy more; outer loop tries the next
       }
 
+      // size_ = logical used, capacity_ = physical slab (>= logical).
       BlobBlock new_block(target_info_copy.bdev_client_,
                           target_info_copy.target_query_, allocated_offset,
-                          allocate_size);
+                          logical, physical);
       blob_info.blocks_.push_back(new_block);
 
-      // Debit the CANONICAL target's remaining_space_ (mirror of
-      // FreeAllBlobBlocks' credit); AllocateFromTarget only touched the copy.
+      // Debit the CANONICAL target's remaining_space_ by the PHYSICAL bytes
+      // taken (mirror of FreeAllBlobBlocks' capacity_ credit); AllocateFromTarget
+      // only touched the copy.
       {
         clio::run::ScopedCoRwReadLock read_lock(target_lock_);
         TargetInfo *ti = registered_targets_.find(selected_target_id);
@@ -3569,13 +3613,13 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
           ctp::ipc::atomic_ref<clio::run::u64> rs(ti->remaining_space_);
           clio::run::u64 cur = rs.load(std::memory_order_relaxed);
           while (!rs.compare_exchange_weak(
-              cur, (cur > allocate_size) ? cur - allocate_size : 0,
+              cur, (cur > physical) ? cur - physical : 0,
               std::memory_order_relaxed)) {
           }
         }
       }
 
-      remaining_to_allocate -= allocate_size;
+      remaining_to_allocate -= logical;
     }
   }
 
@@ -3677,7 +3721,7 @@ clio::run::TaskResume Runtime::ResizeBlob(BlobInfo &blob_info, clio::run::u64 ne
     clio::run::PoolId pool_id = blob_block.bdev_client_.pool_id_;
     clio::run::bdev::Block block;
     block.offset_ = blob_block.target_offset_;
-    block.size_ = blob_block.size_;
+    block.size_ = blob_block.capacity_;  // free the PHYSICAL slab, not size_
     block.block_type_ = 0;
     if (blocks_by_pool.find(pool_id) == blocks_by_pool.end()) {
       blocks_by_pool[pool_id] = std::make_pair(
@@ -4076,7 +4120,7 @@ clio::run::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
     clio::run::PoolId pool_id = blob_block.bdev_client_.pool_id_;
     clio::run::bdev::Block block;
     block.offset_ = blob_block.target_offset_;
-    block.size_ = blob_block.size_;
+    block.size_ = blob_block.capacity_;  // free the PHYSICAL slab, not size_
     // BlobBlock does not track the allocator's size class; bdev
     // Runtime::FreeBlocks re-derives block_type_ from size_ so the block
     // returns to the same partition AllocateBlock draws from. Leave 0.

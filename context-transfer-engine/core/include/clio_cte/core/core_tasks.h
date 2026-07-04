@@ -746,9 +746,18 @@ struct BlobBlock {
   clio::run::bdev::Client bdev_client_;  // Bdev client for this block's target
   clio::run::PoolQuery target_query_;         // Target pool query for bdev API calls
   clio::run::u64 target_offset_;  // Offset within target where this block is stored
-  clio::run::u64 size_;           // Size of this block in bytes
+  clio::run::u64 size_;           // Logical bytes used in this block
+  // Physical bytes allocated on the bdev (>= size_). The bdev rounds every
+  // allocation up to a 4 KB slab, so a tiny append otherwise burns a whole slab
+  // for a few bytes AND pushes a new block. Tracking the slab capacity lets
+  // ExtendBlob grow size_ into a block's spare capacity on the next append
+  // instead of allocating a fresh block -- collapsing the O(writes) block list
+  // and physical waste that made generic/069 O(N^2)+ENOSPC. Frees and
+  // remaining_space_ accounting use capacity_ (the real footprint). The 4-arg
+  // ctor defaults capacity_ = size_ (no spare) so legacy call sites are safe.
+  clio::run::u64 capacity_;
 
-  CTP_CROSS_FUN BlobBlock() : target_offset_(0), size_(0) {}
+  CTP_CROSS_FUN BlobBlock() : target_offset_(0), size_(0), capacity_(0) {}
 
   CTP_CROSS_FUN BlobBlock(const clio::run::bdev::Client &client,
                            const clio::run::PoolQuery &target_query, clio::run::u64 offset,
@@ -756,7 +765,17 @@ struct BlobBlock {
       : bdev_client_(client),
         target_query_(target_query),
         target_offset_(offset),
-        size_(size) {}
+        size_(size),
+        capacity_(size) {}
+
+  CTP_CROSS_FUN BlobBlock(const clio::run::bdev::Client &client,
+                           const clio::run::PoolQuery &target_query, clio::run::u64 offset,
+                           clio::run::u64 size, clio::run::u64 capacity)
+      : bdev_client_(client),
+        target_query_(target_query),
+        target_offset_(offset),
+        size_(size),
+        capacity_(capacity) {}
 };
 
 /**
