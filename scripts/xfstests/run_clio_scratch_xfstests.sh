@@ -89,6 +89,12 @@ dev="\$1"; mnt="\$2"; shift 2 2>/dev/null
 case "\$dev" in *scratch*) port=${SCRATCH_PORT} ;; *) port=${TEST_PORT} ;; esac
 export LD_LIBRARY_PATH="${BUILD_BIN}:${HOME}/.local/lib" CLIO_REPO_PATH="${BUILD_BIN}"
 export CLIO_BIND_ADDR=127.0.0.1 CLIO_PORT=\$port CLIO_WITH_RUNTIME=0
+# Same-node client<->keeper: use the shared-memory data path, not TCP/ZMQ. The
+# TCP default pays a ~340us round-trip per op (~3k ops/s); SHM (ShmMpscTransport)
+# runs ~21k ops/s. With the O(N) append fix in place, this is what lets the
+# O_APPEND stress tests (069/129/476/551/642/750) finish their multi-million tiny
+# appends inside the timeout instead of crawling. Both ends must agree on SHM.
+export CLIO_IPC_MODE=SHM
 exec "${CLF}" "\$mnt" -o "fsname=\$dev,allow_other,default_permissions"
 EOF
   sudo chmod +x "${HELPER}"
@@ -134,7 +140,10 @@ trap cleanup EXIT
 
 start_runtime() {  # $1=port  $2=keeper_mnt  $3=logfile -> echoes keeper pid
   fusermount3 -u "$2" 2>/dev/null
+  # CLIO_IPC_MODE=SHM: the keeper must also select the shared-memory data path so
+  # cross-process clients attach over SHM rather than TCP (see the mount helper).
   env CLIO_PORT="$1" CLIO_WITH_RUNTIME=1 CLIO_SERVER_CONF="${CAP_CONF}" \
+    CLIO_IPC_MODE=SHM \
     "${CLF}" "$2" -o fsname=keeper -f >"$3" 2>&1 &
   local pid=$!
   for _ in $(seq 1 40); do mountpoint -q "$2" && break; sleep 0.25; done
