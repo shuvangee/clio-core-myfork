@@ -54,6 +54,7 @@ class Runtime : public clio::run::Container {
   clio::run::TaskResume Listxattr(clio::run::shared_ptr<ListxattrTask> &task);
   clio::run::TaskResume Removexattr(clio::run::shared_ptr<RemovexattrTask> &task);
   clio::run::TaskResume Utimens(clio::run::shared_ptr<UtimensTask> &task);
+  clio::run::TaskResume Chown(clio::run::shared_ptr<ChownTask> &task);
   clio::run::TaskResume Readdir(clio::run::shared_ptr<ReaddirTask> &task);
   clio::run::TaskResume StatSize(clio::run::shared_ptr<StatSizeTask> &task);
   // ---- deferred-append pipeline ----
@@ -117,6 +118,10 @@ class Runtime : public clio::run::Container {
     clio::run::u64 set_atime_{0};
     clio::run::u64 set_mtime_{0};
     clio::run::u64 set_ctime_{0};
+    // chown overrides. 0xFFFFFFFF = never chown'd (getattr defers to the
+    // adapter's getuid()/getgid() default). Guarded by meta_mu_.
+    clio::run::u32 set_uid_{0xFFFFFFFFu};
+    clio::run::u32 set_gid_{0xFFFFFFFFu};
   };
   std::mutex meta_mu_;
   std::unordered_map<clio::run::u64, std::shared_ptr<FileInfo>> handles_;  // handle -> file

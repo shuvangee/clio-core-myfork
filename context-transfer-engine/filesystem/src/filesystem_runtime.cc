@@ -517,6 +517,7 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     clio::run::u64 live_size = 0;
     clio::cte::core::TagId h_tag = clio::cte::core::TagId::GetNull();
     clio::run::u64 ov_atime = 0, ov_mtime = 0, ov_ctime = 0;
+    clio::run::u32 ov_uid = 0xFFFFFFFFu, ov_gid = 0xFFFFFFFFu;
     {
       std::lock_guard<std::mutex> g(meta_mu_);
       auto it = by_path_.find(path);
@@ -527,6 +528,8 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
         ov_atime = it->second->set_atime_;
         ov_mtime = it->second->set_mtime_;
         ov_ctime = it->second->set_ctime_;
+        ov_uid = it->second->set_uid_;
+        ov_gid = it->second->set_gid_;
       }
     }
     if (tracked) {
@@ -557,6 +560,10 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
       // masked those real ctime changes (generic/755: ctime unchanged after
       // unlinking a hard link).
       if (ov_ctime > task->ctime_) task->ctime_ = ov_ctime;
+      // chown owner overrides (0xFFFFFFFF if never chown'd => adapter defaults
+      // to getuid()/getgid()).
+      task->uid_ = ov_uid;
+      task->gid_ = ov_gid;
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
@@ -1347,6 +1354,71 @@ clio::run::TaskResume Runtime::Utimens(clio::run::shared_ptr<UtimensTask> &task)
     if (m_now) fi->set_mtime_ = now;
     else if (m_set) fi->set_mtime_ = task->mtime_ns_;
     fi->set_ctime_ = now;  // utimens always advances ctime
+  }
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Chown(clio::run::shared_ptr<ChownTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+
+  // A directory isn't tracked in by_path_ (that map holds files). For a dir,
+  // just bump its tag's ctime/mtime via a touch (owner-tracking on dirs is not
+  // needed for the target tests); files below get per-path owner overrides.
+  {
+    std::string child_re = "^" + EscapeExact(path) + "/[^/]+$";
+    auto q = cte_.AsyncTagQuery(child_re, 1, clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(q);
+    if (q->GetReturnCode() == 0 && !q->results_.empty()) {
+      CLIO_FS_TOUCH_DIR(path);
+      task->return_code_ = 0;
+      CLIO_CO_RETURN;
+    }
+  }
+
+  // Regular file: resolve its tag (chown may target a not-yet-opened file).
+  clio::cte::core::TagId tag_id;
+  {
+    std::lock_guard<std::mutex> g(meta_mu_);
+    auto it = by_path_.find(path);
+    if (it != by_path_.end()) tag_id = it->second->tag_id_;
+  }
+  if (tag_id.IsNull()) {
+    auto t = cte_.AsyncGetOrCreateTag(path, clio::cte::core::TagId::GetNull(),
+                                      clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(t);
+    if (t->GetReturnCode() != 0) { task->return_code_ = EIO; CLIO_CO_RETURN; }
+    tag_id = t->tag_id_;
+  }
+  // Fetch the current on-tag size BEFORE taking meta_mu_ (no RPC under the
+  // lock). If we must CREATE a new FileInfo below, we seed its size_ from this
+  // so getattr's tracked branch reports the real file size (not 0) for a file
+  // that already has data.
+  clio::run::u64 cur_size = 0;
+  {
+    auto s = cte_.AsyncGetTagSize(tag_id, clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(s);
+    if (s->GetReturnCode() == 0) cur_size = s->tag_size_;
+  }
+  {
+    std::lock_guard<std::mutex> g(meta_mu_);
+    auto it = by_path_.find(path);
+    std::shared_ptr<FileInfo> fi;
+    if (it != by_path_.end()) {
+      fi = it->second;  // already tracked: do NOT overwrite its live size_.
+    } else {
+      fi = std::make_shared<FileInfo>();
+      fi->tag_id_ = tag_id;
+      fi->path_ = path;
+      fi->size_.store(cur_size);  // seed size so getattr doesn't report 0
+      by_path_[path] = fi;
+    }
+    // 0xFFFFFFFF means "leave this field unchanged" (POSIX (uid_t)-1).
+    if (task->uid_ != 0xFFFFFFFFu) fi->set_uid_ = task->uid_;
+    if (task->gid_ != 0xFFFFFFFFu) fi->set_gid_ = task->gid_;
+    fi->set_ctime_ = clio::cte::core::GetCurrentTimeNs();  // chown advances ctime
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;

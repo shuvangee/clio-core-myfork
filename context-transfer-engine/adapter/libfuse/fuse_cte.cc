@@ -206,8 +206,12 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
   if (t->GetReturnCode() != 0 || t->exists_ == 0) {
     return -ENOENT;
   }
-  stbuf->st_uid = getuid();
-  stbuf->st_gid = getgid();
+  // Owner: a prior chown recorded an override (uid_/gid_ != 0xFFFFFFFF);
+  // otherwise report the mounting user's uid/gid (files carry no stored owner).
+  stbuf->st_uid =
+      (t->uid_ != 0xFFFFFFFFu) ? static_cast<uid_t>(t->uid_) : getuid();
+  stbuf->st_gid =
+      (t->gid_ != 0xFFFFFFFFu) ? static_cast<gid_t>(t->gid_) : getgid();
   stbuf->st_ino = static_cast<ino_t>(t->ino_);  // stable inode = packed TagId
   if (t->is_dir_) {
     stbuf->st_mode = S_IFDIR | 0755;
@@ -350,6 +354,21 @@ static int cte_fuse_chmod(const char *path, cte_mode_t mode,
     return -ENOENT;
   }
   return 0;
+}
+
+// chown records a per-file owner uid/gid override in the chimod, surfaced by
+// getattr (files carry no stored POSIX owner otherwise). A uid/gid of
+// (uid_t)-1 == 0xFFFFFFFF means "leave that field unchanged" (POSIX), which is
+// exactly the chimod's "unchanged" sentinel, so no translation is needed.
+static int cte_fuse_chown(const char *path, uid_t uid, gid_t gid,
+                          struct fuse_file_info *fi) {
+  (void)fi;
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncChown(std::string(path),
+                           static_cast<clio::run::u32>(uid),
+                           static_cast<clio::run::u32>(gid));
+  t.Wait();
+  return t->GetReturnCode() == 0 ? 0 : -EIO;
 }
 
 // ============================================================================
@@ -808,6 +827,7 @@ static const struct fuse_operations cte_fuse_ops = {
     .rename = cte_fuse_rename,
     .link = cte_fuse_link,
     .chmod = cte_fuse_chmod,
+    .chown = cte_fuse_chown,
     .truncate = cte_fuse_truncate,
     .open = cte_fuse_open,
     .read = cte_fuse_read,

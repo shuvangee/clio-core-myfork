@@ -113,6 +113,16 @@ class Client : public clio::cte::core::Client {
     return ipc->Send(task);
   }
 
+  clio::run::Future<ChownTask> AsyncChown(const std::string &path,
+                                          clio::run::u32 uid,
+                                          clio::run::u32 gid) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<ChownTask>(clio::run::CreateTaskId(), pool_id_,
+                                        clio::run::PoolQuery::Local(), path, uid,
+                                        gid);
+    return ipc->Send(task);
+  }
+
   clio::run::Future<MkdirTask> AsyncMkdir(const std::string &path) {
     auto *ipc = CLIO_CPU_IPC;
     auto task = ipc->NewTask<MkdirTask>(clio::run::CreateTaskId(), pool_id_,
