@@ -161,6 +161,26 @@ static void cte_fuse_destroy(void *private_data) {
 // Metadata
 // ============================================================================
 
+// Decode a tag timestamp (stored as the two's-complement bits of an i64
+// nanoseconds-since-epoch value in a u64 field) into a POSIX timespec. Using
+// signed floor division makes pre-epoch (negative) times round-trip correctly
+// — an unsigned divide turns e.g. Jan 1 1960 into a huge positive year
+// (generic/258). For normal post-epoch times the value and result are
+// identical to the old unsigned path (remainder is non-negative). tv_nsec is
+// always normalized into [0, 1e9).
+static inline void NsBitsToTimespec(clio::run::u64 bits, time_t &sec,
+                                    long &nsec) {
+  int64_t ns = static_cast<int64_t>(bits);
+  int64_t s = ns / 1000000000LL;
+  int64_t rem = ns % 1000000000LL;
+  if (rem < 0) {
+    s -= 1;
+    rem += 1000000000LL;
+  }
+  sec = static_cast<time_t>(s);
+  nsec = static_cast<long>(rem);
+}
+
 static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
                                  struct fuse_file_info *fi) {
   (void)fi;
@@ -213,19 +233,16 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
   // (last_changed_), mtime = last content change (last_modified_), atime = last
   // access (last_read_). All three are surfaced from the same GetTagSize query.
   if (t->ctime_ != 0) {
-    stbuf->st_ctim.tv_sec = static_cast<time_t>(t->ctime_ / 1000000000ULL);
-    stbuf->st_ctim.tv_nsec = static_cast<long>(t->ctime_ % 1000000000ULL);
+    NsBitsToTimespec(t->ctime_, stbuf->st_ctim.tv_sec, stbuf->st_ctim.tv_nsec);
   }
   // Fall back to ctime when mtime is unknown, so a valid file never reports
   // mtime at the epoch while it has a real ctime (merged from #680).
   clio::run::u64 mtime_ns = (t->mtime_ != 0) ? t->mtime_ : t->ctime_;
   if (mtime_ns != 0) {
-    stbuf->st_mtim.tv_sec = static_cast<time_t>(mtime_ns / 1000000000ULL);
-    stbuf->st_mtim.tv_nsec = static_cast<long>(mtime_ns % 1000000000ULL);
+    NsBitsToTimespec(mtime_ns, stbuf->st_mtim.tv_sec, stbuf->st_mtim.tv_nsec);
   }
   if (t->atime_ != 0) {
-    stbuf->st_atim.tv_sec = static_cast<time_t>(t->atime_ / 1000000000ULL);
-    stbuf->st_atim.tv_nsec = static_cast<long>(t->atime_ % 1000000000ULL);
+    NsBitsToTimespec(t->atime_, stbuf->st_atim.tv_sec, stbuf->st_atim.tv_nsec);
   }
   return 0;
 }
@@ -282,15 +299,19 @@ static int cte_fuse_utimens(const char *path, const cte_timespec_t tv[2],
       flags |= 0x4u;
     } else if (tv[0].tv_nsec != UTIME_OMIT) {
       flags |= 0x1u;
-      atime_ns = static_cast<clio::run::u64>(tv[0].tv_sec) * 1000000000ULL +
-                 static_cast<clio::run::u64>(tv[0].tv_nsec);
+      // Signed arithmetic so pre-epoch times don't wrap (generic/258); stored
+      // as the two's-complement bits, decoded symmetrically in NsBitsToTimespec.
+      atime_ns = static_cast<clio::run::u64>(
+          static_cast<int64_t>(tv[0].tv_sec) * 1000000000LL +
+          static_cast<int64_t>(tv[0].tv_nsec));
     }
     if (tv[1].tv_nsec == UTIME_NOW) {
       flags |= 0x8u;
     } else if (tv[1].tv_nsec != UTIME_OMIT) {
       flags |= 0x2u;
-      mtime_ns = static_cast<clio::run::u64>(tv[1].tv_sec) * 1000000000ULL +
-                 static_cast<clio::run::u64>(tv[1].tv_nsec);
+      mtime_ns = static_cast<clio::run::u64>(
+          static_cast<int64_t>(tv[1].tv_sec) * 1000000000LL +
+          static_cast<int64_t>(tv[1].tv_nsec));
     }
   } else {
     // NULL tv means "set both to now".
