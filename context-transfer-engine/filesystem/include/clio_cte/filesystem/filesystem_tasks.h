@@ -424,6 +424,115 @@ struct ReadlinkTask : public clio::run::Task {
   }
 };
 
+/**
+ * Setxattr: set extended attribute `name_` to `value_` on the file at `path_`.
+ * `value_` may contain NUL bytes (raw byte string). `flags_` carries
+ * XATTR_CREATE (1) / XATTR_REPLACE (2) semantics. Returns errno-style codes
+ * (0 / EEXIST / ENODATA / ENOENT / EIO) in return_code_.
+ */
+struct SetxattrTask : public clio::run::Task {
+  IN clio::run::priv::string path_;   // file path
+  IN clio::run::priv::string name_;   // attribute name
+  IN clio::run::priv::string value_;  // attribute value bytes (may hold NULs)
+  IN clio::run::u32 flags_;           // XATTR_CREATE=1 / XATTR_REPLACE=2
+  SetxattrTask()
+      : clio::run::Task(), path_(CTP_MALLOC), name_(CTP_MALLOC),
+        value_(CTP_MALLOC), flags_(0) {}
+  explicit SetxattrTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                        const clio::run::PoolQuery &pool_query,
+                        const std::string &path, const std::string &name,
+                        const std::string &value, clio::run::u32 flags)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kSetxattr),
+        path_(CTP_MALLOC, path), name_(CTP_MALLOC, name),
+        value_(CTP_MALLOC, value), flags_(flags) {}
+  void Copy(const ctp::ipc::FullPtr<SetxattrTask>& o) {
+    path_ = o->path_; name_ = o->name_; value_ = o->value_; flags_ = o->flags_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(path_, name_, value_, flags_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
+};
+
+/**
+ * Getxattr: read extended attribute `name_` of the file at `path_`. On success
+ * `found_`=1 and `value_` holds the raw bytes; `found_`=0 means the attribute
+ * is absent (adapter maps to -ENODATA). return_code_ is errno-style (0 /
+ * ENOENT).
+ */
+struct GetxattrTask : public clio::run::Task {
+  IN clio::run::priv::string path_;   // file path
+  IN clio::run::priv::string name_;   // attribute name
+  OUT clio::run::priv::string value_;  // attribute value bytes (may hold NULs)
+  OUT clio::run::u32 found_;           // 1 if the attribute exists
+  GetxattrTask()
+      : clio::run::Task(), path_(CTP_MALLOC), name_(CTP_MALLOC),
+        value_(CTP_MALLOC), found_(0) {}
+  explicit GetxattrTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                        const clio::run::PoolQuery &pool_query,
+                        const std::string &path, const std::string &name)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kGetxattr),
+        path_(CTP_MALLOC, path), name_(CTP_MALLOC, name), value_(CTP_MALLOC),
+        found_(0) {}
+  void Copy(const ctp::ipc::FullPtr<GetxattrTask>& o) {
+    path_ = o->path_; name_ = o->name_; value_ = o->value_; found_ = o->found_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(path_, name_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) {
+    Task::SerializeOut(ar); ar(value_, found_);
+  }
+};
+
+/**
+ * Listxattr: list all extended attribute names of the file at `path_`. `names_`
+ * is the NUL-separated concatenation of names, each NUL-terminated (the POSIX
+ * listxattr wire format). return_code_ is errno-style (0 / ENOENT).
+ */
+struct ListxattrTask : public clio::run::Task {
+  IN clio::run::priv::string path_;   // file path
+  OUT clio::run::priv::string names_;  // NUL-terminated name list
+  ListxattrTask() : clio::run::Task(), path_(CTP_MALLOC), names_(CTP_MALLOC) {}
+  explicit ListxattrTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                         const clio::run::PoolQuery &pool_query,
+                         const std::string &path)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kListxattr),
+        path_(CTP_MALLOC, path), names_(CTP_MALLOC) {}
+  void Copy(const ctp::ipc::FullPtr<ListxattrTask>& o) {
+    path_ = o->path_; names_ = o->names_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(path_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) {
+    Task::SerializeOut(ar); ar(names_);
+  }
+};
+
+/**
+ * Removexattr: remove extended attribute `name_` from the file at `path_`.
+ * Returns errno-style codes (0 / ENODATA / ENOENT / EIO) in return_code_.
+ */
+struct RemovexattrTask : public clio::run::Task {
+  IN clio::run::priv::string path_;   // file path
+  IN clio::run::priv::string name_;   // attribute name
+  RemovexattrTask()
+      : clio::run::Task(), path_(CTP_MALLOC), name_(CTP_MALLOC) {}
+  explicit RemovexattrTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                           const clio::run::PoolQuery &pool_query,
+                           const std::string &path, const std::string &name)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kRemovexattr),
+        path_(CTP_MALLOC, path), name_(CTP_MALLOC, name) {}
+  void Copy(const ctp::ipc::FullPtr<RemovexattrTask>& o) {
+    path_ = o->path_; name_ = o->name_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(path_, name_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
+};
+
 /** Readdir: list direct children of a directory. */
 struct ReaddirTask : public clio::run::Task {
   IN clio::run::priv::string path_;

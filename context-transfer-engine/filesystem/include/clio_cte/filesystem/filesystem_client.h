@@ -159,6 +159,43 @@ class Client : public clio::cte::core::Client {
     return ipc->Send(task);
   }
 
+  clio::run::Future<SetxattrTask> AsyncSetxattr(const std::string &path,
+                                                const std::string &name,
+                                                const std::string &value,
+                                                clio::run::u32 flags) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<SetxattrTask>(clio::run::CreateTaskId(), pool_id_,
+                                           clio::run::PoolQuery::Local(), path,
+                                           name, value, flags);
+    return ipc->Send(task);
+  }
+
+  clio::run::Future<GetxattrTask> AsyncGetxattr(const std::string &path,
+                                                const std::string &name) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<GetxattrTask>(clio::run::CreateTaskId(), pool_id_,
+                                           clio::run::PoolQuery::Local(), path,
+                                           name);
+    return ipc->Send(task);
+  }
+
+  clio::run::Future<ListxattrTask> AsyncListxattr(const std::string &path) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<ListxattrTask>(clio::run::CreateTaskId(), pool_id_,
+                                            clio::run::PoolQuery::Local(), path);
+    return ipc->Send(task);
+  }
+
+  clio::run::Future<RemovexattrTask> AsyncRemovexattr(const std::string &path,
+                                                      const std::string &name) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<RemovexattrTask>(clio::run::CreateTaskId(),
+                                              pool_id_,
+                                              clio::run::PoolQuery::Local(),
+                                              path, name);
+    return ipc->Send(task);
+  }
+
   // ---- deferred-append pipeline ----
   /** Kick off (or tick) the periodic local pending-append drain. */
   clio::run::Future<AppendSequenceTask> AsyncAppendSequence(

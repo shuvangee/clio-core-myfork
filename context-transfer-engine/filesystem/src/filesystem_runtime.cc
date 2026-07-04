@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <clio_cte/filesystem/filesystem_runtime.h>
@@ -124,6 +125,54 @@ inline clio::run::u64 InoFromTag(const clio::cte::core::TagId &t) {
   return InoFromPacked((static_cast<clio::run::u64>(t.major_) << 32) |
                        static_cast<clio::run::u64>(t.minor_));
 }
+
+// ---- extended-attribute (xattr) blob (de)serialization ----
+// A file's xattrs are stored as ONE blob under the global xattr tag, named by
+// the file's packed tag id (decimal). Payload = repeated records
+// [u32 name_len][name][u32 val_len][val], little-endian u32 via memcpy (values
+// may hold NULs). Empty/missing blob == no xattrs.
+inline std::string XattrKey(const clio::cte::core::TagId &t) {
+  return std::to_string((static_cast<clio::run::u64>(t.major_) << 32) |
+                        static_cast<clio::run::u64>(t.minor_));
+}
+inline void PutU32(std::string &out, clio::run::u32 v) {
+  char b[4];
+  std::memcpy(b, &v, 4);  // host is little-endian on all supported targets
+  out.append(b, 4);
+}
+inline std::string SerializeXattrs(
+    const std::vector<std::pair<std::string, std::string>> &xa) {
+  std::string out;
+  for (const auto &kv : xa) {
+    PutU32(out, static_cast<clio::run::u32>(kv.first.size()));
+    out.append(kv.first.data(), kv.first.size());
+    PutU32(out, static_cast<clio::run::u32>(kv.second.size()));
+    out.append(kv.second.data(), kv.second.size());
+  }
+  return out;
+}
+inline std::vector<std::pair<std::string, std::string>> DeserializeXattrs(
+    const char *data, size_t len) {
+  std::vector<std::pair<std::string, std::string>> xa;
+  size_t pos = 0;
+  while (pos + 4 <= len) {
+    clio::run::u32 nlen = 0;
+    std::memcpy(&nlen, data + pos, 4);
+    pos += 4;
+    if (pos + nlen > len) break;
+    std::string name(data + pos, nlen);
+    pos += nlen;
+    if (pos + 4 > len) break;
+    clio::run::u32 vlen = 0;
+    std::memcpy(&vlen, data + pos, 4);
+    pos += 4;
+    if (pos + vlen > len) break;
+    std::string val(data + pos, vlen);
+    pos += vlen;
+    xa.emplace_back(std::move(name), std::move(val));
+  }
+  return xa;
+}
 }  // namespace
 
 clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
@@ -148,6 +197,19 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
     CLIO_CO_AWAIT(st);
     if (st->GetReturnCode() == 0) {
       staging_tag_id_ = st->tag_id_;
+    }
+  }
+
+  // Resolve the global xattr-store tag (shared by all files). Each file's
+  // xattrs live in ONE serialized blob here, named by the file's packed tag id,
+  // so they never inflate any file's GetTagSize (st_size). Flat tag name.
+  {
+    auto xt = cte_.AsyncGetOrCreateTag("_clio_xattr_store",
+                                       clio::cte::core::TagId::GetNull(),
+                                       clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(xt);
+    if (xt->GetReturnCode() == 0) {
+      xattr_tag_id_ = xt->tag_id_;
     }
   }
   HLOG(kInfo, "filesystem: Create over CTE core pool {}",
@@ -1052,6 +1114,179 @@ clio::run::TaskResume Runtime::Readlink(clio::run::shared_ptr<ReadlinkTask> &tas
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
+
+// ---- extended attributes (xattr) ----
+// All handlers use a read-modify-write over the file's single xattr blob, which
+// lives under xattr_tag_id_ (NOT the file's own tag) keyed by the file's packed
+// tag id, so xattrs never inflate the file's reported size.
+
+// Resolve `pathvar` to a file tag id `tidvar`; ENOENT-return if it is absent.
+#define CLIO_XATTR_RESOLVE_TAG(pathvar, tidvar)                              \
+  clio::cte::core::TagId tidvar = clio::cte::core::TagId::GetNull();         \
+  {                                                                          \
+    auto _q = cte_.AsyncTagQuery(ExactRe(pathvar), 1,                        \
+                                 clio::run::PoolQuery::Local());             \
+    CLIO_CO_AWAIT(_q);                                                       \
+    if (_q->GetReturnCode() != 0 || _q->results_.empty()) {                 \
+      task->return_code_ = ENOENT;                                          \
+      CLIO_CO_RETURN;                                                       \
+    }                                                                       \
+    clio::run::u64 _packed =                                                \
+        _q->result_ids_.empty() ? 0 : _q->result_ids_[0];                   \
+    tidvar = clio::cte::core::TagId(                                        \
+        static_cast<clio::run::u32>(_packed >> 32),                         \
+        static_cast<clio::run::u32>(_packed & 0xffffffffULL));              \
+  }
+
+// Load the file's xattr map into `xavar` (empty if no blob / read miss).
+#define CLIO_XATTR_LOAD(tidvar, xavar)                                       \
+  std::vector<std::pair<std::string, std::string>> xavar;                    \
+  {                                                                          \
+    std::string _key = XattrKey(tidvar);                                     \
+    clio::run::u64 _len = 0;                                                 \
+    auto _s = cte_.AsyncGetBlobSize(xattr_tag_id_, _key,                     \
+                                    clio::run::PoolQuery::Local());          \
+    CLIO_CO_AWAIT(_s);                                                       \
+    if (_s->GetReturnCode() == 0) { _len = _s->size_; }                      \
+    if (_len > 0) {                                                          \
+      auto *_ipc = CLIO_IPC;                                                 \
+      ctp::ipc::FullPtr<char> _buf = _ipc->AllocateBuffer(_len);             \
+      if (!_buf.IsNull()) {                                                  \
+        auto _g = cte_.AsyncGetBlob(xattr_tag_id_, _key, 0, _len, 0u,        \
+                                    _buf.shm_.template Cast<void>(),         \
+                                    clio::run::PoolQuery::Local());          \
+        CLIO_CO_AWAIT(_g);                                                   \
+        if (_g->GetReturnCode() == 0) {                                      \
+          xavar = DeserializeXattrs(_buf.ptr_, _len);                        \
+        }                                                                    \
+        _ipc->FreeBuffer(_buf);                                             \
+      }                                                                      \
+    }                                                                        \
+  }
+
+// Reserialize `xavar` and write it back over the file's xattr blob (replace).
+#define CLIO_XATTR_STORE(tidvar, xavar)                                      \
+  {                                                                          \
+    std::string _payload = SerializeXattrs(xavar);                           \
+    std::string _key = XattrKey(tidvar);                                     \
+    auto *_ipc = CLIO_IPC;                                                   \
+    clio::run::u64 _len = _payload.size();                                   \
+    ctp::ipc::FullPtr<char> _buf = _ipc->AllocateBuffer(_len ? _len : 1);    \
+    if (_buf.IsNull()) { task->return_code_ = EIO; CLIO_CO_RETURN; }         \
+    if (_len) { std::memcpy(_buf.ptr_, _payload.data(), _len); }             \
+    auto _p = cte_.AsyncPutBlob(xattr_tag_id_, _key, 0, _len,                \
+                                _buf.shm_.template Cast<void>(), -1.0f,       \
+                                clio::cte::core::Context(),                   \
+                                clio::cte::core::kCtePutReplace,              \
+                                clio::run::PoolQuery::Local());              \
+    CLIO_CO_AWAIT(_p);                                                       \
+    bool _ok = (_p->GetReturnCode() == 0);                                   \
+    _ipc->FreeBuffer(_buf);                                                  \
+    if (!_ok) { task->return_code_ = EIO; CLIO_CO_RETURN; }                  \
+  }
+
+clio::run::TaskResume Runtime::Setxattr(clio::run::shared_ptr<SetxattrTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+  std::string name = task->name_.str();
+  std::string value = task->value_.str();
+  CLIO_XATTR_RESOLVE_TAG(path, tid);
+  CLIO_XATTR_LOAD(tid, xa);
+
+  bool present = false;
+  for (auto &kv : xa) {
+    if (kv.first == name) {
+      present = true;
+      // XATTR_CREATE: fail if the attribute already exists.
+      if ((task->flags_ & 0x1u) != 0) {  // XATTR_CREATE
+        task->return_code_ = EEXIST;
+        CLIO_CO_RETURN;
+      }
+      kv.second = value;  // upsert (replace)
+      break;
+    }
+  }
+  if (!present) {
+    // XATTR_REPLACE: fail if the attribute does not already exist.
+    if ((task->flags_ & 0x2u) != 0) {  // XATTR_REPLACE
+      task->return_code_ = ENODATA;
+      CLIO_CO_RETURN;
+    }
+    xa.emplace_back(name, value);
+  }
+
+  CLIO_XATTR_STORE(tid, xa);
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Getxattr(clio::run::shared_ptr<GetxattrTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+  std::string name = task->name_.str();
+  CLIO_XATTR_RESOLVE_TAG(path, tid);
+  CLIO_XATTR_LOAD(tid, xa);
+
+  task->found_ = 0;
+  for (const auto &kv : xa) {
+    if (kv.first == name) {
+      task->value_ = clio::run::priv::string(CTP_MALLOC, kv.second);
+      task->found_ = 1;
+      break;
+    }
+  }
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Listxattr(clio::run::shared_ptr<ListxattrTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+  CLIO_XATTR_RESOLVE_TAG(path, tid);
+  CLIO_XATTR_LOAD(tid, xa);
+
+  std::string names;
+  for (const auto &kv : xa) {
+    names.append(kv.first);
+    names.push_back('\0');
+  }
+  task->names_ = clio::run::priv::string(CTP_MALLOC, names);
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Removexattr(clio::run::shared_ptr<RemovexattrTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+  std::string name = task->name_.str();
+  CLIO_XATTR_RESOLVE_TAG(path, tid);
+  CLIO_XATTR_LOAD(tid, xa);
+
+  bool erased = false;
+  for (auto it = xa.begin(); it != xa.end(); ++it) {
+    if (it->first == name) {
+      xa.erase(it);
+      erased = true;
+      break;
+    }
+  }
+  if (!erased) {
+    task->return_code_ = ENODATA;
+    CLIO_CO_RETURN;
+  }
+
+  CLIO_XATTR_STORE(tid, xa);
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+#undef CLIO_XATTR_RESOLVE_TAG
+#undef CLIO_XATTR_LOAD
+#undef CLIO_XATTR_STORE
 
 clio::run::TaskResume Runtime::Utimens(clio::run::shared_ptr<UtimensTask> &task) {
   CLIO_TASK_BODY_BEGIN

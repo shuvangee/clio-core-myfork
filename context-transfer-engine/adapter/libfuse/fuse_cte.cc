@@ -670,6 +670,76 @@ static int cte_fuse_readlink(const char *path, char *buf, size_t size) {
   return 0;
 }
 
+static int cte_fuse_setxattr(const char *path, const char *name,
+                             const char *value, size_t size, int flags) {
+  // Set xattr `name` on `path`. `value` is raw bytes (may contain NULs), so
+  // preserve its length rather than treating it as a C string. `flags` carries
+  // XATTR_CREATE(1) / XATTR_REPLACE(2), matching the runtime's bit checks.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncSetxattr(std::string(path), std::string(name),
+                              std::string(value, size),
+                              static_cast<unsigned int>(flags));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  return rc == 0 ? 0 : -rc;  // EEXIST/ENODATA/ENOENT/EIO -> negative errno
+}
+
+static int cte_fuse_getxattr(const char *path, const char *name, char *value,
+                             size_t size) {
+  // Read xattr `name` of `path`. Return the value length (POSIX getxattr);
+  // size==0 is a length query. Missing attribute -> -ENODATA.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncGetxattr(std::string(path), std::string(name));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  if (rc != 0) {
+    return -rc;  // ENOENT (file absent)
+  }
+  if (t->found_ == 0) {
+    return -ENODATA;  // attribute not present
+  }
+  std::string val = t->value_.str();
+  size_t len = val.size();
+  if (size == 0) {
+    return static_cast<int>(len);  // length query
+  }
+  if (size < len) {
+    return -ERANGE;
+  }
+  std::memcpy(value, val.data(), len);
+  return static_cast<int>(len);
+}
+
+static int cte_fuse_listxattr(const char *path, char *list, size_t size) {
+  // Return the NUL-separated, NUL-terminated list of xattr names. size==0 is a
+  // length query.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncListxattr(std::string(path));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  if (rc != 0) {
+    return -rc;  // ENOENT
+  }
+  std::string names = t->names_.str();
+  size_t len = names.size();
+  if (size == 0) {
+    return static_cast<int>(len);  // length query
+  }
+  if (size < len) {
+    return -ERANGE;
+  }
+  std::memcpy(list, names.data(), len);
+  return static_cast<int>(len);
+}
+
+static int cte_fuse_removexattr(const char *path, const char *name) {
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncRemovexattr(std::string(path), std::string(name));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());
+  return rc == 0 ? 0 : -rc;  // ENODATA/ENOENT/EIO -> negative errno
+}
+
 static int cte_fuse_rename(const char *from, const char *to,
                            unsigned int flags) {
   // RENAME_NOREPLACE / RENAME_EXCHANGE aren't supported; POSIX replace is.
@@ -746,6 +816,10 @@ static const struct fuse_operations cte_fuse_ops = {
     .flush = cte_fuse_flush,
     .release = cte_fuse_release,
     .fsync = cte_fuse_fsync,
+    .setxattr = cte_fuse_setxattr,
+    .getxattr = cte_fuse_getxattr,
+    .listxattr = cte_fuse_listxattr,
+    .removexattr = cte_fuse_removexattr,
     .readdir = cte_fuse_readdir,
     .init = cte_fuse_init,
     .destroy = cte_fuse_destroy,

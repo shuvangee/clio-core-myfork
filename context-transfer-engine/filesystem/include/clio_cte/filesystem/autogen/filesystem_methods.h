@@ -39,8 +39,12 @@ GLOBAL_CROSS_CONST clio::run::u32 kAppendPlan = 27;       // sort+plan+dispatch 
 GLOBAL_CROSS_CONST clio::run::u32 kUtimens = 28;          // set file atime/mtime
 GLOBAL_CROSS_CONST clio::run::u32 kSymlink = 29;          // create a symlink
 GLOBAL_CROSS_CONST clio::run::u32 kReadlink = 30;         // read a symlink target
+GLOBAL_CROSS_CONST clio::run::u32 kSetxattr = 31;         // set an extended attr
+GLOBAL_CROSS_CONST clio::run::u32 kGetxattr = 32;         // get an extended attr
+GLOBAL_CROSS_CONST clio::run::u32 kListxattr = 33;        // list extended attrs
+GLOBAL_CROSS_CONST clio::run::u32 kRemovexattr = 34;      // remove an extended attr
 
-GLOBAL_CROSS_CONST clio::run::u32 kMaxMethodId = 31;
+GLOBAL_CROSS_CONST clio::run::u32 kMaxMethodId = 35;
 
 inline const std::vector<std::string>& GetMethodNames() {
   static const std::vector<std::string> names = [] {
@@ -69,6 +73,10 @@ inline const std::vector<std::string>& GetMethodNames() {
     v[28] = "Utimens";
     v[29] = "Symlink";
     v[30] = "Readlink";
+    v[31] = "Setxattr";
+    v[32] = "Getxattr";
+    v[33] = "Listxattr";
+    v[34] = "Removexattr";
     return v;
   }();
   return names;

@@ -49,6 +49,10 @@ class Runtime : public clio::run::Container {
   clio::run::TaskResume Link(clio::run::shared_ptr<LinkTask> &task);
   clio::run::TaskResume Symlink(clio::run::shared_ptr<SymlinkTask> &task);
   clio::run::TaskResume Readlink(clio::run::shared_ptr<ReadlinkTask> &task);
+  clio::run::TaskResume Setxattr(clio::run::shared_ptr<SetxattrTask> &task);
+  clio::run::TaskResume Getxattr(clio::run::shared_ptr<GetxattrTask> &task);
+  clio::run::TaskResume Listxattr(clio::run::shared_ptr<ListxattrTask> &task);
+  clio::run::TaskResume Removexattr(clio::run::shared_ptr<RemovexattrTask> &task);
   clio::run::TaskResume Utimens(clio::run::shared_ptr<UtimensTask> &task);
   clio::run::TaskResume Readdir(clio::run::shared_ptr<ReaddirTask> &task);
   clio::run::TaskResume StatSize(clio::run::shared_ptr<StatSizeTask> &task);
@@ -96,6 +100,11 @@ class Runtime : public clio::run::Container {
   // the file's tag) so GetTagSize(file_tag) reports the true file tail,
   // unpolluted by still-unmerged staged appends. Resolved once at Create.
   clio::cte::core::TagId staging_tag_id_ = clio::cte::core::TagId::GetNull();
+  // Global store for per-file extended attributes. Each file's xattrs live in
+  // ONE serialized blob under this tag, named by the file's packed tag id
+  // (decimal string). Kept OUT of the file's own tag so xattrs never inflate
+  // GetTagSize (i.e. the reported st_size). Resolved once at Create.
+  clio::cte::core::TagId xattr_tag_id_ = clio::cte::core::TagId::GetNull();
 
   // ---- per-file logical-size metadata + handle table ----
   struct FileInfo {
