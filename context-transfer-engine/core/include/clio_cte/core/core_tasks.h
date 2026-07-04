@@ -47,6 +47,8 @@
 #include <clio_runtime/bdev/bdev_client.h>
 // Include mutex for BlobInfo prealloc_lock_
 #include <clio_ctp/thread/lock/mutex.h>
+// Include atomic_ref for BlobInfo write_owner_ (per-blob async write lock)
+#include <clio_ctp/types/atomic.h>
 #if CTP_IS_HOST
 #include <yaml-cpp/yaml.h>
 
@@ -772,6 +774,17 @@ struct BlobInfo {
       trace_key_;  // Unique trace ID for linking to trace logs (0 = not traced)
   clio::run::u64 preallocated_size_;  // Total preallocated capacity in bytes
   ctp::Mutex prealloc_lock_;   // Mutex for preallocation
+  // Per-blob async write-serialization token (issue #680 / generic/074).
+  // Concurrent PutBlob/Resize/Truncate tasks for the SAME blob hash to the same
+  // container and interleave on ONE worker across co_await points, racing on
+  // blocks_ (the block layout) and the size read-modify-write — corrupting
+  // data (fsx O_DIRECT mismatches). This token serializes them WITHOUT blocking
+  // the worker thread: a contender busy-polls via `co_await yield()` (see
+  // PutBlobImpl), which is lost-wakeup-proof because it re-checks every worker
+  // iteration. A thread-blocking lock (ctp::Mutex / CoRwLock) CANNOT be used
+  // here — it would deadlock the single worker the instant the holder suspends
+  // at a co_await. 0 == unlocked; otherwise a non-zero per-task owner token.
+  clio::run::u64 write_owner_;
 
   CTP_CROSS_FUN BlobInfo()
       : blob_name_(CLIO_PRIV_ALLOC),
@@ -782,7 +795,8 @@ struct BlobInfo {
         compress_lib_(0),
         compress_preset_(2),
         trace_key_(0),
-        preallocated_size_(0) {
+        preallocated_size_(0),
+        write_owner_(0) {
     prealloc_lock_.Init();
   }
 
@@ -795,7 +809,8 @@ struct BlobInfo {
         compress_lib_(0),
         compress_preset_(2),
         trace_key_(0),
-        preallocated_size_(0) {
+        preallocated_size_(0),
+        write_owner_(0) {
     prealloc_lock_.Init();
   }
 
@@ -809,7 +824,8 @@ struct BlobInfo {
         compress_lib_(0),
         compress_preset_(2),
         trace_key_(0),
-        preallocated_size_(0) {
+        preallocated_size_(0),
+        write_owner_(0) {
     prealloc_lock_.Init();
   }
 #endif
@@ -823,7 +839,8 @@ struct BlobInfo {
         compress_lib_(other.compress_lib_),
         compress_preset_(other.compress_preset_),
         trace_key_(other.trace_key_),
-        preallocated_size_(other.preallocated_size_) {
+        preallocated_size_(other.preallocated_size_),
+        write_owner_(0) {  // a fresh copy is unlocked; never inherit lock state
     prealloc_lock_.Init();
   }
 
@@ -849,7 +866,60 @@ struct BlobInfo {
     }
     return total;
   }
+
+#if CTP_IS_HOST
+  /**
+   * Try to acquire the per-blob write lock for owner token `tok` (must be
+   * non-zero). Returns true if it was free (now held by `tok`) or already held
+   * by `tok` (reentrant, same task). There is NO co_await inside, so this whole
+   * method is atomic with respect to other coroutines on the same worker
+   * (cooperative scheduling only switches at co_await). The atomic_ref makes it
+   * additionally safe if the container is ever serviced from another thread.
+   * @param tok Non-zero per-task owner token (e.g. the Task pointer).
+   * @return true if the caller now holds the lock.
+   */
+  bool TryLockWrite(clio::run::u64 tok) {
+    ctp::ipc::atomic_ref<clio::run::u64> ref(write_owner_);
+    clio::run::u64 expected = 0;
+    if (ref.compare_exchange_strong(expected, tok)) return true;
+    return ref.load() == tok;  // reentrant: already ours
+  }
+
+  /**
+   * Release the per-blob write lock if (and only if) it is held by `tok`.
+   * Synchronous (no co_await), so it is safe to call from a RAII destructor on
+   * any coroutine exit path.
+   * @param tok The owner token used to acquire.
+   */
+  void UnlockWrite(clio::run::u64 tok) {
+    ctp::ipc::atomic_ref<clio::run::u64> ref(write_owner_);
+    clio::run::u64 expected = tok;
+    ref.compare_exchange_strong(expected, 0);
+  }
+#endif  // CTP_IS_HOST
 };
+
+#if CTP_IS_HOST
+/**
+ * RAII release guard for BlobInfo's per-blob write lock. Acquisition is done by
+ * the caller (it needs `co_await yield()` to busy-poll, which cannot live in a
+ * constructor); this guard only guarantees the lock is released on EVERY scope
+ * exit — normal return, early CLIO_CO_RETURN, or a thrown exception — so no
+ * error path can leak the lock and wedge the blob. UnlockWrite is a plain CAS,
+ * legal in a destructor (no co_await).
+ */
+struct BlobWriteLockGuard {
+  BlobInfo *blob_;
+  clio::run::u64 tok_;
+  BlobWriteLockGuard(BlobInfo *blob, clio::run::u64 tok)
+      : blob_(blob), tok_(tok) {}
+  ~BlobWriteLockGuard() {
+    if (blob_ != nullptr) blob_->UnlockWrite(tok_);
+  }
+  BlobWriteLockGuard(const BlobWriteLockGuard &) = delete;
+  BlobWriteLockGuard &operator=(const BlobWriteLockGuard &) = delete;
+};
+#endif  // CTP_IS_HOST
 
 /**
  * Context structure for workflow-aware compression

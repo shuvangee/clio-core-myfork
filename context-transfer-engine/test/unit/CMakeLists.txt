@@ -84,6 +84,13 @@ add_executable(test_concurrent_io_stress
     test_concurrent_io_stress.cc
 )
 
+# Same-blob write-race regression (#680 / xfstests generic/074). Many threads
+# write disjoint regions of ONE shared blob; the per-blob write token must keep
+# each region intact.
+add_executable(test_concurrent_same_blob
+    test_concurrent_same_blob.cc
+)
+
 # GPU-runtime-era CUDA tests were removed when the GPU runtime concept
 # was retired. The kernel→CPU submission path is now exercised by:
 #   - context-runtime/test/unit/gpu/test_gpu_kernel_stress_*
@@ -310,6 +317,21 @@ target_link_libraries(test_concurrent_io_stress
     ${CMAKE_THREAD_LIBS_INIT}
 )
 target_include_directories(test_concurrent_io_stress PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+# Link test_concurrent_same_blob (#680 same-blob write race) - same deps.
+target_link_libraries(test_concurrent_same_blob
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+target_include_directories(test_concurrent_same_blob PRIVATE
     ${CMAKE_SOURCE_DIR}/context-runtime/test
 )
 
@@ -585,6 +607,19 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "regression;cte"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+)
+
+# Regression: concurrent writes to disjoint regions of ONE shared blob must not
+# corrupt the shared block layout (#680 / xfstests generic/074 fsx mismatches).
+add_test(NAME cte_concurrent_same_blob_all
+    COMMAND test_concurrent_same_blob)
+
+set_tests_properties(
+    cte_concurrent_same_blob_all
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout
+        LABELS "regression;concurrent;cte"
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 

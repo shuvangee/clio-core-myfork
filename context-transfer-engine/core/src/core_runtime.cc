@@ -1152,7 +1152,10 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
       CLIO_CO_RETURN;
     }
 
-    // Create blob metadata if new; otherwise remember its current size.
+    // Create blob metadata if new. CheckBlobExists..CreateNewBlob run with no
+    // intervening co_await, so two concurrent puts to a not-yet-existing blob
+    // cannot double-create it: whichever runs its synchronous prefix second
+    // sees the winner's freshly-inserted blob on its own CheckBlobExists.
     clio::run::u64 old_blob_size = 0;
     if (!blob_found) {
       blob_info_ptr = CreateNewBlob(blob_name, tag_id, blob_score);
@@ -1160,9 +1163,33 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
         task->return_code_ = 5;
         CLIO_CO_RETURN;
       }
-    } else {
-      old_blob_size = blob_info_ptr->GetTotalSize();
     }
+
+    // Serialize this blob's read-modify-write against other concurrent
+    // PutBlob/Resize tasks for the SAME blob (issue #680 / generic/074). They
+    // hash to the same container and interleave on ONE worker at every co_await
+    // below (ExtendBlob, the sparse-hole zero-fill, ModifyExistingData), racing
+    // on blocks_ (the block layout) and the size read-modify-write — which
+    // corrupts data (fsx O_DIRECT content mismatches). Acquire this blob's write
+    // token; on contention busy-poll by yielding the worker. The busy-poll is
+    // deliberately lost-wakeup-proof: the waiter re-checks the token every time
+    // the worker re-runs it, so there is no wakeup signal that can be missed and
+    // hang the write path. A thread-blocking lock (ctp::Mutex / CoRwLock) is
+    // unusable here — it would deadlock the single worker the instant the holder
+    // suspends at one of those co_awaits. The guard releases the token on EVERY
+    // exit below (normal completion, early CLIO_CO_RETURN, or a thrown
+    // exception).
+    static constexpr double kBlobWriteLockPollUs = 2050.0;  // ~50us effective throttle (worker periodic ready-check has a 2000us tolerance); avoids the busy-poll hot-spin
+    clio::run::u64 lock_tok = reinterpret_cast<clio::run::u64>(task.get());
+    while (!blob_info_ptr->TryLockWrite(lock_tok)) {
+      CLIO_CO_AWAIT(clio::run::yield(kBlobWriteLockPollUs));
+    }
+    BlobWriteLockGuard blob_write_guard(blob_info_ptr.get(), lock_tok);
+
+    // Read the current size UNDER the write token. If we parked above waiting on
+    // a prior holder, it may have grown the blob while we were suspended, so this
+    // must be read here — never hoisted above the acquire.
+    old_blob_size = blob_info_ptr->GetTotalSize();
 
     // Step 1+2: size the blob to fit the write.
     //  - default (partial modify): grow to cover [offset, offset+size) but
@@ -1350,9 +1377,20 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     // Use the pre-provided data pointer from the task
     ctp::ipc::ShmPtr<> blob_data_ptr = task->blob_data_;
 
+    // Snapshot the block layout BEFORE the read I/O. ReadData co_awaits a bdev
+    // read per block; a concurrent PutBlob/Truncate (holding the per-blob write
+    // token) may ExtendBlob/ResizeBlob and push_back into the SAME blocks_
+    // vector during those awaits, reallocating it and dangling the reference
+    // ReadData iterates — a torn read that fsx (generic/074) flags as an
+    // O_DIRECT content mismatch. Copying here runs in a co_await-free region, so
+    // it is atomic with respect to other tasks on this worker (cooperative
+    // scheduling only switches at co_await); the reader then iterates its own
+    // stable copy. #680 read-vs-write safety.
+    clio::run::priv::vector<BlobBlock> blocks_snapshot(blob_info_ptr->blocks_);
+
     // Step 2: Read data from blob blocks (no lock held during I/O)
     clio::run::u32 read_result = 0;
-    CLIO_CO_AWAIT(ReadData(blob_info_ptr->blocks_, blob_data_ptr, size, offset,
+    CLIO_CO_AWAIT(ReadData(blocks_snapshot, blob_data_ptr, size, offset,
                       read_result));
     if (read_result != 0) {
       task->return_code_ = read_result;
@@ -1552,6 +1590,18 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
       CLIO_CO_RETURN;
     }
 
+    // Serialize against concurrent writes/truncates to the SAME blob (issue
+    // #680 per-blob write token): freeing its blocks under FreeAllBlobBlocks
+    // while a PutBlob iterates blocks_ across a co_await is a use-after-free.
+    // The local shared_ptr keeps this BlobInfo alive past the map erase below,
+    // so releasing the token in the guard destructor stays valid.
+    static constexpr double kBlobWriteLockPollUs = 2050.0;  // ~50us effective throttle (worker periodic ready-check has a 2000us tolerance); avoids the busy-poll hot-spin
+    clio::run::u64 lock_tok = reinterpret_cast<clio::run::u64>(task.get());
+    while (!blob_info_ptr->TryLockWrite(lock_tok)) {
+      CLIO_CO_AWAIT(clio::run::yield(kBlobWriteLockPollUs));
+    }
+    BlobWriteLockGuard blob_write_guard(blob_info_ptr.get(), lock_tok);
+
     // Step 2: Get blob size before deletion for tag size accounting
     clio::run::u64 blob_size = blob_info_ptr->GetTotalSize();
 
@@ -1644,6 +1694,20 @@ clio::run::TaskResume Runtime::TruncateBlob(clio::run::shared_ptr<TruncateBlobTa
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
+    // Serialize against concurrent PutBlob/Truncate for the SAME blob (the
+    // per-blob write token from PutBlobImpl, issue #680 / generic/074): a
+    // truncate and a write racing on blocks_ across the ResizeBlob co_await
+    // corrupt the block layout. Busy-poll the token (lost-wakeup-proof — see
+    // PutBlobImpl); the guard releases it on every exit path.
+    static constexpr double kBlobWriteLockPollUs = 2050.0;  // ~50us effective throttle (worker periodic ready-check has a 2000us tolerance); avoids the busy-poll hot-spin
+    clio::run::u64 lock_tok = reinterpret_cast<clio::run::u64>(task.get());
+    while (!blob_info_ptr->TryLockWrite(lock_tok)) {
+      CLIO_CO_AWAIT(clio::run::yield(kBlobWriteLockPollUs));
+    }
+    BlobWriteLockGuard blob_write_guard(blob_info_ptr.get(), lock_tok);
+
+    // Read sizes UNDER the token — a prior holder we waited on may have resized
+    // the blob while we were parked, so these must not be hoisted above acquire.
     clio::run::u64 old_size = blob_info_ptr->GetTotalSize();
     float blob_score = blob_info_ptr->score_;
 
