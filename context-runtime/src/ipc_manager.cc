@@ -653,7 +653,10 @@ void IpcManager::SetNumSchedQueues(u32 num_sched_queues) {
 
 void IpcManager::AwakenWorker(TaskLane *lane) {
   if (!lane) {
-    HLOG(kWarning, "AwakenWorker: lane is null");
+    // No lane to target — wake every worker so a task parked with no resolvable
+    // owning lane is still re-checked (lost-wakeup safety net).
+    HLOG(kWarning, "AwakenWorker: lane is null; waking all workers");
+    CLIO_WORK_ORCHESTRATOR->AwakenAllWorkers();
     return;
   }
 
@@ -682,7 +685,15 @@ void IpcManager::AwakenWorker(TaskLane *lane) {
            runtime_pid, tid, lane->IsActive(), errno);
     }
   } else {
-    HLOG(kWarning, "AwakenWorker: tid={} (invalid), cannot send signal", tid);
+    // The target lane has no worker tid (only a worker's OWN assigned_lane_
+    // ever gets a tid, so a task parked on any secondary lane reads tid==0).
+    // A targeted signal is impossible, but some worker DOES own this task's
+    // event queue, so wake them all and let the owner re-check and resume the
+    // parked parent. This closes a lost-wakeup that hung sustained O_APPEND
+    // writes (#680 generic/069): a completed PutBlob subtask emplaced its
+    // result on the parent WriteTask's event queue but could not signal, so
+    // the parent slept forever while all workers idled in epoll.
+    CLIO_WORK_ORCHESTRATOR->AwakenAllWorkers();
   }
 }
 
