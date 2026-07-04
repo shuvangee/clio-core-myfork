@@ -14,8 +14,13 @@
 # 2026-07-03 update: generic/089 + generic/100 added after fixing a hard-link
 # unlink bug (unlinking a file's canonical name destroyed its hard links, which
 # spun t_mtab's lock loop forever) + adding a no-op chmod op. generic/208 + 323
-# (aio-dio) are NOT here: they PASS but each runs a fixed 200s race loop, over
-# the 90s CI per-test timeout -- run them in a separate slow lane (timeout>=210s).
+# (aio-dio) are NOT here: they PASS but each runs a fixed long race loop (208 =
+# 200s; 323 = two 60s phases) that clio completes correctly but which exceeds
+# the 90s CI per-test timeout -- run them in a separate slow lane (timeout>=210s;
+# verified 2026-07-04: 323 passes at CLIO_XFS_PERTEST_TIMEOUT=220). Both target
+# KERNEL DIO races a userspace fs can't exhibit, so they add no clio coverage.
+# NOTE: 323 was briefly re-added by mistake (commit 860df359) and removed again
+# here -- do NOT re-add either without a slow lane, or CI will "hang" on them.
 generic/001
 generic/002
 generic/006
@@ -51,7 +56,6 @@ generic/285
 generic/308
 generic/309
 generic/313
-generic/323
 generic/362
 generic/364
 generic/428
