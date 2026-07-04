@@ -19,14 +19,28 @@
 #
 # Failing/hanging scratch tests (tracked, not run in CI):
 #   FAIL: 003 120 344 346 403 452 460 519 615
-#   HANG: 069 129 339 345 347 464 476 551 642 707 750
+#   HANG: 339 345 347 464 707
 # Established 2026-07-03.
+#
+# 2026-07-04 update: the O_APPEND hang class 069/129/476/642 now PASS and are
+# gated below. Root cause was an O(N^2) append path: each tiny O_APPEND
+# allocated a new BlobBlock + burned a 4 KB bdev slab, so a multi-million-int
+# append grew the block list O(N) (O(N^2) read/write scans) and hit ENOSPC.
+# Fixed by BlobBlock capacity_/spare-fill (reuse a block's spare slab) +
+# CLIO_IPC_MODE=SHM in the driver (cross-process 3k->27k ops/s). Verified twice.
+# 551 + 750 remain NOT gated: they no longer hang but CRASH the client mount
+# daemon ("Transport endpoint is not connected") under their much heavier stress
+# (551 = aio-dio-write-verify, 750 = fsstress soak) -- a cross-process SHM
+# transport robustness issue under load, NOT the append fix (embedded fsstress
+# is clean) and NOT the O_APPEND pattern; tracked separately.
 generic/029
 generic/030
+generic/069
 generic/071
 generic/084
 generic/098
 generic/124
+generic/129
 generic/130
 generic/132
 generic/135
@@ -38,11 +52,13 @@ generic/393
 generic/406
 generic/412
 generic/422
+generic/476
 generic/524
 generic/525
 generic/565
 generic/604
 generic/634
+generic/642
 generic/732
 generic/749
 generic/761
