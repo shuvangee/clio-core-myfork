@@ -47,6 +47,8 @@ class Runtime : public clio::run::Container {
   clio::run::TaskResume Rmdir(clio::run::shared_ptr<RmdirTask> &task);
   clio::run::TaskResume Rename(clio::run::shared_ptr<RenameTask> &task);
   clio::run::TaskResume Link(clio::run::shared_ptr<LinkTask> &task);
+  clio::run::TaskResume Symlink(clio::run::shared_ptr<SymlinkTask> &task);
+  clio::run::TaskResume Readlink(clio::run::shared_ptr<ReadlinkTask> &task);
   clio::run::TaskResume Utimens(clio::run::shared_ptr<UtimensTask> &task);
   clio::run::TaskResume Readdir(clio::run::shared_ptr<ReaddirTask> &task);
   clio::run::TaskResume StatSize(clio::run::shared_ptr<StatSizeTask> &task);

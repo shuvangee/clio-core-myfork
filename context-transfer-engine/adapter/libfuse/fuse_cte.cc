@@ -33,6 +33,7 @@
 
 #include "fuse_cte.h"
 
+#include <algorithm>
 #include <climits>
 #include <cstring>
 #include <string>
@@ -211,6 +212,10 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
   if (t->is_dir_) {
     stbuf->st_mode = S_IFDIR | 0755;
     stbuf->st_nlink = 2;
+  } else if (t->is_symlink_) {
+    stbuf->st_mode = S_IFLNK | 0777;
+    stbuf->st_nlink = 1;
+    stbuf->st_size = static_cast<cte_off_t>(t->size_);  // target length
   } else {
     stbuf->st_mode = S_IFREG | 0644;
     // POSIX link count = canonical name (1) + tag-level hard-link aliases.
@@ -635,6 +640,36 @@ static int cte_fuse_link(const char *from, const char *to) {
   return rc == 0 ? 0 : -rc;  // chimod returns errno-style codes
 }
 
+static int cte_fuse_symlink(const char *target, const char *path) {
+  // Create a symlink at `path` pointing at `target`. The chimod stores the
+  // target string in a reserved marker blob under `path`'s tag.
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncSymlink(std::string(target), std::string(path));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());  // 0/EEXIST/EIO
+  return rc == 0 ? 0 : -rc;  // chimod returns errno-style codes
+}
+
+static int cte_fuse_readlink(const char *path, char *buf, size_t size) {
+  // Read the symlink target into `buf` (NUL-terminated). FUSE readlink returns
+  // 0 on success (not the length).
+  if (size == 0) {
+    return -EINVAL;
+  }
+  auto *cfs = CLIO_CFS_CLIENT;
+  auto t = cfs->AsyncReadlink(std::string(path));
+  t.Wait();
+  int rc = static_cast<int>(t->GetReturnCode());  // 0/ENOENT/EINVAL
+  if (rc != 0) {
+    return -rc;
+  }
+  std::string target = t->target_.str();
+  size_t n = std::min(target.size(), size - 1);
+  std::memcpy(buf, target.data(), n);
+  buf[n] = '\0';
+  return 0;
+}
+
 static int cte_fuse_rename(const char *from, const char *to,
                            unsigned int flags) {
   // RENAME_NOREPLACE / RENAME_EXCHANGE aren't supported; POSIX replace is.
@@ -695,9 +730,11 @@ static int cte_fuse_statfs(const char *path, cte_statvfs_t *stbuf) {
 
 static const struct fuse_operations cte_fuse_ops = {
     .getattr = cte_fuse_getattr,
+    .readlink = cte_fuse_readlink,
     .mkdir = cte_fuse_mkdir,
     .unlink = cte_fuse_unlink,
     .rmdir = cte_fuse_rmdir,
+    .symlink = cte_fuse_symlink,
     .rename = cte_fuse_rename,
     .link = cte_fuse_link,
     .chmod = cte_fuse_chmod,

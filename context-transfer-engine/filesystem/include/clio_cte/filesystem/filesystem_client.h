@@ -143,6 +143,22 @@ class Client : public clio::cte::core::Client {
     return ipc->Send(task);
   }
 
+  clio::run::Future<SymlinkTask> AsyncSymlink(const std::string &target,
+                                              const std::string &path) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<SymlinkTask>(clio::run::CreateTaskId(), pool_id_,
+                                          clio::run::PoolQuery::Local(), target,
+                                          path);
+    return ipc->Send(task);
+  }
+
+  clio::run::Future<ReadlinkTask> AsyncReadlink(const std::string &path) {
+    auto *ipc = CLIO_CPU_IPC;
+    auto task = ipc->NewTask<ReadlinkTask>(clio::run::CreateTaskId(), pool_id_,
+                                           clio::run::PoolQuery::Local(), path);
+    return ipc->Send(task);
+  }
+
   // ---- deferred-append pipeline ----
   /** Kick off (or tick) the periodic local pending-append drain. */
   clio::run::Future<AppendSequenceTask> AsyncAppendSequence(

@@ -37,8 +37,10 @@ GLOBAL_CROSS_CONST clio::run::u32 kAppendCollect = 25;    // ManyToOne collect (
 GLOBAL_CROSS_CONST clio::run::u32 kAppendExecution = 26;  // merge a plan slice into pages
 GLOBAL_CROSS_CONST clio::run::u32 kAppendPlan = 27;       // sort+plan+dispatch (suspendable)
 GLOBAL_CROSS_CONST clio::run::u32 kUtimens = 28;          // set file atime/mtime
+GLOBAL_CROSS_CONST clio::run::u32 kSymlink = 29;          // create a symlink
+GLOBAL_CROSS_CONST clio::run::u32 kReadlink = 30;         // read a symlink target
 
-GLOBAL_CROSS_CONST clio::run::u32 kMaxMethodId = 29;
+GLOBAL_CROSS_CONST clio::run::u32 kMaxMethodId = 31;
 
 inline const std::vector<std::string>& GetMethodNames() {
   static const std::vector<std::string> names = [] {
@@ -65,6 +67,8 @@ inline const std::vector<std::string>& GetMethodNames() {
     v[26] = "AppendExecution";
     v[27] = "AppendPlan";
     v[28] = "Utimens";
+    v[29] = "Symlink";
+    v[30] = "Readlink";
     return v;
   }();
   return names;

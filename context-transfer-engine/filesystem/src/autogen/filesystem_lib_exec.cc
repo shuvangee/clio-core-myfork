@@ -35,7 +35,9 @@ namespace clio::cte::filesystem {
   X(kAppendCollect, AppendCollectTask, AppendCollect)       \
   X(kAppendExecution, AppendExecutionTask, AppendExecution) \
   X(kAppendPlan, AppendPlanTask, AppendPlan)                \
-  X(kUtimens, UtimensTask, Utimens)
+  X(kUtimens, UtimensTask, Utimens)   \
+  X(kSymlink, SymlinkTask, Symlink)   \
+  X(kReadlink, ReadlinkTask, Readlink)
 
 void Runtime::Init(const clio::run::PoolId &pool_id, const std::string &pool_name,
                    clio::run::u32 container_id) {

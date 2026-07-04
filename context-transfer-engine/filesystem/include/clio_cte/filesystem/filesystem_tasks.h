@@ -245,25 +245,26 @@ struct GetattrTask : public clio::run::Task {
   OUT clio::run::u64 ctime_;   // tag change-time (ns); 0 if unknown
   OUT clio::run::u64 mtime_;   // tag modify-time (ns); 0 if unknown
   OUT clio::run::u64 atime_;   // tag access-time (ns); 0 if unknown
+  OUT clio::run::u32 is_symlink_;  // 1 if the entry is a symlink (S_IFLNK)
   GetattrTask()
       : clio::run::Task(), path_(CTP_MALLOC), exists_(0), is_dir_(0), size_(0),
-        ino_(0), ctime_(0), mtime_(0), atime_(0) {}
+        ino_(0), ctime_(0), mtime_(0), atime_(0), is_symlink_(0) {}
   explicit GetattrTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
                        const clio::run::PoolQuery &pool_query, const std::string &path)
       : clio::run::Task(task_id, pool_id, pool_query, Method::kGetattr),
         path_(CTP_MALLOC, path), exists_(0), is_dir_(0), size_(0), ino_(0),
-        ctime_(0), mtime_(0), atime_(0) {}
+        ctime_(0), mtime_(0), atime_(0), is_symlink_(0) {}
   void Copy(const ctp::ipc::FullPtr<GetattrTask>& o) {
     path_ = o->path_; exists_ = o->exists_; is_dir_ = o->is_dir_;
     size_ = o->size_; ino_ = o->ino_; ctime_ = o->ctime_;
-    mtime_ = o->mtime_; atime_ = o->atime_;
+    mtime_ = o->mtime_; atime_ = o->atime_; is_symlink_ = o->is_symlink_;
   }
   template <typename Ar> void SerializeIn(Ar &ar) {
     Task::SerializeIn(ar); ar(path_);
   }
   template <typename Ar> void SerializeOut(Ar &ar) {
     Task::SerializeOut(ar);
-    ar(exists_, is_dir_, size_, ino_, ctime_, mtime_, atime_);
+    ar(exists_, is_dir_, size_, ino_, ctime_, mtime_, atime_, is_symlink_);
   }
 };
 
@@ -375,6 +376,52 @@ struct LinkTask : public clio::run::Task {
     Task::SerializeIn(ar); ar(target_, link_);
   }
   template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
+};
+
+/**
+ * Symlink: create a symbolic link at `path_` whose target string is `target_`.
+ * The symlink is a CTE tag at `path_` carrying a reserved marker blob that
+ * stores the target bytes. Returns errno-style codes (0 / EEXIST / EIO).
+ */
+struct SymlinkTask : public clio::run::Task {
+  IN clio::run::priv::string target_;  // link target string (contents)
+  IN clio::run::priv::string path_;    // path of the new symlink
+  SymlinkTask() : clio::run::Task(), target_(CTP_MALLOC), path_(CTP_MALLOC) {}
+  explicit SymlinkTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                       const clio::run::PoolQuery &pool_query,
+                       const std::string &target, const std::string &path)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kSymlink),
+        target_(CTP_MALLOC, target), path_(CTP_MALLOC, path) {}
+  void Copy(const ctp::ipc::FullPtr<SymlinkTask>& o) {
+    target_ = o->target_; path_ = o->path_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(target_, path_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
+};
+
+/**
+ * Readlink: read the target string of the symlink at `path_`. Returns the
+ * bytes in `target_`; errno-style codes (0 / ENOENT / EINVAL) in return_code_.
+ */
+struct ReadlinkTask : public clio::run::Task {
+  IN clio::run::priv::string path_;    // path of the symlink
+  OUT clio::run::priv::string target_;  // resolved target string
+  ReadlinkTask() : clio::run::Task(), path_(CTP_MALLOC), target_(CTP_MALLOC) {}
+  explicit ReadlinkTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
+                        const clio::run::PoolQuery &pool_query, const std::string &path)
+      : clio::run::Task(task_id, pool_id, pool_query, Method::kReadlink),
+        path_(CTP_MALLOC, path), target_(CTP_MALLOC) {}
+  void Copy(const ctp::ipc::FullPtr<ReadlinkTask>& o) {
+    path_ = o->path_; target_ = o->target_;
+  }
+  template <typename Ar> void SerializeIn(Ar &ar) {
+    Task::SerializeIn(ar); ar(path_);
+  }
+  template <typename Ar> void SerializeOut(Ar &ar) {
+    Task::SerializeOut(ar); ar(target_);
+  }
 };
 
 /** Readdir: list direct children of a directory. */

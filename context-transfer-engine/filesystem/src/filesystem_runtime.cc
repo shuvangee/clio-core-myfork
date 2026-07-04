@@ -74,6 +74,10 @@ inline std::string ParentDir(const std::string &p) {
 // and just bumps the tag's mtime/ctime without touching any data.
 inline const char *TsTouchBlob() { return "__clio_ts_touch__"; }
 
+// Reserved blob under a symlink's tag holding the link target string. Its
+// presence (non-empty) is what marks a tag as a symlink (S_IFLNK) at getattr.
+inline const char *SymlinkMarker() { return "__clio_symlink__"; }
+
 // Bump a directory's mtime/ctime after a child is added or removed (POSIX
 // updates the parent dir's times on create/unlink/rename/mkdir/rmdir/link).
 // Resolves the dir's tag and stamps it via a no-op truncate of a sentinel blob
@@ -562,6 +566,16 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
       task->mtime_ = s->mtime_;
       task->atime_ = s->atime_;
     }
+    // Symlink probe: only in the exact-file branch (one extra RPC per file
+    // stat). A tag carrying the reserved marker blob is a symlink; its size is
+    // the target length (S_IFLNK). Non-symlinks pay one GetBlobSize miss.
+    auto sm = cte_.AsyncGetBlobSize(tid, SymlinkMarker(),
+                                    clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(sm);
+    if (sm->GetReturnCode() == 0 && sm->size_ > 0) {
+      task->is_symlink_ = 1;
+      task->size_ = sm->size_;
+    }
   } else {
     task->exists_ = 0; task->is_dir_ = 0; task->size_ = 0;
   }
@@ -929,6 +943,112 @@ clio::run::TaskResume Runtime::Link(clio::run::shared_ptr<LinkTask> &task) {
   } else {
     task->return_code_ = ENOENT;
   }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Symlink(clio::run::shared_ptr<SymlinkTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string target = task->target_.str();
+  std::string path = StripTrailingSlash(task->path_.str());
+
+  // A symlink must not land on an existing name.
+  {
+    auto q = cte_.AsyncTagQuery(ExactRe(path), 1, clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(q);
+    if (q->GetReturnCode() == 0 && !q->results_.empty()) {
+      task->return_code_ = EEXIST;
+      CLIO_CO_RETURN;
+    }
+  }
+
+  // Create the symlink's tag at `path` (exactly like a regular file's tag).
+  clio::cte::core::TagId tag_id = clio::cte::core::TagId::GetNull();
+  {
+    auto t = cte_.AsyncGetOrCreateTag(path, clio::cte::core::TagId::GetNull(),
+                                      clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(t);
+    if (t->GetReturnCode() != 0) {
+      task->return_code_ = EIO;
+      CLIO_CO_RETURN;
+    }
+    tag_id = t->tag_id_;
+  }
+
+  // Store the target string in the reserved marker blob under the tag.
+  auto *ipc = CLIO_IPC;
+  clio::run::u64 len = target.size();
+  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(len);
+  if (buf.IsNull()) {
+    task->return_code_ = EIO;
+    CLIO_CO_RETURN;
+  }
+  std::memcpy(buf.ptr_, target.data(), len);
+  auto p = cte_.AsyncPutBlob(tag_id, SymlinkMarker(), 0, len,
+                             buf.shm_.template Cast<void>(), -1.0f,
+                             clio::cte::core::Context(), 0u,
+                             clio::run::PoolQuery::Local());
+  CLIO_CO_AWAIT(p);
+  bool ok = (p->GetReturnCode() == 0);
+  ipc->FreeBuffer(buf);
+  if (!ok) {
+    task->return_code_ = EIO;
+    CLIO_CO_RETURN;
+  }
+
+  CLIO_FS_TOUCH_DIR(ParentDir(path));  // new symlink => parent dir mtime/ctime
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::Readlink(clio::run::shared_ptr<ReadlinkTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  std::string path = StripTrailingSlash(task->path_.str());
+
+  // Resolve the tag at `path`.
+  auto q = cte_.AsyncTagQuery(ExactRe(path), 1, clio::run::PoolQuery::Local());
+  CLIO_CO_AWAIT(q);
+  if (q->GetReturnCode() != 0 || q->results_.empty()) {
+    task->return_code_ = ENOENT;
+    CLIO_CO_RETURN;
+  }
+  clio::run::u64 packed = q->result_ids_.empty() ? 0 : q->result_ids_[0];
+  clio::cte::core::TagId tid(static_cast<clio::run::u32>(packed >> 32),
+                             static_cast<clio::run::u32>(packed & 0xffffffffULL));
+
+  // The marker blob holds the target string; its size is the target length.
+  clio::run::u64 len = 0;
+  {
+    auto s = cte_.AsyncGetBlobSize(tid, SymlinkMarker(),
+                                   clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(s);
+    if (s->GetReturnCode() == 0) {
+      len = s->size_;
+    }
+  }
+  if (len == 0) {
+    task->return_code_ = EINVAL;  // not a symlink (no marker)
+    CLIO_CO_RETURN;
+  }
+
+  auto *ipc = CLIO_IPC;
+  ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(len);
+  if (buf.IsNull()) {
+    task->return_code_ = EIO;
+    CLIO_CO_RETURN;
+  }
+  auto g = cte_.AsyncGetBlob(tid, SymlinkMarker(), 0, len, 0u,
+                             buf.shm_.template Cast<void>(),
+                             clio::run::PoolQuery::Local());
+  CLIO_CO_AWAIT(g);
+  bool ok = (g->GetReturnCode() == 0);
+  if (ok) {
+    task->target_ = clio::run::priv::string(
+        CTP_MALLOC, std::string(buf.ptr_, len));
+  }
+  ipc->FreeBuffer(buf);
+  task->return_code_ = ok ? 0 : EIO;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
