@@ -478,11 +478,19 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
           task->atime_ = s->atime_;
         }
       }
-      // utimens overrides win over the natural tag timestamps until the next
-      // write/truncate clears them.
-      if (ov_ctime != 0) task->ctime_ = ov_ctime;
+      // utimens atime/mtime overrides win over the natural tag timestamps until
+      // the next write/truncate clears them (utimens can set those to arbitrary,
+      // even past, values).
       if (ov_mtime != 0) task->mtime_ = ov_mtime;
       if (ov_atime != 0) task->atime_ = ov_atime;
+      // ctime, however, can ONLY advance: POSIX ties it to the last metadata
+      // change and forbids setting it to an arbitrary value. The utimens
+      // override records the ctime bump at utimens time, but a later metadata op
+      // (e.g. adding/removing a hard link) advances the tag's live last_changed_
+      // beyond it — so take the max. Letting the frozen override win instead
+      // masked those real ctime changes (generic/755: ctime unchanged after
+      // unlinking a hard link).
+      if (ov_ctime > task->ctime_) task->ctime_ = ov_ctime;
       task->return_code_ = 0;
       CLIO_CO_RETURN;
     }
