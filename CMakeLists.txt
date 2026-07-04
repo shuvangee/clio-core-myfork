@@ -181,6 +181,8 @@ option(CLIO_CTE_ENABLE_HDF5_VOL "Enable HDF5 VOL connector (requires HDF5 >= 1.1
 # CAE (context-assimilation-engine) Options
 #------------------------------------------------------------------------------
 option(CAE_ENABLE_GLOBUS "Enable Globus transfer support in CAE" OFF)
+option(CAE_ENABLE_S3 "Enable Amazon S3 (s3://) import in CAE" OFF)
+option(CAE_ENABLE_GCS "Enable Google Cloud Storage (gs://) import in CAE" OFF)
 # LLM labeling/summary + semantic-search features and their integration tests
 # require a running Ollama service. OFF by default so default builds don't
 # build or run them without Ollama.
@@ -872,6 +874,37 @@ if(CLIO_ENABLE_GOOGLE_CLOUD AND NOT Poco_FOUND)
 endif()
 if(CLIO_ENABLE_GOOGLE_CLOUD)
   message(STATUS "Google Cloud Storage bdev support: ENABLED (Poco found)")
+endif()
+
+# AWS SDK for C++ (optional - for the CAE S3 assimilator, s3://). Reuses the
+# same dependency the bdev S3 transport links (aws-cpp-sdk-s3/-core). If the
+# option is requested but the SDK isn't found, warn and disable rather than
+# fail the configure (mirrors the CAE Globus dependency check).
+if(CAE_ENABLE_S3)
+  find_package(AWSSDK COMPONENTS s3 QUIET)
+  if(AWSSDK_FOUND)
+    message(STATUS "found AWS SDK for C++ (CAE S3 support: ENABLED)")
+  else()
+    message(WARNING "CAE_ENABLE_S3 is ON but the AWS SDK for C++ (component s3) "
+                    "was not found. S3 import will be disabled. "
+                    "Install aws-sdk-cpp to enable it.")
+    set(CAE_ENABLE_S3 OFF)
+  endif()
+endif()
+
+# google-cloud-cpp (optional - for the CAE GCS assimilator, gs://). A new
+# optional dependency (the storage component). If requested but not found,
+# warn and disable rather than fail the configure.
+if(CAE_ENABLE_GCS)
+  find_package(google_cloud_cpp_storage QUIET)
+  if(google_cloud_cpp_storage_FOUND)
+    message(STATUS "found google-cloud-cpp storage (CAE GCS support: ENABLED)")
+  else()
+    message(WARNING "CAE_ENABLE_GCS is ON but google-cloud-cpp (storage "
+                    "component) was not found. GCS import will be disabled. "
+                    "Install google-cloud-cpp to enable it.")
+    set(CAE_ENABLE_GCS OFF)
+  endif()
 endif()
 
 if (CLIO_CTE_ENABLE_ADIOS2_ADAPTER OR CLIO_CORE_ENABLE_GRAY_SCOTT)
