@@ -83,3 +83,16 @@ generic/729
 generic/736
 generic/755
 generic/763
+# 2026-07-04 update: added 9 more tests confirmed passing across two runs after
+# the same-blob concurrency + hard-link ctime fixes (#680). Metadata/timestamp
+# coverage: 003/120 (atime), 023 (fsync dir), 355/356/357/358 (chown/setuid on
+# write/truncate), 631/636 (rename).
+generic/003
+generic/023
+generic/120
+generic/355
+generic/356
+generic/357
+generic/358
+generic/631
+generic/636
