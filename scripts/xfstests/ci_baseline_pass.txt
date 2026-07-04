@@ -88,7 +88,6 @@ generic/763
 # coverage: 003/120 (atime), 023 (fsync dir), 355/356/357/358 (chown/setuid on
 # write/truncate), 631/636 (rename).
 generic/003
-generic/023
 generic/120
 generic/355
 generic/356
@@ -96,3 +95,32 @@ generic/357
 generic/358
 generic/631
 generic/636
+# 2026-07-04 update: symlink/readlink support added (commit 73b8ba1) unblocks
+# 24 previously-notrun _require_symlinks tests, all passing across two runs.
+# generic/023 (renameat2) MOVED OUT: it was only "passing" because symlink()
+# was unimplemented (its symlink sub-cases were skipped); with symlinks it
+# exercises symlink+tree renames that hit rename-overwrite bugs (tracked).
+generic/005
+generic/024
+generic/025
+generic/062
+generic/067
+generic/078
+generic/109
+generic/294
+generic/306
+generic/348
+generic/360
+generic/397
+generic/399
+generic/401
+generic/423
+generic/440
+generic/479
+generic/556
+generic/597
+generic/690
+generic/754
+generic/772
+generic/779
+generic/780
