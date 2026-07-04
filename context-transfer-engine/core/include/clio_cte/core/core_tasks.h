@@ -35,6 +35,7 @@
 #define WRPCTE_CORE_TASKS_H_
 
 #include <algorithm>
+#include <cassert>
 
 #include <clio_runtime/clio_runtime.h>
 #include <clio_cte/core/autogen/core_methods.h>
@@ -785,6 +786,12 @@ struct BlobInfo {
   // here — it would deadlock the single worker the instant the holder suspends
   // at a co_await. 0 == unlocked; otherwise a non-zero per-task owner token.
   clio::run::u64 write_owner_;
+  // Maintained mirror of sum(blocks_[i].size_). GetTotalSize() returns this in
+  // O(1) instead of an O(blocks) sum; every blocks_ mutation MUST keep it in
+  // sync (ExtendBlob updates it incrementally; cold paths call
+  // RecomputeTotalSize()). Without it, a file built by millions of tiny
+  // O_APPEND writes pays an O(blocks) sum on every put -> O(N^2) (generic/069).
+  clio::run::u64 total_size_cache_;
 
   CTP_CROSS_FUN BlobInfo()
       : blob_name_(CLIO_PRIV_ALLOC),
@@ -796,7 +803,8 @@ struct BlobInfo {
         compress_preset_(2),
         trace_key_(0),
         preallocated_size_(0),
-        write_owner_(0) {
+        write_owner_(0),
+        total_size_cache_(0) {
     prealloc_lock_.Init();
   }
 
@@ -810,7 +818,8 @@ struct BlobInfo {
         compress_preset_(2),
         trace_key_(0),
         preallocated_size_(0),
-        write_owner_(0) {
+        write_owner_(0),
+        total_size_cache_(0) {
     prealloc_lock_.Init();
   }
 
@@ -825,7 +834,8 @@ struct BlobInfo {
         compress_preset_(2),
         trace_key_(0),
         preallocated_size_(0),
-        write_owner_(0) {
+        write_owner_(0),
+        total_size_cache_(0) {
     prealloc_lock_.Init();
   }
 #endif
@@ -840,7 +850,8 @@ struct BlobInfo {
         compress_preset_(other.compress_preset_),
         trace_key_(other.trace_key_),
         preallocated_size_(other.preallocated_size_),
-        write_owner_(0) {  // a fresh copy is unlocked; never inherit lock state
+        write_owner_(0),  // a fresh copy is unlocked; never inherit lock state
+        total_size_cache_(other.total_size_cache_) {
     prealloc_lock_.Init();
   }
 
@@ -855,16 +866,36 @@ struct BlobInfo {
       compress_preset_ = other.compress_preset_;
       trace_key_ = other.trace_key_;
       preallocated_size_ = other.preallocated_size_;
+      total_size_cache_ = other.total_size_cache_;
     }
     return *this;
   }
 
-  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
+  // Authoritative O(blocks) sum; the source of truth for total_size_cache_.
+  CTP_CROSS_FUN clio::run::u64 ComputeTotalSizeSlow() const {
     clio::run::u64 total = 0;
     for (size_t i = 0; i < blocks_.size(); ++i) {
       total += blocks_[i].size_;
     }
     return total;
+  }
+
+  // Reset the cache to the authoritative sum. Call after any blocks_ mutation
+  // that does not update the cache incrementally (Resize/Truncate/WAL replay/
+  // restore) -- these are cold paths where the O(blocks) recompute is fine.
+  CTP_CROSS_FUN void RecomputeTotalSize() {
+    total_size_cache_ = ComputeTotalSizeSlow();
+  }
+
+  // O(1) total size. Returns the maintained cache; a debug/sanitizer build
+  // asserts it still equals the authoritative sum so any missed mutation site
+  // is caught during testing before it can corrupt a size in release.
+  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
+#if !defined(NDEBUG) && CTP_IS_HOST
+    assert(ComputeTotalSizeSlow() == total_size_cache_ &&
+           "BlobInfo::total_size_cache_ drifted from sum(blocks_)");
+#endif
+    return total_size_cache_;
   }
 
 #if CTP_IS_HOST

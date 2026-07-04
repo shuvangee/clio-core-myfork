@@ -1190,6 +1190,14 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     // a prior holder, it may have grown the blob while we were suspended, so this
     // must be read here — never hoisted above the acquire.
     old_blob_size = blob_info_ptr->GetTotalSize();
+    // Block count BEFORE the extend below. For a tail write (offset >=
+    // old_blob_size) that goes through ExtendBlob — which only push_backs new
+    // blocks, leaving blocks[0..old_num_blocks) untouched — the written region
+    // starts at block index old_num_blocks, whose first byte is at blob offset
+    // old_blob_size. ModifyExistingData can then skip rescanning the existing
+    // blocks (the O(N^2) source for millions of tiny appends, generic/069). NOT
+    // valid for kCtePutReplace, which rebuilds blocks_ wholesale via ResizeBlob.
+    const size_t old_num_blocks = blob_info_ptr->blocks_.size();
 
     // Step 1+2: size the blob to fit the write.
     //  - default (partial modify): grow to cover [offset, offset+size) but
@@ -1214,6 +1222,16 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
       task->return_code_ = 10 + alloc_result;
       CLIO_CO_RETURN;
     }
+
+    // Tail-write fast path: a write landing at/after the pre-extend end went
+    // through the append-only ExtendBlob, so ModifyExistingData may start its
+    // block walk at (old_num_blocks, old_blob_size) instead of block 0. The
+    // hole-fill and data writes below both target [old_blob_size, ...), so the
+    // same hint serves both. (0,0) preserves the full-scan default otherwise.
+    const bool tail_write =
+        !(task->flags_ & kCtePutReplace) && offset >= old_blob_size;
+    const size_t hint_idx = tail_write ? old_num_blocks : 0;
+    const size_t hint_off = tail_write ? old_blob_size : 0;
 
     // WAL: log all current blocks (full replacement semantics)
     if (!blob_txn_logs_.empty() && !blob_info_ptr->blocks_.empty()) {
@@ -1253,7 +1271,8 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
       clio::run::u32 zero_result = 0;
       CLIO_CO_AWAIT(ModifyExistingData(blob_info_ptr->blocks_,
                                   zbuf.shm_.template Cast<void>(), hole,
-                                  old_blob_size, zero_result));
+                                  old_blob_size, zero_result, hint_idx,
+                                  hint_off));
       ipc_mgr->FreeBuffer(zbuf);
       if (zero_result != 0) {
         task->return_code_ = 20 + zero_result;
@@ -1264,7 +1283,7 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     // Step 3: ModifyExistingData — write data to blocks
     clio::run::u32 write_result = 0;
     CLIO_CO_AWAIT(ModifyExistingData(blob_info_ptr->blocks_, blob_data, size, offset,
-                                write_result));
+                                write_result, hint_idx, hint_off));
     if (write_result != 0) {
       task->return_code_ = 20 + write_result;
       CLIO_CO_RETURN;
@@ -2974,6 +2993,7 @@ clio::run::TaskResume Runtime::FlushData(clio::run::shared_ptr<FlushDataTask> &t
 
     // Update blob blocks to only keep nonvolatile blocks
     blob_info_ptr->blocks_ = nonvolatile_blocks;
+    blob_info_ptr->RecomputeTotalSize();  // blocks_ replaced: resync size cache
 
     // Step 3: Re-put data using AsyncPutBlob with persistence context
     Context flush_ctx;
@@ -3252,6 +3272,7 @@ void Runtime::ReplayTransactionLogs() {
                             tb.size_);
             blob_info_ptr->blocks_.push_back(block);
           }
+          blob_info_ptr->RecomputeTotalSize();  // blocks_ rebuilt: resync cache
         }
         blobs_replayed++;
 
@@ -3264,6 +3285,7 @@ void Runtime::ReplayTransactionLogs() {
         std::shared_ptr<BlobInfo> blob_info_ptr = tag_blob_name_to_info_.get(composite_key);
         if (blob_info_ptr) {
           blob_info_ptr->blocks_.clear();
+          blob_info_ptr->total_size_cache_ = 0;  // blocks_ cleared
         }
         blobs_replayed++;
 
@@ -3560,10 +3582,17 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
   // Error condition: if we've exhausted all targets but still have remaining
   // space
   if (remaining_to_allocate > 0) {
+    // Partial allocation left blocks_ inconsistent; resync the size cache from
+    // the authoritative sum before bailing (cold error path).
+    blob_info.RecomputeTotalSize();
     error_code = 3;
     CLIO_CO_RETURN;
   }
 
+  // Success: we allocated exactly `additional_size`, so the blob now spans
+  // required_size (== offset + size). Update the O(1) size cache incrementally
+  // instead of re-summing every block -- this is what keeps append O(1).
+  blob_info.total_size_cache_ = required_size;
   error_code = 0;  // Success
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -3635,6 +3664,9 @@ clio::run::TaskResume Runtime::ResizeBlob(BlobInfo &blob_info, clio::run::u64 ne
   for (auto &b : keep) {
     blob_info.blocks_.push_back(b);
   }
+  // The kept blocks span exactly [0, new_size) (the boundary block was trimmed),
+  // so the O(1) size cache is precisely new_size.
+  blob_info.total_size_cache_ = new_size;
 
   // Free the dropped blocks, grouped by pool, and credit remaining_space_
   // (mirrors FreeAllBlobBlocks).
@@ -3680,7 +3712,8 @@ clio::run::TaskResume Runtime::ResizeBlob(BlobInfo &blob_info, clio::run::u64 ne
 
 clio::run::TaskResume Runtime::ModifyExistingData(
     const clio::run::priv::vector<BlobBlock> &blocks, ctp::ipc::ShmPtr<> data, size_t data_size,
-    size_t data_offset_in_blob, clio::run::u32 &error_code) {
+    size_t data_offset_in_blob, clio::run::u32 &error_code,
+    size_t start_block_idx, size_t start_block_offset_in_blob) {
 #ifdef CLIO_ENABLE_BOOST_COROUTINES
   clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
 #endif
@@ -3701,12 +3734,14 @@ clio::run::TaskResume Runtime::ModifyExistingData(
   std::vector<clio::run::Future<clio::run::bdev::WriteTask>> write_tasks;
   std::vector<size_t> expected_write_sizes;
 
-  // Step 2: Store the offset of the block in the blob. The first block is
-  // offset 0
-  size_t block_offset_in_blob = 0;
+  // Step 2: Store the offset of the block in the blob. Normally the first block
+  // is at offset 0; a tail-write hint lets the caller start mid-list (the block
+  // at start_block_idx begins at start_block_offset_in_blob), skipping an
+  // O(blocks) rescan for appends.
+  size_t block_offset_in_blob = start_block_offset_in_blob;
 
-  // Iterate over every block in the blob
-  for (size_t block_idx = 0; block_idx < blocks.size(); ++block_idx) {
+  // Iterate over every block in the blob (from the hinted start).
+  for (size_t block_idx = start_block_idx; block_idx < blocks.size(); ++block_idx) {
     const BlobBlock &block = blocks[block_idx];
     HLOG(
         kDebug,
@@ -4094,6 +4129,7 @@ clio::run::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
 
   // Clear all blocks
   blob_info.blocks_.clear();
+  blob_info.total_size_cache_ = 0;  // blocks_ emptied: size cache is now 0
   error_code = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END

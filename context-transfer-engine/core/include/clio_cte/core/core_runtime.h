@@ -580,9 +580,20 @@ private:
    * @param error_code Output: 0 for success, 1 for failure
    * Returns TaskResume for coroutine-based async operations
    */
+  // start_block_idx / start_block_offset_in_blob: an optional fast-path hint for
+  // writes known to target the blob tail (e.g. an append). The scan then begins
+  // at block `start_block_idx`, whose first byte sits at `start_block_offset_in_blob`
+  // in the blob, instead of re-walking from block 0. Callers MUST pass a
+  // consistent pair (start_block_offset_in_blob == sum of blocks[0..start_block_idx)
+  // sizes) and only for writes whose region lies entirely at/after that offset;
+  // the default (0,0) reproduces the exact full-scan behavior. This turns an
+  // O(blocks) rescan per append into O(1), fixing the O(N^2) blowup on files
+  // built by millions of tiny O_APPEND writes (generic/069).
   clio::run::TaskResume ModifyExistingData(const clio::run::priv::vector<BlobBlock> &blocks,
                                      ctp::ipc::ShmPtr<> data, size_t data_size,
-                                     size_t data_offset_in_blob, clio::run::u32 &error_code);
+                                     size_t data_offset_in_blob, clio::run::u32 &error_code,
+                                     size_t start_block_idx = 0,
+                                     size_t start_block_offset_in_blob = 0);
 
   /**
    * Read existing blob data from blocks
