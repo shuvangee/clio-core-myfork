@@ -234,6 +234,29 @@ u32 DefaultScheduler::RuntimeMapTask(Worker *worker, const Future<Task> &task,
   return 0;
 }
 
+Worker *DefaultScheduler::PickAltWorker(u32 avoid_id) const {
+  // Prefer an I/O worker: it drains bdev leaf tasks (which do not self-send),
+  // so it makes forward progress and never mutually back-pressures the caller.
+  for (Worker *w : io_workers_) {
+    if (w != nullptr && w->GetId() != avoid_id) {
+      return w;
+    }
+  }
+  // Fall back to the scheduler worker, then the net workers — any worker whose
+  // Run loop drains its own lane breaks the self-block (the caller is no longer
+  // the consumer of the lane it is pushing to).
+  if (scheduler_worker_ != nullptr && scheduler_worker_->GetId() != avoid_id) {
+    return scheduler_worker_;
+  }
+  if (net_recv_worker_ != nullptr && net_recv_worker_->GetId() != avoid_id) {
+    return net_recv_worker_;
+  }
+  if (net_send_worker_ != nullptr && net_send_worker_->GetId() != avoid_id) {
+    return net_send_worker_;
+  }
+  return nullptr;
+}
+
 void DefaultScheduler::RebalanceWorker(Worker *worker) { (void)worker; }
 
 void DefaultScheduler::AdjustPolling(const clio::run::shared_ptr<Task> &task) {

@@ -3192,6 +3192,25 @@ RouteResult IpcManager::RouteLocal(Future<Task> &future, bool force_enqueue) {
     return RouteResult::ExecHere;
   }
 
+  // Self-send deadlock avoidance: a worker force-enqueuing a subtask onto its
+  // OWN lane busy-spins in the WAIT_FOR_SPACE ring Push when the lane is full,
+  // and can never drain it — it IS the consumer, blocked here in Push rather
+  // than in its Run loop. Redirect to an alternate worker whose own thread
+  // drains it, converting the deadlock into transient backpressure. An earlier
+  // "only redirect to a non-full sibling" guard failed under the mmap-writeback
+  // storm (all lanes saturate → no non-full sibling → fell back to self-spin);
+  // redirect UNCONDITIONALLY — briefly spinning on a *sibling's* full lane is
+  // safe because that sibling's thread drains it. (generic/438: mmap read fault
+  // -> GetBlob -> bdev::AsyncRead -> SendIn all on the scheduler worker; the
+  // bdev subtask's predicted io_size is 0 so RuntimeMapTask routes it back to
+  // the scheduler worker = self.)
+  if (force_enqueue && worker && dest_worker_id == worker->GetId()) {
+    Worker *alt = scheduler_->PickAltWorker(dest_worker_id);
+    if (alt != nullptr) {
+      dest_worker_id = alt->GetId();
+    }
+  }
+
   // Enqueue to the destination worker's lane, then ALWAYS signal. Gating the
   // wakeup on was_empty is the exact lost-wakeup race AwakenWorker's own
   // comment warns against: the consumer can drain the lane and park in
