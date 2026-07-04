@@ -153,3 +153,16 @@ generic/700
 generic/727
 generic/745
 generic/748
+# 2026-07-04 update: chown support added unblocks 11 more _require_chown tests
+# (all passing across two runs); generic/355 was already gated.
+generic/087
+generic/088
+generic/126
+generic/193
+generic/314
+generic/317
+generic/633
+generic/645
+generic/656
+generic/698
+generic/699
