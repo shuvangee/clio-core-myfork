@@ -3444,55 +3444,53 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
       continue;
     }
 
-    // Calculate how much we can allocate from this target
-    clio::run::u64 allocate_size =
-        std::min(remaining_to_allocate, target_info_copy.remaining_space_);
+    // Back a large logical extension with MULTIPLE small physical blocks by
+    // capping each block at kMaxBlockChunk. Under long-soak churn the bdev free
+    // pool fragments into sub-request-size extents (measured: ~4640 extents,
+    // largest ~324 KB) while a single-block extension request is 0.5-1 MB, so
+    // one large contiguous block can NEVER be reused and the bump-only Heap
+    // watermark climbs to the tier capacity → write EIO (074/521/522). Small
+    // blocks match the fragmented pool and reuse freed space. The blob stores
+    // blocks_ as a vector and read/write iterate them, so multi-block extents
+    // are transparent to the data path. AllocateFromTarget decrements the copy's
+    // remaining_space_ by reference, so the loop condition drains naturally.
+    constexpr clio::run::u64 kMaxBlockChunk = 65536;  // 64 KB
+    while (remaining_to_allocate > 0 && target_info_copy.remaining_space_ > 0) {
+      clio::run::u64 allocate_size =
+          std::min(std::min(remaining_to_allocate,
+                            target_info_copy.remaining_space_),
+                   kMaxBlockChunk);
 
-    if (allocate_size == 0) {
-      continue;
-    }
+      clio::run::u64 allocated_offset;
+      bool alloc_success = false;
+      CLIO_CO_AWAIT(AllocateFromTarget(target_info_copy, allocate_size,
+                                  allocated_offset, alloc_success));
+      if (!alloc_success) {
+        break;  // this target can't satisfy more; outer loop tries the next
+      }
 
-    // Allocate space using bdev client
-    clio::run::u64 allocated_offset;
-    bool alloc_success = false;
-    CLIO_CO_AWAIT(AllocateFromTarget(target_info_copy, allocate_size,
-                                allocated_offset, alloc_success));
-    if (!alloc_success) {
-      // Allocation failed, try next target
-      continue;
-    }
+      BlobBlock new_block(target_info_copy.bdev_client_,
+                          target_info_copy.target_query_, allocated_offset,
+                          allocate_size);
+      blob_info.blocks_.push_back(new_block);
 
-    // Create new block for the allocated space
-    BlobBlock new_block(target_info_copy.bdev_client_,
-                        target_info_copy.target_query_, allocated_offset,
-                        allocate_size);
-    blob_info.blocks_.push_back(new_block);
-
-    // Debit the CANONICAL target's remaining_space_ (mirror of
-    // FreeAllBlobBlocks' credit). AllocateFromTarget only decremented the
-    // throwaway target_info_copy, so without this allocs never reduced
-    // the real counter and accounting drifted between StatTargets polls.
-    //
-    // registered_targets_ is structurally STATIONARY on the data path
-    // (only RegisterTarget inserts, at setup), so a shared READ lock is
-    // sufficient to traverse/find it — no exclusive write lock for a
-    // plain integer update. The counter is mutated lock-free via
-    // ctp::ipc::atomic_ref with a CAS loop that saturates at 0 instead
-    // of underflowing the unsigned value.
-    {
-      clio::run::ScopedCoRwReadLock read_lock(target_lock_);
-      TargetInfo *ti = registered_targets_.find(selected_target_id);
-      if (ti != nullptr) {
-        ctp::ipc::atomic_ref<clio::run::u64> rs(ti->remaining_space_);
-        clio::run::u64 cur = rs.load(std::memory_order_relaxed);
-        while (!rs.compare_exchange_weak(
-            cur, (cur > allocate_size) ? cur - allocate_size : 0,
-            std::memory_order_relaxed)) {
+      // Debit the CANONICAL target's remaining_space_ (mirror of
+      // FreeAllBlobBlocks' credit); AllocateFromTarget only touched the copy.
+      {
+        clio::run::ScopedCoRwReadLock read_lock(target_lock_);
+        TargetInfo *ti = registered_targets_.find(selected_target_id);
+        if (ti != nullptr) {
+          ctp::ipc::atomic_ref<clio::run::u64> rs(ti->remaining_space_);
+          clio::run::u64 cur = rs.load(std::memory_order_relaxed);
+          while (!rs.compare_exchange_weak(
+              cur, (cur > allocate_size) ? cur - allocate_size : 0,
+              std::memory_order_relaxed)) {
+          }
         }
       }
-    }
 
-    remaining_to_allocate -= allocate_size;
+      remaining_to_allocate -= allocate_size;
+    }
   }
 
   // Error condition: if we've exhausted all targets but still have remaining
