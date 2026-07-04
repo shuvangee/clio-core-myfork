@@ -282,7 +282,16 @@ clio::run::TaskResume Runtime::Open(clio::run::shared_ptr<OpenTask> &task) {
     std::lock_guard<std::mutex> g(meta_mu_);
     auto it = by_path_.find(path);
     std::shared_ptr<FileInfo> fi;
-    if (it != by_path_.end()) {
+    // Reuse the cached entry ONLY if it still tracks the tag this path resolves
+    // to now. A by_path_ entry can outlive its tag (path key does not follow an
+    // ancestor rename; a delete via the renamed path clears a different key), so
+    // an entry left over from a since-deleted file would otherwise be reused with
+    // its DEAD tag_id_ — every read/write on the freshly O_CREAT'd file would hit
+    // the old, gone tag (generic/023). When the cached tag differs from the
+    // freshly resolved one, bind a new FileInfo to the correct tag, replacing the
+    // stale mapping (any still-open handle keeps its own shared_ptr, so an
+    // open-unlink-recreate on the same name stays correctly separated).
+    if (it != by_path_.end() && it->second->tag_id_ == tag_id) {
       fi = it->second;
       size = fi->size_.load();  // keep the live logical size if already open
     } else {
@@ -533,39 +542,74 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
       }
     }
     if (tracked) {
-      task->exists_ = 1;
-      task->is_dir_ = 0;
-      task->size_ = live_size;
-      task->ino_ = InoFromTag(h_tag);
-      // Timestamps (ctime/mtime/atime) from the tag (mutex released before RPC).
+      // Validate the cached entry against core BEFORE trusting it. A by_path_ key
+      // is the absolute path *string*, so the entry does NOT follow the file when
+      // an ancestor directory is renamed, and a delete through the post-rename
+      // path clears a different key. Such a stale entry (a real, now-deleted tag
+      // id) would otherwise make getattr report a long-gone file as still
+      // present — the kernel then routes a fresh create() to open() and gets
+      // ENOENT, permanently wedging that name (generic/023 tree/regu, tree/tree:
+      // `mkdir d; echo>d/bar; rename d e; rm e/bar; rmdir e; mkdir d; echo>d/bar`
+      // failed because getattr(/d/bar) still resolved through the orphaned
+      // "/d/bar" entry). GetTagSize returns nonzero once the tag is gone, so on
+      // failure we drop the stale entry and fall through to the authoritative
+      // path resolution below. A genuinely open-but-unlinked file keeps its tag
+      // alive, so its GetTagSize still succeeds and it stays tracked.
+      bool stale = false;
+      bool have_ts = false;
+      clio::run::u64 g_ctime = 0, g_mtime = 0, g_atime = 0;
       if (!h_tag.IsNull()) {
         auto s = cte_.AsyncGetTagSize(h_tag, clio::run::PoolQuery::Local());
         CLIO_CO_AWAIT(s);
         if (s->GetReturnCode() == 0) {
-          task->ctime_ = s->ctime_;
-          task->mtime_ = s->mtime_;
-          task->atime_ = s->atime_;
+          g_ctime = s->ctime_;
+          g_mtime = s->mtime_;
+          g_atime = s->atime_;
+          have_ts = true;
+        } else {
+          stale = true;
         }
       }
-      // utimens atime/mtime overrides win over the natural tag timestamps until
-      // the next write/truncate clears them (utimens can set those to arbitrary,
-      // even past, values).
-      if (ov_mtime != 0) task->mtime_ = ov_mtime;
-      if (ov_atime != 0) task->atime_ = ov_atime;
-      // ctime, however, can ONLY advance: POSIX ties it to the last metadata
-      // change and forbids setting it to an arbitrary value. The utimens
-      // override records the ctime bump at utimens time, but a later metadata op
-      // (e.g. adding/removing a hard link) advances the tag's live last_changed_
-      // beyond it — so take the max. Letting the frozen override win instead
-      // masked those real ctime changes (generic/755: ctime unchanged after
-      // unlinking a hard link).
-      if (ov_ctime > task->ctime_) task->ctime_ = ov_ctime;
-      // chown owner overrides (0xFFFFFFFF if never chown'd => adapter defaults
-      // to getuid()/getgid()).
-      task->uid_ = ov_uid;
-      task->gid_ = ov_gid;
-      task->return_code_ = 0;
-      CLIO_CO_RETURN;
+      if (stale) {
+        std::lock_guard<std::mutex> g(meta_mu_);
+        // Only drop it if it still maps to the same dead tag — a concurrent
+        // reopen may have rebound this path to a fresh, live FileInfo.
+        auto it = by_path_.find(path);
+        if (it != by_path_.end() && it->second->tag_id_ == h_tag) {
+          by_path_.erase(it);
+        }
+        // fall through to normal resolution (do not CLIO_CO_RETURN here)
+      } else {
+        task->exists_ = 1;
+        task->is_dir_ = 0;
+        task->size_ = live_size;
+        task->ino_ = InoFromTag(h_tag);
+        // Timestamps (ctime/mtime/atime) from the tag.
+        if (have_ts) {
+          task->ctime_ = g_ctime;
+          task->mtime_ = g_mtime;
+          task->atime_ = g_atime;
+        }
+        // utimens atime/mtime overrides win over the natural tag timestamps until
+        // the next write/truncate clears them (utimens can set those to
+        // arbitrary, even past, values).
+        if (ov_mtime != 0) task->mtime_ = ov_mtime;
+        if (ov_atime != 0) task->atime_ = ov_atime;
+        // ctime, however, can ONLY advance: POSIX ties it to the last metadata
+        // change and forbids setting it to an arbitrary value. The utimens
+        // override records the ctime bump at utimens time, but a later metadata
+        // op (e.g. adding/removing a hard link) advances the tag's live
+        // last_changed_ beyond it — so take the max. Letting the frozen override
+        // win instead masked those real ctime changes (generic/755: ctime
+        // unchanged after unlinking a hard link).
+        if (ov_ctime > task->ctime_) task->ctime_ = ov_ctime;
+        // chown owner overrides (0xFFFFFFFF if never chown'd => adapter defaults
+        // to getuid()/getgid()).
+        task->uid_ = ov_uid;
+        task->gid_ = ov_gid;
+        task->return_code_ = 0;
+        CLIO_CO_RETURN;
+      }
     }
   }
 
@@ -963,6 +1007,14 @@ clio::run::TaskResume Runtime::Rename(clio::run::shared_ptr<RenameTask> &task) {
   // Move the per-file logical-size metadata entry to the new path.
   {
     std::lock_guard<std::mutex> g(meta_mu_);
+    // The destination's old tag was just deleted and its name rebound to the
+    // source's tag, so any cached FileInfo for `dst` (e.g. left over from an
+    // earlier write to the overwritten file) now points at a dead tag. Drop it
+    // first, unconditionally, so getattr re-resolves `dst` from scratch. Without
+    // this, renaming a symlink over a previously-written regular file kept
+    // reporting the stale regular-file type/size via the tracked getattr branch
+    // (generic/023 symb/regu case).
+    by_path_.erase(dst);
     auto it = by_path_.find(src);
     if (it != by_path_.end()) {
       it->second->path_ = dst;
