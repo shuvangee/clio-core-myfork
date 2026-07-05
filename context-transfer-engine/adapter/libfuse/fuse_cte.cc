@@ -821,13 +821,28 @@ static int cte_fuse_removexattr(const char *path, const char *name) {
   return rc == 0 ? 0 : -rc;  // ENODATA/ENOENT/EIO -> negative errno
 }
 
+#ifndef RENAME_NOREPLACE
+#define RENAME_NOREPLACE (1 << 0)  // from <linux/fs.h>; guarded to avoid header clash
+#endif
+
 static int cte_fuse_rename(const char *from, const char *to,
                            unsigned int flags) {
-  // RENAME_NOREPLACE / RENAME_EXCHANGE aren't supported; POSIX replace is.
-  if (flags != 0) {
-    return -EINVAL;
-  }
   auto *cfs = CLIO_CFS_CLIENT;
+  // RENAME_NOREPLACE: the rename must fail with EEXIST if `to` already exists.
+  // Probe for the destination then fall through to a plain rename. This is the
+  // standard high-level-FUSE approach (a tiny TOCTOU window vs a truly atomic
+  // check, acceptable for a single-namespace rename). RENAME_EXCHANGE and
+  // RENAME_WHITEOUT need chimod-level atomic swap / whiteout support and stay
+  // EINVAL so callers fall back cleanly.
+  if (flags & RENAME_NOREPLACE) {
+    auto g = cfs->AsyncGetattr(std::string(to));
+    g.Wait();
+    if (g->GetReturnCode() == 0 && g->exists_ != 0) return -EEXIST;
+    flags &= ~static_cast<unsigned int>(RENAME_NOREPLACE);
+  }
+  if (flags != 0) {
+    return -EINVAL;  // RENAME_EXCHANGE / RENAME_WHITEOUT unsupported
+  }
   auto t = cfs->AsyncRename(std::string(from), std::string(to));
   t.Wait();
   int rc = static_cast<int>(t->GetReturnCode());
