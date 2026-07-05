@@ -623,7 +623,10 @@ set_tests_properties(
 
 # Parallel overlap stress: Put/Get/Del/GetInfo race on 4 tags x 4 blobs.
 # Pass = the process finishes (no crash) within the timeout (no hang); run under
-# sanitizers for the no-leak metric.
+# sanitizers for the no-leak metric. Labeled concurrent (NOT "stress") so it is
+# included in the default CI ctest run -- like test_concurrent_same_blob -- and
+# a CI-friendly iteration count keeps it fast even in the instrumented coverage
+# build (override STRESS_ITERS/STRESS_THREADS locally for a heavier soak).
 add_test(NAME cte_parallel_overlap_stress
     COMMAND test_cte_parallel_overlap_stress)
 
@@ -631,8 +634,8 @@ set_tests_properties(
     cte_parallel_overlap_stress
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout -> a hang trips this
-        LABELS "stress;concurrent;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        LABELS "concurrent;cte;msan_skip"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;STRESS_THREADS=8;STRESS_ITERS=1500"
 )
 
 # Regression: blocks freed by DelBlob return to their bdev partition.
