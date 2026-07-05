@@ -47,7 +47,10 @@ jobs:
           submodules: recursive
       - name: Build adapters + run adapter tests (inside deps-cpu)
         run: |
-          docker run --rm \
+          # --shm-size: docker's default /dev/shm is 64 MB; the clio runtime
+          # places its GB-scale SHM segments there, so give it room (also lets
+          # the FUSE runtime breathe under the xfstests gate).
+          docker run --rm --shm-size=2g \
             -v "${{ github.workspace }}":/workspace -w /workspace -u 0 \
             --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor=unconfined \
             iowarp/deps-cpu:latest bash -c '

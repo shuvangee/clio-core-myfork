@@ -169,8 +169,11 @@ static void cte_fuse_destroy(void *private_data) {
 // (generic/258). For normal post-epoch times the value and result are
 // identical to the old unsigned path (remainder is non-negative). tv_nsec is
 // always normalized into [0, 1e9).
+// NsecT is templated so this binds to the platform's timespec tv_nsec type:
+// `long` on Linux/libfuse, `int64_t` on Windows/WinFsp (struct fuse_timespec).
+template <typename NsecT>
 static inline void NsBitsToTimespec(clio::run::u64 bits, time_t &sec,
-                                    long &nsec) {
+                                    NsecT &nsec) {
   int64_t ns = static_cast<int64_t>(bits);
   int64_t s = ns / 1000000000LL;
   int64_t rem = ns % 1000000000LL;
@@ -179,7 +182,7 @@ static inline void NsBitsToTimespec(clio::run::u64 bits, time_t &sec,
     rem += 1000000000LL;
   }
   sec = static_cast<time_t>(s);
-  nsec = static_cast<long>(rem);
+  nsec = static_cast<NsecT>(rem);
 }
 
 static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,

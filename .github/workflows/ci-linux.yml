@@ -143,7 +143,10 @@ jobs:
           submodules: recursive
       - name: Build with Boost backend + run ctest (inside deps-cpu)
         run: |
-          docker run --rm -v "${{ github.workspace }}":/workspace -w /workspace -u 0 \
+          # --shm-size: docker's default /dev/shm is 64 MB, far too small for the
+          # clio runtime's GB-scale SHM segments; a 1 MB blob PutBlob in
+          # cte_tiered_storage_all then fails (rc=21) where native builds pass.
+          docker run --rm --shm-size=2g -v "${{ github.workspace }}":/workspace -w /workspace -u 0 \
             iowarp/deps-cpu:latest bash -c '
               set -e
               export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH

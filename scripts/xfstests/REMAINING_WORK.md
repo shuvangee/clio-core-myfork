@@ -32,18 +32,37 @@ Fixes:
 3. **generic/127 removed** — fsx torture; passes on >=4 cores (verified locally,
    84/84 at 4 CPUs / 90s), borderline under a tighter cap. Slow-lane candidate.
 
-### STILL OPEN: six genuine deadlocks in CI (011/013/089/286/438/471)
-These still hang in CI's deps-cpu docker **even at num_threads=1** and are
-quarantined out of the gate (84 -> 77). They are **deadlocks, not timeouts**:
-CI per-test timing shows them hitting the 90s cap (~91s) while heavier fsx tests
-finish in 21-34s in the same run. They pass on dev hardware; they wedge only
-under CI's constrained docker scheduling. gdb on a locally-reproduced hang (2-CPU
-pin) showed workers spinning in `ProcessNewTasks` and
-`BatchManager::FlushDue`/`pthread_mutex_lock` without yielding; with a lone
-compute worker (num_threads=1) a task can also starve its own sub-task. This is
-the self-send / lost-wakeup class in the busy-spin worker model — a config knob
-cannot resolve it (fewer workers fixes oversubscription for some tests but
-enables single-worker sub-task starvation for others).
+### STILL OPEN: a 12-test FLAKY POOL in CI (quarantined; gate 84 -> 72)
+The hangs are a **flaky scheduling race**, not a fixed set of deadlocks. Across
+CI runs the hanging subset CHANGES: run 28751210007 hung 011/013/089/286/438/471;
+run 28752153968 hung a DIFFERENT set 006/007/100/363. Any of the 12 (006 007 011
+013 089 100 113 127 286 363 438 471) can hang on a given run, so the whole pool is
+quarantined for a deterministically-green gate. They are NOT timeouts (they hit
+the 90s cap while heavier fsx passes in ~25s) and pass reliably on dev hardware.
+
+NOT locally reproducible, which blocks validating any runtime fix: dev host =
+pass; the deps-cpu container even at 2 CPUs and --shm-size=2g = FAILs (not hangs,
+a separate root-in-docker artifact); only CI flakes. gdb on the ORIGINAL
+num_threads=4 hang (2-CPU pin) showed workers spinning in `ProcessNewTasks` and
+`BatchManager::FlushDue`/`pthread_mutex_lock` without yielding — the self-send /
+lost-wakeup class in the busy-spin worker model. A config knob cannot resolve it
+(num_threads=1 halved the hang count but did not remove the race). The real fix
+needs CI-iteration validation and is a runtime change (add CTP_THREAD_MODEL->Yield()
+to the ProcessNewTasks / BatchManager::FlushDue hot-spin paths, or fix the
+self-send/lost-wakeup so a blocked task is always rescheduled on sub-task
+completion). See memory [[xfstests-ci-oversubscription]] for the docker repro
+recipe.
+
+### Also fixed this round (unrelated pre-existing branch debt)
+- **boost (docker deps-cpu) `cte_tiered_storage_all` rc=21**: docker's default
+  /dev/shm is 64 MB, too small for the runtime's GB-scale SHM segments; a 1 MB
+  blob PutBlob failed where native builds pass. Added `--shm-size=2g` to the
+  docker runs in ci-linux.yml and ci-adapters.yml.
+- **Windows (MSVC/WinFsp) build of fuse_cte.cc**: the chown/symlink/timestamp
+  handlers used POSIX spellings MSVC lacks. Made `NsBitsToTimespec` templated on
+  the timespec nsec type (long on Linux, int64_t on WinFsp) and added
+  `uid_t`/`gid_t`/`S_IFLNK` to fuse_win_compat.h. Linux rebuild verified; the
+  Windows build itself is validated only by CI (no local MSVC).
 
 Real fix (a runtime change, not done here — high blast radius, and CI's docker
 env is not locally reproducible for validation):
