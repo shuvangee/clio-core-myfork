@@ -144,9 +144,14 @@ for t in "${LIST[@]}"; do
   remount >/dev/null 2>&1 || { echo "${t}: MOUNTFAIL"; fail=$((fail+1)); failed_list="${failed_list} ${t}"; continue; }
   out=$(timeout "${CLIO_XFS_PERTEST_TIMEOUT:-90}" ./check "${t}" 2>/dev/null)
   rc=$?
+  # NOTE: check "Not run:" BEFORE "Passed all". ./check prints BOTH
+  # "Not run: <t>" AND "Passed all 0 tests" when the only test notruns, so
+  # matching "^Passed all" first miscounts a notrun test as a pass -- which
+  # would silently admit a scratch/hardware-requiring test into the CI gate
+  # where it tests nothing. "Not run:" is the authoritative signal.
   if [ "${rc}" -eq 124 ]; then echo "${t}: HANG"; hang=$((hang+1)); failed_list="${failed_list} ${t}(hang)"
-  elif echo "${out}" | grep -q "^Passed all"; then echo "${t}: pass"; pass=$((pass+1))
   elif echo "${out}" | grep -q "^Not run:"; then echo "${t}: notrun"; notrun=$((notrun+1))
+  elif echo "${out}" | grep -q "^Passed all"; then echo "${t}: pass"; pass=$((pass+1))
   else echo "${t}: FAIL"; fail=$((fail+1)); failed_list="${failed_list} ${t}"; fi
 done
 
