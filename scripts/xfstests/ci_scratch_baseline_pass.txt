@@ -18,8 +18,8 @@
 # independent verification runs.
 #
 # Failing/hanging scratch tests (tracked, not run in CI):
-#   FAIL: 003 120 344 346 403 452 460 519 615
-#   HANG: 339 345 347 464 707
+#   FAIL: 003 120 346 403 452 460 519 615
+#   HANG: 339 347 464 707
 # Established 2026-07-03.
 #
 # 2026-07-04 update: the O_APPEND hang class 069/129/476/642 now PASS and are
@@ -39,6 +39,10 @@
 # the file vanishes -- NOT a clio atime/timestamp/persistence bug (the feature
 # logic is correct). Under this two-runtime driver the keeper survives the client
 # remount via the fuse mount-helper, and all three pass 3 independent runs.
+# 2026-07-05 update: added 344 + 345 (mmap-vs-buffered-write / mmap-vs-mmap race
+# tests via src/holetest). Both were previously listed above as FAIL(344)/HANG(345)
+# but now pass a discovery run + two verification runs on the two-runtime driver
+# (removed from the FAIL/HANG lists above).
 generic/029
 generic/030
 generic/069
@@ -55,6 +59,8 @@ generic/169
 generic/192
 generic/258
 generic/340
+generic/344
+generic/345
 generic/354
 generic/393
 generic/406
