@@ -18,8 +18,15 @@
 # independent verification runs.
 #
 # Failing/hanging scratch tests (tracked, not run in CI):
-#   FAIL: 003 120 346 403 452 460 519 615
-#   HANG: 347 707
+#   FAIL: 003 120 452 615   (346/403/460 now pass -- already embedded-gated;
+#     519 now passes and is gated below. 2026-07-05 recheck on current build.)
+#     Root causes found 2026-07-05: 003 + 120 = atime relatime/noatime semantics
+#     (clio updates atime unconditionally, so "atime must NOT change" assertions
+#     fail); 452 = cannot exec a binary copied onto the fs ("Permission denied")
+#     -- clio getattr hardcodes regular files to mode 0644 (no +x) and chmod is a
+#     no-op, so the execute bit never sticks; 615 = stat st_blocks always 0 (clio
+#     getattr never populates st_blocks). 452 + 615 are addressable clio gaps.
+#   HANG: 347 (needs _require_dm_target -> really NOTRUN, not a hang) 707
 #   SLOW-PASS (not deadlocks; complete correctly given time, but run ~40-64s so
 #     they exceed a tight cap -- NOT gated to avoid CI-load flakiness near the
 #     90s cap, same policy as embedded 208/323): 339 (dir hash order) 464
@@ -72,6 +79,7 @@ generic/406
 generic/412
 generic/422
 generic/476
+generic/519
 generic/524
 generic/525
 generic/565
