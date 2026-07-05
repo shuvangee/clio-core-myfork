@@ -115,12 +115,20 @@ class Client : public clio::cte::core::Client {
 
   clio::run::Future<ChownTask> AsyncChown(const std::string &path,
                                           clio::run::u32 uid,
-                                          clio::run::u32 gid) {
+                                          clio::run::u32 gid,
+                                          clio::run::u32 mode = 0xFFFFFFFFu) {
     auto *ipc = CLIO_CPU_IPC;
     auto task = ipc->NewTask<ChownTask>(clio::run::CreateTaskId(), pool_id_,
                                         clio::run::PoolQuery::Local(), path, uid,
-                                        gid);
+                                        gid, mode);
     return ipc->Send(task);
+  }
+
+  // chmod reuses the ChownTask (per-file mode override) with uid/gid left
+  // unchanged, avoiding a separate RPC method for a single stored field.
+  clio::run::Future<ChownTask> AsyncChmod(const std::string &path,
+                                          clio::run::u32 mode) {
+    return AsyncChown(path, 0xFFFFFFFFu, 0xFFFFFFFFu, mode);
   }
 
   clio::run::Future<MkdirTask> AsyncMkdir(const std::string &path) {

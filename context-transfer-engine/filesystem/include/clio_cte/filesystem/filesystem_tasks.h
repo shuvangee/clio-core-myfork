@@ -248,21 +248,22 @@ struct GetattrTask : public clio::run::Task {
   OUT clio::run::u32 is_symlink_;  // 1 if the entry is a symlink (S_IFLNK)
   OUT clio::run::u32 uid_;  // chown'd owner uid; 0xFFFFFFFF = defer to default
   OUT clio::run::u32 gid_;  // chown'd owner gid; 0xFFFFFFFF = defer to default
+  OUT clio::run::u32 mode_;  // chmod'd/created mode bits; 0xFFFFFFFF = default
   GetattrTask()
       : clio::run::Task(), path_(CTP_MALLOC), exists_(0), is_dir_(0), size_(0),
         ino_(0), ctime_(0), mtime_(0), atime_(0), is_symlink_(0),
-        uid_(0xFFFFFFFFu), gid_(0xFFFFFFFFu) {}
+        uid_(0xFFFFFFFFu), gid_(0xFFFFFFFFu), mode_(0xFFFFFFFFu) {}
   explicit GetattrTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
                        const clio::run::PoolQuery &pool_query, const std::string &path)
       : clio::run::Task(task_id, pool_id, pool_query, Method::kGetattr),
         path_(CTP_MALLOC, path), exists_(0), is_dir_(0), size_(0), ino_(0),
         ctime_(0), mtime_(0), atime_(0), is_symlink_(0),
-        uid_(0xFFFFFFFFu), gid_(0xFFFFFFFFu) {}
+        uid_(0xFFFFFFFFu), gid_(0xFFFFFFFFu), mode_(0xFFFFFFFFu) {}
   void Copy(const ctp::ipc::FullPtr<GetattrTask>& o) {
     path_ = o->path_; exists_ = o->exists_; is_dir_ = o->is_dir_;
     size_ = o->size_; ino_ = o->ino_; ctime_ = o->ctime_;
     mtime_ = o->mtime_; atime_ = o->atime_; is_symlink_ = o->is_symlink_;
-    uid_ = o->uid_; gid_ = o->gid_;
+    uid_ = o->uid_; gid_ = o->gid_; mode_ = o->mode_;
   }
   template <typename Ar> void SerializeIn(Ar &ar) {
     Task::SerializeIn(ar); ar(path_);
@@ -270,7 +271,7 @@ struct GetattrTask : public clio::run::Task {
   template <typename Ar> void SerializeOut(Ar &ar) {
     Task::SerializeOut(ar);
     ar(exists_, is_dir_, size_, ino_, ctime_, mtime_, atime_, is_symlink_,
-       uid_, gid_);
+       uid_, gid_, mode_);
   }
 };
 
@@ -330,19 +331,21 @@ struct ChownTask : public clio::run::Task {
   IN clio::run::priv::string path_;
   IN clio::run::u32 uid_;  // new uid, or 0xFFFFFFFF to leave unchanged
   IN clio::run::u32 gid_;  // new gid, or 0xFFFFFFFF to leave unchanged
+  IN clio::run::u32 mode_;  // new mode bits, or 0xFFFFFFFF to leave unchanged
   ChownTask()
       : clio::run::Task(), path_(CTP_MALLOC), uid_(0xFFFFFFFFu),
-        gid_(0xFFFFFFFFu) {}
+        gid_(0xFFFFFFFFu), mode_(0xFFFFFFFFu) {}
   explicit ChownTask(const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
                      const clio::run::PoolQuery &pool_query, const std::string &path,
-                     clio::run::u32 uid, clio::run::u32 gid)
+                     clio::run::u32 uid, clio::run::u32 gid,
+                     clio::run::u32 mode = 0xFFFFFFFFu)
       : clio::run::Task(task_id, pool_id, pool_query, Method::kChown),
-        path_(CTP_MALLOC, path), uid_(uid), gid_(gid) {}
+        path_(CTP_MALLOC, path), uid_(uid), gid_(gid), mode_(mode) {}
   void Copy(const ctp::ipc::FullPtr<ChownTask>& o) {
-    path_ = o->path_; uid_ = o->uid_; gid_ = o->gid_;
+    path_ = o->path_; uid_ = o->uid_; gid_ = o->gid_; mode_ = o->mode_;
   }
   template <typename Ar> void SerializeIn(Ar &ar) {
-    Task::SerializeIn(ar); ar(path_, uid_, gid_);
+    Task::SerializeIn(ar); ar(path_, uid_, gid_, mode_);
   }
   template <typename Ar> void SerializeOut(Ar &ar) { Task::SerializeOut(ar); }
 };

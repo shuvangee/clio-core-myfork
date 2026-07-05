@@ -213,15 +213,19 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
   stbuf->st_gid =
       (t->gid_ != 0xFFFFFFFFu) ? static_cast<gid_t>(t->gid_) : getgid();
   stbuf->st_ino = static_cast<ino_t>(t->ino_);  // stable inode = packed TagId
+  // A chmod/create recorded permission bits (t->mode_ != 0xFFFFFFFF) win over
+  // the synthesized defaults; keep only the low 12 bits (perms + setuid/gid/sticky).
+  const bool have_mode = (t->mode_ != 0xFFFFFFFFu);
+  const unsigned int perm = t->mode_ & 07777u;
   if (t->is_dir_) {
-    stbuf->st_mode = S_IFDIR | 0755;
+    stbuf->st_mode = S_IFDIR | (have_mode ? perm : 0755u);
     stbuf->st_nlink = 2;
   } else if (t->is_symlink_) {
     stbuf->st_mode = S_IFLNK | 0777;
     stbuf->st_nlink = 1;
     stbuf->st_size = static_cast<cte_off_t>(t->size_);  // target length
   } else {
-    stbuf->st_mode = S_IFREG | 0644;
+    stbuf->st_mode = S_IFREG | (have_mode ? perm : 0644u);
     // POSIX link count = canonical name (1) + tag-level hard-link aliases.
     // Ask the CTE core how many extra names are bound to this tag.
     nlink_t nlink = 1;
@@ -345,22 +349,25 @@ static int cte_fuse_utimens(const char *path, const cte_timespec_t tv[2],
   return rc == 0 ? 0 : -rc;
 }
 
-// clio files are tags without a stored POSIX mode (getattr synthesizes 0644 for
-// files / 0755 for dirs), so chmod is accepted as a best-effort no-op rather
-// than failing with ENOSYS. Programs that chmod-then-proceed (e.g. mount's mtab
-// updater in generic/089) need the call to succeed; the exact bits are not
-// persisted. Validate existence so chmod of a missing path still returns ENOENT.
+// chmod records the permission bits as a per-file override in the chimod
+// (surfaced by getattr), mirroring chown. Storing the mode lets +x stick, so a
+// binary copied onto the fs can be executed (generic/452) and chmod-then-proceed
+// callers (e.g. mount's mtab updater in generic/089) still succeed. AsyncChmod
+// resolves the path and returns ENOENT for a missing file, so no separate
+// existence probe is needed.
 static int cte_fuse_chmod(const char *path, cte_mode_t mode,
                           struct fuse_file_info *fi) {
-  (void)mode;
   (void)fi;
   auto *cfs = CLIO_CFS_CLIENT;
-  auto t = cfs->AsyncGetattr(std::string(path));
+  std::string p(path);
+  // Probe existence first: the chmod path resolves via GetOrCreateTag, so a
+  // missing target would otherwise be silently created. chmod(2) must ENOENT.
+  auto g = cfs->AsyncGetattr(p);
+  g.Wait();
+  if (g->GetReturnCode() != 0 || g->exists_ == 0) return -ENOENT;
+  auto t = cfs->AsyncChmod(p, static_cast<clio::run::u32>(mode) & 07777u);
   t.Wait();
-  if (t->GetReturnCode() != 0 || t->exists_ == 0) {
-    return -ENOENT;
-  }
-  return 0;
+  return t->GetReturnCode() == 0 ? 0 : -EIO;
 }
 
 // chown records a per-file owner uid/gid override in the chimod, surfaced by

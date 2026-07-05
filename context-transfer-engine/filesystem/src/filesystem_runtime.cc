@@ -301,6 +301,9 @@ clio::run::TaskResume Runtime::Open(clio::run::shared_ptr<OpenTask> &task) {
       fi->size_.store(size);
       by_path_[path] = fi;
     }
+    // A fresh O_CREAT carries the caller's mode (cp/install rely on this to
+    // make copied binaries executable — getattr otherwise synthesizes 0644).
+    if (!existed) fi->set_mode_ = task->mode_ & 07777u;
     handles_[handle] = fi;
   }
 
@@ -527,6 +530,7 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
     clio::cte::core::TagId h_tag = clio::cte::core::TagId::GetNull();
     clio::run::u64 ov_atime = 0, ov_mtime = 0, ov_ctime = 0;
     clio::run::u32 ov_uid = 0xFFFFFFFFu, ov_gid = 0xFFFFFFFFu;
+    clio::run::u32 ov_mode = 0xFFFFFFFFu;
     {
       std::lock_guard<std::mutex> g(meta_mu_);
       auto it = by_path_.find(path);
@@ -539,6 +543,7 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
         ov_ctime = it->second->set_ctime_;
         ov_uid = it->second->set_uid_;
         ov_gid = it->second->set_gid_;
+        ov_mode = it->second->set_mode_;
       }
     }
     if (tracked) {
@@ -607,6 +612,8 @@ clio::run::TaskResume Runtime::Getattr(clio::run::shared_ptr<GetattrTask> &task)
         // to getuid()/getgid()).
         task->uid_ = ov_uid;
         task->gid_ = ov_gid;
+        // chmod/create mode override (0xFFFFFFFF => adapter synthesizes 0644).
+        task->mode_ = ov_mode;
         task->return_code_ = 0;
         CLIO_CO_RETURN;
       }
@@ -1470,7 +1477,9 @@ clio::run::TaskResume Runtime::Chown(clio::run::shared_ptr<ChownTask> &task) {
     // 0xFFFFFFFF means "leave this field unchanged" (POSIX (uid_t)-1).
     if (task->uid_ != 0xFFFFFFFFu) fi->set_uid_ = task->uid_;
     if (task->gid_ != 0xFFFFFFFFu) fi->set_gid_ = task->gid_;
-    fi->set_ctime_ = clio::cte::core::GetCurrentTimeNs();  // chown advances ctime
+    // chmod rides the same task (uid/gid unchanged): store the permission bits.
+    if (task->mode_ != 0xFFFFFFFFu) fi->set_mode_ = task->mode_ & 07777u;
+    fi->set_ctime_ = clio::cte::core::GetCurrentTimeNs();  // chown/chmod advances ctime
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;

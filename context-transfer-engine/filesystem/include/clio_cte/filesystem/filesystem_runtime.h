@@ -122,6 +122,10 @@ class Runtime : public clio::run::Container {
     // adapter's getuid()/getgid() default). Guarded by meta_mu_.
     clio::run::u32 set_uid_{0xFFFFFFFFu};
     clio::run::u32 set_gid_{0xFFFFFFFFu};
+    // chmod / create mode override (permission bits). 0xFFFFFFFF = no stored
+    // mode (getattr synthesizes 0644 for files, 0755 for dirs). Persists across
+    // writes (unlike timestamps). Guarded by meta_mu_.
+    clio::run::u32 set_mode_{0xFFFFFFFFu};
   };
   std::mutex meta_mu_;
   std::unordered_map<clio::run::u64, std::shared_ptr<FileInfo>> handles_;  // handle -> file
