@@ -22,22 +22,39 @@ and the pipeline livelocks. gdb on a hung daemon showed two workers pinned at
 
 Fixes:
 1. **`clio_xfstests_config.yaml`: `runtime.num_threads: 1`** (1 compute + 1
-   network worker). Verified under 2-CPU pinning: 11 of the 12 recover. The rule
-   is workers ≤ cores — `num_threads=2` (3 workers) still livelocks on 2 CPUs.
-   The embedded FUSE adapter is a single-client front-end and needs no
-   compute-worker fan-out, so undersubscribing is correct, not a workaround.
-2. **`worker.cc`: yield in the idle busy-wait window** (`SuspendMe`, the
-   `elapsed_idle_us < first_busy_wait` branch). A bare spin there monopolizes a
-   core; `std::this_thread::yield()` is a no-op when a core is free and cedes it
-   under contention. Complementary robustness; num_threads is the primary fix.
-3. **generic/127 removed from the gate** — fsx torture stays hung even with a
-   single worker under CPU constraint (too heavy to finish within the 90s cap on
-   a starved runner). Candidate for a slow-lane / dedicated-CPU re-add. Gate 84->83.
+   network worker). Locally under 2-CPU pinning 11 of 12 recover; **in CI (run
+   28751210007) it recovered HALF: 12 hangs -> 6.** 006/007/100/113 pass again
+   (127 already removed). The embedded FUSE adapter is a single-client front-end
+   and needs no compute-worker fan-out, so undersubscribing is correct.
+2. **`worker.cc`: yield in the idle busy-wait window** (`SuspendMe`). A bare spin
+   monopolizes a core; `std::this_thread::yield()` is a no-op when a core is free
+   and cedes it under contention. Complementary robustness.
+3. **generic/127 removed** — fsx torture; passes on >=4 cores (verified locally,
+   84/84 at 4 CPUs / 90s), borderline under a tighter cap. Slow-lane candidate.
 
-General follow-up (not done): the busy-spin worker design assumes ~1 core per
-worker. Either auto-size `num_threads` to `min(default, max(1, nproc-1))`, or add
-yields to the `ProcessNewTasks`/`FlushDue` hot-spin paths, so any embedded/
-constrained deployment degrades gracefully instead of livelocking.
+### STILL OPEN: six genuine deadlocks in CI (011/013/089/286/438/471)
+These still hang in CI's deps-cpu docker **even at num_threads=1** and are
+quarantined out of the gate (84 -> 77). They are **deadlocks, not timeouts**:
+CI per-test timing shows them hitting the 90s cap (~91s) while heavier fsx tests
+finish in 21-34s in the same run. They pass on dev hardware; they wedge only
+under CI's constrained docker scheduling. gdb on a locally-reproduced hang (2-CPU
+pin) showed workers spinning in `ProcessNewTasks` and
+`BatchManager::FlushDue`/`pthread_mutex_lock` without yielding; with a lone
+compute worker (num_threads=1) a task can also starve its own sub-task. This is
+the self-send / lost-wakeup class in the busy-spin worker model — a config knob
+cannot resolve it (fewer workers fixes oversubscription for some tests but
+enables single-worker sub-task starvation for others).
+
+Real fix (a runtime change, not done here — high blast radius, and CI's docker
+env is not locally reproducible for validation):
+- add `CTP_THREAD_MODEL->Yield()` to the `ProcessNewTasks` and
+  `BatchManager::FlushDue` hot-spin paths so a worker holding a blocked task's
+  dependency cedes the core under oversubscription; and/or
+- fix the self-send/lost-wakeup so a blocked task is always re-scheduled when its
+  sub-task completes regardless of worker count; and/or
+- auto-size `num_threads` to `min(default, max(1, nproc-1))` globally.
+Re-add each quarantined test to the gate once the runtime fix lands and it
+passes two clean CI runs.
 
 ## What was fixed this session (committed)
 - **Harness bug** (`b0a616c3`): `run_clio_xfstests.sh` counted `notrun` as
