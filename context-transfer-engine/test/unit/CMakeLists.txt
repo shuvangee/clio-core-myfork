@@ -91,6 +91,13 @@ add_executable(test_concurrent_same_blob
     test_concurrent_same_blob.cc
 )
 
+# Parallel blob-metadata overlap stress: many threads race
+# PutBlob/GetBlob/DelBlob/GetBlobInfo over only 4 tags x 4 blobs (heavy
+# overlap). Success = no crashes, hangs, or leaks.
+add_executable(test_cte_parallel_overlap_stress
+    test_cte_parallel_overlap_stress.cc
+)
+
 # GPU-runtime-era CUDA tests were removed when the GPU runtime concept
 # was retired. The kernel→CPU submission path is now exercised by:
 #   - context-runtime/test/unit/gpu/test_gpu_kernel_stress_*
@@ -332,6 +339,22 @@ target_link_libraries(test_concurrent_same_blob
     ${CMAKE_THREAD_LIBS_INIT}
 )
 target_include_directories(test_concurrent_same_blob PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+# Link test_cte_parallel_overlap_stress - same deps (embedded runtime + CTE
+# core + bdev + threads).
+target_link_libraries(test_cte_parallel_overlap_stress
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+target_include_directories(test_cte_parallel_overlap_stress PRIVATE
     ${CMAKE_SOURCE_DIR}/context-runtime/test
 )
 
@@ -595,6 +618,20 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 300  # 5 minute timeout
         LABELS "stress;tiered;cte"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+)
+
+# Parallel overlap stress: Put/Get/Del/GetInfo race on 4 tags x 4 blobs.
+# Pass = the process finishes (no crash) within the timeout (no hang); run under
+# sanitizers for the no-leak metric.
+add_test(NAME cte_parallel_overlap_stress
+    COMMAND test_cte_parallel_overlap_stress)
+
+set_tests_properties(
+    cte_parallel_overlap_stress
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout -> a hang trips this
+        LABELS "stress;concurrent;cte"
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
