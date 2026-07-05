@@ -237,6 +237,13 @@ static int cte_fuse_getattr_stat(const char *path, cte_stat_t *stbuf,
     // cte_off_t is off_t on Linux; the WinFsp shim maps it for Windows.
     stbuf->st_size = static_cast<cte_off_t>(t->size_);
   }
+  // Report the 512-byte block count backing the file so stat(2) st_blocks is
+  // non-zero for files that hold data (generic/615 asserts a buffered/direct
+  // write shows allocated blocks). Derived from the logical size; directories
+  // report 0. st_blksize advertises a sensible I/O unit for tools.
+  stbuf->st_blksize = static_cast<decltype(stbuf->st_blksize)>(4096);
+  stbuf->st_blocks = static_cast<decltype(stbuf->st_blocks)>(
+      (static_cast<uint64_t>(stbuf->st_size) + 511) / 512);
   // Timestamps come from the tag as ns since the epoch (0 means the chimod had
   // no value, so leave that field at the epoch): ctime = last metadata change
   // (last_changed_), mtime = last content change (last_modified_), atime = last
