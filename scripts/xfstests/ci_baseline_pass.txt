@@ -1,568 +1,105 @@
-# xfstests baseline: the MAXIMUM set of generic/* tests that pass against the
-# clio FUSE filesystem. This is the CI gate -- CI runs ONLY these and every one
-# must pass (scripts/xfstests/run_ci_xfstests.sh).
+# xfstests baseline: generic/* tests that ACTUALLY PASS against the clio FUSE
+# filesystem (TEST_DIR-only harness). CI runs ONLY these via
+# scripts/xfstests/run_ci_xfstests.sh and every one must pass.
 #
-# How this list was produced (not hand-curated): the full generic/* group (793
-# tests) was run against the clio FUSE fs; 702 are notrun (require SCRATCH_DEV,
-# which the fs can't provide), leaving 91 that actually execute. Of those, these
-# passed a discovery run AND two independent verification runs. Flaky tests
-# (e.g. generic/013, fsstress-driven) are excluded on purpose.
+# 2026-07-05 INTEGRITY REBUILD. This list was rebuilt from 513 -> 81 entries
+# after finding that scripts/xfstests/run_clio_xfstests.sh miscounted NOTRUN
+# tests as PASS (it grepped ./check output for "^Passed all" before "^Not run:";
+# a notrun test prints BOTH "Not run: <t>" and "Passed all 0 tests"). A prior
+# bulk sweep had therefore admitted ~430 tests that never actually ran -- mostly
+# _require_scratch (SCRATCH_DEV is intentionally unset on this TEST_DIR-only
+# harness, so they notrun in EVERY environment; 130 of them) plus tests needing
+# an xfs_io command / feature clio's fs does not provide (~300). run_ci treats
+# any non-pass (incl. notrun) as failure, so with the harness bug fixed those
+# entries would (correctly) fail CI. The harness fix is commit b0a616c3.
 #
-# Failing/hanging tests are tracked, with root causes, in issue #680 (they are
-# NOT run in CI). Established 2026-07-03.
+# The 81 tests below were verified passing across TWO independent runs with the
+# corrected harness (2026-07-05). Scratch-requiring tests that pass under the
+# two-runtime driver belong in ci_scratch_baseline_pass.txt, not here. Removed
+# tests are recorded in the commit + scratchpad GATE_INTEGRITY_FINDING.md; any
+# that genuinely pass (e.g. once a missing xfstests helper like src/dbtest is
+# built) can be re-added after verification with the fixed harness.
 #
-# 2026-07-03 update: generic/089 + generic/100 added after fixing a hard-link
-# unlink bug (unlinking a file's canonical name destroyed its hard links, which
-# spun t_mtab's lock loop forever) + adding a no-op chmod op. generic/208 + 323
-# (aio-dio) are NOT here: they PASS but each runs a fixed long race loop (208 =
-# 200s; 323 = two 60s phases) that clio completes correctly but which exceeds
-# the 90s CI per-test timeout -- run them in a separate slow lane (timeout>=210s;
-# verified 2026-07-04: 323 passes at CLIO_XFS_PERTEST_TIMEOUT=220). Both target
-# KERNEL DIO races a userspace fs can't exhibit, so they add no clio coverage.
-# NOTE: 323 was briefly re-added by mistake (commit 860df359) and removed again
-# here -- do NOT re-add either without a slow lane, or CI will "hang" on them.
-# 2026-07-04 update: added 9 more tests confirmed passing across two runs after
-# the same-blob concurrency + hard-link ctime fixes (#680). Metadata/timestamp
-# coverage: 003/120 (atime), 023 (fsync dir), 355/356/357/358 (chown/setuid on
-# write/truncate), 631/636 (rename).
-# 2026-07-04 update: symlink/readlink support added (commit 73b8ba1) unblocks
-# 24 previously-notrun _require_symlinks tests, all passing across two runs.
-# generic/023 (renameat2) MOVED OUT: it was only "passing" because symlink()
-# was unimplemented (its symlink sub-cases were skipped); with symlinks it
-# exercises symlink+tree renames that hit rename-overwrite bugs (tracked).
-# 2026-07-04 update: xattr support added (commit 40afd1e3) unblocks 27 more
-# previously-notrun _require_attrs tests, all passing across two runs.
-# 2026-07-04 update: chown support added unblocks 11 more _require_chown tests
-# (all passing across two runs); generic/355 was already gated.
-# 2026-07-04 sweep: 358 previously-notrun/never-attempted generic tests that need
-# no block device — discovered + verified passing across two independent runs each.
-# (This closes the 'openable but never attempted' gap; flaky generic/013 excluded.)
-# 2026-07-05 sweep: re-triaged all 269 still-ungated generic tests. Of the 38 with
-# no hardware/scratch barrier, 15 pass and are added here after a discovery run +
-# TWO clean verification runs (100% consistent): 010 072 127 137 241 349 350 351
-# 363 473 616 649 694 701 746. The remaining ungated ones are non-clio-bugs:
-# env-privilege under unshare (086/394/650), false-timeouts >60s (310/323/522),
-# libfuse/architectural (035/074), trusted-xattr CAP + mount-cycle (097/533/639/728),
-# NFS export/open_by_handle (426/467/477/756/777), THP (759), fallocate-design (213).
-# Genuine feature gaps still open in #680: atime(192), neg-timestamps(258),
-# locking(504), xfs_io-cmd(590).
-# 2026-07-05 O_DIRECT sweep: of the 14 _require_odirect tests, most are notrun
-# (need reflink: 165/166/170/187/243/333, or atomic-writes: 773/774, or scratch:
-# 226). The 4 pure TEST_DIR+O_DIRECT ones ran embedded: 125 PASSES (3 runs) and
-# is added here; 521/617 pass only at a longer cap (soak fsx, false-timeouts like
-# 522 -- slow-lane, not gated); 760 needs hugepages (madvise-collapse EINVAL,
-# env, like THP 759); 391 = env-privilege. RESOLVED: 504 (flock) is NOT a clio
-# bug -- a direct embedded experiment showed clio's flock IS visible in
-# /proc/locks; it only fails under `unshare -rm` pid-ns /proc visibility (env
-# artifact like 086/394/650). 192/258 were harness-remount limits, now gated in
-# the SCRATCH baseline. So NO addressable clio bugs remain in the embedded set.
+# Slow-lane note: 208/323 (aio-dio) PASS but exceed the 90s per-test CI cap by
+# design; keep them out of this gate (a longer-cap lane), or CI "hangs".
 generic/001
 generic/002
-generic/003
-generic/004
 generic/005
 generic/006
 generic/007
-generic/008
-generic/009
-generic/010
 generic/011
-generic/012
-generic/014
-generic/015
-generic/016
-generic/018
+generic/013
 generic/020
-generic/021
-generic/022
-generic/024
-generic/025
-generic/026
+generic/023
 generic/028
-generic/031
-generic/032
-generic/033
 generic/036
-generic/037
-generic/053
-generic/058
-generic/060
-generic/061
-generic/062
-generic/063
-generic/064
-generic/066
-generic/067
-generic/069
 generic/070
-generic/072
 generic/075
-generic/076
-generic/077
-generic/078
-generic/079
 generic/080
-generic/082
-generic/087
-generic/088
 generic/089
 generic/091
-generic/092
-generic/093
-generic/094
-generic/095
-generic/096
-generic/099
 generic/100
-generic/103
-generic/105
-generic/109
-generic/110
-generic/111
 generic/112
 generic/113
-generic/114
-generic/115
-generic/116
-generic/117
-generic/118
-generic/119
-generic/120
-generic/121
-generic/122
-generic/123
-generic/125
-generic/126
 generic/127
-generic/128
-generic/129
 generic/131
 generic/133
-generic/134
-generic/136
-generic/137
-generic/138
-generic/139
-generic/140
-generic/142
-generic/143
-generic/144
-generic/145
-generic/146
-generic/147
-generic/148
-generic/149
-generic/150
-generic/151
-generic/152
-generic/153
-generic/154
-generic/155
-generic/156
-generic/157
-generic/158
-generic/159
-generic/160
-generic/161
-generic/162
-generic/163
-generic/171
-generic/172
-generic/173
-generic/174
-generic/178
-generic/179
-generic/180
-generic/181
-generic/182
-generic/183
-generic/184
-generic/185
-generic/188
-generic/189
-generic/190
-generic/191
-generic/193
-generic/194
-generic/195
-generic/196
-generic/197
 generic/198
-generic/199
-generic/200
-generic/201
-generic/202
-generic/203
-generic/205
-generic/206
 generic/207
-generic/209
 generic/210
-generic/211
 generic/212
 generic/214
 generic/215
-generic/216
-generic/217
-generic/218
-generic/219
-generic/220
 generic/221
-generic/222
-generic/223
-generic/225
-generic/227
 generic/228
-generic/229
-generic/230
-generic/235
 generic/236
-generic/237
-generic/238
-generic/239
-generic/240
-generic/241
-generic/244
 generic/245
 generic/246
 generic/247
 generic/248
 generic/249
-generic/253
-generic/254
-generic/255
-generic/256
 generic/257
-generic/259
-generic/260
-generic/261
-generic/262
 generic/263
-generic/264
-generic/270
-generic/277
-generic/284
 generic/285
 generic/286
-generic/287
-generic/288
-generic/289
-generic/290
-generic/291
-generic/292
-generic/293
-generic/294
-generic/295
-generic/296
-generic/301
-generic/302
-generic/303
-generic/304
-generic/305
-generic/306
-generic/307
 generic/308
 generic/309
-generic/312
 generic/313
-generic/314
 generic/315
-generic/316
-generic/317
-generic/318
-generic/319
-generic/324
-generic/326
-generic/327
-generic/328
-generic/330
-generic/332
-generic/337
-generic/346
-generic/348
-generic/349
-generic/350
-generic/351
-generic/353
-generic/355
-generic/356
-generic/357
-generic/358
-generic/359
 generic/360
 generic/362
 generic/363
 generic/364
-generic/366
-generic/367
-generic/368
-generic/369
-generic/370
-generic/371
-generic/372
-generic/373
-generic/374
-generic/375
-generic/377
-generic/378
-generic/379
-generic/380
-generic/381
-generic/382
-generic/383
-generic/384
-generic/385
-generic/386
-generic/389
-generic/395
-generic/396
-generic/397
-generic/398
-generic/399
-generic/400
-generic/401
-generic/402
-generic/403
-generic/404
-generic/407
-generic/408
-generic/409
-generic/410
-generic/411
-generic/413
-generic/414
-generic/419
-generic/420
-generic/421
-generic/423
-generic/424
-generic/425
-generic/427
 generic/428
 generic/430
 generic/431
 generic/432
 generic/433
-generic/434
 generic/436
 generic/437
 generic/438
-generic/439
-generic/440
 generic/443
-generic/444
 generic/445
-generic/446
 generic/448
-generic/449
-generic/450
 generic/451
-generic/452
-generic/453
-generic/454
-generic/458
-generic/460
-generic/462
-generic/463
 generic/465
-generic/469
-generic/470
 generic/471
-generic/472
-generic/473
 generic/478
-generic/479
-generic/485
-generic/486
-generic/488
-generic/489
 generic/490
-generic/492
-generic/493
-generic/494
-generic/495
-generic/496
-generic/497
-generic/499
-generic/503
-generic/511
-generic/513
-generic/514
-generic/515
-generic/516
-generic/517
-generic/518
-generic/523
-generic/528
-generic/529
-generic/531
 generic/532
-generic/537
-generic/538
-generic/539
-generic/540
-generic/541
-generic/542
-generic/543
-generic/544
-generic/545
-generic/548
-generic/549
-generic/550
-generic/553
-generic/554
-generic/555
-generic/556
-generic/564
-generic/566
-generic/567
 generic/568
-generic/569
 generic/571
-generic/572
-generic/573
-generic/574
-generic/575
-generic/576
-generic/577
-generic/578
-generic/580
-generic/581
-generic/582
-generic/583
-generic/584
 generic/586
-generic/587
 generic/591
-generic/592
-generic/593
-generic/594
-generic/595
-generic/596
-generic/597
-generic/598
-generic/600
-generic/601
-generic/602
-generic/603
-generic/605
-generic/606
-generic/607
-generic/608
 generic/609
-generic/610
-generic/611
-generic/612
-generic/613
-generic/614
-generic/615
-generic/616
-generic/618
-generic/620
-generic/621
-generic/623
-generic/624
-generic/625
-generic/626
-generic/630
-generic/631
 generic/632
-generic/633
-generic/636
 generic/637
 generic/638
-generic/641
-generic/644
-generic/645
 generic/647
-generic/649
-generic/651
-generic/652
-generic/653
-generic/654
-generic/655
-generic/656
-generic/657
-generic/658
-generic/659
-generic/660
-generic/661
-generic/662
-generic/663
-generic/664
-generic/665
-generic/666
-generic/667
-generic/668
-generic/669
-generic/673
-generic/674
-generic/675
 generic/676
-generic/678
-generic/679
-generic/680
-generic/681
-generic/682
-generic/683
-generic/684
-generic/685
-generic/686
-generic/687
-generic/688
-generic/689
-generic/690
-generic/692
-generic/693
-generic/694
-generic/696
-generic/697
-generic/698
-generic/699
-generic/700
-generic/701
-generic/702
 generic/706
 generic/708
-generic/709
-generic/710
-generic/711
-generic/712
-generic/713
-generic/714
-generic/715
-generic/716
-generic/717
-generic/718
-generic/719
-generic/720
-generic/721
-generic/723
-generic/724
-generic/725
-generic/726
-generic/727
 generic/729
-generic/734
-generic/735
 generic/736
-generic/739
-generic/742
-generic/745
-generic/746
-generic/748
-generic/752
-generic/754
 generic/755
-generic/758
 generic/763
-generic/765
-generic/772
-generic/776
-generic/779
-generic/780
-generic/783
-generic/786
-generic/787
-generic/788
-generic/793
