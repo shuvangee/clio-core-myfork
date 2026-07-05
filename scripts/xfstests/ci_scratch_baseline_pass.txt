@@ -33,6 +33,12 @@
 # (551 = aio-dio-write-verify, 750 = fsstress soak) -- a cross-process SHM
 # transport robustness issue under load, NOT the append fix (embedded fsstress
 # is clean) and NOT the O_APPEND pattern; tracked separately.
+# 2026-07-05 update: added 192 (atime) 258 (negative timestamps) 639 (write past
+# EOF after remount). These FAIL under the embedded harness only because it can't
+# remount TEST_DIR (_test_cycle_mount execs a nonexistent "clio_test" helper), so
+# the file vanishes -- NOT a clio atime/timestamp/persistence bug (the feature
+# logic is correct). Under this two-runtime driver the keeper survives the client
+# remount via the fuse mount-helper, and all three pass 3 independent runs.
 generic/029
 generic/030
 generic/069
@@ -46,6 +52,8 @@ generic/132
 generic/135
 generic/141
 generic/169
+generic/192
+generic/258
 generic/340
 generic/354
 generic/393
@@ -58,6 +66,7 @@ generic/525
 generic/565
 generic/604
 generic/634
+generic/639
 generic/642
 generic/732
 generic/749
