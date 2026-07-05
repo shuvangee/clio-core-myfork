@@ -61,3 +61,17 @@ would take*, with the concrete caveats found by actually attempting them.
 3. If sparse-file correctness matters beyond tests, pick the st_blocks tradeoff
    (accept the per-getattr scan cost, or the tracked-counter drift risk with a
    debug assert like `GetTotalSize()` has).
+
+## Metadata durability model (verified 2026-07-05)
+- DATA: consistent + durable. Write-through (no writeback cache), per-blob write
+  token serializes same-blob writes. Verified byte-identical readback + in-place
+  overwrite; fsx 075/091/127/263 pass. mmap uses the kernel page cache (074).
+- XATTRS: durable. Stored in the `_clio_xattr_store` CTE tag (keyed by file tag
+  id). set/get/list/remove verified, incl. system.posix_acl_access (ACLs work).
+  Gap: cross-mount-cycle persistence (533).
+- PERMISSIONS (mode/uid/gid): correct but PER-RUNTIME IN-MEMORY (by_path_
+  FileInfo set_mode_/set_uid_/set_gid_), NOT durable tag metadata. Survive while
+  the serving runtime/keeper is alive (192/258/639 pass under the 2-runtime
+  driver) but are lost on a runtime restart / embedded unmount. To make
+  permissions durable, move these overrides into the tag metadata alongside
+  timestamps/xattrs. This is the one metadata-durability gap.
