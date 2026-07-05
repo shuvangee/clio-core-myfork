@@ -19,7 +19,12 @@
 #
 # Failing/hanging scratch tests (tracked, not run in CI):
 #   FAIL: 003 120 346 403 452 460 519 615
-#   HANG: 339 347 464 707
+#   HANG: 347 707
+#   SLOW-PASS (not deadlocks; complete correctly given time, but run ~40-64s so
+#     they exceed a tight cap -- NOT gated to avoid CI-load flakiness near the
+#     90s cap, same policy as embedded 208/323): 339 (dir hash order) 464
+#     (delalloc/append/sync writeback race). Verified pass at CLIO_XFS_PERTEST_
+#     TIMEOUT=90 and 150 across multiple runs 2026-07-05.
 # Established 2026-07-03.
 #
 # 2026-07-04 update: the O_APPEND hang class 069/129/476/642 now PASS and are
