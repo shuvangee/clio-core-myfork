@@ -3494,6 +3494,11 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
           std::min(last.capacity_ - last.size_, additional_size);
       last.size_ += fill;
       additional_size -= fill;
+      // Keep the O(1) size cache == sum(blocks_) in the SAME co_await-free step
+      // as the blocks_ mutation. Otherwise a concurrent reader (GetBlob/
+      // GetBlobInfo do not hold the per-blob write token) could run during a
+      // later co_await and observe grown blocks_ with a stale cache.
+      blob_info.total_size_cache_ += fill;
     }
   }
   if (additional_size == 0) {
@@ -3602,6 +3607,10 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
                           target_info_copy.target_query_, allocated_offset,
                           logical, physical);
       blob_info.blocks_.push_back(new_block);
+      // Advance the O(1) size cache in the SAME co_await-free step as the
+      // push_back (the debit lock + next AllocateFromTarget below both co_await),
+      // so a concurrent reader never sees grown blocks_ with a stale cache.
+      blob_info.total_size_cache_ += logical;
 
       // Debit the CANONICAL target's remaining_space_ by the PHYSICAL bytes
       // taken (mirror of FreeAllBlobBlocks' capacity_ credit); AllocateFromTarget
