@@ -627,23 +627,71 @@ static int cte_fuse_truncate(const char *path, cte_off_t size,
 }
 
 #ifdef __linux__
-// fallocate — implemented as an ftruncate-grow. We never reserve storage ahead
-// of time: page-blobs are created lazily on write and holes read back as zeros,
-// so preallocating blocks is unnecessary. A plain fallocate(mode=0) therefore
-// reduces to "ensure the file is at least offset+length bytes"; it only ever
-// grows (fallocate never shrinks). FALLOC_FL_KEEP_SIZE is a no-op success (the
-// caller wants blocks reserved without moving EOF, and we don't reserve). Modes
-// that rewrite data layout — punch hole, collapse/insert range, zero range —
-// are not supported and return EOPNOTSUPP so callers fall back cleanly.
+// Write `len` zero bytes at `off` through an open handle, chunked so a large
+// range doesn't need one giant SHM buffer. Used by ZERO_RANGE. Returns 0 or a
+// negative errno.
+static int cte_fuse_write_zeros(CfsHandle *handle, cte_off_t off,
+                                cte_off_t len) {
+  auto *ipc = CLIO_IPC;
+  auto *cfs = CLIO_CFS_CLIENT;
+  constexpr cte_off_t kChunk = 1 << 20;  // 1 MiB
+  const cte_off_t buf_sz = (len < kChunk) ? len : kChunk;
+  ctp::ipc::FullPtr<char> zbuf = ipc->AllocateBuffer(buf_sz);
+  if (zbuf.IsNull()) return -ENOMEM;
+  memset(zbuf.ptr_, 0, static_cast<size_t>(buf_sz));
+  int result = 0;
+  for (cte_off_t done = 0; done < len;) {
+    const cte_off_t n = ((len - done) < buf_sz) ? (len - done) : buf_sz;
+    auto t = cfs->AsyncWrite(handle->fh, static_cast<clio::run::u64>(off + done),
+                             static_cast<clio::run::u64>(n),
+                             ctp::ipc::ShmPtr<>(zbuf.shm_));
+    t.Wait();
+    if (t->GetReturnCode() != 0) { result = -EIO; break; }
+    done += n;
+  }
+  ipc->FreeBuffer(zbuf);
+  return result;
+}
+
+// fallocate — page-blobs are created lazily on write and holes read back as
+// zeros, so we never reserve storage ahead of time. Supported modes:
+//   * mode==0            : grow EOF to offset+length (never shrinks).
+//   * FALLOC_FL_KEEP_SIZE: no-op success (nothing to reserve).
+//   * FALLOC_FL_ZERO_RANGE: make [offset,offset+length) read as zeros by
+//     writing zeros through the open handle (with KEEP_SIZE, restore EOF after
+//     if the write extended it). This is a correct ZERO_RANGE for our
+//     hole-reads-as-zero model and unblocks the fzero xfstests.
+// Layout-shifting modes (punch hole, collapse/insert range) would need a
+// chimod-level block-dealloc/shift op and still return EOPNOTSUPP.
 static int cte_fuse_fallocate(const char *path, int mode, cte_off_t offset,
                               cte_off_t length, struct fuse_file_info *fi) {
-  const int kSupportedModes = FALLOC_FL_KEEP_SIZE;
+  const int kSupportedModes = FALLOC_FL_KEEP_SIZE | FALLOC_FL_ZERO_RANGE;
   if (mode & ~kSupportedModes) {
-    return -EOPNOTSUPP;  // punch/collapse/insert/zero-range: layout-changing
+    return -EOPNOTSUPP;  // punch/collapse/insert: layout-changing
   }
   if (offset < 0 || length <= 0) {
     return -EINVAL;
   }
+
+  if (mode & FALLOC_FL_ZERO_RANGE) {
+    auto *handle = GetHandle(fi);
+    if (!handle) return -EBADF;
+    // Original size, so KEEP_SIZE can restore EOF if the zero-write grows it.
+    cte_stat_t st;
+    int rc = cte_fuse_getattr_stat(path, &st, fi);
+    if (rc != 0) return rc;
+    rc = cte_fuse_write_zeros(handle, offset, length);
+    if (rc != 0) return rc;
+    if ((mode & FALLOC_FL_KEEP_SIZE) && (offset + length) > st.st_size) {
+      auto *cfs = CLIO_CFS_CLIENT;
+      auto t = cfs->AsyncTruncate(std::string(path),
+                                  static_cast<clio::run::u64>(st.st_size));
+      t.Wait();
+      if (t->GetReturnCode() != 0) return -EIO;
+    }
+    return 0;
+  }
+
   if (mode & FALLOC_FL_KEEP_SIZE) {
     return 0;  // no size change requested, and there is nothing to reserve
   }
