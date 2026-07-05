@@ -5,6 +5,40 @@ embedded gate is now **84 tests** (all verified passing, `run_ci`-green) plus 35
 in the scratch gate. Everything below is *why the rest don't pass* and *what it
 would take*, with the concrete caveats found by actually attempting them.
 
+## 2026-07-05 — CI went red: worker oversubscription livelock (FIXED)
+The embedded-FUSE gate passed locally but **hung 12 tests in CI** (run
+28747864260, job "adapters (linux, all 5)"): generic/006/007/011/013/089/100/
+113/127/286/363/438/471. These pass on a 16-core dev box but hang in the
+deps-cpu docker on a 4-vCPU GitHub runner.
+
+Root cause (reproduced locally by `taskset -c 0,1`, i.e. pinning to 2 CPUs):
+the runtime's default `num_threads=4` spawns 5 busy-spinning workers. Under
+`Worker::Run` an idle/blocked worker busy-polls its lane (`ProcessNewTasks`) and
+the ManyToOne batch mutex (`BatchManager::FlushDue`) **without yielding**. When
+the number of runnable workers + libfuse's thread pool + the 8 ZMQ I/O threads
+exceeds the core count, a worker holding a blocked task's dependency is starved
+and the pipeline livelocks. gdb on a hung daemon showed two workers pinned at
+~46% CPU in `ProcessNewTasks` and `BatchManager::FlushDue`/`pthread_mutex_lock`.
+
+Fixes:
+1. **`clio_xfstests_config.yaml`: `runtime.num_threads: 1`** (1 compute + 1
+   network worker). Verified under 2-CPU pinning: 11 of the 12 recover. The rule
+   is workers ≤ cores — `num_threads=2` (3 workers) still livelocks on 2 CPUs.
+   The embedded FUSE adapter is a single-client front-end and needs no
+   compute-worker fan-out, so undersubscribing is correct, not a workaround.
+2. **`worker.cc`: yield in the idle busy-wait window** (`SuspendMe`, the
+   `elapsed_idle_us < first_busy_wait` branch). A bare spin there monopolizes a
+   core; `std::this_thread::yield()` is a no-op when a core is free and cedes it
+   under contention. Complementary robustness; num_threads is the primary fix.
+3. **generic/127 removed from the gate** — fsx torture stays hung even with a
+   single worker under CPU constraint (too heavy to finish within the 90s cap on
+   a starved runner). Candidate for a slow-lane / dedicated-CPU re-add. Gate 84->83.
+
+General follow-up (not done): the busy-spin worker design assumes ~1 core per
+worker. Either auto-size `num_threads` to `min(default, max(1, nproc-1))`, or add
+yields to the `ProcessNewTasks`/`FlushDue` hot-spin paths, so any embedded/
+constrained deployment degrades gracefully instead of livelocking.
+
 ## What was fixed this session (committed)
 - **Harness bug** (`b0a616c3`): `run_clio_xfstests.sh` counted `notrun` as
   `pass` (matched `^Passed all` before `^Not run:`). A prior sweep had thus

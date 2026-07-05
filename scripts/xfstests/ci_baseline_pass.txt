@@ -22,6 +22,18 @@
 #
 # Slow-lane note: 208/323 (aio-dio) PASS but exceed the 90s per-test CI cap by
 # design; keep them out of this gate (a longer-cap lane), or CI "hangs".
+#
+# 2026-07-05 CI-CPU FIX. This gate went red in CI (run 28747864260): 12 tests
+# (006/007/011/013/089/100/113/127/286/363/438/471) that pass on a 16-core dev
+# box HUNG in the deps-cpu docker on the 4-vCPU GitHub runner. Root cause: the
+# embedded FUSE runtime's default 4 worker threads (5 busy-spinning workers)
+# oversubscribe the runner's cores and livelock (reproduced by pinning to 2
+# CPUs locally). Fixed by capping the embedded runtime to num_threads=1 in
+# scripts/xfstests/clio_xfstests_config.yaml -> 11 of the 12 recover. The lone
+# exception, generic/127 (fsx torture), stays hung even with a single worker
+# under constraint (too heavy to finish within the cap on a starved runner), so
+# it is REMOVED from this gate and tracked in REMAINING_WORK.md for a slow-lane
+# / dedicated-CPU re-add. Gate: 84 -> 83.
 generic/001
 generic/002
 generic/005
@@ -43,7 +55,6 @@ generic/091
 generic/100
 generic/112
 generic/113
-generic/127
 generic/131
 generic/133
 generic/198

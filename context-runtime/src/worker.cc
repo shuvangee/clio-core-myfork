@@ -506,7 +506,18 @@ void Worker::SuspendMe() {
   double elapsed_idle_us = idle_start_.GetUsecFromStart(current_time);
 
   if (elapsed_idle_us < first_busy_wait) {
-    // Still in busy wait period - just return
+    // Still in busy-wait period. Yield the core before returning to the poll
+    // loop. std::this_thread::yield only reschedules when another thread is
+    // runnable, so on a well-provisioned host (spare cores) this is a no-op
+    // and the low-latency busy-wait is preserved. When the runtime is
+    // oversubscribed — more runnable workers + FUSE/ZMQ threads than cores, as
+    // on CI's 2-core runners — a bare spin here monopolizes the core and
+    // starves the worker that must run a blocked task's dependency (or the
+    // FUSE thread that must submit it), livelocking the whole pipeline. That
+    // is why the embedded-FUSE xfstests (generic/006/007/011/013/089/100/113/
+    // 127/286/363/438/471) pass on a 16-core box but hang in CI. Yielding lets
+    // the runnable thread get scheduled so forward progress resumes.
+    CTP_THREAD_MODEL->Yield();
     return;
   } else {
     // Past busy wait period - use epoll
