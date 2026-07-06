@@ -71,6 +71,7 @@ class DefaultScheduler : public Scheduler {
   Worker *GetNetWorker() const override { return net_recv_worker_; }
   Worker *GetNetSendWorker() const override { return net_send_worker_; }
   Worker *GetNetRecvWorker() const override { return net_recv_worker_; }
+  Worker *PickAltWorker(u32 avoid_id) const override;
 
  private:
   static constexpr size_t kLargeIOThreshold = 4096;  ///< I/O size threshold

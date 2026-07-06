@@ -215,6 +215,42 @@ if(CLIO_CORE_ENABLE_TESTS)
       LABELS "msan_skip"
     )
 
+    # Parallel CFS overlap stress: many threads race read/write/append/unlink/
+    # rmdir/readdir over a tiny shared namespace (4 files + 4 dirs). Success =
+    # no crash, hang, or leak.
+    add_executable(clio_run_cfs_parallel_stress_test test_cfs_parallel_stress.cc)
+    target_include_directories(clio_run_cfs_parallel_stress_test PRIVATE
+      ${CLIO_RUN_ROOT}/include
+      ${CLIO_RUN_ROOT}/test
+    )
+    target_link_libraries(clio_run_cfs_parallel_stress_test
+      clio_cte_filesystem_client
+      clio_cte_core_client
+      clio_admin_client
+      clio_run_cxx
+      ctp::cxx
+      ${CMAKE_THREAD_LIBS_INIT}
+    )
+    target_compile_definitions(clio_run_cfs_parallel_stress_test PRIVATE
+      CLIO_RUN_EXE="$<TARGET_FILE:clio_run>")
+    add_dependencies(clio_run_cfs_parallel_stress_test clio_run clio_cte_filesystem_runtime)
+    set_target_properties(clio_run_cfs_parallel_stress_test PROPERTIES
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    add_test(
+      NAME cr_cli_cfs_parallel_stress
+      COMMAND clio_run_cfs_parallel_stress_test
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    set_tests_properties(cr_cli_cfs_parallel_stress PROPERTIES
+      ENVIRONMENT "${_cli_live_env}"
+      RESOURCE_LOCK "clio_runtime_port"
+      TIMEOUT 300
+      LABELS "msan_skip"
+    )
+
     # Fallback-runtime CTE test: CTE on a USER runtime backed by a bdev on a
     # MAIN runtime. Gated OFF — the runtime-fallback feature was removed (see
     # CLIO_CORE_ENABLE_RUNTIME_FALLBACK at the top of this file).

@@ -80,6 +80,24 @@ add_executable(test_bdev_leak_stress
     test_bdev_leak_stress.cc
 )
 
+add_executable(test_concurrent_io_stress
+    test_concurrent_io_stress.cc
+)
+
+# Same-blob write-race regression (#680 / xfstests generic/074). Many threads
+# write disjoint regions of ONE shared blob; the per-blob write token must keep
+# each region intact.
+add_executable(test_concurrent_same_blob
+    test_concurrent_same_blob.cc
+)
+
+# Parallel blob-metadata overlap stress: many threads race
+# PutBlob/GetBlob/DelBlob/GetBlobInfo over only 4 tags x 4 blobs (heavy
+# overlap). Success = no crashes, hangs, or leaks.
+add_executable(test_cte_parallel_overlap_stress
+    test_cte_parallel_overlap_stress.cc
+)
+
 # GPU-runtime-era CUDA tests were removed when the GPU runtime concept
 # was retired. The kernel→CPU submission path is now exercised by:
 #   - context-runtime/test/unit/gpu/test_gpu_kernel_stress_*
@@ -291,6 +309,53 @@ target_link_libraries(test_bdev_leak_stress
     clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+# Link test_concurrent_io_stress (#680 concurrency repro) - same deps as the
+# leak stress test (embedded runtime + CTE core + bdev + threads).
+target_link_libraries(test_concurrent_io_stress
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+target_include_directories(test_concurrent_io_stress PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+# Link test_concurrent_same_blob (#680 same-blob write race) - same deps.
+target_link_libraries(test_concurrent_same_blob
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+target_include_directories(test_concurrent_same_blob PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+)
+
+# Link test_cte_parallel_overlap_stress - same deps (embedded runtime + CTE
+# core + bdev + threads).
+target_link_libraries(test_cte_parallel_overlap_stress
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+target_include_directories(test_cte_parallel_overlap_stress PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
 )
 
 # GPU-runtime-era link rules removed.
@@ -520,6 +585,13 @@ set_tests_properties(cte_bdev_leak_stress PROPERTIES
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;CTE_LEAK_STRESS_SECONDS=60"
 )
 
+# Concurrent I/O stress: many threads hammer the shared per-process allocator
+# via AllocateBuffer/FreeBuffer (+ optional Put/Get) to reproduce the #680
+# multi-threaded buffer/task race without fsx/FUSE. NOT registered with add_test
+# yet: it still fails until the shared_ptr<Task>/Future completion race in the
+# client-submit -> worker-process path is fixed (TSan-confirmed root cause). Run
+# it manually as a repro: build/bin/test_concurrent_io_stress.
+
 # Add tiered storage stress tests
 # NOTE: These tests are chained (Put -> Reorganize -> Integrity -> Cleanup)
 # and share global state via g_fixture, so they must run together in a single
@@ -549,6 +621,23 @@ set_tests_properties(
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
+# Parallel overlap stress: Put/Get/Del/GetInfo race on 4 tags x 4 blobs.
+# Pass = the process finishes (no crash) within the timeout (no hang); run under
+# sanitizers for the no-leak metric. Labeled concurrent (NOT "stress") so it is
+# included in the default CI ctest run -- like test_concurrent_same_blob -- and
+# a CI-friendly iteration count keeps it fast even in the instrumented coverage
+# build (override STRESS_ITERS/STRESS_THREADS locally for a heavier soak).
+add_test(NAME cte_parallel_overlap_stress
+    COMMAND test_cte_parallel_overlap_stress)
+
+set_tests_properties(
+    cte_parallel_overlap_stress
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout -> a hang trips this
+        LABELS "concurrent;cte;msan_skip"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;STRESS_THREADS=8;STRESS_ITERS=1500"
+)
+
 # Regression: blocks freed by DelBlob return to their bdev partition.
 add_test(NAME cte_block_reuse_all
     COMMAND test_blob_block_reuse)
@@ -559,6 +648,27 @@ set_tests_properties(
         TIMEOUT 300  # 5 minute timeout
         LABELS "regression;cte"
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+)
+
+# Regression: concurrent writes to disjoint regions of ONE shared blob must not
+# corrupt the shared block layout (#680 / xfstests generic/074 fsx mismatches).
+# Every writer serializes on the same per-blob write token, so the workload is
+# effectively a single serial stream of PutBlobs. The 1500-iter default writes
+# ~800 MB and cannot finish inside the 300s budget on an instrumented Debug/gcov
+# build (measured: ~33% done at timeout on the coverage runner), so -- exactly
+# like cte_parallel_overlap_stress above -- pin a CI-friendly iteration count in
+# the environment. 8 threads x 100 iters still races ~800 concurrent same-blob
+# extends, which is what detects the corruption; the 1500-iter soak is a local
+# knob (override SAME_BLOB_ITERS/SAME_BLOB_THREADS for a heavier run).
+add_test(NAME cte_concurrent_same_blob_all
+    COMMAND test_concurrent_same_blob)
+
+set_tests_properties(
+    cte_concurrent_same_blob_all
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout -> a hang trips this
+        LABELS "regression;concurrent;cte"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;SAME_BLOB_THREADS=8;SAME_BLOB_ITERS=100"
 )
 
 # Add reorganize blob tests

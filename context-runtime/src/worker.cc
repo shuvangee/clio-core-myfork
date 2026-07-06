@@ -506,7 +506,18 @@ void Worker::SuspendMe() {
   double elapsed_idle_us = idle_start_.GetUsecFromStart(current_time);
 
   if (elapsed_idle_us < first_busy_wait) {
-    // Still in busy wait period - just return
+    // Still in busy-wait period. Yield the core before returning to the poll
+    // loop. std::this_thread::yield only reschedules when another thread is
+    // runnable, so on a well-provisioned host (spare cores) this is a no-op
+    // and the low-latency busy-wait is preserved. When the runtime is
+    // oversubscribed — more runnable workers + FUSE/ZMQ threads than cores, as
+    // on CI's 2-core runners — a bare spin here monopolizes the core and
+    // starves the worker that must run a blocked task's dependency (or the
+    // FUSE thread that must submit it), livelocking the whole pipeline. That
+    // is why the embedded-FUSE xfstests (generic/006/007/011/013/089/100/113/
+    // 127/286/363/438/471) pass on a 16-core box but hang in CI. Yielding lets
+    // the runnable thread get scheduled so forward progress resumes.
+    CTP_THREAD_MODEL->Yield();
     return;
   } else {
     // Past busy wait period - use epoll
@@ -815,12 +826,33 @@ void Worker::EndTask(clio::run::shared_ptr<Task> &task_ptr, bool can_resched) {
          task_ptr->pool_id_, task_ptr->method_);
     return;
   }
-  // Dispatch response via transport class
-  IpcCpu2Self::SendOut(task_ptr, shm_send_transport_.get());
-  // SendOut has signaled the waiter (or, for a subtask, enqueued its Future copy
-  // onto the parent's event queue), so this RunContext's back-reference can drop
-  // its ownership and let the finished task free by RAII.
-  break_self_cycle();
+  // A top-level in-process task shares its Task object (and RunContext) with the
+  // waiting client. In that case SendOut() below flips this task's completion
+  // flag directly (IpcCpu2Self::SendOut -> SetComplete), which unblocks the
+  // client's Wait(); the client then tears down the RunContext. break_self_cycle
+  // mutates that same RunContext's RunFuture.task_ptr_, so running it AFTER the
+  // signal races the just-unblocked client on that shared_ptr — a
+  // use-after-free / double-release that corrupts the task allocator and shows
+  // up as a SIGSEGV in _BuddyAllocator::AllocateOffset (#680; TSan flags
+  // concurrent shared_ptr<Task>::Release from Worker::EndTask and the client's
+  // ~RunContext). So for this case break the cycle BEFORE signaling. For a
+  // subtask, SendOut enqueues an OWNING RunFuture copy onto the parent's event
+  // queue, so the self-cycle must stay owning until after SendOut — break after.
+  const bool signals_inprocess_client =
+      future_shm->origin_ == ClientOrigin::kClientShm &&
+      !task_ptr->task_flags_.Any(TASK_EXTERNAL_CLIENT) &&
+      (task_ptr->GetParentTask().IsNull() ||
+       task_ptr->GetParentTask()->EventQueue() == nullptr);
+  if (signals_inprocess_client) {
+    break_self_cycle();
+    IpcCpu2Self::SendOut(task_ptr, shm_send_transport_.get());
+  } else {
+    IpcCpu2Self::SendOut(task_ptr, shm_send_transport_.get());
+    // SendOut enqueued the Future copy onto the parent's event queue (subtask)
+    // or shipped it to a remote/external client; the local back-reference can
+    // now drop its ownership and let the finished task free by RAII.
+    break_self_cycle();
+  }
 }
 
 void Worker::ProcessBlockedQueue(std::queue<clio::run::shared_ptr<Task>> &queue,

@@ -453,11 +453,14 @@ class Client : public clio::run::ContainerClient {
    */
   clio::run::Future<DelTagTask> AsyncDelTag(
       const std::string &tag_name,
-      const clio::run::PoolQuery &pool_query = clio::run::PoolQuery::Dynamic()) {
+      const clio::run::PoolQuery &pool_query = clio::run::PoolQuery::Dynamic(),
+      bool posix_unlink = false) {
     auto *ipc_manager = CLIO_CPU_IPC;
 
     auto task = ipc_manager->NewTask<DelTagTask>(
         clio::run::CreateTaskId(), pool_id_, pool_query, tag_name);
+    // POSIX unlink (#680): promote a surviving alias instead of cascade-deleting.
+    task->posix_unlink_ = posix_unlink ? 1u : 0u;
 
     return ipc_manager->Send(task);
   }
