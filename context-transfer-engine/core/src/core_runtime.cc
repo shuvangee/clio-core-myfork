@@ -1538,20 +1538,6 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
       CLIO_CO_RETURN;
     }
 
-    // Step 6.5: The blob data is now safely held in blob_data_buffer, so free
-    // the OLD placement before re-putting. A reorganize that re-Puts before the
-    // old blocks are freed needs transient 2x tier space (old copy + new copy);
-    // near capacity that spike makes the re-Put fail with "no space" (rc=7) for
-    // a few blobs -- which is exactly how reorganizing 128 MB toward a 64 MB
-    // DRAM tier flakes 3/128 in a constrained container (passes on a roomier
-    // host). Deleting first hands the re-Put the full freed capacity, so the
-    // move needs only 1x space. Data safety is preserved: the bytes live in
-    // blob_data_buffer, which the AsyncPutBlob below writes back.
-    auto del_task = client_.AsyncDelBlob(tag_id, blob_name);
-    CLIO_CO_AWAIT(del_task);
-    // A failed delete is non-fatal: fall through to Put, which overwrites in
-    // place (the pre-existing behavior) rather than aborting the reorganize.
-
     // Step 7: Put blob with new score (data reorganization)
     HLOG(kDebug,
          "ReorganizeBlob calling AsyncPutBlob for blob={}, new_score={}",
