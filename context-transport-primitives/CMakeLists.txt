@@ -460,14 +460,11 @@ target_link_libraries(host_deps INTERFACE
     ${REAL_TIME_FLAGS}
 )
 
-# Poco::Net powers the optional drive-failure prediction HTTP client
-# (SystemInfo::PredictDriveFailure). Poco is already located by the root
-# CMakeLists (find_package(Poco COMPONENTS Net ...)); when present we expose
-# CTP_HAS_POCO so the client compiles, otherwise the call degrades to "{}".
-if(Poco_FOUND)
-    target_link_libraries(host_deps INTERFACE Poco::Net Poco::Foundation)
-    target_compile_definitions(host_deps INTERFACE CTP_HAS_POCO=1)
-endif()
+# NOTE: Poco::Net (the drive-failure prediction HTTP client) is intentionally
+# NOT linked into this INTERFACE aggregate. The client is compiled into
+# clio_ctp_host and links Poco PRIVATE there; propagating Poco::Foundation's
+# _FILE_OFFSET_BITS=64 / _LARGEFILE64_SOURCE through host_deps would collide with
+# the POSIX/stdio interception adapters (open64/creat64 "already defined").
 
 # Install interface libraries (compiled libraries are installed in src/CMakeLists.txt)
 install(TARGETS
