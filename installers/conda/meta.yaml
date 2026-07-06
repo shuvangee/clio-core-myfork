@@ -41,6 +41,7 @@ requirements:
     - liburing    # [linux]
     - nlohmann_json
     - libcurl
+    - poco            # Poco::Net: HTTP client for the drive-failure prediction path
     - libboost-devel  # Boost.Context: optional stackful coroutine backend (#620)
   run:
     - python
@@ -54,6 +55,7 @@ requirements:
     - liburing    # [linux]
     - nlohmann_json
     - libcurl
+    - poco            # Poco::Net: HTTP client for the drive-failure prediction path
     - pyyaml
     - msgpack-python
     - flask

@@ -46,13 +46,23 @@
 #define PATH_MAX 4096  // POSIX default; not always in <climits> under NVHPC
 #endif
 // LCOV_EXCL_STOP
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <string>
 
-#if CTP_HAS_CURL
-#include <curl/curl.h>
+#if CTP_HAS_POCO
+#include <Poco/Exception.h>
+#include <Poco/StreamCopier.h>
+#include <Poco/Timespan.h>
+#include <Poco/URI.h>
+#include <Poco/Net/HTTPClientSession.h>
+#include <Poco/Net/HTTPMessage.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <istream>
 #endif
 
 #include "clio_ctp/constants/macros.h"
@@ -1163,13 +1173,6 @@ SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept {
   return *this;
 }
 
-#if CTP_HAS_CURL
-static size_t CurlWriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
-#endif
-
 /// @brief Retrieves storage device hardware health statistics.
 ///
 /// Reads a JSON file left by an external admin service
@@ -1233,46 +1236,92 @@ std::string SystemInfo::GetDeviceHealthStats(const std::string &path) {
 #endif
 }
 
-/// @brief Predicts drive failure by calling local python server.
-std::string SystemInfo::PredictDriveFailure(const std::string &drive_type, const std::string &health_json, const std::string &drive_id) {
-#if CTP_HAS_CURL
-  // Use host.docker.internal so the request reaches the Windows/Mac host
-  // when running inside a Docker container. Falls back gracefully if
-  // the prediction server is not running.
-  const char *url = "http://host.docker.internal:8000/predict/auto";
+/// @brief Derive the drive type ("hdd" or "ssd") from a pool/drive name.
+std::string SystemInfo::DeriveDriveType(const std::string &pool_name) {
+  // Case-insensitive substring match on "hdd"; default to "ssd" otherwise so
+  // an unlabelled pool routes to the flash model rather than failing.
+  std::string lower = pool_name;
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return lower.find("hdd") != std::string::npos ? "hdd" : "ssd";
+}
 
-  std::string payload = "{\"drive_type\": \"" + drive_type + "\", "
-      + "\"drive_id\": \"" + drive_id + "\", "
-      + "\"metrics\": "
-      + (health_json.empty() || health_json == "{}" ? "{}" : health_json) + "}";
-  std::string read_buffer;
+#if CTP_HAS_POCO
+namespace {
+// Minimal JSON string escaping so an error message embedded in the fallback
+// payload can never produce invalid JSON (quotes/backslashes/control chars).
+std::string JsonEscape(const std::string &s) {
+  std::string out;
+  out.reserve(s.size() + 8);
+  for (char c : s) {
+    switch (c) {
+      case '"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n':
+      case '\r':
+      case '\t': out += ' '; break;
+      default:
+        if (static_cast<unsigned char>(c) < 0x20) {
+          out += ' ';
+        } else {
+          out += c;
+        }
+    }
+  }
+  return out;
+}
+}  // namespace
+#endif
 
-  CURL *curl = curl_easy_init();
-  if (curl) {
-    struct curl_slist *headers = nullptr;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+/// @brief Predicts drive failure by POSTing health metrics to a local
+/// prediction server. See the header for the graceful-degradation contract.
+std::string SystemInfo::PredictDriveFailure(const std::string &drive_type,
+                                            const std::string &health_json,
+                                            const std::string &drive_id) {
+  // The request body is identical regardless of transport availability so the
+  // payload contract is stable; only the actual send is Poco-gated.
+  const std::string metrics =
+      (health_json.empty() || health_json == "{}") ? "{}" : health_json;
+  const std::string payload = "{\"drive_type\": \"" + drive_type + "\", " +
+                              "\"drive_id\": \"" + drive_id + "\", " +
+                              "\"metrics\": " + metrics + "}";
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWriteCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &read_buffer);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
-
-    CURLcode res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-      read_buffer = std::string("{\"error\": \"Prediction server unreachable: ")
-                    + curl_easy_strerror(res) + "\"}";
+#if CTP_HAS_POCO
+  // Endpoint is overridable via CLIO_PREDICT_URL so tests and non-Docker
+  // deployments can target a reachable server. The default host.docker.internal
+  // only resolves under Docker Desktop; on any other host the connect fails
+  // fast and we return an {"error": ...} JSON object rather than throwing.
+  const char *env_url = std::getenv("CLIO_PREDICT_URL");
+  const std::string url =
+      (env_url && *env_url) ? env_url
+                            : "http://host.docker.internal:8000/predict/auto";
+  try {
+    Poco::URI uri(url);
+    std::string path = uri.getPathAndQuery();
+    if (path.empty()) {
+      path = "/";
     }
 
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
+    Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
+    session.setTimeout(Poco::Timespan(5, 0));  // 5s for connect/send/receive
+
+    Poco::Net::HTTPRequest req(Poco::Net::HTTPRequest::HTTP_POST, path,
+                               Poco::Net::HTTPMessage::HTTP_1_1);
+    req.setContentType("application/json");
+    req.setContentLength(static_cast<std::streamsize>(payload.size()));
+    session.sendRequest(req) << payload;
+
+    Poco::Net::HTTPResponse res;
+    std::istream &rs = session.receiveResponse(res);
+    std::string body;
+    Poco::StreamCopier::copyToString(rs, body);
+    return body.empty() ? "{}" : body;
+  } catch (const Poco::Exception &e) {
+    return std::string("{\"error\": \"Prediction server unreachable: ") +
+           JsonEscape(e.displayText()) + "\"}";
   }
-  return read_buffer.empty() ? "{}" : read_buffer;
 #else
-  (void)drive_type;
-  (void)health_json;
-  (void)drive_id;
+  (void)payload;
   return "{}";
 #endif
 }

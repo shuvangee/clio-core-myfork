@@ -42,9 +42,12 @@ target_link_libraries(clio_ctp_host PUBLIC
     configure
     thread_all
 )
-if(CURL_FOUND)
-    target_link_libraries(clio_ctp_host PUBLIC CURL::libcurl)
-    target_compile_definitions(clio_ctp_host PUBLIC CTP_HAS_CURL=1)
+# Poco::Net for the optional drive-failure prediction HTTP client. PUBLIC so
+# the CTP_HAS_POCO define and Poco headers propagate to test executables that
+# link clio_ctp_host (e.g. the drive-prediction contract test).
+if(Poco_FOUND)
+    target_link_libraries(clio_ctp_host PUBLIC Poco::Net Poco::Foundation)
+    target_compile_definitions(clio_ctp_host PUBLIC CTP_HAS_POCO=1)
 endif()
 if(WIN32)
     target_link_libraries(clio_ctp_host PUBLIC ws2_32)

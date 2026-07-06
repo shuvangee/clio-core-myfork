@@ -48,6 +48,7 @@ jobs:
       uses: actions/checkout@v5
       with:
         submodules: recursive
+        lfs: true          # pull the trained prediction models (Git LFS)
     - name: Install lcov (Linux)
       if: runner.os == 'Linux'
       run: sudo apt-get update && sudo apt-get install -y lcov
@@ -71,6 +72,22 @@ jobs:
         fi
         conda activate iowarp
         ./CI/calculate_coverage.sh --build --run-ctest --clean --site ${{ matrix.site }}
+    # Drive-failure prediction end-to-end section. The contract test
+    # (ctp_drive_prediction) already runs in the coverage ctest sweep above on
+    # every OS; the prediction_e2e-labelled tests (the direct C++ E2E and the
+    # full bdev->model integration) SKIP there because they need a live model
+    # server. This Linux section stands that up: it installs the Python server
+    # deps and re-runs the build/ tree's prediction_e2e tests for real, against
+    # the Git-LFS models pulled at checkout.
+    - name: Drive-failure prediction E2E (Linux)
+      if: matrix.coverage
+      run: |
+        python3 -m venv "$HOME/predenv"
+        "$HOME/predenv/bin/pip" install --quiet --upgrade pip
+        "$HOME/predenv/bin/pip" install --quiet -r prediction_server/requirements.txt
+        cd build
+        PREDICT_PYTHON="$HOME/predenv/bin/python" \
+          ctest -L prediction_e2e --output-on-failure
     - name: Upload coverage to Codecov
       if: matrix.coverage && always()
       uses: codecov/codecov-action@v5

@@ -55,6 +55,7 @@
 #include <clio_ctp/introspect/system_info.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -642,31 +643,6 @@ TEST_CASE("bdev_performance_metrics", "[bdev][performance][metrics]") {
     REQUIRE(initial_metrics.read_bandwidth_mbps_ >= 0.0);
     REQUIRE(initial_metrics.write_bandwidth_mbps_ >= 0.0);
 
-    // [INJECTED] Trigger the bdev Monitor with "stats" to hit our prediction server
-    {
-      HLOG(kInfo, "Triggering bdev Monitor(stats) to test Prediction Server Integration...");
-      auto monitor_task = client.AsyncMonitor(clio::run::PoolQuery::Local(), "stats");
-      monitor_task.Wait();
-      if (!monitor_task->results_.empty()) {
-        HLOG(kInfo, "Prediction server hook fired! bdev Monitor returned {} result entries",
-             monitor_task->results_.size());
-             
-        for (const auto& [node_id, result] : monitor_task->results_) {
-            std::cout << "\n\n========== PREDICTION RESULT ==========\n";
-            std::cout << "Node ID: " << node_id << ", Raw result size: " << result.size() << "\n";
-            std::string readable;
-            for (char c : result) {
-                if (c >= 32 && c <= 126) readable += c;
-                else readable += ' ';
-            }
-            std::cout << "Raw Payload Content:\n" << readable << "\n";
-            std::cout << "=======================================\n\n";
-        }
-      } else {
-        HLOG(kInfo, "bdev Monitor returned no results (prediction server may not be running)");
-      }
-    }
-
     // Perform I/O operations using DirectHash for distributed execution
     for (int i = 0; i < 16; ++i) {
       auto pool_query = clio::run::PoolQuery::DirectHash(i);
@@ -761,6 +737,87 @@ TEST_CASE("bdev_performance_metrics", "[bdev][performance][metrics]") {
     HLOG(kInfo, "Write BW: {} MB/s", final_metrics.write_bandwidth_mbps_);
     HLOG(kInfo, "IOPS: {}", final_metrics.iops_);
   }
+}
+
+// Full-chain drive-failure prediction integration test.
+//
+// Exercises the real production path end to end: a live bdev's Monitor("stats")
+// entry point collects device health statistics, derives the drive type, and
+// calls the local ML prediction server, which loads the trained LightGBM models
+// and runs a real inference; the resulting failure_prediction is packed back
+// into the Monitor payload that this C++ driver receives and asserts on.
+//
+// This requires the Python prediction server to be running with the trained
+// models and CLIO_PREDICT_URL pointing at it — the run_bdev_prediction_
+// integration.sh driver sets that up. When run outside that harness (e.g. the
+// ordinary bdev suite, with no server), the test no-ops so it never fails a
+// plain build.
+TEST_CASE("bdev_failure_prediction_integration", "[bdev][prediction][integration]") {
+  const char *predict_url = std::getenv("CLIO_PREDICT_URL");
+  if (predict_url == nullptr || *predict_url == '\0') {
+    HLOG(kInfo,
+         "CLIO_PREDICT_URL unset; skipping live bdev->model integration "
+         "(run via run_bdev_prediction_integration.sh)");
+    return;
+  }
+
+  BdevChimodFixture fixture;
+  REQUIRE(g_initialized);
+
+  // Name the pool with "hdd" so DeriveDriveType routes to the HDD model.
+  clio::run::PoolId custom_pool_id(9137, 0);
+  std::string pool_name = "hdd_pred_" + std::to_string(getpid());
+  clio::run::bdev::Client client(custom_pool_id);
+  bool created = BdevChimodFixture::CreateBdevAsync(
+      client, clio::run::PoolQuery::Broadcast(), pool_name, custom_pool_id,
+      clio::run::bdev::BdevType::kRam, 4 * 1024 * 1024);
+  REQUIRE(created);
+
+  // Publish synthetic SMART device statistics where GetDeviceHealthStats(pool_name)
+  // will read them: it derives /tmp/iowarp_hw_health_<name>.json from the pool
+  // name. These are the "device statistics" the runtime collects and feeds to
+  // the model for inference.
+  std::string health_path = "/tmp/iowarp_hw_health_" + pool_name + ".json";
+  const std::string health_json =
+      "{\"smart_5_raw\": 24, \"smart_187_raw\": 5, \"smart_197_raw\": 2, "
+      "\"smart_198_raw\": 1, \"smart_9_raw\": 13000}";
+  {
+    std::ofstream hf(health_path);
+    REQUIRE(hf.is_open());
+    hf << health_json;
+  }
+
+  // Production entry point: collect health -> derive type -> call live model.
+  auto monitor_task = client.AsyncMonitor(clio::run::PoolQuery::Local(), "stats");
+  monitor_task.Wait();
+  REQUIRE_FALSE(monitor_task->results_.empty());
+
+  // msgpack packs the device_health / failure_prediction JSON strings as raw
+  // bytes, so the JSON text is embedded verbatim in the payload. Assert on it
+  // to prove the whole chain fired.
+  bool checked_any = false;
+  for (const auto &[node_id, result] : monitor_task->results_) {
+    HLOG(kInfo, "bdev Monitor(stats) payload from node {}: {} bytes", node_id,
+         result.size());
+
+    // (1) Device statistics were collected and embedded (our injected marker).
+    REQUIRE(result.find("device_health") != std::string::npos);
+    REQUIRE(result.find("smart_5_raw") != std::string::npos);
+
+    // (2) The live model produced a real inference that round-tripped back
+    //     through the bdev Monitor payload.
+    REQUIRE(result.find("failure_prediction") != std::string::npos);
+    REQUIRE(result.find("failure_probability") != std::string::npos);
+    REQUIRE(result.find("model_used") != std::string::npos);
+
+    // (3) Not the graceful-degradation fallback (server was genuinely reached).
+    REQUIRE(result.find("unreachable") == std::string::npos);
+    checked_any = true;
+  }
+  REQUIRE(checked_any);
+
+  std::error_code ec;
+  std::filesystem::remove(health_path, ec);
 }
 
 TEST_CASE("bdev_error_conditions", "[bdev][error][edge_cases]") {
