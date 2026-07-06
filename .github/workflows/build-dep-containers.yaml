@@ -10,20 +10,13 @@ on:
     paths:
       - 'docker/deps-cpu.Dockerfile'
       - 'docker/deps-nvidia.Dockerfile'
-  # Build-only regression gate on PRs: build every dependency image to catch
-  # Dockerfile breakage before merge, but do NOT push, tag a manifest, or export
-  # registry buildcache. All publish steps are guarded on the event being a push
-  # (github.event_name != 'pull_request'), so a PR run just proves it builds.
-  pull_request:
-    branches: [main, dev]
-    paths:
-      - 'docker/deps-cpu.Dockerfile'
-      - 'docker/deps-nvidia.Dockerfile'
-      - '.github/workflows/build-dep-containers.yaml'
-
-concurrency:
-  group: build-dep-containers-${{ github.ref }}
-  cancel-in-progress: true
+  # NOTE: intentionally no pull_request trigger and no concurrency group here.
+  # On PRs this workflow runs only as a reusable workflow (workflow_call) via
+  # build-core-containers.yaml's rebuild-deps job -- that single path does the
+  # build-only dependency validation (publish steps below are still gated on
+  # github.event_name != 'pull_request'). A ref-scoped concurrency group here
+  # made the standalone run collide with the reusable invocation in the same
+  # group and cancel it, so all PR builds are routed through build-core instead.
 
 env:
   # Present on push + internal-branch PRs; empty on forked-PR runs, which skips

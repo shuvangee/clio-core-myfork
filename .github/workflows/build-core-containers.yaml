@@ -26,6 +26,7 @@ on:
     paths:
       - 'docker/deploy-cpu.Dockerfile'
       - 'docker/deps-cpu.Dockerfile'
+      - 'docker/deps-nvidia.Dockerfile'
       - 'docker/redis_bench/Dockerfile'
       - 'docker/clio_cte_bench/Dockerfile'
       - 'CMakeLists.txt'
