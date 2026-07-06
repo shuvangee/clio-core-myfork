@@ -181,6 +181,8 @@ option(CLIO_CTE_ENABLE_HDF5_VOL "Enable HDF5 VOL connector (requires HDF5 >= 1.1
 # CAE (context-assimilation-engine) Options
 #------------------------------------------------------------------------------
 option(CAE_ENABLE_GLOBUS "Enable Globus transfer support in CAE" OFF)
+option(CAE_ENABLE_S3 "Enable Amazon S3 (s3://) import in CAE" OFF)
+option(CAE_ENABLE_GCS "Enable Google Cloud Storage (gs://) import in CAE" OFF)
 # LLM labeling/summary + semantic-search features and their integration tests
 # require a running Ollama service. OFF by default so default builds don't
 # build or run them without Ollama.
@@ -284,7 +286,7 @@ if(CLIO_CORE_ENABLE_DOXYGEN)
     message(STATUS "found doxygen at ${DOXYGEN_EXECUTABLE}")
 endif()
 
-# YAML-CPP - find from system or install.sh installation
+# YAML-CPP - find from system or CI/ci-deps.sh installation
 find_package(yaml-cpp REQUIRED)
 if(yaml-cpp_FOUND)
     message(STATUS "found yaml-cpp at ${yaml-cpp_DIR}")
@@ -319,7 +321,7 @@ if(CLIO_CORE_STATIC_DEPS AND NOT WIN32 AND NOT APPLE)
     endif()
 endif()
 
-# Cereal - find from system or install.sh installation
+# Cereal - find from system or CI/ci-deps.sh installation
 find_package(cereal REQUIRED)
 if(cereal_FOUND)
     message(STATUS "found cereal at ${cereal_DIR}")
@@ -549,6 +551,90 @@ if(CLIO_CTE_ENABLE_COMPRESS)
         message(STATUS "SYCL libzfp not found under ${CLIO_ZFP_SYCL_ROOT} - zfp-sycl compression disabled")
     endif()
 
+    # cuSZ (https://github.com/szcompressor/cuSZ) - GPU error-bounded lossy
+    # compressor for floating-point data. Optional, requires CUDA. Auto-detected
+    # via its CMake config (target CUSZ::cusz) with a raw find_library fallback.
+    set(CLIO_CTP_ENABLE_CUSZ OFF)
+    if(CLIO_CORE_ENABLE_CUDA)
+        find_package(CUSZ QUIET)
+        if(CUSZ_FOUND)
+            set(cusz_LIBRARIES CUSZ::cusz)
+            set(cusz_INCLUDE_DIRS ${CUSZ_INCLUDE_DIRS})
+            set(CLIO_CTP_ENABLE_CUSZ ON)
+            message(STATUS "found cuSZ via CMake config (GPU lossy compression)")
+        else()
+            find_path(cusz_INCLUDE_DIR cusz.h PATH_SUFFIXES cusz)
+            find_library(cusz_LIBRARY NAMES cusz pszcuda cuszapi)
+            if(cusz_INCLUDE_DIR AND cusz_LIBRARY)
+                set(cusz_LIBRARIES ${cusz_LIBRARY})
+                set(cusz_INCLUDE_DIRS ${cusz_INCLUDE_DIR})
+                set(CLIO_CTP_ENABLE_CUSZ ON)
+                message(STATUS "found cusz.h at ${cusz_INCLUDE_DIRS}")
+            else()
+                message(STATUS "cuSZ not found - cuSZ GPU compression disabled")
+            endif()
+        endif()
+    else()
+        message(STATUS "CLIO_CORE_ENABLE_CUDA is OFF - cuSZ GPU compression disabled")
+    endif()
+
+    # ndzip (https://github.com/celerity/ndzip) - GPU high-throughput lossless
+    # compressor for floating-point data. Optional, requires CUDA and an ndzip
+    # built with NDZIP_WITH_CUDA=ON (provides the ndzip-cuda library). Auto-
+    # detected via its CMake config (ndzip::ndzip-cuda) with a find_library
+    # fallback.
+    set(CLIO_CTP_ENABLE_NDZIP OFF)
+    if(CLIO_CORE_ENABLE_CUDA)
+        find_package(ndzip QUIET)
+        if(ndzip_FOUND AND TARGET ndzip::ndzip-cuda)
+            set(ndzip_LIBRARIES ndzip::ndzip ndzip::ndzip-cuda)
+            set(ndzip_INCLUDE_DIRS "")
+            set(CLIO_CTP_ENABLE_NDZIP ON)
+            message(STATUS "found ndzip via CMake config (GPU lossless compression)")
+        else()
+            find_path(ndzip_INCLUDE_DIR ndzip/ndzip.hh)
+            find_library(ndzip_LIBRARY NAMES ndzip)
+            find_library(ndzip_cuda_LIBRARY NAMES ndzip-cuda)
+            if(ndzip_INCLUDE_DIR AND ndzip_LIBRARY AND ndzip_cuda_LIBRARY)
+                set(ndzip_LIBRARIES ${ndzip_cuda_LIBRARY} ${ndzip_LIBRARY})
+                set(ndzip_INCLUDE_DIRS ${ndzip_INCLUDE_DIR})
+                set(CLIO_CTP_ENABLE_NDZIP ON)
+                message(STATUS "found ndzip.hh at ${ndzip_INCLUDE_DIRS}")
+            else()
+                message(STATUS "ndzip not found - ndzip GPU compression disabled")
+            endif()
+        endif()
+    else()
+        message(STATUS "CLIO_CORE_ENABLE_CUDA is OFF - ndzip GPU compression disabled")
+    endif()
+
+    # cuSZp (https://github.com/szcompressor/cuSZp) - GPU ultra-fast error-bounded
+    # lossy compressor for floating-point data. Optional, requires CUDA. Auto-
+    # detected via its CMake config (cuSZp::cuSZp) with a find_library fallback.
+    set(CLIO_CTP_ENABLE_CUSZP OFF)
+    if(CLIO_CORE_ENABLE_CUDA)
+        find_package(cuSZp QUIET)
+        if(cuSZp_FOUND AND TARGET cuSZp::cuSZp)
+            set(cuszp_LIBRARIES cuSZp::cuSZp)
+            set(cuszp_INCLUDE_DIRS "")
+            set(CLIO_CTP_ENABLE_CUSZP ON)
+            message(STATUS "found cuSZp via CMake config (GPU lossy compression)")
+        else()
+            find_path(cuszp_INCLUDE_DIR cuSZp.h)
+            find_library(cuszp_LIBRARY NAMES cuSZp)
+            if(cuszp_INCLUDE_DIR AND cuszp_LIBRARY)
+                set(cuszp_LIBRARIES ${cuszp_LIBRARY})
+                set(cuszp_INCLUDE_DIRS ${cuszp_INCLUDE_DIR})
+                set(CLIO_CTP_ENABLE_CUSZP ON)
+                message(STATUS "found cuSZp.h at ${cuszp_INCLUDE_DIRS}")
+            else()
+                message(STATUS "cuSZp not found - cuSZp GPU compression disabled")
+            endif()
+        endif()
+    else()
+        message(STATUS "CLIO_CORE_ENABLE_CUDA is OFF - cuSZp GPU compression disabled")
+    endif()
+
     set(COMPRESS_LIBS
         bz2
         ${lzo2_LIBRARIES}
@@ -600,6 +686,24 @@ if(CLIO_CTE_ENABLE_COMPRESS)
         list(APPEND COMPRESS_INCLUDES ${ZFP_SYCL_INCLUDE_DIR})
     endif()
 
+    # Only add cuSZ if found
+    if(CLIO_CTP_ENABLE_CUSZ)
+        list(APPEND COMPRESS_LIBS ${cusz_LIBRARIES})
+        list(APPEND COMPRESS_INCLUDES ${cusz_INCLUDE_DIRS})
+    endif()
+
+    # Only add ndzip if found
+    if(CLIO_CTP_ENABLE_NDZIP)
+        list(APPEND COMPRESS_LIBS ${ndzip_LIBRARIES})
+        list(APPEND COMPRESS_INCLUDES ${ndzip_INCLUDE_DIRS})
+    endif()
+
+    # Only add cuSZp if found
+    if(CLIO_CTP_ENABLE_CUSZP)
+        list(APPEND COMPRESS_LIBS ${cuszp_LIBRARIES})
+        list(APPEND COMPRESS_INCLUDES ${cuszp_INCLUDE_DIRS})
+    endif()
+
     # Make CTP_ENABLE_LIBPRESSIO available to subdirectories (CTP)
     set(CLIO_CTP_ENABLE_LIBPRESSIO ${CLIO_CTP_ENABLE_LIBPRESSIO} CACHE BOOL "Enable LibPressio wrapper (auto-detected)" FORCE)
     # Make CTP_ENABLE_NVCOMP available to subdirectories (CTP)
@@ -607,6 +711,10 @@ if(CLIO_CTE_ENABLE_COMPRESS)
     # Make CLIO_CTP_ENABLE_ZFP_SYCL available to subdirectories (CTP). Distinct
     # from CLIO_CTP_ENABLE_SYCL (the SYCL-language switch) -- do not conflate.
     set(CLIO_CTP_ENABLE_ZFP_SYCL ${CLIO_CTP_ENABLE_ZFP_SYCL} CACHE BOOL "Enable zfp-sycl GPU compression (auto-detected)" FORCE)
+    # Make CLIO_CTP_ENABLE_CUSZ / CLIO_CTP_ENABLE_NDZIP available to subdirs (CTP)
+    set(CLIO_CTP_ENABLE_CUSZ ${CLIO_CTP_ENABLE_CUSZ} CACHE BOOL "Enable cuSZ GPU compression (auto-detected)" FORCE)
+    set(CLIO_CTP_ENABLE_NDZIP ${CLIO_CTP_ENABLE_NDZIP} CACHE BOOL "Enable ndzip GPU compression (auto-detected)" FORCE)
+    set(CLIO_CTP_ENABLE_CUSZP ${CLIO_CTP_ENABLE_CUSZP} CACHE BOOL "Enable cuSZp GPU compression (auto-detected)" FORCE)
 endif()
 
 # Encryption libraries (conditional)
@@ -670,7 +778,7 @@ if(CLIO_CORE_ENABLE_ZMQ)
         endif()
     endif()
     if(NOT _ZMQ_FOUND)
-        message(FATAL_ERROR "ZeroMQ not found. Please install ZeroMQ or run install.sh to build from submodules.")
+        message(FATAL_ERROR "ZeroMQ not found. Please install ZeroMQ or run CI/ci-deps.sh to build from submodules.")
     endif()
 endif()
 
@@ -733,7 +841,7 @@ if(CLIO_CTE_ENABLE_HDF5_VOL)
             list(APPEND HDF5_LIBRARIES CURL::libcurl)
         endif()
     else()
-        message(FATAL_ERROR "HDF5 not found. Please install HDF5 or run install.sh to build from submodules.")
+        message(FATAL_ERROR "HDF5 not found. Please install HDF5 or run CI/ci-deps.sh to build from submodules.")
     endif()
 else()
     message(STATUS "HDF5 support disabled")
@@ -766,6 +874,37 @@ if(CLIO_ENABLE_GOOGLE_CLOUD AND NOT Poco_FOUND)
 endif()
 if(CLIO_ENABLE_GOOGLE_CLOUD)
   message(STATUS "Google Cloud Storage bdev support: ENABLED (Poco found)")
+endif()
+
+# AWS SDK for C++ (optional - for the CAE S3 assimilator, s3://). Reuses the
+# same dependency the bdev S3 transport links (aws-cpp-sdk-s3/-core). If the
+# option is requested but the SDK isn't found, warn and disable rather than
+# fail the configure (mirrors the CAE Globus dependency check).
+if(CAE_ENABLE_S3)
+  find_package(AWSSDK COMPONENTS s3 QUIET)
+  if(AWSSDK_FOUND)
+    message(STATUS "found AWS SDK for C++ (CAE S3 support: ENABLED)")
+  else()
+    message(WARNING "CAE_ENABLE_S3 is ON but the AWS SDK for C++ (component s3) "
+                    "was not found. S3 import will be disabled. "
+                    "Install aws-sdk-cpp to enable it.")
+    set(CAE_ENABLE_S3 OFF)
+  endif()
+endif()
+
+# google-cloud-cpp (optional - for the CAE GCS assimilator, gs://). A new
+# optional dependency (the storage component). If requested but not found,
+# warn and disable rather than fail the configure.
+if(CAE_ENABLE_GCS)
+  find_package(google_cloud_cpp_storage QUIET)
+  if(google_cloud_cpp_storage_FOUND)
+    message(STATUS "found google-cloud-cpp storage (CAE GCS support: ENABLED)")
+  else()
+    message(WARNING "CAE_ENABLE_GCS is ON but google-cloud-cpp (storage "
+                    "component) was not found. GCS import will be disabled. "
+                    "Install google-cloud-cpp to enable it.")
+    set(CAE_ENABLE_GCS OFF)
+  endif()
 endif()
 
 if (CLIO_CTE_ENABLE_ADIOS2_ADAPTER OR CLIO_CORE_ENABLE_GRAY_SCOTT)
@@ -1209,7 +1348,7 @@ endif()
 
 # yaml-cpp is already found by ClioCoreCommon (line 202)
 if(NOT TARGET yaml-cpp AND NOT TARGET yaml-cpp::yaml-cpp)
-  message(FATAL_ERROR "yaml-cpp was not found. Please run install.sh to install dependencies.")
+  message(FATAL_ERROR "yaml-cpp was not found. Please run CI/ci-deps.sh to install dependencies.")
 endif()
 message(STATUS "yaml-cpp already found by ClioCoreCommon")
 

@@ -1,24 +1,24 @@
 #!/bin/bash
-# install.sh - Install IOWarp Core using conda-build
+# CI/ci-deps.sh - Install IOWarp Core using conda-build
 # This script builds and installs IOWarp Core from source
 # It will automatically install Miniconda if conda is not detected
 #
 # Usage:
-#   ./install.sh                          # Build with default (release) preset
-#   ./install.sh release                  # Build with release preset
-#   ./install.sh release-fuse             # Build with FUSE adapter enabled
-#   ./install.sh debug                    # Build with debug preset
-#   ./install.sh conda                    # Build with conda-optimized preset
-#   ./install.sh cuda                     # Build with CUDA preset
-#   ./install.sh rocm                     # Build with ROCm preset
-#   ./install.sh --only-deps [preset]     # Install ONLY iowarp-core's deps
+#   ./CI/ci-deps.sh                          # Build with default (release) preset
+#   ./CI/ci-deps.sh release                  # Build with release preset
+#   ./CI/ci-deps.sh release-fuse             # Build with FUSE adapter enabled
+#   ./CI/ci-deps.sh debug                    # Build with debug preset
+#   ./CI/ci-deps.sh conda                    # Build with conda-optimized preset
+#   ./CI/ci-deps.sh cuda                     # Build with CUDA preset
+#   ./CI/ci-deps.sh rocm                     # Build with ROCm preset
+#   ./CI/ci-deps.sh --only-deps [preset]     # Install ONLY iowarp-core's deps
 #                                         # (build+host+run from the recipe),
 #                                         # skip conda-build of iowarp-core itself.
 
 set -e  # Exit on error
 
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get the repo root. This script lives in CI/, so the root is its parent dir.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
 # Parse arguments: --only-deps flag + optional positional preset
@@ -213,7 +213,14 @@ CONDA_BIN="${CONDA_BASE}/bin/conda"
 
 if ! "$CONDA_BIN" build --version &> /dev/null; then
     echo -e "${YELLOW}Installing conda-build into base environment...${NC}"
-    "$CONDA_BIN" install -n base -y conda-build -c conda-forge
+    # Retry: conda's package-cache sqlite can transiently report
+    # "database is locked" and conda-forge occasionally 502s during the
+    # solve; a short back-off clears both (observed as an arm64 CI flake).
+    for _attempt in 1 2 3; do
+        "$CONDA_BIN" install -n base -y conda-build -c conda-forge && break
+        echo -e "${YELLOW}conda-build install failed (attempt $_attempt/3), retrying in $((10 * _attempt))s...${NC}"
+        sleep $((10 * _attempt))
+    done
     echo ""
 fi
 
@@ -293,9 +300,20 @@ if [ "$ONLY_DEPS" = true ]; then
     # No --python: the recipe's conda_build_config.yaml `python:` pin
     # drives the variant. Passing --python on the CLI overrides that
     # pin and trips conda-build's execute_download_actions IndexError.
-    if ! "$CONDA_BIN" render "$RECIPE_DIR" \
-            -c conda-forge \
-            -f "$RENDERED" >/dev/null 2>&1; then
+    # Retry: render performs a solve and can hit the same transient
+    # "database is locked" / conda-forge 502 flakes as the installs above.
+    _render_ok=0
+    for _attempt in 1 2 3; do
+        if "$CONDA_BIN" render "$RECIPE_DIR" \
+                -c conda-forge \
+                -f "$RENDERED" >/dev/null 2>&1; then
+            _render_ok=1
+            break
+        fi
+        echo -e "${YELLOW}conda render failed (attempt $_attempt/3), retrying in $((10 * _attempt))s...${NC}"
+        sleep $((10 * _attempt))
+    done
+    if [ "$_render_ok" -ne 1 ]; then
         echo -e "${RED}conda render failed${NC}"
         rm -f "$RENDERED"
         exit 1
