@@ -652,15 +652,23 @@ set_tests_properties(
 
 # Regression: concurrent writes to disjoint regions of ONE shared blob must not
 # corrupt the shared block layout (#680 / xfstests generic/074 fsx mismatches).
+# Every writer serializes on the same per-blob write token, so the workload is
+# effectively a single serial stream of PutBlobs. The 1500-iter default writes
+# ~800 MB and cannot finish inside the 300s budget on an instrumented Debug/gcov
+# build (measured: ~33% done at timeout on the coverage runner), so -- exactly
+# like cte_parallel_overlap_stress above -- pin a CI-friendly iteration count in
+# the environment. 8 threads x 100 iters still races ~800 concurrent same-blob
+# extends, which is what detects the corruption; the 1500-iter soak is a local
+# knob (override SAME_BLOB_ITERS/SAME_BLOB_THREADS for a heavier run).
 add_test(NAME cte_concurrent_same_blob_all
     COMMAND test_concurrent_same_blob)
 
 set_tests_properties(
     cte_concurrent_same_blob_all
     PROPERTIES
-        TIMEOUT 300  # 5 minute timeout
+        TIMEOUT 300  # 5 minute timeout -> a hang trips this
         LABELS "regression;concurrent;cte"
-        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;SAME_BLOB_THREADS=8;SAME_BLOB_ITERS=100"
 )
 
 # Add reorganize blob tests
