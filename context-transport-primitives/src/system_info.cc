@@ -554,12 +554,12 @@ bool SystemInfo::CreateNewSharedMemory(File &fd, const std::string &name,
   // not be reopened by name, breaking every OpenSharedMemory.
   std::string win_name = WinShmName(name);
   fd.windows_fd_ =
-      CreateFileMapping(INVALID_HANDLE_VALUE,    // use paging file
-                        nullptr,                 // default security
-                        PAGE_READWRITE,          // read/write access
-                        0,           // maximum object size (high-order DWORD)
-                        static_cast<DWORD>(size),  // low-order DWORD
-                        win_name.c_str());         // mapping object name
+      CreateFileMappingA(INVALID_HANDLE_VALUE,   // use paging file
+                         nullptr,                // default security
+                         PAGE_READWRITE,         // read/write access
+                         0,          // maximum object size (high-order DWORD)
+                         static_cast<DWORD>(size),  // low-order DWORD
+                         win_name.c_str());         // mapping object name
   return fd.windows_fd_ != nullptr;
 #endif
 }
@@ -580,7 +580,7 @@ bool SystemInfo::OpenSharedMemory(File &fd, const std::string &name) {
 #elif CTP_ENABLE_WINDOWS_SYSINFO
   std::string win_name = WinShmName(name);
   fd.windows_fd_ =
-      OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, win_name.c_str());
+      OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, win_name.c_str());
   return fd.windows_fd_ != nullptr;
 #endif
 }
@@ -656,10 +656,10 @@ void *SystemInfo::MapSharedMemory(const File &fd, size_t size, i64 off) {
   if (ret == nullptr) {
     DWORD error = GetLastError();
     LPVOID msg_buf;
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                      FORMAT_MESSAGE_IGNORE_INSERTS,
-                  NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                  (LPTSTR)&msg_buf, 0, NULL);
+    FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                       FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   (LPSTR)&msg_buf, 0, NULL);
     printf("MapViewOfFile failed with error: %s\n", (char *)msg_buf);
     LocalFree(msg_buf);
   }
@@ -1060,8 +1060,8 @@ std::string SystemInfo::Getenv(const char *name, size_t max_size) {
 #elif CTP_ENABLE_WINDOWS_SYSINFO
   std::string var;
   var.resize(max_size);
-  DWORD len = GetEnvironmentVariable(name, var.data(),
-                                     static_cast<DWORD>(var.size()));
+  DWORD len = GetEnvironmentVariableA(name, var.data(),
+                                      static_cast<DWORD>(var.size()));
   if (len == 0) {
     return "";
   }
