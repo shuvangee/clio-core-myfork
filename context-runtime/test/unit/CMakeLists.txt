@@ -705,10 +705,16 @@ if(CLIO_CORE_ENABLE_TESTS)
     COMMAND ${AUTOGEN_COVERAGE_TEST_TARGET}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   )
+  # "cae": this per-method battery exercises the CAE autogen lib_exec dispatch
+  # arms for the custom task types (ParseOmni/ProcessHdf5Dataset) that the
+  # sweep can't construct generically. Together with cr_autogen_sweep_tests it
+  # lifts context-assimilation-engine/.../autogen/core_lib_exec.cc to ~93% in
+  # the single-node CAE coverage phase (was ~2% — those serialize/copy arms
+  # otherwise only run when a task crosses the network).
   set_tests_properties(cr_autogen_coverage_tests PROPERTIES
     ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     TIMEOUT 300
-    LABELS "msan_skip"
+    LABELS "cae;msan_skip"
   )
   endif()  # CLIO_CORE_ENABLE_CAE
 
