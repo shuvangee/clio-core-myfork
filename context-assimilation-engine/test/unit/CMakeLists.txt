@@ -514,11 +514,13 @@ set_tests_properties(
     cae_labeling_dispatch
     PROPERTIES
         TIMEOUT 180
-        # NOTE: deliberately NOT labeled "integration" — the coverage run
-        # excludes integration tests, and this test's whole purpose is to add
-        # CAE labeling-dispatch coverage. It is self-contained (dead endpoint,
-        # no external service), so it is safe to run in the coverage suite.
-        LABELS "coverage;cae;labeling;dispatch;msan_skip"
+        # Labeled "cae" so the CI coverage `cae` phase (`ctest -L cae`) runs it
+        # and counts its coverage. Also labeled "integration" so the macOS and
+        # default runs (`ctest -LE integration`) SKIP it: like the interceptor
+        # and string-assim tests it drives the CAE->CTE forward GetBlob path,
+        # which hangs on the macOS loopback data path (issue #504). `-L cae`
+        # ignores the integration exclusion, so coverage is unaffected.
+        LABELS "coverage;cae;labeling;dispatch;integration;msan_skip"
         RESOURCE_LOCK "clio_runtime"
 )
 
@@ -713,9 +715,13 @@ clio_add_force_net_test(NAME cae_string_assim_force_net
 
 # The force-net helper only sets "msan_skip"; add "cae" so these variants are
 # picked up by the CI coverage phase's `ctest -L cae` selection alongside the
-# rest of the CAE suite.
-set_property(TEST cae_exportdata_force_net cae_comprehensive_force_net
-             cae_string_assim_force_net APPEND PROPERTY LABELS "cae")
+# rest of the CAE suite. clio_add_force_net_test() is a no-op on Apple (the
+# loopback data path hangs there, issue #504), so these tests only exist on
+# non-Apple platforms — guard the set_property to match.
+if(NOT APPLE)
+  set_property(TEST cae_exportdata_force_net cae_comprehensive_force_net
+               cae_string_assim_force_net APPEND PROPERTY LABELS "cae")
+endif()
 
 #------------------------------------------------------------------------------
 # Test Summary Target
