@@ -102,6 +102,3 @@ through the C API / a telemetry check, all automated by the suite: iteration
 caching + partial-write invalidation (`vol_c_selection_test.c`), and access
 telemetry (`telemetry` case — runs a workload under `IOWARP_VOL_TRACE` and checks
 the summary).
-
-See `benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md` for the detailed matrix,
-method, and the vlen/Safe-mode implementation notes.

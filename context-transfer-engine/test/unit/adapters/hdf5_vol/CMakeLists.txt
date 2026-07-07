@@ -125,12 +125,10 @@ install(
 # real data round-trips end to end and REQUIRES a running clio_run — the suite
 # starts/stops its own (pkill + start), so it must run alone (RUN_SERIAL).
 #
-# This test HONESTLY FAILS today: it reports the VOL's real compatibility state,
-# so it is RED while the four known gaps (strings/attrs/groups_links/iteration,
-# see benchmarks/hdf5-ingest/VOL_COMPAT_FINDINGS.md) remain. The suite supports an
-# --expect-fail allowlist for a green regression-gate mode, but we deliberately do
-# NOT use it here — the failing test IS the honest signal that Phase 2 is not done.
-# It turns green on its own as Phase 2 closes each gap.
+# Runs in HONEST mode (no --expect-fail allowlist): it reports the VOL's real
+# compatibility state rather than masking gaps, so any future regression fails the
+# test. Run it for the authoritative, always-current status; do not rely on numbers
+# copied into comments/prose.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_FOUND)
     add_test(NAME cte_hdf5_vol_compat_suite
