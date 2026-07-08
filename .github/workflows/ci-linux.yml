@@ -70,7 +70,14 @@ jobs:
             # Skip the live-mount suites (real FUSE mount needs /dev/fuse +
             # privileges); those run in ci-adapters' mount-smoke step for now.
             exclude_labels: "docker|copy_workspace|integration"
-            extract: "*/context-transfer-engine/adapter/*"
+            # Scope to BOTH the adapter tree and the filesystem (CFS) tree: the
+            # FUSE adapter (fuse_cte.cc / cfs_io.h) sits on top of the CFS
+            # filesystem client+runtime and the fuse|adapter unit tests exercise
+            # it, so its coverage must be uploaded too. Extracting adapter/*
+            # alone silently dropped context-transfer-engine/filesystem/**,
+            # making filesystem_client/runtime/tasks read 0% on Codecov even
+            # though the fuse phase runs them.
+            extract: "*/context-transfer-engine/adapter/* */context-transfer-engine/filesystem/*"
           # Context Assimilation Engine
           - phase: cae
             arch: amd64
