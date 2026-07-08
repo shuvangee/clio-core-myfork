@@ -734,7 +734,13 @@ clio_add_force_net_test(NAME cte_bdev_leak_stress_force_net
 # executable"). The current GPU CTE test is cte_devmem_putget_cuda
 # (test_cte_devmem_putget, defined below).
 
-# Mark all CTE tests as msan_skip (they use ZMQ via clio_run runtime which is uninstrumented)
+# Mark all CTE tests as msan_skip (they use ZMQ via clio_run runtime which is
+# uninstrumented).
+# NOTE: set_tests_properties(LABELS ...) REPLACES each test's label list (the
+# same clobbering trap called out for cte_functional_all below), so these tests
+# lose their own labels (e.g. "regression;cte", "query;core;cte"). Fixing it is
+# NOT a drive-by: the coverage gate excludes -LE "query|stress|functional", so
+# restoring labels changes which tests the gate runs. Tracked separately.
 set_tests_properties(
     cte_core_pool_creation
     cte_core_target_registration
@@ -821,13 +827,47 @@ set_tests_properties(
     PROPERTIES
         RESOURCE_LOCK "clio_runtime"
         FIXTURES_REQUIRED "clio_test_cleanup_fixture"
-        # Move the runtime off port 9413 (and its derivatives 9414/9416) onto
-        # a high range so that an IDE / random local server squatting on the
-        # default port doesn't break the test run. libzmq's Windows socket
-        # handle is inheritable, which lets an ancestor process (e.g. the
-        # IDE that spawned ctest) accidentally keep a listener alive across
-        # test runs. Until that's fixed upstream, just dodge.
-        ENVIRONMENT "CLIO_PORT=10500"
+)
+# Move the runtime off port 9413 (and its derivatives 9414/9416) onto
+# a high range so that an IDE / random local server squatting on the
+# default port doesn't break the test run. libzmq's Windows socket
+# handle is inheritable, which lets an ancestor process (e.g. the
+# IDE that spawned ctest) accidentally keep a listener alive across
+# test runs. Until that's fixed upstream, just dodge.
+# APPEND: setting ENVIRONMENT via set_tests_properties REPLACED the env list
+# set alongside each add_test above, silently dropping CLIO_TEST_DATA_DIR and
+# CLIO_BIND_ADDR for every test in this group (cte_block_reuse_all then wrote
+# its config to "./" and bound 0.0.0.0 instead of 127.0.0.1).
+set_property(TEST
+    cte_query_tag_exact
+    cte_query_tag_wildcard
+    cte_query_tag_alternation
+    cte_query_tag_matchall
+    cte_query_tag_nomatch
+    cte_query_blob_exact
+    cte_query_blob_wildcard
+    cte_query_blob_multitag
+    cte_query_blob_matchall
+    cte_query_blob_no_blob
+    cte_query_blob_no_tag
+    cte_query_local_poolquery
+    cte_tag_construction
+    cte_tag_putblob
+    cte_tag_getblob
+    cte_tag_errors
+    cte_tag_metadata
+    cte_tag_reorganize
+    cte_tag_async
+    cte_tag_large
+    cte_tag_edge
+    cte_functional_all
+    cte_client_config_all
+    cte_runtime_coverage_all
+    cte_tiered_storage_all
+    cte_tiered_dram_default_all
+    cte_block_reuse_all
+    cte_reorganize_all
+    APPEND PROPERTY ENVIRONMENT "CLIO_PORT=10500"
 )
 # All cte_functional_* tests run test_core_functionality (9 test cases, each
 # initializing and finalizing the full clio_run runtime).  After multiple
