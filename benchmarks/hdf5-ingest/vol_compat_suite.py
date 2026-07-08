@@ -332,16 +332,27 @@ def _tool_ok(path):
             return False
     return True
 
-def restart_runtime():
-    """Kill any clio_run, wipe shm, start fresh from BIN, wait until ready."""
-    subprocess.run(["pkill", "-f", "clio_run"], check=False)
-    time.sleep(2)
-    for f in os.listdir("/dev/shm"):
+def _wipe_clio_shm():
+    """Remove leftover clio/chimaera POSIX shm segments from a prior run.
+    /dev/shm is Linux-only; on macOS (no /dev/shm) there is nothing to sweep
+    here and clio_run's own shm_unlink handles cleanup."""
+    try:
+        names = os.listdir("/dev/shm")
+    except OSError:
+        return
+    for f in names:
         if f.startswith("chimaera") or f.startswith("clio"):
             try:
                 os.remove(os.path.join("/dev/shm", f))
             except OSError:
                 pass
+
+
+def restart_runtime():
+    """Kill any clio_run, wipe shm, start fresh from BIN, wait until ready."""
+    subprocess.run(["pkill", "-f", "clio_run"], check=False)
+    time.sleep(2)
+    _wipe_clio_shm()
     # Provide clio_run a self-contained compose config (see SUITE_CONF_YAML) so
     # readiness does not depend on a ~/.clio/clio.yaml that CI lacks.
     os.makedirs(TMP, exist_ok=True)
@@ -496,15 +507,7 @@ def stop_runtime():
     smoke's clio_run then dies with 'Address already in use'."""
     subprocess.run(["pkill", "-f", "clio_run"], check=False)
     time.sleep(1)
-    try:
-        for f in os.listdir("/dev/shm"):
-            if f.startswith("chimaera") or f.startswith("clio"):
-                try:
-                    os.remove(os.path.join("/dev/shm", f))
-                except OSError:
-                    pass
-    except OSError:
-        pass
+    _wipe_clio_shm()
 
 
 def driver(args):
