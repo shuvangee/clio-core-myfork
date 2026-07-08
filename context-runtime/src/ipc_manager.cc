@@ -653,7 +653,10 @@ void IpcManager::SetNumSchedQueues(u32 num_sched_queues) {
 
 void IpcManager::AwakenWorker(TaskLane *lane) {
   if (!lane) {
-    HLOG(kWarning, "AwakenWorker: lane is null");
+    // No lane to target — wake every worker so a task parked with no resolvable
+    // owning lane is still re-checked (lost-wakeup safety net).
+    HLOG(kWarning, "AwakenWorker: lane is null; waking all workers");
+    CLIO_WORK_ORCHESTRATOR->AwakenAllWorkers();
     return;
   }
 
@@ -682,18 +685,26 @@ void IpcManager::AwakenWorker(TaskLane *lane) {
            runtime_pid, tid, lane->IsActive(), errno);
     }
   } else {
-    HLOG(kWarning, "AwakenWorker: tid={} (invalid), cannot send signal", tid);
+    // The target lane has no worker tid (only a worker's OWN assigned_lane_
+    // ever gets a tid, so a task parked on any secondary lane reads tid==0).
+    // A targeted signal is impossible, but some worker DOES own this task's
+    // event queue, so wake them all and let the owner re-check and resume the
+    // parked parent. This closes a lost-wakeup that hung sustained O_APPEND
+    // writes (#680 generic/069): a completed PutBlob subtask emplaced its
+    // result on the parent WriteTask's event queue but could not signal, so
+    // the parent slept forever while all workers idled in epoll.
+    CLIO_WORK_ORCHESTRATOR->AwakenAllWorkers();
   }
 }
 
 IpcManagerTls *IpcManager::GetTls() {
   // One-time key registration (double-checked under the mutex). The key is
   // process-wide; the per-thread value below is what differs per thread.
-  if (!ipc_tls_key_created_) {
+  if (!ipc_tls_key_created_.load(std::memory_order_acquire)) {
     std::lock_guard<std::mutex> lk(ipc_tls_key_mutex_);
-    if (!ipc_tls_key_created_) {
+    if (!ipc_tls_key_created_.load(std::memory_order_relaxed)) {
       CTP_THREAD_MODEL->CreateTls<IpcManagerTls>(ipc_tls_key_, nullptr);
-      ipc_tls_key_created_ = true;
+      ipc_tls_key_created_.store(true, std::memory_order_release);
     }
   }
   // Lazily allocate this thread's IpcManagerTls. Its EventManager ctor runs on
@@ -3192,13 +3203,36 @@ RouteResult IpcManager::RouteLocal(Future<Task> &future, bool force_enqueue) {
     return RouteResult::ExecHere;
   }
 
-  // Enqueue to the destination worker's lane
-  auto &dest_lane = worker_queues_->GetLane(dest_worker_id, 0);
-  bool was_empty = dest_lane.Empty();
-  dest_lane.Push(future);
-  if (was_empty) {
-    AwakenWorker(&dest_lane);
+  // Self-send deadlock avoidance: a worker force-enqueuing a subtask onto its
+  // OWN lane busy-spins in the WAIT_FOR_SPACE ring Push when the lane is full,
+  // and can never drain it — it IS the consumer, blocked here in Push rather
+  // than in its Run loop. Redirect to an alternate worker whose own thread
+  // drains it, converting the deadlock into transient backpressure. An earlier
+  // "only redirect to a non-full sibling" guard failed under the mmap-writeback
+  // storm (all lanes saturate → no non-full sibling → fell back to self-spin);
+  // redirect UNCONDITIONALLY — briefly spinning on a *sibling's* full lane is
+  // safe because that sibling's thread drains it. (generic/438: mmap read fault
+  // -> GetBlob -> bdev::AsyncRead -> SendIn all on the scheduler worker; the
+  // bdev subtask's predicted io_size is 0 so RuntimeMapTask routes it back to
+  // the scheduler worker = self.)
+  if (force_enqueue && worker && dest_worker_id == worker->GetId()) {
+    Worker *alt = scheduler_->PickAltWorker(dest_worker_id);
+    if (alt != nullptr) {
+      dest_worker_id = alt->GetId();
+    }
   }
+
+  // Enqueue to the destination worker's lane, then ALWAYS signal. Gating the
+  // wakeup on was_empty is the exact lost-wakeup race AwakenWorker's own
+  // comment warns against: the consumer can drain the lane and park in
+  // epoll_pwait2 in the window between our Empty() check and Push, so a
+  // "non-empty" observation skips a wakeup the worker actually needed. The
+  // extra SIGUSR1 is absorbed harmlessly by signalfd if the worker is already
+  // awake. (Surfaced as a permanent hang in generic/208 aio-dio once self-sent
+  // subtasks began routing to otherwise-idle I/O workers.)
+  auto &dest_lane = worker_queues_->GetLane(dest_worker_id, 0);
+  dest_lane.Push(future);
+  AwakenWorker(&dest_lane);
   return RouteResult::Local;
 }
 

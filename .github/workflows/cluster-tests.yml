@@ -195,6 +195,16 @@ jobs:
           export HOST_UID="$(id -u)" HOST_GID="$(id -g)"
           ./context-transfer-engine/test/integration/distributed/run_tests.sh
 
+      # CTE filesystem (CFS) cross-node correctness (#685): a file created via the
+      # CFS client on node 1 must be readable, byte-identical, via the CFS client
+      # on node 2. Fails hard if the CFS namespace is node-local (the pre-#685
+      # PoolQuery::Local() routing); the run script keys on the reader's result.
+      - name: CTE filesystem cross-node test (2-node, issue #685)
+        if: ${{ !cancelled() }}
+        run: |
+          export HOST_UID="$(id -u)" HOST_GID="$(id -g)"
+          ./context-transfer-engine/test/integration/cfs_distributed/run_tests.sh
+
       - name: CTE FUSE test (mount + POSIX I/O)
         if: ${{ !cancelled() }}
         run: |
@@ -217,6 +227,7 @@ jobs:
             context-runtime/test/integration/leader_elect/docker-compose.yml \
             context-runtime/test/integration/recovery/docker-compose.yml \
             context-transfer-engine/test/integration/distributed/docker-compose.yaml \
+            context-transfer-engine/test/integration/cfs_distributed/docker-compose.yaml \
             context-transfer-engine/test/integration/fuse/docker-compose.yaml ; do
             docker compose -f "$f" down -v 2>/dev/null || true
           done

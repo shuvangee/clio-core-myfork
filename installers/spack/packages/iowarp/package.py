@@ -46,6 +46,11 @@ class Iowarp(CMakePackage):
     variant('rocm', default=False, description='Enable ROCm support')
     variant('adios2', default=False, description='Build with ADIOS2 support')
     variant('fuse', default=False, description='Enable FUSE3 adapter (CTE)')
+    variant('s3', default=False,
+            description='Enable Amazon S3 (s3://) import in CAE (aws-sdk-cpp)')
+    variant('gcs', default=False,
+            description='Enable Google Cloud Storage (gs://) import in CAE '
+                        '(google-cloud-cpp storage)')
     variant('boost_coro', default=False,
             description='Use Boost.Context stackful coroutine backend (issue #620)')
 
@@ -76,6 +81,15 @@ class Iowarp(CMakePackage):
     depends_on('adios2', when='+adios2')
     depends_on('libfuse@3:', when='+fuse')
     depends_on('boost+context', when='+boost_coro')
+
+    # CAE cloud import backends (opt-in). aws-sdk-cpp for the S3 assimilator
+    # (find_package(AWSSDK COMPONENTS s3)); the iowarp-overlay storage-only
+    # google-cloud-cpp for the GCS assimilator (find_package(google_cloud_cpp_storage)).
+    depends_on('aws-sdk-cpp', when='+s3')
+    depends_on('google-cloud-cpp', when='+gcs')
+
+    conflicts('+s3', when='~cae', msg='S3 import lives under CAE; enable +cae')
+    conflicts('+gcs', when='~cae', msg='GCS import lives under CAE; enable +cae')
 
     conflicts('+fuse', when='~cte', msg='fuse adapter lives under CTE; enable +cte')
 
@@ -238,6 +252,10 @@ class Iowarp(CMakePackage):
                 args.append(self.define('CAE_ENABLE_CUDA', 'ON'))
             if '+rocm' in self.spec:
                 args.append(self.define('CAE_ENABLE_ROCM', 'ON'))
+            if '+s3' in self.spec:
+                args.append(self.define('CAE_ENABLE_S3', 'ON'))
+            if '+gcs' in self.spec:
+                args.append(self.define('CAE_ENABLE_GCS', 'ON'))
 
         return args
 

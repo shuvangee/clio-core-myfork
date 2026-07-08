@@ -46,10 +46,24 @@
 #define PATH_MAX 4096  // POSIX default; not always in <climits> under NVHPC
 #endif
 // LCOV_EXCL_STOP
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <string>
+
+#if CTP_HAS_POCO
+#include <Poco/Exception.h>
+#include <Poco/StreamCopier.h>
+#include <Poco/Timespan.h>
+#include <Poco/URI.h>
+#include <Poco/Net/HTTPClientSession.h>
+#include <Poco/Net/HTTPMessage.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <istream>
+#endif
 
 #include "clio_ctp/constants/macros.h"
 // MSan: inform sanitizer that mmap-backed memory is initialized by the kernel
@@ -540,12 +554,12 @@ bool SystemInfo::CreateNewSharedMemory(File &fd, const std::string &name,
   // not be reopened by name, breaking every OpenSharedMemory.
   std::string win_name = WinShmName(name);
   fd.windows_fd_ =
-      CreateFileMapping(INVALID_HANDLE_VALUE,    // use paging file
-                        nullptr,                 // default security
-                        PAGE_READWRITE,          // read/write access
-                        0,           // maximum object size (high-order DWORD)
-                        static_cast<DWORD>(size),  // low-order DWORD
-                        win_name.c_str());         // mapping object name
+      CreateFileMappingA(INVALID_HANDLE_VALUE,   // use paging file
+                         nullptr,                // default security
+                         PAGE_READWRITE,         // read/write access
+                         0,          // maximum object size (high-order DWORD)
+                         static_cast<DWORD>(size),  // low-order DWORD
+                         win_name.c_str());         // mapping object name
   return fd.windows_fd_ != nullptr;
 #endif
 }
@@ -566,7 +580,7 @@ bool SystemInfo::OpenSharedMemory(File &fd, const std::string &name) {
 #elif CTP_ENABLE_WINDOWS_SYSINFO
   std::string win_name = WinShmName(name);
   fd.windows_fd_ =
-      OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, win_name.c_str());
+      OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, win_name.c_str());
   return fd.windows_fd_ != nullptr;
 #endif
 }
@@ -642,10 +656,10 @@ void *SystemInfo::MapSharedMemory(const File &fd, size_t size, i64 off) {
   if (ret == nullptr) {
     DWORD error = GetLastError();
     LPVOID msg_buf;
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                      FORMAT_MESSAGE_IGNORE_INSERTS,
-                  NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                  (LPTSTR)&msg_buf, 0, NULL);
+    FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                       FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   (LPSTR)&msg_buf, 0, NULL);
     printf("MapViewOfFile failed with error: %s\n", (char *)msg_buf);
     LocalFree(msg_buf);
   }
@@ -1046,8 +1060,8 @@ std::string SystemInfo::Getenv(const char *name, size_t max_size) {
 #elif CTP_ENABLE_WINDOWS_SYSINFO
   std::string var;
   var.resize(max_size);
-  DWORD len = GetEnvironmentVariable(name, var.data(),
-                                     static_cast<DWORD>(var.size()));
+  DWORD len = GetEnvironmentVariableA(name, var.data(),
+                                      static_cast<DWORD>(var.size()));
   if (len == 0) {
     return "";
   }
@@ -1218,6 +1232,96 @@ std::string SystemInfo::GetDeviceHealthStats(const std::string &path) {
   return result.empty() ? "{}" : result;
 #else
   (void)path;
+  return "{}";
+#endif
+}
+
+/// @brief Derive the drive type ("hdd" or "ssd") from a pool/drive name.
+std::string SystemInfo::DeriveDriveType(const std::string &pool_name) {
+  // Case-insensitive substring match on "hdd"; default to "ssd" otherwise so
+  // an unlabelled pool routes to the flash model rather than failing.
+  std::string lower = pool_name;
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return lower.find("hdd") != std::string::npos ? "hdd" : "ssd";
+}
+
+#if CTP_HAS_POCO
+namespace {
+// Minimal JSON string escaping so an error message embedded in the fallback
+// payload can never produce invalid JSON (quotes/backslashes/control chars).
+std::string JsonEscape(const std::string &s) {
+  std::string out;
+  out.reserve(s.size() + 8);
+  for (char c : s) {
+    switch (c) {
+      case '"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n':
+      case '\r':
+      case '\t': out += ' '; break;
+      default:
+        if (static_cast<unsigned char>(c) < 0x20) {
+          out += ' ';
+        } else {
+          out += c;
+        }
+    }
+  }
+  return out;
+}
+}  // namespace
+#endif
+
+/// @brief Predicts drive failure by POSTing health metrics to a local
+/// prediction server. See the header for the graceful-degradation contract.
+std::string SystemInfo::PredictDriveFailure(const std::string &drive_type,
+                                            const std::string &health_json,
+                                            const std::string &drive_id) {
+  // The request body is identical regardless of transport availability so the
+  // payload contract is stable; only the actual send is Poco-gated.
+  const std::string metrics =
+      (health_json.empty() || health_json == "{}") ? "{}" : health_json;
+  const std::string payload = "{\"drive_type\": \"" + drive_type + "\", " +
+                              "\"drive_id\": \"" + drive_id + "\", " +
+                              "\"metrics\": " + metrics + "}";
+
+#if CTP_HAS_POCO
+  // Endpoint is overridable via CLIO_PREDICT_URL so tests and non-Docker
+  // deployments can target a reachable server. The default host.docker.internal
+  // only resolves under Docker Desktop; on any other host the connect fails
+  // fast and we return an {"error": ...} JSON object rather than throwing.
+  const char *env_url = std::getenv("CLIO_PREDICT_URL");
+  const std::string url =
+      (env_url && *env_url) ? env_url
+                            : "http://host.docker.internal:8000/predict/auto";
+  try {
+    Poco::URI uri(url);
+    std::string path = uri.getPathAndQuery();
+    if (path.empty()) {
+      path = "/";
+    }
+
+    Poco::Net::HTTPClientSession session(uri.getHost(), uri.getPort());
+    session.setTimeout(Poco::Timespan(5, 0));  // 5s for connect/send/receive
+
+    Poco::Net::HTTPRequest req(Poco::Net::HTTPRequest::HTTP_POST, path,
+                               Poco::Net::HTTPMessage::HTTP_1_1);
+    req.setContentType("application/json");
+    req.setContentLength(static_cast<std::streamsize>(payload.size()));
+    session.sendRequest(req) << payload;
+
+    Poco::Net::HTTPResponse res;
+    std::istream &rs = session.receiveResponse(res);
+    std::string body;
+    Poco::StreamCopier::copyToString(rs, body);
+    return body.empty() ? "{}" : body;
+  } catch (const Poco::Exception &e) {
+    return std::string("{\"error\": \"Prediction server unreachable: ") +
+           JsonEscape(e.displayText()) + "\"}";
+  }
+#else
+  (void)payload;
   return "{}";
 #endif
 }

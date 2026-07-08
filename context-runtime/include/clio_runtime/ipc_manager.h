@@ -1409,7 +1409,10 @@ class IpcManager {
   // created once (guarded by ipc_tls_key_mutex_); each thread lazily allocates
   // its own IpcManagerTls value on first GetTls() call.
   ctp::ThreadLocalKey ipc_tls_key_;
-  bool ipc_tls_key_created_ = false;
+  // Atomic for the lock-free fast-path read in GetTls() (double-checked locking):
+  // the unlocked outer check raced the locked write (TSan, #680). acquire/release
+  // ordering pairs the outer load with the store so the key is fully published.
+  std::atomic<bool> ipc_tls_key_created_{false};
   std::mutex ipc_tls_key_mutex_;
 
   // Client-side: DEALER transport for sending tasks and receiving responses

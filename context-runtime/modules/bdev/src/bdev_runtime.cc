@@ -259,7 +259,7 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
 
-    pk.pack_map(14);
+    pk.pack_map(15);
     pk.pack("pool_name");              pk.pack(pool_name_);
     pk.pack("bdev_type");              pk.pack(static_cast<clio::run::u32>(bdev_type_));
     pk.pack("total_capacity");         pk.pack(transport_ ? transport_->GetCapacity() : 0);
@@ -273,7 +273,13 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
     pk.pack("total_writes");           pk.pack(total_writes_.load());
     pk.pack("total_bytes_read");       pk.pack(total_bytes_read_.load());
     pk.pack("total_bytes_written");    pk.pack(total_bytes_written_.load());
-    pk.pack("device_health");          pk.pack(ctp::SystemInfo::GetDeviceHealthStats(pool_name_));
+
+    std::string health_json = ctp::SystemInfo::GetDeviceHealthStats(pool_name_);
+    std::string drive_type = ctp::SystemInfo::DeriveDriveType(pool_name_);
+    std::string prediction_json = ctp::SystemInfo::PredictDriveFailure(drive_type, health_json, pool_name_);
+
+    pk.pack("device_health");          pk.pack(health_json);
+    pk.pack("failure_prediction");     pk.pack(prediction_json);
 
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }

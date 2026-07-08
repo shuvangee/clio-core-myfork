@@ -136,6 +136,22 @@ class Scheduler {
    * @return Pointer to net recv worker, or nullptr if none assigned
    */
   virtual Worker *GetNetRecvWorker() const { return GetNetWorker(); }
+
+  /**
+   * Pick an alternate worker to drain a force-enqueued task that would
+   * otherwise route back to worker \a avoid_id (its own producer). Used by
+   * RouteLocal to break the self-send deadlock: a worker that force-enqueues a
+   * subtask onto its OWN lane busy-spins in the WAIT_FOR_SPACE ring Push when
+   * that lane is full and can never drain it (it is the consumer, blocked in
+   * Push). Redirecting to a different worker hands the task to a thread that
+   * actively drains, turning the deadlock into transient backpressure. Prefer
+   * a leaf-task drainer (I/O worker) that does not itself self-send.
+   * @return an alternate worker with id != avoid_id, or nullptr if none.
+   */
+  virtual Worker *PickAltWorker(u32 avoid_id) const {
+    (void)avoid_id;
+    return nullptr;
+  }
 };
 
 }  // namespace clio::run

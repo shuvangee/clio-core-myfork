@@ -102,6 +102,7 @@ bool IpcCpu2Cpu::RecvOut(IpcManager *ipc,
   // (Per-net_key demux for concurrent async sends is a later refinement.)
   ctp::Timepoint start;
   start.Now();
+  size_t spins = 0;
   while (true) {
     LoadTaskArchive archive;
     ctp::lbm::ClientInfo info =
@@ -119,7 +120,21 @@ bool IpcCpu2Cpu::RecvOut(IpcManager *ipc,
         return false;
       }
     }
-    CTP_THREAD_MODEL->Yield();
+    // Adaptive backoff. Busy-yield for the first burst so the common case (the
+    // worker completes our task in microseconds) stays low-latency, then sleep
+    // so we CEDE the CPU to the runtime workers. Without the sleep, many client
+    // threads waiting concurrently (same-blob write stress, a FUSE thread pool,
+    // etc.) all spin in Yield() and starve the very workers that must run their
+    // tasks -- a livelock. std::this_thread::yield() does not cede to the
+    // workers on Windows, so this shows up as a deterministic hang there
+    // (cte_concurrent_same_blob_all) while Linux only slows down; reproduced on
+    // Linux with 64 waiter threads pinned to 1 CPU. Same oversubscription class
+    // as the FUSE xfstests hangs.
+    if (++spins < 2048) {
+      CTP_THREAD_MODEL->Yield();
+    } else {
+      CTP_THREAD_MODEL->SleepForUs(20);
+    }
   }
 #endif  // CTP_IS_HOST
 }
