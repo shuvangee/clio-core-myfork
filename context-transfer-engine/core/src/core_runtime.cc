@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
 
 #include "clio_ctp/types/atomic.h"  // ctp::ipc::atomic_ref
 #include <filesystem>
@@ -71,6 +72,36 @@ using chi::chi_cur_worker_key_;
 using chi::Worker;
 
 // No more static member definitions - using instance-based locking
+
+namespace {
+
+constexpr size_t kMaxIndexedTermsPerBlob = 1024;
+
+/** Tokenize text as lowercase alphanumeric terms of length at least two. */
+std::vector<std::string> SemSearchTokenize(const char *data, size_t size) {
+  std::vector<std::string> tokens;
+  std::string cur;
+  cur.reserve(16);
+  for (size_t i = 0; i < size; ++i) {
+    unsigned char c = static_cast<unsigned char>(data[i]);
+    if (std::isalnum(c)) {
+      cur.push_back(static_cast<char>(std::tolower(c)));
+    } else {
+      if (cur.size() >= 2) tokens.push_back(std::move(cur));
+      cur.clear();
+    }
+  }
+  if (cur.size() >= 2) tokens.push_back(std::move(cur));
+  return tokens;
+}
+
+/** Return true when a search regex string means "match everything". */
+bool IsSearchWildcardRegex(const std::string &pattern) {
+  return pattern.empty() || pattern == ".*" || pattern == "^.*$";
+}
+
+}  // namespace
+
 
 chi::u64 Runtime::ParseCapacityToBytes(const std::string &capacity_str) {
   if (capacity_str.empty()) {
@@ -930,6 +961,106 @@ chi::TaskResume Runtime::GetTargetInfo(ctp::ipc::FullPtr<GetTargetInfoTask> task
   CLIO_TASK_BODY_END
 }
 
+std::string Runtime::MakeSearchDocKey(const TagId &tag_id,
+                                      const std::string &blob_name) const {
+  return std::to_string(tag_id.major_) + "." +
+         std::to_string(tag_id.minor_) + "." + blob_name;
+}
+
+void Runtime::RemoveSearchIndexForBlob(const TagId &tag_id,
+                                       const std::string &blob_name) {
+  std::lock_guard<std::mutex> lock(search_index_mu_);
+  const std::string doc_key = MakeSearchDocKey(tag_id, blob_name);
+  auto doc_it = search_docs_.find(doc_key);
+  if (doc_it == search_docs_.end()) return;
+  for (const auto &term : doc_it->second.tf) {
+    auto postings_it = keyword_to_blob_keys_.find(term.first);
+    if (postings_it == keyword_to_blob_keys_.end()) continue;
+    postings_it->second.erase(doc_key);
+    if (postings_it->second.empty()) {
+      keyword_to_blob_keys_.erase(postings_it);
+    }
+  }
+  search_docs_.erase(doc_it);
+}
+
+chi::TaskResume Runtime::RefreshSearchIndexForBlob(
+    const TagId &tag_id, const std::string &tag_name,
+    const std::string &blob_name, BlobInfo &blob_info,
+    chi::RunContext &ctx) {
+#ifdef __NVCOMPILER
+  chi::RunContext &rctx = ctx;
+#else
+  (void)ctx;
+#endif
+  CLIO_TASK_BODY_BEGIN
+  const chi::u64 total = blob_info.GetTotalSize();
+  if (total == 0) {
+    RemoveSearchIndexForBlob(tag_id, blob_name);
+    CLIO_CO_RETURN;
+  }
+
+  auto *ipc_manager = CLIO_IPC;
+  ctp::ipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(total);
+  if (buf.IsNull()) {
+    HLOG(kWarning,
+         "SemanticSearch: AllocateBuffer({}) failed while indexing '{}'",
+         total, blob_name);
+    CLIO_CO_RETURN;
+  }
+
+  ctp::ipc::ShmPtr<> shm(buf.shm_);
+  chi::u32 read_rc = 0;
+  CLIO_CO_AWAIT(ReadData(blob_info.blocks_, shm, total, 0, read_rc));
+  if (read_rc != 0) {
+    HLOG(kWarning,
+         "SemanticSearch: ReadData failed while indexing '{}' (rc={})",
+         blob_name, read_rc);
+    ipc_manager->FreeBuffer(buf);
+    CLIO_CO_RETURN;
+  }
+
+  auto tokens = SemSearchTokenize(buf.ptr_, total);
+  ipc_manager->FreeBuffer(buf);
+
+  SearchDocEntry entry;
+  entry.tag_id = tag_id;
+  entry.tag_name = tag_name;
+  entry.blob_name = blob_name;
+  entry.length = tokens.size();
+  for (auto &token : tokens) {
+    if (entry.tf.find(token) == entry.tf.end() &&
+        entry.tf.size() >= kMaxIndexedTermsPerBlob) {
+      continue;
+    }
+    ++entry.tf[token];
+  }
+
+  const std::string doc_key = MakeSearchDocKey(tag_id, blob_name);
+  std::lock_guard<std::mutex> lock(search_index_mu_);
+  auto old_it = search_docs_.find(doc_key);
+  if (old_it != search_docs_.end()) {
+    for (const auto &term : old_it->second.tf) {
+      auto postings_it = keyword_to_blob_keys_.find(term.first);
+      if (postings_it == keyword_to_blob_keys_.end()) continue;
+      postings_it->second.erase(doc_key);
+      if (postings_it->second.empty()) {
+        keyword_to_blob_keys_.erase(postings_it);
+      }
+    }
+  }
+  if (entry.tf.empty()) {
+    search_docs_.erase(doc_key);
+    CLIO_CO_RETURN;
+  }
+  for (const auto &term : entry.tf) {
+    keyword_to_blob_keys_[term.first].insert(doc_key);
+  }
+  search_docs_[doc_key] = std::move(entry);
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 chi::TaskResume Runtime::PutBlob(ctp::ipc::FullPtr<PutBlobTask> task,
                                  chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
@@ -1161,6 +1292,15 @@ chi::TaskResume Runtime::PutBlob(ctp::ipc::FullPtr<PutBlobTask> task,
         }
       }
     }
+
+    std::string tag_name;
+    {
+      chi::ScopedCoRwReadLock lock(tag_map_lock_);
+      TagInfo *tag_info_ptr = tag_id_to_info_.find(tag_id);
+      if (tag_info_ptr != nullptr) tag_name = tag_info_ptr->tag_name_.str();
+    }
+    CLIO_CO_AWAIT(RefreshSearchIndexForBlob(tag_id, tag_name, blob_name,
+                                            *blob_info_ptr, ctx));
 
     LogTelemetry(CteOp::kPutBlob, offset, size, tag_id, now,
                  blob_info_ptr->last_read_);
@@ -1447,6 +1587,7 @@ chi::TaskResume Runtime::DelBlob(ctp::ipc::FullPtr<DelBlobTask> task,
     }
 
     // Success
+    RemoveSearchIndexForBlob(tag_id, blob_name);
     GpuCacheOnDelBlob(tag_id, blob_name);
     task->return_code_ = 0;
     HLOG(kDebug, "DelBlob successful: name={}, blob_size={}", blob_name,
@@ -1583,6 +1724,10 @@ chi::TaskResume Runtime::DelTag(ctp::ipc::FullPtr<DelTagTask> task,
     {
       chi::ScopedCoRwWriteLock lock(tag_map_lock_);
       tag_id_to_info_.erase(tag_id);
+    }
+
+    for (const std::string &blob_name : blob_names_to_delete) {
+      RemoveSearchIndexForBlob(tag_id, blob_name);
     }
 
     // Success
@@ -3534,38 +3679,6 @@ chi::TaskResume Runtime::BlobQuery(ctp::ipc::FullPtr<BlobQueryTask> task,
 // SemanticSearch — BM25 over blob contents
 // ==============================================================================
 
-namespace {
-
-// Tokenize raw bytes as lowercase alphanumeric runs of length >= 2.
-// Anything else (whitespace, punctuation, non-ASCII) splits a token.
-// Deliberately simple; good enough for English-ish text from labels.
-std::vector<std::string> SemSearchTokenize(const char *data, size_t size) {
-  std::vector<std::string> tokens;
-  std::string cur;
-  cur.reserve(16);
-  for (size_t i = 0; i < size; ++i) {
-    unsigned char c = static_cast<unsigned char>(data[i]);
-    if (std::isalnum(c)) {
-      cur.push_back(static_cast<char>(std::tolower(c)));
-    } else {
-      if (cur.size() >= 2) tokens.push_back(std::move(cur));
-      cur.clear();
-    }
-  }
-  if (cur.size() >= 2) tokens.push_back(std::move(cur));
-  return tokens;
-}
-
-struct SemSearchDoc {
-  TagId tag_id;
-  std::string tag_name;
-  std::string blob_name;
-  std::unordered_map<std::string, int> tf;
-  size_t length;
-};
-
-}  // namespace
-
 chi::TaskResume Runtime::SemanticSearch(
     ctp::ipc::FullPtr<SemanticSearchTask> task, chi::RunContext &ctx) {
 #ifdef __NVCOMPILER
@@ -3594,89 +3707,45 @@ chi::TaskResume Runtime::SemanticSearch(
     CLIO_CO_RETURN;
   }
 
-  // Step 1: pick matching (tag_name, tag_id) pairs from tag metadata
-  // (same iteration as BlobQuery).
-  std::vector<std::pair<std::string, TagId>> matching_tags;
-  tag_name_to_id_.for_each(
-      [&tag_pattern, &matching_tags](const std::string &tag_name,
-                                     const TagId &tag_id) {
-        if (std::regex_match(tag_name, tag_pattern)) {
-          matching_tags.emplace_back(tag_name, tag_id);
-        }
-      });
-
-  // Step 2: walk the tag-blob metadata and collect (tag_id, tag_name,
-  // blob_name) triples whose blob_name matches blob_regex_. We collect names
-  // first and read bytes afterward — keeping the metadata iteration short
-  // means the for_each lambda doesn't block on bdev I/O.
-  struct Candidate { TagId tag_id; std::string tag_name; std::string blob_name; };
-  std::vector<Candidate> candidates;
-  for (const auto &tn : matching_tags) {
-    const std::string &tag_name = tn.first;
-    const TagId &tag_id = tn.second;
-    std::string prefix = std::to_string(tag_id.major_) + "." +
-                         std::to_string(tag_id.minor_) + ".";
-    tag_blob_name_to_info_.for_each(
-        [&prefix, &blob_pattern, &tag_id, &tag_name, &candidates](
-            const std::string &composite_key, const BlobInfo &blob_info) {
-          (void)blob_info;
-          if (composite_key.rfind(prefix, 0) != 0) return;
-          std::string blob_name = composite_key.substr(prefix.length());
-          if (std::regex_match(blob_name, blob_pattern)) {
-            candidates.push_back({tag_id, tag_name, blob_name});
-          }
-        });
-  }
-  if (candidates.empty()) {
-    HLOG(kDebug,
-         "SemanticSearch: no candidates for tag='{}' blob='{}'",
-         tag_regex_str, blob_regex_str);
+  // Step 1: tokenize the query and use the reverse index to find only blobs
+  // that contain at least one query term. Empty regex strings are treated as
+  // wildcards so search("", "", query) can take the fast path requested by
+  // the user-facing API.
+  auto qtokens = SemSearchTokenize(query_text.data(), query_text.size());
+  std::unordered_set<std::string> uniq_q(qtokens.begin(), qtokens.end());
+  if (uniq_q.empty()) {
     CLIO_CO_RETURN;
   }
 
-  // Step 3: read each candidate's bytes, tokenize, and accumulate
-  // BM25 corpus statistics (tf per doc, doc length, df, avgdl).
-  auto *ipc_manager = CLIO_IPC;
-  std::vector<SemSearchDoc> docs;
-  docs.reserve(candidates.size());
-  for (auto &cand : candidates) {
-    BlobInfo *info = CheckBlobExists(cand.blob_name, cand.tag_id);
-    if (info == nullptr) continue;
-    chi::u64 total = info->GetTotalSize();
-    if (total == 0) continue;
-
-    ctp::ipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(total);
-    if (buf.IsNull()) {
-      HLOG(kWarning,
-           "SemanticSearch: AllocateBuffer({}) failed for blob '{}'; "
-           "skipping",
-           total, cand.blob_name);
-      continue;
+  const bool tag_wildcard = IsSearchWildcardRegex(tag_regex_str);
+  const bool blob_wildcard = IsSearchWildcardRegex(blob_regex_str);
+  std::vector<SearchDocEntry> docs;
+  {
+    std::lock_guard<std::mutex> lock(search_index_mu_);
+    std::unordered_set<std::string> candidate_keys;
+    for (const auto &term : uniq_q) {
+      auto postings_it = keyword_to_blob_keys_.find(term);
+      if (postings_it == keyword_to_blob_keys_.end()) continue;
+      candidate_keys.insert(postings_it->second.begin(),
+                            postings_it->second.end());
     }
-    ctp::ipc::ShmPtr<> shm(buf.shm_);
-    chi::u32 read_rc = 0;
-    CLIO_CO_AWAIT(ReadData(info->blocks_, shm, total, 0, read_rc));
-    if (read_rc != 0) {
-      HLOG(kWarning,
-           "SemanticSearch: ReadData failed for blob '{}' (rc={}); "
-           "skipping",
-           cand.blob_name, read_rc);
-      ipc_manager->FreeBuffer(buf);
-      continue;
+    docs.reserve(candidate_keys.size());
+    for (const auto &doc_key : candidate_keys) {
+      auto doc_it = search_docs_.find(doc_key);
+      if (doc_it == search_docs_.end()) continue;
+      const SearchDocEntry &doc = doc_it->second;
+      bool tag_matches =
+          tag_wildcard || std::regex_match(doc.tag_name, tag_pattern);
+      bool blob_matches =
+          blob_wildcard || std::regex_match(doc.blob_name, blob_pattern);
+      if (tag_matches && blob_matches) docs.push_back(doc);
     }
-
-    auto tokens = SemSearchTokenize(buf.ptr_, total);
-    ipc_manager->FreeBuffer(buf);
-
-    SemSearchDoc doc;
-    doc.tag_id = cand.tag_id;
-    doc.tag_name = std::move(cand.tag_name);
-    doc.blob_name = std::move(cand.blob_name);
-    doc.length = tokens.size();
-    for (auto &t : tokens) ++doc.tf[t];
-    docs.push_back(std::move(doc));
   }
+
   if (docs.empty()) {
+    HLOG(kDebug,
+         "SemanticSearch: no indexed candidates for tag='{}' blob='{}'",
+         tag_regex_str, blob_regex_str);
     CLIO_CO_RETURN;
   }
 
@@ -3695,9 +3764,6 @@ chi::TaskResume Runtime::SemanticSearch(
   double avgdl = (docs.empty() ? 1.0 : total_len / docs.size());
   if (avgdl <= 0.0) avgdl = 1.0;
   const size_t N = docs.size();
-
-  auto qtokens = SemSearchTokenize(query_text.data(), query_text.size());
-  std::unordered_set<std::string> uniq_q(qtokens.begin(), qtokens.end());
 
   std::vector<SemanticSearchResult> scored;
   scored.reserve(docs.size());
@@ -3729,7 +3795,7 @@ chi::TaskResume Runtime::SemanticSearch(
        "SemanticSearch: tag='{}' blob='{}' query='{}' -> {} results "
        "(from {} candidates)",
        tag_regex_str, blob_regex_str, query_text, task->results_.size(),
-       candidates.size());
+       docs.size());
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }

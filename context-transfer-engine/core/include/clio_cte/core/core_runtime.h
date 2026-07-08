@@ -35,6 +35,9 @@
 #define WRPCTE_CORE_RUNTIME_H_
 
 #include <atomic>
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/comutex.h>
 #include <clio_runtime/corwlock.h>
@@ -335,6 +338,51 @@ private:
    * the cache header pointer if enabled, else nullptr.
    */
   GpuMetadataCacheHeader *GetGpuCache() const { return gpu_cache_; }
+
+  struct SearchDocEntry {
+    TagId tag_id;
+    std::string tag_name;
+    std::string blob_name;
+    std::unordered_map<std::string, int> tf;
+    size_t length = 0;
+  };
+
+  std::mutex search_index_mu_;
+  std::unordered_map<std::string, std::unordered_set<std::string>>
+      keyword_to_blob_keys_;
+  std::unordered_map<std::string, SearchDocEntry> search_docs_;
+
+  /**
+   * Build the stable in-memory key used by the keyword search index.
+   * @param tag_id Tag that owns the blob.
+   * @param blob_name Name of the blob within the tag.
+   * @return A string key unique within this runtime container.
+   */
+  std::string MakeSearchDocKey(const TagId &tag_id,
+                               const std::string &blob_name) const;
+
+  /**
+   * Remove a blob from all keyword posting lists and cached document stats.
+   * @param tag_id Tag that owns the blob.
+   * @param blob_name Name of the blob to remove from the index.
+   */
+  void RemoveSearchIndexForBlob(const TagId &tag_id,
+                                const std::string &blob_name);
+
+  /**
+   * Refresh the reverse keyword index for a blob after its bytes change.
+   * @param tag_id Tag that owns the blob.
+   * @param tag_name Best-known tag name, possibly empty on non-owner shards.
+   * @param blob_name Name of the blob to index.
+   * @param blob_info Blob metadata used to read the current full contents.
+   * @param ctx Current run context for coroutine execution.
+   * @return TaskResume for coroutine-based reads from blob storage.
+   */
+  chi::TaskResume RefreshSearchIndexForBlob(const TagId &tag_id,
+                                            const std::string &tag_name,
+                                            const std::string &blob_name,
+                                            BlobInfo &blob_info,
+                                            chi::RunContext &ctx);
 
   // Telemetry ring buffer for performance monitoring
   static inline constexpr size_t kTelemetryRingSize = 1024; // Ring buffer size
