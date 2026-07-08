@@ -297,8 +297,9 @@ def restart_runtime():
                 pass
     env = dict(os.environ, HOME=CLIO_HOME)
     with open(RUNTIME_LOG, "w") as log:
-        subprocess.Popen([os.path.join(BIN, "clio_run"), "start"], stdout=log,
-                         stderr=log, cwd=os.path.dirname(BIN) or "/", env=env)
+        proc = subprocess.Popen([os.path.join(BIN, "clio_run"), "start"],
+                                stdout=log, stderr=log,
+                                cwd=os.path.dirname(BIN) or "/", env=env)
     for _ in range(60):
         try:
             with open(RUNTIME_LOG) as fh:
@@ -308,7 +309,42 @@ def restart_runtime():
         except FileNotFoundError:
             pass
         time.sleep(1)
+    # Never became ready. This has been opaque in CI (the runtime log is not
+    # surfaced), so dump why before the caller's assert fails.
+    _dump_restart_diagnostics(proc, env)
     return False
+
+
+def _dump_restart_diagnostics(proc, env):
+    """Print why clio_run failed to become ready — visible in CI output."""
+    print("=" * 72)
+    print("restart_runtime: clio_run did NOT become ready — diagnostics")
+    print("=" * 72)
+    rc = proc.poll()
+    print(f"clio_run pid={proc.pid} alive={rc is None} returncode={rc}")
+    home = env.get("HOME", "")
+    cfg = os.path.join(home, ".clio", "clio.yaml")
+    print(f"HOME(clio_run)={home}  BIN={BIN}")
+    print(f"config {cfg} exists={os.path.exists(cfg)}")
+    for cmd in (["df", "-h", "/dev/shm"], ["free", "-m"],
+                ["ls", "-la", os.path.join(BIN, "clio_run")]):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            print(f"$ {' '.join(cmd)}\n{r.stdout}{r.stderr}", end="")
+        except Exception as e:  # noqa: BLE001 - diagnostics must never raise
+            print(f"$ {' '.join(cmd)} -> {e}")
+    print(f"--- {RUNTIME_LOG} (last 80 lines) ---")
+    try:
+        with open(RUNTIME_LOG) as fh:
+            lines = fh.read().splitlines()
+        print("\n".join(lines[-80:]) if lines else "(runtime log is empty)")
+    except OSError as e:
+        print(f"(could not read runtime log: {e})")
+    print("=" * 72)
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _run_c_tests():
