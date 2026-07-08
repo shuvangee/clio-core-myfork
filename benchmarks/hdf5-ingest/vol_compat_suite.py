@@ -489,6 +489,24 @@ def _run_trace_check():
     return {"telemetry": checks}
 
 
+def stop_runtime():
+    """Tear down the clio_run that restart_runtime started, so it does not leak
+    into later steps of the same CI job. The Linux adapters job runs a FUSE
+    mount smoke test after ctest; a leftover runtime holds port 9413 and the
+    smoke's clio_run then dies with 'Address already in use'."""
+    subprocess.run(["pkill", "-f", "clio_run"], check=False)
+    time.sleep(1)
+    try:
+        for f in os.listdir("/dev/shm"):
+            if f.startswith("chimaera") or f.startswith("clio"):
+                try:
+                    os.remove(os.path.join("/dev/shm", f))
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
 def driver(args):
     assert restart_runtime(), "clio_run did not become ready"
     os.makedirs(TMP, exist_ok=True)
@@ -567,7 +585,13 @@ def main():
     if a.worker:
         worker(a.case, a.action, a.file)
         return 0
-    return driver(a)
+    try:
+        return driver(a)
+    finally:
+        # Never leak the clio_run started by restart_runtime into later CI steps
+        # (the Linux adapters FUSE mount smoke binds the same port). Tear it down
+        # even if the suite raised.
+        stop_runtime()
 
 if __name__ == "__main__":
     sys.exit(main())
