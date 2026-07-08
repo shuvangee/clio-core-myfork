@@ -999,6 +999,23 @@ void Worker::ProcessEventQueue() {
       continue;
     }
 
+    // Resume the parent ONLY if THIS is the subtask it is currently suspended
+    // on. A coroutine that issues several subtasks concurrently and awaits them
+    // in a loop (parallel bdev reads/writes in ModifyExistingData/ReadData) is
+    // suspended on exactly one future at a time; if a sibling completes first,
+    // resuming here would run await_resume() on the still-pending awaited future
+    // and read a STALE bytes_written_/bytes_read_ (the CFS write-EIO / read-0
+    // race). future.Complete() above already flipped this sibling's flag, so
+    // when the parent later co_awaits it, await_ready() short-circuits and reads
+    // it correctly. AwaitedTask()==nullptr means the parent isn't suspended on a
+    // Future (legacy/non-coroutine paths) — resume as before.
+    Task* awaited = parent->AwaitedTask();
+    if (awaited != nullptr && awaited != future.GetTaskPtr().get()) {
+      continue;
+    }
+    // Consumed the awaited subtask; clear so a later stale event can't match.
+    parent->AwaitedTask() = nullptr;
+
     // Reset the is_yielded_ flag before executing the task
     parent->SetYielded(false);
 
