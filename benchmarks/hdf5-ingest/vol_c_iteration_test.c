@@ -1,4 +1,4 @@
-/* Isolated C test for iowarp VOL object/link ITERATION, using the modern
+/* Isolated C test for clio VOL object/link ITERATION, using the modern
  * VOL-aware APIs (H5Ovisit3 / H5Literate2). This is the accurate way to test
  * VOL iteration: h5py cannot (it calls the deprecated *_by_name1 variants that
  * HDF5 restricts to the native VOL), so the h5py compat suite disables its
@@ -6,7 +6,7 @@
  *
  * Self-contained: builds a small grouped file through whatever VOL is active,
  * then visits it and checks the traversal matches the expected object/link set.
- * Run with HDF5_VOL_CONNECTOR=iowarp (and a running clio_run). Exit 0 = pass.
+ * Run with HDF5_VOL_CONNECTOR=clio (and a running clio_run). Exit 0 = pass.
  *
  * Build: h5cc -o vol_c_iteration_test vol_c_iteration_test.c
  */
@@ -23,13 +23,13 @@ static int  g_nl;
 static herr_t ovisit_cb(hid_t obj, const char *name, const H5O_info2_t *info,
                         void *data) {
   (void)obj; (void)info; (void)data;
-  if (g_no < MAXN) snprintf(g_ovisit[g_no++], 256, "%s", name);
+  if (g_no < MAXN) snprintf(g_ovisit[g_no++], sizeof(g_ovisit[0]), "%s", name);
   return 0;
 }
 static herr_t liter_cb(hid_t g, const char *name, const H5L_info2_t *info,
                        void *data) {
   (void)g; (void)info; (void)data;
-  if (g_nl < MAXN) snprintf(g_liter[g_nl++], 256, "%s", name);
+  if (g_nl < MAXN) snprintf(g_liter[g_nl++], sizeof(g_liter[0]), "%s", name);
   return 0;
 }
 static int seen(char arr[][256], int n, const char *s) {

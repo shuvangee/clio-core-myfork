@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Phase 1 / Part A — iowarp VOL compatibility suite (differential testing).
+"""Phase 1 / Part A — clio VOL compatibility suite (differential testing).
 
-Does routing HDF5 through the iowarp VOL preserve native HDF5 semantics? Method:
+Does routing HDF5 through the clio VOL preserve native HDF5 semantics? Method:
 the NATIVE VOL is the oracle. For each feature case, exercise four arms and assert
 the file content (data + metadata) matches:
 
@@ -229,7 +229,7 @@ CASES = {
     # visititems()/keys() call the DEPRECATED H5Ovisit_by_name1 / H5Literate_by_name1,
     # which HDF5 hard-restricts to the native VOL connector, so they fail through ANY
     # non-native VOL (the reference H5VLpassthru included) — before our callbacks are
-    # even reached. The iowarp VOL's iteration is actually correct: a C client using
+    # even reached. The clio VOL's iteration is actually correct: a C client using
     # the modern H5Ovisit3 / H5Literate2 traverses fine. That is verified by the
     # isolated C test `vol_c_iteration_test.c` (run via _run_c_tests below), which is
     # the accurate way to test VOL iteration. Do not re-add an h5py iteration case.
@@ -257,7 +257,7 @@ def _env(vol):
              PYTHONPATH=BIN)
     if vol:
         e["HDF5_PLUGIN_PATH"] = BIN
-        e["HDF5_VOL_CONNECTOR"] = "iowarp"
+        e["HDF5_VOL_CONNECTOR"] = "clio"
     else:
         e.pop("HDF5_VOL_CONNECTOR", None)
     return e
@@ -350,7 +350,7 @@ def _run_c_tests():
 
 def _run_trace_check():
     """Verify access telemetry (Part B). Runs the c_selection workload with
-    IOWARP_VOL_TRACE set and asserts the summary JSON + per-access JSONL are
+    CLIO_VOL_TRACE set and asserts the summary JSON + per-access JSONL are
     produced with sane, self-consistent fields — including read cache-hit rate in
     [0,1] and repeated-selection detection (the workload reads one hyperslab
     twice). Observe-only: does not change data-path behavior."""
@@ -367,7 +367,7 @@ def _run_trace_check():
     os.makedirs(tdir, exist_ok=True)
     for f in glob.glob(tdir + "/*"):
         os.remove(f)
-    env = dict(_env(True), IOWARP_VOL_TRACE=tdir)
+    env = dict(_env(True), CLIO_VOL_TRACE=tdir)
     r = subprocess.run([binp], capture_output=True, text=True, env=env, timeout=120)
     checks = {"workload_ok": r.returncode == 0}
     summaries = glob.glob(tdir + "/*.access.json")
@@ -467,7 +467,7 @@ def main():
     ap.add_argument("--action", choices=["write", "read"])
     ap.add_argument("--file")
     ap.add_argument("--out", default="vol_compat_results.json")
-    ap.add_argument("--bin", help="dir with libiowarp_hdf5_vol.so + clio_run "
+    ap.add_argument("--bin", help="dir with libclio_hdf5_vol.so + clio_run "
                     "(default $CLIO_VOL_BIN or /workspace/build/bin)")
     ap.add_argument("--expect-fail", default="",
                     help="comma-separated cases allowed to fail (known gaps); "

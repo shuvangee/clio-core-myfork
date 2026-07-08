@@ -6,14 +6,14 @@
  */
 
 /**
- * IOWarp HDF5 VOL Connector
+ * Clio HDF5 VOL Connector
  *
  * Intercepts H5Dwrite/H5Dread and maps them to CTE AsyncPutBlob/AsyncGetBlob.
  * Large writes are split into configurable-size chunks and submitted
  * asynchronously. All other HDF5 operations pass through to the native VOL.
  */
 
-#include "iowarp_vol.h"
+#include "clio_vol.h"
 
 #include <H5PLextern.h>     /* H5PLget_plugin_type / H5PLget_plugin_info */
 #ifdef H5_HAVE_PARALLEL
@@ -29,7 +29,7 @@
 #include <unordered_set>
 #include <chrono>
 
-#include "iowarp_vol_trace.h"
+#include "clio_vol_trace.h"
 
 #include <clio_runtime/clio_runtime.h>
 /* transport_factory_impl.h provides the inline definitions of
@@ -46,22 +46,22 @@
  * Internal state structures
  * ======================================================================== */
 
-struct iowarp_file_t;     /* fwd */
-struct iowarp_dataset_t;  /* fwd */
+struct clio_file_t;     /* fwd */
+struct clio_dataset_t;  /* fwd */
 
-/* parent_file points to the iowarp_file_t this object belongs to. For
+/* parent_file points to the clio_file_t this object belongs to. For
    files it is a self-pointer; for groups, datasets, attributes it is
    inherited from the containing file/group at create-time. The
    dataset_t branch reads it to find the CTE tag for AsyncPutBlob /
    AsyncGetBlob. */
-struct iowarp_obj_t {
+struct clio_obj_t {
   void           *under_object;
   hid_t           under_vol_id;
-  iowarp_file_t  *parent_file;
+  clio_file_t  *parent_file;
 };
 
-struct iowarp_file_t {
-  iowarp_obj_t obj;
+struct clio_file_t {
+  clio_obj_t obj;
   clio::cte::core::TagId tag_id;
   std::string file_name;
   size_t chunk_size;
@@ -70,15 +70,15 @@ struct iowarp_file_t {
      successful flush/close (the native file is already written synchronously and
      stays authoritative; this keeps the CTE cache coherent with it). */
   std::mutex ds_mtx;
-  std::unordered_set<iowarp_dataset_t *> open_datasets;
-  /* Access telemetry (observe-only); non-null only when IOWARP_VOL_TRACE is set.
+  std::unordered_set<clio_dataset_t *> open_datasets;
+  /* Access telemetry (observe-only); non-null only when CLIO_VOL_TRACE is set.
      Finalized to a summary JSON at file close. */
-  iowarp::trace::FileTrace *trace = nullptr;
+  clio::trace::FileTrace *trace = nullptr;
 };
 
-struct iowarp_dataset_t {
-  iowarp_obj_t obj;
-  iowarp_file_t *file;
+struct clio_dataset_t {
+  clio_obj_t obj;
+  clio_file_t *file;
   std::string dataset_path;
   /* When false the CTE cache is bypassed and every transfer goes to the native
      VOL. Set for datasets whose stable path is unknown (opened via the generic
@@ -89,7 +89,7 @@ struct iowarp_dataset_t {
   std::vector<clio::run::Future<clio::cte::core::PutBlobTask>> pending_puts;
   std::vector<ctp::ipc::FullPtr<char>> pending_buffers;
   /* Telemetry-only storage-layout probe, filled lazily on first traced access
-     (never touched unless IOWARP_VOL_TRACE is set). */
+     (never touched unless CLIO_VOL_TRACE is set). */
   int layout_probed = 0;         /* 0 = not yet probed, 1 = probed */
   bool chunked = false;
   int chunk_rank = 0;
@@ -98,13 +98,13 @@ struct iowarp_dataset_t {
 
 /* Build a dataset wrapper. Centralised so every code path that can produce a
    dataset object (dataset_open/create, object_open, wrap_object) yields the
-   same fully-formed iowarp_dataset_t — otherwise a dataset returned as a bare
-   iowarp_obj_t would be fatally mis-cast when HDF5 later routes
+   same fully-formed clio_dataset_t — otherwise a dataset returned as a bare
+   clio_obj_t would be fatally mis-cast when HDF5 later routes
    dataset_read/close to it. */
-static iowarp_dataset_t *make_dataset_wrapper(void *under, hid_t under_vol_id,
-                                              iowarp_file_t *parent_file,
+static clio_dataset_t *make_dataset_wrapper(void *under, hid_t under_vol_id,
+                                              clio_file_t *parent_file,
                                               const char *path) {
-  auto *dset = new iowarp_dataset_t;
+  auto *dset = new clio_dataset_t;
   dset->obj.under_object = under;
   dset->obj.under_vol_id = under_vol_id;
   dset->file = parent_file;
@@ -122,7 +122,7 @@ static iowarp_dataset_t *make_dataset_wrapper(void *under, hid_t under_vol_id,
 
 /* Block until every async CTE put for this dataset has completed, then release
    the shared-memory buffers. Shared by dataset_close and Safe-mode flush/close. */
-static void drain_dataset_puts(iowarp_dataset_t *dset) {
+static void drain_dataset_puts(clio_dataset_t *dset) {
   for (auto &future : dset->pending_puts) {
     future.Wait();
   }
@@ -133,14 +133,14 @@ static void drain_dataset_puts(iowarp_dataset_t *dset) {
 /* VOL object-wrap context. HDF5 uses this during link/object iteration
    (H5Literate2 / H5Lvisit2 / H5Ovisit2): before invoking the user's operator it
    saves a wrap context from this connector, then for every iterated object it
-   calls iowarp_wrap_object() to re-wrap the native object back into our VOL so
+   calls clio_wrap_object() to re-wrap the native object back into our VOL so
    the operator's hid_t routes through this connector. Mirrors the reference
    pass-through connector (H5VLpassthru). The previous implementation returned
-   the native wrap context directly and had iowarp_wrap_object() skip
+   the native wrap context directly and had clio_wrap_object() skip
    H5VLwrap_object(), which left the iterated object only half-wrapped and made
    H5Literate2 abort with "... is not a VOL connector ID" — the deeper blocker
    that kept neuroh5's group enumeration from completing. */
-struct iowarp_wrap_ctx_t {
+struct clio_wrap_ctx_t {
   hid_t under_vol_id;
   void *under_wrap_ctx;
 };
@@ -165,9 +165,9 @@ static clio::cte::core::Client *get_cte_client() {
  * Info callbacks
  * ======================================================================== */
 
-static void *iowarp_info_copy(const void *_info) {
-  const auto *info = static_cast<const iowarp_vol_info_t *>(_info);
-  auto *new_info = new iowarp_vol_info_t(*info);
+static void *clio_info_copy(const void *_info) {
+  const auto *info = static_cast<const clio_vol_info_t *>(_info);
+  auto *new_info = new clio_vol_info_t(*info);
   if (info->under_vol_info) {
     H5VLcopy_connector_info(info->under_vol_id, &new_info->under_vol_info,
                             info->under_vol_info);
@@ -175,8 +175,8 @@ static void *iowarp_info_copy(const void *_info) {
   return new_info;
 }
 
-static herr_t iowarp_info_free(void *_info) {
-  auto *info = static_cast<iowarp_vol_info_t *>(_info);
+static herr_t clio_info_free(void *_info) {
+  auto *info = static_cast<clio_vol_info_t *>(_info);
   if (info->under_vol_info) {
     H5VLfree_connector_info(info->under_vol_id, info->under_vol_info);
   }
@@ -188,16 +188,16 @@ static herr_t iowarp_info_free(void *_info) {
  * Wrap / unwrap callbacks
  * ======================================================================== */
 
-static void *iowarp_wrap_get_object(const void *obj) {
-  auto *o = static_cast<const iowarp_obj_t *>(obj);
+static void *clio_wrap_get_object(const void *obj) {
+  auto *o = static_cast<const clio_obj_t *>(obj);
   return H5VLget_object(o->under_object, o->under_vol_id);
 }
 
-static herr_t iowarp_get_wrap_ctx(const void *obj, void **wrap_ctx) {
-  auto *o = static_cast<const iowarp_obj_t *>(obj);
-  /* Carry the under VOL id alongside its wrap context so iowarp_wrap_object()
+static herr_t clio_get_wrap_ctx(const void *obj, void **wrap_ctx) {
+  auto *o = static_cast<const clio_obj_t *>(obj);
+  /* Carry the under VOL id alongside its wrap context so clio_wrap_object()
      can call H5VLwrap_object() against the right connector. */
-  auto *ctx = new iowarp_wrap_ctx_t;
+  auto *ctx = new clio_wrap_ctx_t;
   ctx->under_vol_id = o->under_vol_id;
   H5Iinc_ref(ctx->under_vol_id);
   ctx->under_wrap_ctx = nullptr;
@@ -206,9 +206,9 @@ static herr_t iowarp_get_wrap_ctx(const void *obj, void **wrap_ctx) {
   return 0;
 }
 
-static void *iowarp_wrap_object(void *under_obj, H5I_type_t obj_type,
+static void *clio_wrap_object(void *under_obj, H5I_type_t obj_type,
                                 void *_wrap_ctx) {
-  auto *ctx = static_cast<iowarp_wrap_ctx_t *>(_wrap_ctx);
+  auto *ctx = static_cast<clio_wrap_ctx_t *>(_wrap_ctx);
   hid_t under_vol_id = ctx ? ctx->under_vol_id : H5VL_NATIVE;
   void *under_wrap_ctx = ctx ? ctx->under_wrap_ctx : nullptr;
 
@@ -221,29 +221,29 @@ static void *iowarp_wrap_object(void *under_obj, H5I_type_t obj_type,
 
   /* parent_file is unknown during iteration, so everything wrapped here falls
      back to the native VOL (correct, just uncached). A wrapped *dataset* must
-     still be a full iowarp_dataset_t (non-cacheable), or a later
+     still be a full clio_dataset_t (non-cacheable), or a later
      dataset_read/close would mis-cast it. */
   if (obj_type == H5I_DATASET) {
     return make_dataset_wrapper(under, under_vol_id, nullptr, nullptr);
   }
-  auto *o = new iowarp_obj_t;
+  auto *o = new clio_obj_t;
   o->under_object = under;
   o->under_vol_id = under_vol_id;
   o->parent_file = nullptr;
   return o;
 }
 
-static void *iowarp_unwrap_object(void *obj) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
-  /* Symmetric with iowarp_wrap_object()'s H5VLwrap_object(): peel the native
+static void *clio_unwrap_object(void *obj) {
+  auto *o = static_cast<clio_obj_t *>(obj);
+  /* Symmetric with clio_wrap_object()'s H5VLwrap_object(): peel the native
      wrapper back off before discarding our wrapper. */
   void *under = H5VLunwrap_object(o->under_object, o->under_vol_id);
   if (under) delete o;
   return under;
 }
 
-static herr_t iowarp_free_wrap_ctx(void *_wrap_ctx) {
-  auto *ctx = static_cast<iowarp_wrap_ctx_t *>(_wrap_ctx);
+static herr_t clio_free_wrap_ctx(void *_wrap_ctx) {
+  auto *ctx = static_cast<clio_wrap_ctx_t *>(_wrap_ctx);
   if (!ctx) return 0;
   /* Preserve the active HDF5 error stack across the cleanup calls, per the
      reference connector. */
@@ -261,19 +261,19 @@ static herr_t iowarp_free_wrap_ctx(void *_wrap_ctx) {
  * File callbacks
  * ======================================================================== */
 
-static void *iowarp_file_create(const char *name, unsigned flags,
+static void *clio_file_create(const char *name, unsigned flags,
                                 hid_t fcpl_id, hid_t fapl_id,
                                 hid_t dxpl_id, void **req) {
   /* Get underlying VOL info */
   hid_t under_vol_id = H5VL_NATIVE;
   void *under_vol_info = nullptr;
 
-  /* Check if user provided IOWarp VOL info.
+  /* Check if user provided Clio VOL info.
    * HDF5 2.x split H5Pget_vol() into H5Pget_vol_id() + H5Pget_vol_info();
      we only care about the info blob here. */
-  iowarp_vol_info_t *vol_info = nullptr;
+  clio_vol_info_t *vol_info = nullptr;
   H5Pget_vol_info(fapl_id, reinterpret_cast<void **>(&vol_info));
-  size_t chunk_size = IOWARP_VOL_DEFAULT_CHUNK_SIZE;
+  size_t chunk_size = CLIO_VOL_DEFAULT_CHUNK_SIZE;
   if (vol_info) {
     under_vol_id = vol_info->under_vol_id;
     under_vol_info = vol_info->under_vol_info;
@@ -283,10 +283,10 @@ static void *iowarp_file_create(const char *name, unsigned flags,
   }
 
   /* Check environment variable for chunk size */
-  const char *env_chunk = std::getenv("IOWARP_VOL_CHUNK_SIZE");
+  const char *env_chunk = std::getenv("CLIO_VOL_CHUNK_SIZE");
   if (env_chunk) {
     chunk_size = std::strtoul(env_chunk, nullptr, 10);
-    if (chunk_size == 0) chunk_size = IOWARP_VOL_DEFAULT_CHUNK_SIZE;
+    if (chunk_size == 0) chunk_size = CLIO_VOL_DEFAULT_CHUNK_SIZE;
   }
 
   /* Create file via native VOL */
@@ -303,25 +303,25 @@ static void *iowarp_file_create(const char *name, unsigned flags,
   tag_task.Wait();
 
   /* Create file state */
-  auto *file = new iowarp_file_t;
+  auto *file = new clio_file_t;
   file->obj.under_object = under_file;
   file->obj.under_vol_id = H5VL_NATIVE;
   file->obj.parent_file = file;          /* self-pointer */
   file->tag_id = tag_task->tag_id_;
   file->file_name = name;
   file->chunk_size = chunk_size;
-  file->trace = iowarp::trace::open_file(name);
+  file->trace = clio::trace::open_file(name);
 
   return file;
 }
 
-static void *iowarp_file_open(const char *name, unsigned flags,
+static void *clio_file_open(const char *name, unsigned flags,
                               hid_t fapl_id, hid_t dxpl_id, void **req) {
-  size_t chunk_size = IOWARP_VOL_DEFAULT_CHUNK_SIZE;
-  const char *env_chunk = std::getenv("IOWARP_VOL_CHUNK_SIZE");
+  size_t chunk_size = CLIO_VOL_DEFAULT_CHUNK_SIZE;
+  const char *env_chunk = std::getenv("CLIO_VOL_CHUNK_SIZE");
   if (env_chunk) {
     chunk_size = std::strtoul(env_chunk, nullptr, 10);
-    if (chunk_size == 0) chunk_size = IOWARP_VOL_DEFAULT_CHUNK_SIZE;
+    if (chunk_size == 0) chunk_size = CLIO_VOL_DEFAULT_CHUNK_SIZE;
   }
 
   /* Open file via native VOL */
@@ -336,29 +336,29 @@ static void *iowarp_file_open(const char *name, unsigned flags,
   auto tag_task = cte_client->AsyncGetOrCreateTag(std::string("hdf5:") + name);
   tag_task.Wait();
 
-  auto *file = new iowarp_file_t;
+  auto *file = new clio_file_t;
   file->obj.under_object = under_file;
   file->obj.under_vol_id = H5VL_NATIVE;
   file->obj.parent_file = file;          /* self-pointer */
   file->tag_id = tag_task->tag_id_;
   file->file_name = name;
   file->chunk_size = chunk_size;
-  file->trace = iowarp::trace::open_file(name);
+  file->trace = clio::trace::open_file(name);
 
   return file;
 }
 
-static herr_t iowarp_file_get(void *obj, H5VL_file_get_args_t *args,
+static herr_t clio_file_get(void *obj, H5VL_file_get_args_t *args,
                               hid_t dxpl_id, void **req) {
-  auto *file = static_cast<iowarp_file_t *>(obj);
+  auto *file = static_cast<clio_file_t *>(obj);
   return H5VLfile_get(file->obj.under_object, file->obj.under_vol_id,
                       args, dxpl_id, req);
 }
 
-static herr_t iowarp_file_specific(void *obj,
+static herr_t clio_file_specific(void *obj,
                                    H5VL_file_specific_args_t *args,
                                    hid_t dxpl_id, void **req) {
-  auto *file = static_cast<iowarp_file_t *>(obj);
+  auto *file = static_cast<clio_file_t *>(obj);
   /* Safe mode: on H5Fflush, drain every open cacheable dataset's pending CTE
      puts BEFORE delegating the flush to native. This makes the flush a real
      durability barrier for the cache path (fail-closed: we only return once all
@@ -379,15 +379,15 @@ static herr_t iowarp_file_specific(void *obj,
    VOL object (H5F_VOL_OBJ). With this callback left null the op never reached
    native, so H5F_VOL_OBJ stayed NULL and any variable-length datatype crashed at
    create time in H5T__vlen_set_loc -> H5VL_file_get(NULL). Mirrors H5VLpassthru. */
-static herr_t iowarp_file_optional(void *obj, H5VL_optional_args_t *args,
+static herr_t clio_file_optional(void *obj, H5VL_optional_args_t *args,
                                    hid_t dxpl_id, void **req) {
-  auto *file = static_cast<iowarp_file_t *>(obj);
+  auto *file = static_cast<clio_file_t *>(obj);
   return H5VLfile_optional(file->obj.under_object, file->obj.under_vol_id,
                            args, dxpl_id, req);
 }
 
-static herr_t iowarp_file_close(void *obj, hid_t dxpl_id, void **req) {
-  auto *file = static_cast<iowarp_file_t *>(obj);
+static herr_t clio_file_close(void *obj, hid_t dxpl_id, void **req) {
+  auto *file = static_cast<clio_file_t *>(obj);
   /* Safe mode: drain any datasets still open at file-close time (e.g. weak
      close degree) so no async CTE put outlives the file. Datasets closed the
      normal way have already drained and unregistered themselves. */
@@ -399,7 +399,7 @@ static herr_t iowarp_file_close(void *obj, hid_t dxpl_id, void **req) {
   }
   herr_t ret = H5VLfile_close(file->obj.under_object, file->obj.under_vol_id,
                                dxpl_id, req);
-  iowarp::trace::close_file(file->trace);  /* writes the summary; no-op if null */
+  clio::trace::close_file(file->trace);  /* writes the summary; no-op if null */
   delete file;
   return ret;
 }
@@ -409,24 +409,24 @@ static herr_t iowarp_file_close(void *obj, hid_t dxpl_id, void **req) {
  * ======================================================================== */
 
 /**
- * Helper: extract the iowarp_file_t from an obj pointer.
+ * Helper: extract the clio_file_t from an obj pointer.
  *
- * Every wrapper (file, group, dataset, attr) has an iowarp_obj_t as its
+ * Every wrapper (file, group, dataset, attr) has an clio_obj_t as its
  * first member with a parent_file pointer. Files set it to themselves;
  * groups inherit it from their parent; datasets/attrs inherit it from
  * their containing file or group.
  *
  * If obj came in without parent_file populated (e.g. from
- * iowarp_wrap_object where the wrap context didn't include a file
+ * clio_wrap_object where the wrap context didn't include a file
  * reference), this returns nullptr and the caller falls back to pure
  * native-VOL passthrough.
  */
-static iowarp_file_t *find_parent_file(void *obj) {
+static clio_file_t *find_parent_file(void *obj) {
   if (!obj) return nullptr;
-  /* All iowarp wrappers (iowarp_obj_t, iowarp_file_t, iowarp_dataset_t)
-     start with iowarp_obj_t as their first member, so reading
+  /* All clio wrappers (clio_obj_t, clio_file_t, clio_dataset_t)
+     start with clio_obj_t as their first member, so reading
      parent_file via this cast is safe. */
-  return static_cast<iowarp_obj_t *>(obj)->parent_file;
+  return static_cast<clio_obj_t *>(obj)->parent_file;
 }
 
 /**
@@ -436,7 +436,7 @@ static iowarp_file_t *find_parent_file(void *obj) {
  * contiguously (H5S_ALL on both mem and file spaces). Any hyperslab / point
  * selection must go to the native VOL.
  */
-static bool iowarp_is_whole_read(hid_t mem_space_id, hid_t file_space_id) {
+static bool clio_is_whole_read(hid_t mem_space_id, hid_t file_space_id) {
   return mem_space_id == H5S_ALL && file_space_id == H5S_ALL;
 }
 
@@ -445,7 +445,7 @@ static bool iowarp_is_whole_read(hid_t mem_space_id, hid_t file_space_id) {
  * transfers must stay on the native VOL — serving some ranks from cache while
  * others miss would desynchronise the collective call and deadlock.
  */
-static bool iowarp_is_collective(hid_t dxpl_id) {
+static bool clio_is_collective(hid_t dxpl_id) {
 #ifdef H5_HAVE_PARALLEL
   if (dxpl_id == H5P_DEFAULT) return false;
   H5FD_mpio_xfer_t xfer = H5FD_MPIO_INDEPENDENT;
@@ -476,7 +476,7 @@ static bool iowarp_is_collective(hid_t dxpl_id) {
  * Excluded types are delegated to the native VOL only (the native file still holds
  * the real data; it is simply not mirrored into CTE).
  */
-static bool iowarp_type_is_cacheable(hid_t type_id) {
+static bool clio_type_is_cacheable(hid_t type_id) {
   if (type_id < 0) return false;
   if (H5Tis_variable_str(type_id) > 0) return false;
   switch (H5Tget_class(type_id)) {
@@ -491,13 +491,13 @@ static bool iowarp_type_is_cacheable(hid_t type_id) {
   }
 }
 
-static void *iowarp_dataset_create(void *obj,
+static void *clio_dataset_create(void *obj,
                                    const H5VL_loc_params_t *loc_params,
                                    const char *name, hid_t lcpl_id,
                                    hid_t type_id, hid_t space_id,
                                    hid_t dcpl_id, hid_t dapl_id,
                                    hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
 
   /* Create dataset via native VOL */
   void *under_dset = H5VLdataset_create(
@@ -509,11 +509,11 @@ static void *iowarp_dataset_create(void *obj,
                               find_parent_file(obj), name);
 }
 
-static void *iowarp_dataset_open(void *obj,
+static void *clio_dataset_open(void *obj,
                                  const H5VL_loc_params_t *loc_params,
                                  const char *name, hid_t dapl_id,
                                  hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
 
   void *under_dset = H5VLdataset_open(
       o->under_object, loc_params, o->under_vol_id, name,
@@ -524,9 +524,9 @@ static void *iowarp_dataset_open(void *obj,
                               find_parent_file(obj), name);
 }
 
-/* ---- Access telemetry helpers (observe-only; active only under IOWARP_VOL_TRACE) */
+/* ---- Access telemetry helpers (observe-only; active only under CLIO_VOL_TRACE) */
 
-static const char *iowarp_dtype_class_name(hid_t t) {
+static const char *clio_dtype_class_name(hid_t t) {
   if (t < 0) return "unknown";
   if (H5Tis_variable_str(t) > 0) return "vlen_string";
   switch (H5Tget_class(t)) {
@@ -547,7 +547,7 @@ static const char *iowarp_dtype_class_name(hid_t t) {
 /* Element count a transfer touches: the file-space selection if given, else the
    mem-space selection, else the whole dataset (needs one GET_SPACE). Only called
    when telemetry is enabled. */
-static long long iowarp_sel_nelem(iowarp_dataset_t *dataset, hid_t mem_space,
+static long long clio_sel_nelem(clio_dataset_t *dataset, hid_t mem_space,
                                   hid_t file_space, hid_t dxpl) {
   if (file_space != H5S_ALL) return H5Sget_select_npoints(file_space);
   if (mem_space != H5S_ALL) return H5Sget_select_npoints(mem_space);
@@ -566,7 +566,7 @@ static long long iowarp_sel_nelem(iowarp_dataset_t *dataset, hid_t mem_space,
 
 /* Probe the dataset's storage layout once (chunked? chunk dims), caching the
    result on the dataset. Only reached when telemetry is enabled. */
-static void iowarp_probe_layout(iowarp_dataset_t *dataset, hid_t dxpl_id) {
+static void clio_probe_layout(clio_dataset_t *dataset, hid_t dxpl_id) {
   if (dataset->layout_probed) return;
   dataset->layout_probed = 1;
   H5VL_dataset_get_args_t ga;
@@ -590,7 +590,7 @@ static void iowarp_probe_layout(iowarp_dataset_t *dataset, hid_t dxpl_id) {
    the bounding box must snap to chunk boundaries (start on a chunk edge and end
    on a chunk edge or the dataset extent) — misalignment is the read-amplification
    / rechunk signal. */
-static int iowarp_chunk_alignment(iowarp_dataset_t *dataset, hid_t file_space_id) {
+static int clio_chunk_alignment(clio_dataset_t *dataset, hid_t file_space_id) {
   if (!dataset->chunked) return -1;
   if (file_space_id == H5S_ALL) return 1;
   H5S_sel_type st = H5Sget_select_type(file_space_id);
@@ -612,37 +612,37 @@ static int iowarp_chunk_alignment(iowarp_dataset_t *dataset, hid_t file_space_id
 }
 
 /* Record one read/write access. No-op unless the file has telemetry enabled. */
-static void iowarp_trace_access(iowarp_dataset_t *dataset, iowarp::trace::Op op,
+static void clio_trace_access(clio_dataset_t *dataset, clio::trace::Op op,
                                 hid_t mem_type_id, hid_t mem_space_id,
                                 hid_t file_space_id, hid_t dxpl_id,
-                                iowarp::trace::Served served, double dur_us) {
+                                clio::trace::Served served, double dur_us) {
   if (!dataset || !dataset->file || !dataset->file->trace) return;
-  iowarp::trace::Access a;
+  clio::trace::Access a;
   a.op = op;
   a.served = served;
   a.dataset = dataset->dataset_path;
-  a.sel = iowarp::trace::classify(file_space_id, &a.sel_sig);
-  a.dtype = iowarp_dtype_class_name(mem_type_id);
+  a.sel = clio::trace::classify(file_space_id, &a.sel_sig);
+  a.dtype = clio_dtype_class_name(mem_type_id);
   a.elem_size = (mem_type_id >= 0) ? H5Tget_size(mem_type_id) : 0;
   a.ndims = (file_space_id != H5S_ALL)
                 ? H5Sget_simple_extent_ndims(file_space_id) : 0;
-  long long n = iowarp_sel_nelem(dataset, mem_space_id, file_space_id, dxpl_id);
+  long long n = clio_sel_nelem(dataset, mem_space_id, file_space_id, dxpl_id);
   a.nelem_sel = n;
   a.bytes = (n > 0) ? static_cast<size_t>(n) * a.elem_size : 0;
   a.dur_us = dur_us;
-  iowarp_probe_layout(dataset, dxpl_id);
+  clio_probe_layout(dataset, dxpl_id);
   a.chunked = dataset->chunked;
-  a.chunk_aligned = iowarp_chunk_alignment(dataset, file_space_id);
+  a.chunk_aligned = clio_chunk_alignment(dataset, file_space_id);
   if (dataset->chunked) {
     a.chunk_dims = "[";
     for (int i = 0; i < dataset->chunk_rank; ++i)
       a.chunk_dims += (i ? "," : "") + std::to_string(dataset->chunk_dims[i]);
     a.chunk_dims += "]";
   }
-  iowarp::trace::record(dataset->file->trace, a);
+  clio::trace::record(dataset->file->trace, a);
 }
 
-static inline double iowarp_since_us(std::chrono::steady_clock::time_point s) {
+static inline double clio_since_us(std::chrono::steady_clock::time_point s) {
   return std::chrono::duration<double, std::micro>(
              std::chrono::steady_clock::now() - s).count();
 }
@@ -653,7 +653,7 @@ static inline double iowarp_since_us(std::chrono::steady_clock::time_point s) {
  * Each chunk is copied to shared memory and submitted via AsyncPutBlob.
  * Futures are collected in the dataset state and flushed on close.
  */
-static herr_t iowarp_dataset_write(size_t count, void *dset[],
+static herr_t clio_dataset_write(size_t count, void *dset[],
                                    hid_t mem_type_id[],
                                    hid_t mem_space_id[],
                                    hid_t file_space_id[],
@@ -661,9 +661,9 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
                                    void **req) {
   auto *cte_client = get_cte_client();
 
-  const bool tracing = iowarp::trace::enabled();
+  const bool tracing = clio::trace::enabled();
   for (size_t d = 0; d < count; ++d) {
-    auto *dataset = static_cast<iowarp_dataset_t *>(dset[d]);
+    auto *dataset = static_cast<clio_dataset_t *>(dset[d]);
     if (!dataset || !buf[d]) continue;
     auto t0 = std::chrono::steady_clock::now();
 
@@ -672,9 +672,9 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
        collective writes, persist to the native VOL only — caching a partial
        write under a whole-dataset key would poison a later whole read. */
     if (!dataset->file || !dataset->cacheable ||
-        !iowarp_is_whole_read(mem_space_id[d], file_space_id[d]) ||
-        !iowarp_type_is_cacheable(mem_type_id[d]) ||
-        iowarp_is_collective(dxpl_id)) {
+        !clio_is_whole_read(mem_space_id[d], file_space_id[d]) ||
+        !clio_type_is_cacheable(mem_type_id[d]) ||
+        clio_is_collective(dxpl_id)) {
       H5VLdataset_write(1, &dataset->obj.under_object,
                          dataset->obj.under_vol_id,
                          &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
@@ -689,10 +689,10 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
         del.Wait();
       }
       if (tracing)
-        iowarp_trace_access(dataset, iowarp::trace::Op::kWrite, mem_type_id[d],
+        clio_trace_access(dataset, clio::trace::Op::kWrite, mem_type_id[d],
                             mem_space_id[d], file_space_id[d], dxpl_id,
-                            iowarp::trace::Served::kUncacheable,
-                            iowarp_since_us(t0));
+                            clio::trace::Served::kUncacheable,
+                            clio_since_us(t0));
       continue;
     }
 
@@ -743,9 +743,9 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
                        &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                        dxpl_id, &buf[d], req);
     if (tracing)
-      iowarp_trace_access(dataset, iowarp::trace::Op::kWrite, mem_type_id[d],
+      clio_trace_access(dataset, clio::trace::Op::kWrite, mem_type_id[d],
                           mem_space_id[d], file_space_id[d], dxpl_id,
-                          iowarp::trace::Served::kCache, iowarp_since_us(t0));
+                          clio::trace::Served::kCache, clio_since_us(t0));
   }
 
   return 0;
@@ -753,7 +753,7 @@ static herr_t iowarp_dataset_write(size_t count, void *dset[],
 
 /* True when the dataset's linear chunk cache is populated (a fully-staged cache
    always has a non-empty chunk_0, the hit-test key). */
-static bool iowarp_cache_populated(iowarp_dataset_t *dataset) {
+static bool clio_cache_populated(clio_dataset_t *dataset) {
   auto *cte_client = get_cte_client();
   auto sz = cte_client->AsyncGetBlobSize(dataset->file->tag_id,
                                          dataset->dataset_path + "/chunk_0");
@@ -764,7 +764,7 @@ static bool iowarp_cache_populated(iowarp_dataset_t *dataset) {
 /* Reassemble the full linear dataset image from its CTE chunk blobs into dst
    (which must hold total_size bytes). Returns true on success. Shared by the
    whole-read hit path and selection serving. */
-static bool iowarp_read_cached_image(iowarp_dataset_t *dataset,
+static bool clio_read_cached_image(clio_dataset_t *dataset,
                                      size_t total_size, char *dst) {
   auto *cte_client = get_cte_client();
   size_t chunk_size = dataset->file->chunk_size;
@@ -797,13 +797,13 @@ static bool iowarp_read_cached_image(iowarp_dataset_t *dataset,
 /* H5Dscatter source callback: hand the whole gathered selection to HDF5 in one
    shot. dst_space selects exactly as many elements as we provide, so HDF5
    consumes it in a single call. */
-struct iowarp_scatter_ctx {
+struct clio_scatter_ctx {
   const void *buf;
   size_t nbytes;
 };
-static herr_t iowarp_scatter_cb(const void **src_buf, size_t *src_bytes,
+static herr_t clio_scatter_cb(const void **src_buf, size_t *src_bytes,
                                 void *op) {
-  auto *ctx = static_cast<iowarp_scatter_ctx *>(op);
+  auto *ctx = static_cast<clio_scatter_ctx *>(op);
   *src_buf = ctx->buf;
   *src_bytes = ctx->nbytes;
   return 0;
@@ -817,10 +817,10 @@ static herr_t iowarp_scatter_cb(const void **src_buf, size_t *src_bytes,
    on a cache miss or any failure (caller then falls back to native).
    The whole linear image is materialized per call; range-limited fetch of only
    the touched chunks is a future optimization. */
-static bool iowarp_serve_selection(iowarp_dataset_t *dataset, hid_t mem_type_id,
+static bool clio_serve_selection(clio_dataset_t *dataset, hid_t mem_type_id,
                                    hid_t mem_space_id, hid_t file_space_id,
                                    hid_t dxpl_id, void *buf) {
-  if (!iowarp_cache_populated(dataset)) return false;  /* serve-only: no prefetch */
+  if (!clio_cache_populated(dataset)) return false;  /* serve-only: no prefetch */
 
   H5VL_dataset_get_args_t ga;
   ga.op_type = H5VL_DATASET_GET_SPACE;
@@ -839,7 +839,7 @@ static bool iowarp_serve_selection(iowarp_dataset_t *dataset, hid_t mem_type_id,
     size_t total_size = static_cast<size_t>(total_nelem) * type_size;
 
     std::vector<char> full(total_size);
-    if (!iowarp_read_cached_image(dataset, total_size, full.data())) break;
+    if (!clio_read_cached_image(dataset, total_size, full.data())) break;
 
     /* Gather the file-space selection into a contiguous buffer. H5S_ALL file
        space means the whole image is selected. */
@@ -859,8 +859,8 @@ static bool iowarp_serve_selection(iowarp_dataset_t *dataset, hid_t mem_type_id,
       std::memcpy(buf, sel.data(), sel_size);
       ok = true;
     } else {
-      iowarp_scatter_ctx ctx{sel.data(), sel_size};
-      ok = (H5Dscatter(iowarp_scatter_cb, &ctx, mem_type_id, mem_space_id,
+      clio_scatter_ctx ctx{sel.data(), sel_size};
+      ok = (H5Dscatter(clio_scatter_cb, &ctx, mem_type_id, mem_space_id,
                        buf) >= 0);
     }
   } while (false);
@@ -881,43 +881,43 @@ static bool iowarp_serve_selection(iowarp_dataset_t *dataset, hid_t mem_type_id,
  * written through the connector. All non-whole / collective reads pass through
  * to the native VOL unchanged.
  */
-static herr_t iowarp_dataset_read(size_t count, void *dset[],
+static herr_t clio_dataset_read(size_t count, void *dset[],
                                   hid_t mem_type_id[],
                                   hid_t mem_space_id[],
                                   hid_t file_space_id[],
                                   hid_t dxpl_id, void *buf[],
                                   void **req) {
   auto *cte_client = get_cte_client();
-  const bool tracing = iowarp::trace::enabled();
+  const bool tracing = clio::trace::enabled();
 
   for (size_t d = 0; d < count; ++d) {
-    auto *dataset = static_cast<iowarp_dataset_t *>(dset[d]);
+    auto *dataset = static_cast<clio_dataset_t *>(dset[d]);
     if (!dataset || !buf[d]) continue;
     auto t0 = std::chrono::steady_clock::now();
 
     /* Native passthrough when there is no file reference, the type is not flat,
        or the read is collective. The native VOL always produces correct data. */
     bool cacheable_flat = dataset->file && dataset->cacheable &&
-                          iowarp_type_is_cacheable(mem_type_id[d]) &&
-                          !iowarp_is_collective(dxpl_id);
+                          clio_type_is_cacheable(mem_type_id[d]) &&
+                          !clio_is_collective(dxpl_id);
     if (!cacheable_flat) {
       H5VLdataset_read(1, &dataset->obj.under_object,
                         dataset->obj.under_vol_id,
                         &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                         dxpl_id, &buf[d], req);
       if (tracing)
-        iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+        clio_trace_access(dataset, clio::trace::Op::kRead, mem_type_id[d],
                             mem_space_id[d], file_space_id[d], dxpl_id,
-                            iowarp::trace::Served::kUncacheable,
-                            iowarp_since_us(t0));
+                            clio::trace::Served::kUncacheable,
+                            clio_since_us(t0));
       continue;
     }
 
     /* Partial (hyperslab/point) selection → serve from the CTE tier when the
        linear cache is already populated (serve-only). On a miss, fall back to
        native (unchanged). */
-    if (!iowarp_is_whole_read(mem_space_id[d], file_space_id[d])) {
-      bool served = iowarp_serve_selection(dataset, mem_type_id[d],
+    if (!clio_is_whole_read(mem_space_id[d], file_space_id[d])) {
+      bool served = clio_serve_selection(dataset, mem_type_id[d],
                                            mem_space_id[d], file_space_id[d],
                                            dxpl_id, buf[d]);
       if (!served) {
@@ -927,11 +927,11 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
                           dxpl_id, &buf[d], req);
       }
       if (tracing)
-        iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+        clio_trace_access(dataset, clio::trace::Op::kRead, mem_type_id[d],
                             mem_space_id[d], file_space_id[d], dxpl_id,
-                            served ? iowarp::trace::Served::kCache
-                                   : iowarp::trace::Served::kNative,
-                            iowarp_since_us(t0));
+                            served ? clio::trace::Served::kCache
+                                   : clio::trace::Served::kNative,
+                            clio_since_us(t0));
       continue;
     }
 
@@ -951,9 +951,9 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
                         &mem_type_id[d], &mem_space_id[d], &file_space_id[d],
                         dxpl_id, &buf[d], req);
       if (tracing)
-        iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+        clio_trace_access(dataset, clio::trace::Op::kRead, mem_type_id[d],
                             mem_space_id[d], file_space_id[d], dxpl_id,
-                            iowarp::trace::Served::kNative, iowarp_since_us(t0));
+                            clio::trace::Served::kNative, clio_since_us(t0));
       continue;
     }
 
@@ -995,36 +995,36 @@ static herr_t iowarp_dataset_read(size_t count, void *dset[],
       }
     } else {
       /* HIT — serve the whole image from the CTE tier. */
-      if (!iowarp_read_cached_image(dataset, total_size, dst)) return -1;
+      if (!clio_read_cached_image(dataset, total_size, dst)) return -1;
     }
     if (tracing)
-      iowarp_trace_access(dataset, iowarp::trace::Op::kRead, mem_type_id[d],
+      clio_trace_access(dataset, clio::trace::Op::kRead, mem_type_id[d],
                           mem_space_id[d], file_space_id[d], dxpl_id,
-                          cached == 0 ? iowarp::trace::Served::kNative
-                                      : iowarp::trace::Served::kCache,
-                          iowarp_since_us(t0));
+                          cached == 0 ? clio::trace::Served::kNative
+                                      : clio::trace::Served::kCache,
+                          clio_since_us(t0));
   }
 
   return 0;
 }
 
-static herr_t iowarp_dataset_get(void *obj, H5VL_dataset_get_args_t *args,
+static herr_t clio_dataset_get(void *obj, H5VL_dataset_get_args_t *args,
                                  hid_t dxpl_id, void **req) {
-  auto *dset = static_cast<iowarp_dataset_t *>(obj);
+  auto *dset = static_cast<clio_dataset_t *>(obj);
   return H5VLdataset_get(dset->obj.under_object, dset->obj.under_vol_id,
                           args, dxpl_id, req);
 }
 
-static herr_t iowarp_dataset_specific(void *obj,
+static herr_t clio_dataset_specific(void *obj,
                                       H5VL_dataset_specific_args_t *args,
                                       hid_t dxpl_id, void **req) {
-  auto *dset = static_cast<iowarp_dataset_t *>(obj);
+  auto *dset = static_cast<clio_dataset_t *>(obj);
   return H5VLdataset_specific(dset->obj.under_object, dset->obj.under_vol_id,
                                args, dxpl_id, req);
 }
 
-static herr_t iowarp_dataset_close(void *obj, hid_t dxpl_id, void **req) {
-  auto *dset = static_cast<iowarp_dataset_t *>(obj);
+static herr_t clio_dataset_close(void *obj, hid_t dxpl_id, void **req) {
+  auto *dset = static_cast<clio_dataset_t *>(obj);
 
   /* Unregister from the file's Safe-mode set before draining, so a concurrent
      flush/close does not touch this dataset while it is being torn down. */
@@ -1047,55 +1047,55 @@ static herr_t iowarp_dataset_close(void *obj, hid_t dxpl_id, void **req) {
  * ======================================================================== */
 
 /* Group */
-static void *iowarp_group_create(void *obj,
+static void *clio_group_create(void *obj,
                                  const H5VL_loc_params_t *loc_params,
                                  const char *name, hid_t lcpl_id,
                                  hid_t gcpl_id, hid_t gapl_id,
                                  hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLgroup_create(o->under_object, loc_params,
                                   o->under_vol_id, name, lcpl_id,
                                   gcpl_id, gapl_id, dxpl_id, req);
   if (!under) return nullptr;
-  auto *grp = new iowarp_obj_t;
+  auto *grp = new clio_obj_t;
   grp->under_object = under;
   grp->under_vol_id = o->under_vol_id;
   grp->parent_file = o->parent_file;     /* inherit from parent */
   return grp;
 }
 
-static void *iowarp_group_open(void *obj,
+static void *clio_group_open(void *obj,
                                const H5VL_loc_params_t *loc_params,
                                const char *name, hid_t gapl_id,
                                hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLgroup_open(o->under_object, loc_params,
                                 o->under_vol_id, name, gapl_id,
                                 dxpl_id, req);
   if (!under) return nullptr;
-  auto *grp = new iowarp_obj_t;
+  auto *grp = new clio_obj_t;
   grp->under_object = under;
   grp->under_vol_id = o->under_vol_id;
   grp->parent_file = o->parent_file;     /* inherit from parent */
   return grp;
 }
 
-static herr_t iowarp_group_get(void *obj, H5VL_group_get_args_t *args,
+static herr_t clio_group_get(void *obj, H5VL_group_get_args_t *args,
                                hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLgroup_get(o->under_object, o->under_vol_id, args, dxpl_id, req);
 }
 
-static herr_t iowarp_group_specific(void *obj,
+static herr_t clio_group_specific(void *obj,
                                     H5VL_group_specific_args_t *args,
                                     hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLgroup_specific(o->under_object, o->under_vol_id, args,
                              dxpl_id, req);
 }
 
-static herr_t iowarp_group_close(void *obj, hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+static herr_t clio_group_close(void *obj, hid_t dxpl_id, void **req) {
+  auto *o = static_cast<clio_obj_t *>(obj);
   herr_t ret = H5VLgroup_close(o->under_object, o->under_vol_id,
                                 dxpl_id, req);
   delete o;
@@ -1103,82 +1103,82 @@ static herr_t iowarp_group_close(void *obj, hid_t dxpl_id, void **req) {
 }
 
 /* Attribute — full passthrough via native VOL, with proper wrapping */
-static void *iowarp_attr_create(void *obj,
+static void *clio_attr_create(void *obj,
                                 const H5VL_loc_params_t *loc_params,
                                 const char *name, hid_t type_id,
                                 hid_t space_id, hid_t acpl_id,
                                 hid_t aapl_id, hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLattr_create(o->under_object, loc_params, o->under_vol_id,
                                  name, type_id, space_id, acpl_id, aapl_id,
                                  dxpl_id, req);
   if (!under) return nullptr;
-  auto *attr = new iowarp_obj_t;
+  auto *attr = new clio_obj_t;
   attr->under_object = under;
   attr->under_vol_id = o->under_vol_id;
   attr->parent_file = o->parent_file;
   return attr;
 }
 
-static void *iowarp_attr_open(void *obj,
+static void *clio_attr_open(void *obj,
                               const H5VL_loc_params_t *loc_params,
                               const char *name, hid_t aapl_id,
                               hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLattr_open(o->under_object, loc_params, o->under_vol_id,
                                name, aapl_id, dxpl_id, req);
   if (!under) return nullptr;
-  auto *attr = new iowarp_obj_t;
+  auto *attr = new clio_obj_t;
   attr->under_object = under;
   attr->under_vol_id = o->under_vol_id;
   attr->parent_file = o->parent_file;
   return attr;
 }
 
-static herr_t iowarp_attr_read(void *attr, hid_t dtype_id, void *buf,
+static herr_t clio_attr_read(void *attr, hid_t dtype_id, void *buf,
                                hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(attr);
+  auto *o = static_cast<clio_obj_t *>(attr);
   return H5VLattr_read(o->under_object, o->under_vol_id, dtype_id, buf,
                         dxpl_id, req);
 }
 
-static herr_t iowarp_attr_write(void *attr, hid_t dtype_id, const void *buf,
+static herr_t clio_attr_write(void *attr, hid_t dtype_id, const void *buf,
                                 hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(attr);
+  auto *o = static_cast<clio_obj_t *>(attr);
   return H5VLattr_write(o->under_object, o->under_vol_id, dtype_id, buf,
                          dxpl_id, req);
 }
 
-static herr_t iowarp_attr_get(void *obj, H5VL_attr_get_args_t *args,
+static herr_t clio_attr_get(void *obj, H5VL_attr_get_args_t *args,
                               hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLattr_get(o->under_object, o->under_vol_id, args, dxpl_id, req);
 }
 
-static herr_t iowarp_attr_specific(void *obj, const H5VL_loc_params_t *lp,
+static herr_t clio_attr_specific(void *obj, const H5VL_loc_params_t *lp,
                                    H5VL_attr_specific_args_t *args,
                                    hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLattr_specific(o->under_object, lp, o->under_vol_id, args,
                             dxpl_id, req);
 }
 
-static herr_t iowarp_attr_close(void *attr, hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(attr);
+static herr_t clio_attr_close(void *attr, hid_t dxpl_id, void **req) {
+  auto *o = static_cast<clio_obj_t *>(attr);
   herr_t ret = H5VLattr_close(o->under_object, o->under_vol_id, dxpl_id, req);
   delete o;
   return ret;
 }
 
 /* Link — passthrough */
-static herr_t iowarp_link_create(H5VL_link_create_args_t *args,
+static herr_t clio_link_create(H5VL_link_create_args_t *args,
                                  void *obj,
                                  const H5VL_loc_params_t *loc_params,
                                  hid_t lcpl_id, hid_t lapl_id,
                                  hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
 
-  /* For a HARD link the target object carried in args is an iowarp-wrapped
+  /* For a HARD link the target object carried in args is an clio-wrapped
      pointer. The native VOL must receive the native under-object, or it links
      against a foreign pointer and the resulting structure diverges from native
      (h5diff dirty). Shallow-copy the args and unwrap the target before
@@ -1189,7 +1189,7 @@ static herr_t iowarp_link_create(H5VL_link_create_args_t *args,
       args->args.hard.curr_obj) {
     under_args = *args;
     under_args.args.hard.curr_obj =
-        static_cast<iowarp_obj_t *>(args->args.hard.curr_obj)->under_object;
+        static_cast<clio_obj_t *>(args->args.hard.curr_obj)->under_object;
     args = &under_args;
   }
 
@@ -1198,50 +1198,50 @@ static herr_t iowarp_link_create(H5VL_link_create_args_t *args,
                           lcpl_id, lapl_id, dxpl_id, req);
 }
 
-static herr_t iowarp_link_copy(void *src_obj,
+static herr_t clio_link_copy(void *src_obj,
                                const H5VL_loc_params_t *loc_params1,
                                void *dst_obj,
                                const H5VL_loc_params_t *loc_params2,
                                hid_t lcpl_id, hid_t lapl_id,
                                hid_t dxpl_id, void **req) {
-  auto *s = static_cast<iowarp_obj_t *>(src_obj);
-  auto *d = static_cast<iowarp_obj_t *>(dst_obj);
+  auto *s = static_cast<clio_obj_t *>(src_obj);
+  auto *d = static_cast<clio_obj_t *>(dst_obj);
   return H5VLlink_copy(s->under_object, loc_params1,
                         d->under_object, loc_params2,
                         s->under_vol_id, lcpl_id, lapl_id, dxpl_id, req);
 }
 
-static herr_t iowarp_link_get(void *obj, const H5VL_loc_params_t *loc_params,
+static herr_t clio_link_get(void *obj, const H5VL_loc_params_t *loc_params,
                               H5VL_link_get_args_t *args,
                               hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLlink_get(o->under_object, loc_params, o->under_vol_id,
                        args, dxpl_id, req);
 }
 
-static herr_t iowarp_link_specific(void *obj,
+static herr_t clio_link_specific(void *obj,
                                    const H5VL_loc_params_t *loc_params,
                                    H5VL_link_specific_args_t *args,
                                    hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLlink_specific(o->under_object, loc_params, o->under_vol_id,
                             args, dxpl_id, req);
 }
 
 /* Object — passthrough */
-static void *iowarp_object_open(void *obj,
+static void *clio_object_open(void *obj,
                                 const H5VL_loc_params_t *loc_params,
                                 H5I_type_t *opened_type,
                                 hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLobject_open(o->under_object, loc_params, o->under_vol_id,
                                  opened_type, dxpl_id, req);
   if (!under) return nullptr;
 
   /* CRITICAL: when the opened object is a dataset, HDF5 will subsequently route
      the dataset_read/write/close callbacks to this wrapper and cast it to
-     iowarp_dataset_t. h5py opens datasets through H5Oopen, so returning a bare
-     iowarp_obj_t here would be mis-cast and corrupt the heap. Build the right
+     clio_dataset_t. h5py opens datasets through H5Oopen, so returning a bare
+     clio_obj_t here would be mis-cast and corrupt the heap. Build the right
      wrapper type. The dataset path is recovered from a by-name location when
      available; otherwise the dataset is marked non-cacheable. */
   if (opened_type && *opened_type == H5I_DATASET) {
@@ -1252,14 +1252,14 @@ static void *iowarp_object_open(void *obj,
     return make_dataset_wrapper(under, o->under_vol_id, o->parent_file, name);
   }
 
-  auto *wrapped = new iowarp_obj_t;
+  auto *wrapped = new clio_obj_t;
   wrapped->under_object = under;
   wrapped->under_vol_id = o->under_vol_id;
   wrapped->parent_file = o->parent_file;
   return wrapped;
 }
 
-static herr_t iowarp_object_copy(void *src_obj,
+static herr_t clio_object_copy(void *src_obj,
                                  const H5VL_loc_params_t *loc_params1,
                                  const char *src_name,
                                  void *dst_obj,
@@ -1267,27 +1267,27 @@ static herr_t iowarp_object_copy(void *src_obj,
                                  const char *dst_name,
                                  hid_t ocpypl_id, hid_t lcpl_id,
                                  hid_t dxpl_id, void **req) {
-  auto *s = static_cast<iowarp_obj_t *>(src_obj);
-  auto *d = static_cast<iowarp_obj_t *>(dst_obj);
+  auto *s = static_cast<clio_obj_t *>(src_obj);
+  auto *d = static_cast<clio_obj_t *>(dst_obj);
   return H5VLobject_copy(s->under_object, loc_params1, src_name,
                           d->under_object, loc_params2, dst_name,
                           s->under_vol_id, ocpypl_id, lcpl_id, dxpl_id, req);
 }
 
-static herr_t iowarp_object_get(void *obj,
+static herr_t clio_object_get(void *obj,
                                 const H5VL_loc_params_t *loc_params,
                                 H5VL_object_get_args_t *args,
                                 hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLobject_get(o->under_object, loc_params, o->under_vol_id,
                          args, dxpl_id, req);
 }
 
-static herr_t iowarp_object_specific(void *obj,
+static herr_t clio_object_specific(void *obj,
                                      const H5VL_loc_params_t *loc_params,
                                      H5VL_object_specific_args_t *args,
                                      hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLobject_specific(o->under_object, loc_params, o->under_vol_id,
                               args, dxpl_id, req);
 }
@@ -1296,54 +1296,54 @@ static herr_t iowarp_object_specific(void *obj,
    /H5Types (population enums, etc.) and open them with H5Topen; without these
    callbacks the connector's datatype_cls is all-null and every H5Topen through
    the VOL fails. Every op delegates to the native VOL. */
-static void *iowarp_datatype_commit(void *obj,
+static void *clio_datatype_commit(void *obj,
                                     const H5VL_loc_params_t *loc_params,
                                     const char *name, hid_t type_id,
                                     hid_t lcpl_id, hid_t tcpl_id,
                                     hid_t tapl_id, hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLdatatype_commit(o->under_object, loc_params, o->under_vol_id,
                                      name, type_id, lcpl_id, tcpl_id, tapl_id,
                                      dxpl_id, req);
   if (!under) return nullptr;
-  auto *dt = new iowarp_obj_t;
+  auto *dt = new clio_obj_t;
   dt->under_object = under;
   dt->under_vol_id = o->under_vol_id;
   dt->parent_file = o->parent_file;
   return dt;
 }
 
-static void *iowarp_datatype_open(void *obj,
+static void *clio_datatype_open(void *obj,
                                   const H5VL_loc_params_t *loc_params,
                                   const char *name, hid_t tapl_id,
                                   hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   void *under = H5VLdatatype_open(o->under_object, loc_params, o->under_vol_id,
                                    name, tapl_id, dxpl_id, req);
   if (!under) return nullptr;
-  auto *dt = new iowarp_obj_t;
+  auto *dt = new clio_obj_t;
   dt->under_object = under;
   dt->under_vol_id = o->under_vol_id;
   dt->parent_file = o->parent_file;
   return dt;
 }
 
-static herr_t iowarp_datatype_get(void *obj, H5VL_datatype_get_args_t *args,
+static herr_t clio_datatype_get(void *obj, H5VL_datatype_get_args_t *args,
                                   hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLdatatype_get(o->under_object, o->under_vol_id, args, dxpl_id, req);
 }
 
-static herr_t iowarp_datatype_specific(void *obj,
+static herr_t clio_datatype_specific(void *obj,
                                        H5VL_datatype_specific_args_t *args,
                                        hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLdatatype_specific(o->under_object, o->under_vol_id, args, dxpl_id,
                                 req);
 }
 
-static herr_t iowarp_datatype_close(void *obj, hid_t dxpl_id, void **req) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+static herr_t clio_datatype_close(void *obj, hid_t dxpl_id, void **req) {
+  auto *o = static_cast<clio_obj_t *>(obj);
   herr_t ret = H5VLdatatype_close(o->under_object, o->under_vol_id, dxpl_id,
                                    req);
   delete o;
@@ -1351,15 +1351,15 @@ static herr_t iowarp_datatype_close(void *obj, hid_t dxpl_id, void **req) {
 }
 
 /* Introspect */
-static herr_t iowarp_introspect_get_conn_cls(void *obj,
+static herr_t clio_introspect_get_conn_cls(void *obj,
                                              H5VL_get_conn_lvl_t lvl,
                                              const H5VL_class_t **conn_cls) {
   (void)obj; (void)lvl;
-  *conn_cls = &H5VL_iowarp_cls;
+  *conn_cls = &H5VL_clio_cls;
   return 0;
 }
 
-static herr_t iowarp_introspect_get_cap_flags(const void *info,
+static herr_t clio_introspect_get_cap_flags(const void *info,
                                               uint64_t *cap_flags) {
   (void)info;
   *cap_flags = H5VL_CAP_FLAG_FILE_BASIC | H5VL_CAP_FLAG_DATASET_BASIC |
@@ -1368,14 +1368,14 @@ static herr_t iowarp_introspect_get_cap_flags(const void *info,
   return 0;
 }
 
-static herr_t iowarp_introspect_opt_query(void *obj, H5VL_subclass_t cls,
+static herr_t clio_introspect_opt_query(void *obj, H5VL_subclass_t cls,
                                           int opt_type, uint64_t *flags) {
   /* Forward to the under-VOL so native-specific optional ops are reported as
      supported (mirrors H5VLpassthru). Critically, HDF5 only issues the
      H5VL_NATIVE_FILE_POST_OPEN op — which sets the file's VOL object, required by
      variable-length datatypes — when this query reports it supported. Hardcoding
      *flags=0 suppressed post-open, leaving H5F_VOL_OBJ NULL and crashing vlen. */
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   if (!o) { *flags = 0; return 0; }
   return H5VLintrospect_opt_query(o->under_object, o->under_vol_id, cls,
                                   opt_type, flags);
@@ -1387,31 +1387,31 @@ static herr_t iowarp_introspect_opt_query(void *obj, H5VL_subclass_t cls,
  * VOL "blob" interface. A pass-through connector MUST forward these to the
  * under-VOL; leaving them null makes any vlen/reference dataset crash at
  * create time (H5T__vlen_set_loc dereferences the missing handler). The blob
- * `obj` is a file object — iowarp_obj_t is its first member, so the cast
+ * `obj` is a file object — clio_obj_t is its first member, so the cast
  * yields the native under-object. Blob data lives in the native file's heap;
  * it is not mirrored into CTE (consistent with the vlen cache bypass).
  * ------------------------------------------------------------------------ */
-static herr_t iowarp_blob_put(void *obj, const void *buf, size_t size,
+static herr_t clio_blob_put(void *obj, const void *buf, size_t size,
                               void *blob_id, void *ctx) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLblob_put(o->under_object, o->under_vol_id, buf, size, blob_id, ctx);
 }
 
-static herr_t iowarp_blob_get(void *obj, const void *blob_id, void *buf,
+static herr_t clio_blob_get(void *obj, const void *blob_id, void *buf,
                               size_t size, void *ctx) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLblob_get(o->under_object, o->under_vol_id, blob_id, buf, size, ctx);
 }
 
-static herr_t iowarp_blob_specific(void *obj, void *blob_id,
+static herr_t clio_blob_specific(void *obj, void *blob_id,
                                    H5VL_blob_specific_args_t *args) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLblob_specific(o->under_object, o->under_vol_id, blob_id, args);
 }
 
-static herr_t iowarp_blob_optional(void *obj, void *blob_id,
+static herr_t clio_blob_optional(void *obj, void *blob_id,
                                    H5VL_optional_args_t *args) {
-  auto *o = static_cast<iowarp_obj_t *>(obj);
+  auto *o = static_cast<clio_obj_t *>(obj);
   return H5VLblob_optional(o->under_object, o->under_vol_id, blob_id, args);
 }
 
@@ -1419,104 +1419,104 @@ static herr_t iowarp_blob_optional(void *obj, void *blob_id,
  * VOL connector class definition
  * ======================================================================== */
 
-const H5VL_class_t H5VL_iowarp_cls = {
+const H5VL_class_t H5VL_clio_cls = {
     /* version      */ H5VL_VERSION,
-    /* value        */ IOWARP_VOL_CONNECTOR_VALUE,
-    /* name         */ IOWARP_VOL_CONNECTOR_NAME,
-    /* conn_version */ IOWARP_VOL_CONNECTOR_VERSION,
+    /* value        */ CLIO_VOL_CONNECTOR_VALUE,
+    /* name         */ CLIO_VOL_CONNECTOR_NAME,
+    /* conn_version */ CLIO_VOL_CONNECTOR_VERSION,
     /* cap_flags    */ H5VL_CAP_FLAG_FILE_BASIC | H5VL_CAP_FLAG_DATASET_BASIC |
                        H5VL_CAP_FLAG_GROUP_BASIC | H5VL_CAP_FLAG_ATTR_BASIC,
     /* initialize   */ nullptr,
     /* terminate    */ nullptr,
 
     /* info_cls */ {
-        /* size    */ sizeof(iowarp_vol_info_t),
-        /* copy    */ iowarp_info_copy,
+        /* size    */ sizeof(clio_vol_info_t),
+        /* copy    */ clio_info_copy,
         /* cmp     */ nullptr,
-        /* free    */ iowarp_info_free,
+        /* free    */ clio_info_free,
         /* to_str  */ nullptr,
         /* from_str*/ nullptr,
     },
 
     /* wrap_cls */ {
-        /* get_object  */ iowarp_wrap_get_object,
-        /* get_wrap_ctx*/ iowarp_get_wrap_ctx,
-        /* wrap_object */ iowarp_wrap_object,
-        /* unwrap_object*/ iowarp_unwrap_object,
-        /* free_wrap_ctx*/ iowarp_free_wrap_ctx,
+        /* get_object  */ clio_wrap_get_object,
+        /* get_wrap_ctx*/ clio_get_wrap_ctx,
+        /* wrap_object */ clio_wrap_object,
+        /* unwrap_object*/ clio_unwrap_object,
+        /* free_wrap_ctx*/ clio_free_wrap_ctx,
     },
 
     /* attr_cls */ {
-        /* create   */ iowarp_attr_create,
-        /* open     */ iowarp_attr_open,
-        /* read     */ iowarp_attr_read,
-        /* write    */ iowarp_attr_write,
-        /* get      */ iowarp_attr_get,
-        /* specific */ iowarp_attr_specific,
+        /* create   */ clio_attr_create,
+        /* open     */ clio_attr_open,
+        /* read     */ clio_attr_read,
+        /* write    */ clio_attr_write,
+        /* get      */ clio_attr_get,
+        /* specific */ clio_attr_specific,
         /* optional */ nullptr,
-        /* close    */ iowarp_attr_close,
+        /* close    */ clio_attr_close,
     },
 
     /* dataset_cls */ {
-        /* create   */ iowarp_dataset_create,
-        /* open     */ iowarp_dataset_open,
-        /* read     */ iowarp_dataset_read,
-        /* write    */ iowarp_dataset_write,
-        /* get      */ iowarp_dataset_get,
-        /* specific */ iowarp_dataset_specific,
+        /* create   */ clio_dataset_create,
+        /* open     */ clio_dataset_open,
+        /* read     */ clio_dataset_read,
+        /* write    */ clio_dataset_write,
+        /* get      */ clio_dataset_get,
+        /* specific */ clio_dataset_specific,
         /* optional */ nullptr,
-        /* close    */ iowarp_dataset_close,
+        /* close    */ clio_dataset_close,
     },
 
     /* datatype_cls */ {
-        /* commit   */ iowarp_datatype_commit,
-        /* open     */ iowarp_datatype_open,
-        /* get      */ iowarp_datatype_get,
-        /* specific */ iowarp_datatype_specific,
+        /* commit   */ clio_datatype_commit,
+        /* open     */ clio_datatype_open,
+        /* get      */ clio_datatype_get,
+        /* specific */ clio_datatype_specific,
         /* optional */ nullptr,
-        /* close    */ iowarp_datatype_close,
+        /* close    */ clio_datatype_close,
     },
 
     /* file_cls */ {
-        /* create   */ iowarp_file_create,
-        /* open     */ iowarp_file_open,
-        /* get      */ iowarp_file_get,
-        /* specific */ iowarp_file_specific,
-        /* optional */ iowarp_file_optional,
-        /* close    */ iowarp_file_close,
+        /* create   */ clio_file_create,
+        /* open     */ clio_file_open,
+        /* get      */ clio_file_get,
+        /* specific */ clio_file_specific,
+        /* optional */ clio_file_optional,
+        /* close    */ clio_file_close,
     },
 
     /* group_cls */ {
-        /* create   */ iowarp_group_create,
-        /* open     */ iowarp_group_open,
-        /* get      */ iowarp_group_get,
-        /* specific */ iowarp_group_specific,
+        /* create   */ clio_group_create,
+        /* open     */ clio_group_open,
+        /* get      */ clio_group_get,
+        /* specific */ clio_group_specific,
         /* optional */ nullptr,
-        /* close    */ iowarp_group_close,
+        /* close    */ clio_group_close,
     },
 
     /* link_cls */ {
-        /* create   */ iowarp_link_create,
-        /* copy     */ iowarp_link_copy,
+        /* create   */ clio_link_create,
+        /* copy     */ clio_link_copy,
         /* move     */ nullptr,
-        /* get      */ iowarp_link_get,
-        /* specific */ iowarp_link_specific,
+        /* get      */ clio_link_get,
+        /* specific */ clio_link_specific,
         /* optional */ nullptr,
     },
 
     /* object_cls */ {
-        /* open     */ iowarp_object_open,
-        /* copy     */ iowarp_object_copy,
-        /* get      */ iowarp_object_get,
-        /* specific */ iowarp_object_specific,
+        /* open     */ clio_object_open,
+        /* copy     */ clio_object_copy,
+        /* get      */ clio_object_get,
+        /* specific */ clio_object_specific,
         /* optional */ nullptr,
         /* (no close — objects are closed by their specific type class) */
     },
 
     /* introspect_cls */ {
-        /* get_conn_cls   */ iowarp_introspect_get_conn_cls,
-        /* get_cap_flags  */ iowarp_introspect_get_cap_flags,
-        /* opt_query      */ iowarp_introspect_opt_query,
+        /* get_conn_cls   */ clio_introspect_get_conn_cls,
+        /* get_cap_flags  */ clio_introspect_get_cap_flags,
+        /* opt_query      */ clio_introspect_opt_query,
     },
 
     /* request_cls */ {
@@ -1524,7 +1524,7 @@ const H5VL_class_t H5VL_iowarp_cls = {
     },
 
     /* blob_cls */ {
-        iowarp_blob_put, iowarp_blob_get, iowarp_blob_specific, iowarp_blob_optional,
+        clio_blob_put, clio_blob_get, clio_blob_specific, clio_blob_optional,
     },
 
     /* token_cls */ {
@@ -1534,8 +1534,8 @@ const H5VL_class_t H5VL_iowarp_cls = {
     /* optional */ nullptr,
 };
 
-hid_t H5VL_iowarp_register(void) {
-  return H5VLregister_connector(&H5VL_iowarp_cls, H5P_DEFAULT);
+hid_t H5VL_clio_register(void) {
+  return H5VLregister_connector(&H5VL_clio_cls, H5P_DEFAULT);
 }
 
 /* ========================================================================
@@ -1544,14 +1544,14 @@ hid_t H5VL_iowarp_register(void) {
  * These two exports let HDF5 discover and load the connector dynamically via
  * the standard environment-variable mechanism — no application change needed:
  *
- *   export HDF5_PLUGIN_PATH=<dir containing libiowarp_hdf5_vol.so>
- *   export HDF5_VOL_CONNECTOR="iowarp"
+ *   export HDF5_PLUGIN_PATH=<dir containing libclio_hdf5_vol.so>
+ *   export HDF5_VOL_CONNECTOR="clio"
  *
  * On the first H5Fopen/H5Fcreate, HDF5 dlopen()s plugins on HDF5_PLUGIN_PATH,
  * calls H5PLget_plugin_type() (must be H5PL_TYPE_VOL) and H5PLget_plugin_info()
- * (returns the connector class), and matches by connector name ("iowarp").
+ * (returns the connector class), and matches by connector name ("clio").
  * Without these the connector could only be installed by an application calling
- * H5VL_iowarp_register() + H5Pset_vol() itself.
+ * H5VL_clio_register() + H5Pset_vol() itself.
  * ======================================================================== */
 extern "C" H5PL_type_t H5PLget_plugin_type(void) { return H5PL_TYPE_VOL; }
-extern "C" const void *H5PLget_plugin_info(void) { return &H5VL_iowarp_cls; }
+extern "C" const void *H5PLget_plugin_info(void) { return &H5VL_clio_cls; }

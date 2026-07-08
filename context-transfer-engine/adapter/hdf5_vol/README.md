@@ -1,4 +1,4 @@
-# iowarp HDF5 VOL connector
+# clio HDF5 VOL connector
 
 A pass-through HDF5 VOL connector that transparently caches HDF5 data in the
 clio-core CTE (Context Transfer Engine) while preserving native HDF5 file
@@ -17,7 +17,7 @@ so reads never see stale data. **Safe mode:** `H5Fflush` and `H5Fclose` drain al
 in-flight async CTE puts before returning, so a successful flush/close is a real
 durability barrier for the cache path (no async write outlives it).
 
-Files: `iowarp_vol.cc`, `iowarp_vol.h`. Connector name: **`iowarp`**.
+Files: `clio_vol.cc`, `clio_vol.h`. Connector name: **`clio`**.
 
 ## Enabling and building
 
@@ -26,21 +26,21 @@ The adapter is OFF by default (`CLIO_CTE_ENABLE_HDF5_VOL`, see the top-level
 
 ```bash
 cmake -S <repo> -B <build> -DCLIO_CTE_ENABLE_HDF5_VOL=ON
-cmake --build <build> --target iowarp_hdf5_vol -j
-# -> <build>/bin/libiowarp_hdf5_vol.so
+cmake --build <build> --target clio_hdf5_vol -j
+# -> <build>/bin/libclio_hdf5_vol.so
 ```
 
 **HDF5 linkage matters.** A VOL connector is ABI-coupled to the `libhdf5` of the
 application that `dlopen`s it. The `.so` must link the *same* HDF5 the loading app
 (and `h5dump`/`h5ls`) use, or HDF5 will refuse to load it or mismatch the VOL ABI.
-Confirm with `ldd <build>/bin/libiowarp_hdf5_vol.so | grep hdf5`. The connector
+Confirm with `ldd <build>/bin/libclio_hdf5_vol.so | grep hdf5`. The connector
 requires HDF5 >= 1.14 and does not require ELF support (unlike the VFD adapter).
 
 ## Using it
 
 ```bash
 export HDF5_PLUGIN_PATH=<build>/bin
-export HDF5_VOL_CONNECTOR=iowarp        # under-VOL defaults to native
+export HDF5_VOL_CONNECTOR=clio        # under-VOL defaults to native
 # a clio_run runtime must be reachable for the CTE cache path
 ```
 Any HDF5 application (h5py, C, tools) then routes through the connector. Files it
@@ -48,7 +48,7 @@ writes are valid native HDF5 files readable by standard tools.
 
 ## Access telemetry (observability)
 
-Set `IOWARP_VOL_TRACE=<dir>` to record per-access observability (observe-only; it
+Set `CLIO_VOL_TRACE=<dir>` to record per-access observability (observe-only; it
 never changes the data path, and when unset it is a single cached bool check with
 zero overhead). Only the VOL sees HDF5 semantics — dataset paths, selection shapes,
 datatypes — that the blob layer cannot, so it captures them here. Per file, two
@@ -100,5 +100,5 @@ Feature areas the h5py cases can't reach (h5py has poor non-native VOL support) 
 through the C API / a telemetry check, all automated by the suite: iteration
 (`vol_c_iteration_test.c`), Safe-mode flush (`vol_c_safeflush_test.c`), selection
 caching + partial-write invalidation (`vol_c_selection_test.c`), and access
-telemetry (`telemetry` case — runs a workload under `IOWARP_VOL_TRACE` and checks
+telemetry (`telemetry` case — runs a workload under `CLIO_VOL_TRACE` and checks
 the summary).

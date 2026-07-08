@@ -1,4 +1,4 @@
-/* Isolated C test for iowarp VOL selection-aware READ caching (serve-only) and
+/* Isolated C test for clio VOL selection-aware READ caching (serve-only) and
  * partial-write cache invalidation.
  *
  * The connector caches whole-dataset writes as a linear image in CTE. This test
@@ -13,7 +13,7 @@
  * not the stale cache).
  *
  * Correctness is checked against the known written values (native is the oracle;
- * a wrong serve path would return wrong data). Run with HDF5_VOL_CONNECTOR=iowarp
+ * a wrong serve path would return wrong data). Run with HDF5_VOL_CONNECTOR=clio
  * and a running clio_run. Exit 0 = pass.
  * Build: h5cc -o vol_c_selection_test vol_c_selection_test.c
  */

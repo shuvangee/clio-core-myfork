@@ -6,7 +6,7 @@
  */
 
 /**
- * IOWarp HDF5 VOL — access telemetry (observability, Part B).
+ * Clio HDF5 VOL — access telemetry (observability, Part B).
  *
  * Observe-only, header-only. Records per-access HDF5-semantic information that
  * only the VOL sees (dataset path, datatype, selection shape, transfer size, and
@@ -19,13 +19,13 @@
  * hot datasets, cache hit rate, repeated selections (cache/prefetch candidates),
  * and the transfer-size distribution (small-read / per-object-cost detection).
  *
- * Gated entirely by the IOWARP_VOL_TRACE environment variable (a directory). When
+ * Gated entirely by the CLIO_VOL_TRACE environment variable (a directory). When
  * unset, enabled() is a single cached bool check and nothing else runs — zero
  * effect on data path or performance. Telemetry NEVER alters semantics: records
  * are taken after each operation completes.
  */
-#ifndef IOWARP_HDF5_VOL_TRACE_H_
-#define IOWARP_HDF5_VOL_TRACE_H_
+#ifndef CLIO_HDF5_VOL_TRACE_H_
+#define CLIO_HDF5_VOL_TRACE_H_
 
 #include <hdf5.h>
 
@@ -39,7 +39,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace iowarp {
+namespace clio {
 namespace trace {
 
 enum class Op { kRead, kWrite };
@@ -96,7 +96,7 @@ struct DsetStat {
   std::unordered_map<uint64_t, uint32_t> sel_counts;  /* signature -> count */
 };
 
-/* Per-file aggregation, held by iowarp_file_t and finalized at file close. */
+/* Per-file aggregation, held by clio_file_t and finalized at file close. */
 struct FileTrace {
   std::string file_name;   /* basename used for output filenames */
   std::mutex mtx;
@@ -108,13 +108,13 @@ struct FileTrace {
 
 inline const std::string &trace_dir() {
   static std::string dir = []() {
-    const char *e = std::getenv("IOWARP_VOL_TRACE");
+    const char *e = std::getenv("CLIO_VOL_TRACE");
     return std::string(e ? e : "");
   }();
   return dir;
 }
 
-/* True when telemetry is enabled (IOWARP_VOL_TRACE set). Cached; cheap. */
+/* True when telemetry is enabled (CLIO_VOL_TRACE set). Cached; cheap. */
 inline bool enabled() { return !trace_dir().empty(); }
 
 inline const char *op_str(Op o) { return o == Op::kRead ? "read" : "write"; }
@@ -308,6 +308,6 @@ inline void close_file(FileTrace *ft) {
 }
 
 }  // namespace trace
-}  // namespace iowarp
+}  // namespace clio
 
-#endif  // IOWARP_HDF5_VOL_TRACE_H_
+#endif  // CLIO_HDF5_VOL_TRACE_H_

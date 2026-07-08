@@ -1,4 +1,4 @@
-/* Isolated C test for iowarp VOL Safe-mode flush (H5Fflush durability barrier).
+/* Isolated C test for clio VOL Safe-mode flush (H5Fflush durability barrier).
  *
  * The connector caches whole-dataset writes as ASYNC CTE puts, drained on
  * dataset close. Safe mode additionally drains them on H5Fflush, so a flush is a
@@ -8,7 +8,7 @@
  * (exercising the read-through cache after the flush drain), then reopens the
  * file and reads again. All values must match.
  *
- * Run with HDF5_VOL_CONNECTOR=iowarp (and a running clio_run). Exit 0 = pass.
+ * Run with HDF5_VOL_CONNECTOR=clio (and a running clio_run). Exit 0 = pass.
  * Build: h5cc -o vol_c_safeflush_test vol_c_safeflush_test.c
  */
 #include <hdf5.h>

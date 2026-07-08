@@ -21,7 +21,7 @@ target_include_directories(test_hdf5_vol_adapter PRIVATE
 )
 
 target_link_libraries(test_hdf5_vol_adapter
-    iowarp_hdf5_vol
+    clio_hdf5_vol
     ctp::cxx
     ${HDF5_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
@@ -76,7 +76,7 @@ target_include_directories(test_hdf5_vol_io PRIVATE
 )
 
 target_link_libraries(test_hdf5_vol_io
-    iowarp_hdf5_vol
+    clio_hdf5_vol
     clio_cte_core_runtime
     clio_cte_core_client
     clio::run::admin_runtime
@@ -120,7 +120,7 @@ install(
 
 # ---------------------------------------------------------------------------
 # Differential VOL compatibility suite (Python). Native VOL is the oracle;
-# each feature case is written/read through the iowarp VOL and compared to
+# each feature case is written/read through the clio VOL and compared to
 # native, plus h5diff/h5dump. Unlike the C++ unit tests above, this exercises
 # real data round-trips end to end and REQUIRES a running clio_run — the suite
 # starts/stops its own (pkill + start), so it must run alone (RUN_SERIAL).
@@ -134,7 +134,7 @@ if(Python3_FOUND)
     add_test(NAME cte_hdf5_vol_compat_suite
         COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/benchmarks/hdf5-ingest/vol_compat_suite.py
-            --bin $<TARGET_FILE_DIR:iowarp_hdf5_vol>
+            --bin $<TARGET_FILE_DIR:clio_hdf5_vol>
             --out ${CMAKE_CURRENT_BINARY_DIR}/vol_compat_results.json
     )
     set_tests_properties(cte_hdf5_vol_compat_suite PROPERTIES
