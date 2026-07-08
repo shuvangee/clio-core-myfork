@@ -1534,6 +1534,7 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
 
     if (get_task->return_code_ != 0u) {
       HLOG(kWarning, "Failed to get blob data during reorganization");
+      ipc_manager->FreeBuffer(blob_data_buffer);
       task->return_code_ = 6;  // Get blob failed
       CLIO_CO_RETURN;
     }
@@ -1562,10 +1563,48 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
     CLIO_CO_AWAIT(put_task);
 
     if (put_task->return_code_ != 0) {
-      HLOG(kWarning, "Failed to put blob during reorganization");
-      task->return_code_ = 7;  // Put blob failed
-      CLIO_CO_RETURN;
+      // The old placement is already gone (deleted in Step 6.5), so from here
+      // the blob's bytes exist ONLY in blob_data_buffer — bailing out now
+      // would lose the blob (the next GetBlob reads 0 bytes). Placement can
+      // fail transiently near a full tier (the DPE ranks targets from a
+      // remaining-space snapshot that lags the just-executed DelBlob credit),
+      // so retry once; if that also fails, restore the blob at its original
+      // score — the capacity it occupied before Step 6.5 is free again, so
+      // the restore has the same space the original placement had.
+      HLOG(kWarning,
+           "Reorganize re-Put failed: blob={}, new_score={}, rc={}; retrying",
+           blob_name, new_score, put_task->return_code_);
+      auto retry_task = client_.AsyncPutBlob(
+          tag_id, blob_name, 0, blob_size,
+          blob_data_buffer.shm_.template Cast<void>(), new_score, Context(),
+          0);
+      CLIO_CO_AWAIT(retry_task);
+      if (retry_task->return_code_ != 0) {
+        auto restore_task = client_.AsyncPutBlob(
+            tag_id, blob_name, 0, blob_size,
+            blob_data_buffer.shm_.template Cast<void>(), current_score,
+            Context(), 0);
+        CLIO_CO_AWAIT(restore_task);
+        if (restore_task->return_code_ != 0) {
+          HLOG(kError,
+               "Failed to put blob during reorganization: blob={}, rc={}, "
+               "retry rc={}, restore rc={} — blob data LOST",
+               blob_name, put_task->return_code_, retry_task->return_code_,
+               restore_task->return_code_);
+        } else {
+          HLOG(kWarning,
+               "Failed to put blob during reorganization: blob={}, rc={}, "
+               "retry rc={}; blob restored at original score {}",
+               blob_name, put_task->return_code_, retry_task->return_code_,
+               current_score);
+        }
+        ipc_manager->FreeBuffer(blob_data_buffer);
+        task->return_code_ = 7;  // Put blob failed
+        CLIO_CO_RETURN;
+      }
     }
+
+    ipc_manager->FreeBuffer(blob_data_buffer);
 
     // Success
     task->return_code_ = 0;
