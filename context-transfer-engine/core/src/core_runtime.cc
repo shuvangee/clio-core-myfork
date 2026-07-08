@@ -3924,9 +3924,29 @@ clio::run::TaskResume Runtime::ModifyExistingData(
     auto &task = write_tasks[task_idx];
     size_t expected_size = expected_write_sizes[task_idx];
     CLIO_CO_AWAIT(task);
+    // Premature-resume settle (issue #705): mirror of the ReadData settle —
+    // a bdev write handler that suspends in its POSIX-AIO poll loop can
+    // signal this awaiter before its final `bytes_written_` store, which is
+    // how reorganize-to-file-tier "put failed" flakes (3/96) presented in
+    // the docker CI job. Give the handler a bounded window to finish.
     if (task->bytes_written_ != expected_size) {
+      // LCOV_EXCL_START only reachable under the issue-#705 race, which needs
+      // a yielding bdev backend (containerized POSIX-AIO fallback).
+      for (int settle = 0;
+           settle < 2000 && task->bytes_written_ != expected_size; ++settle) {
+        CLIO_CO_AWAIT(clio::run::yield(50.0));
+      }
+      // LCOV_EXCL_STOP
+    }
+    if (task->bytes_written_ != expected_size) {
+      // LCOV_EXCL_START same issue-#705 race, after the settle gave up.
+      HLOG(kError,
+           "ModifyExistingData: WRITE FAILED - task[{}] wrote {} bytes, "
+           "expected {}",
+           task_idx, task->bytes_written_, expected_size);
       error_code = 1;
       CLIO_CO_RETURN;
+      // LCOV_EXCL_STOP
     }
   }
   timer.Pause();
@@ -4045,6 +4065,22 @@ clio::run::TaskResume Runtime::ReadData(const clio::run::priv::vector<BlobBlock>
          "ReadData: task[{}] completed - bytes_read={}, expected={}, status={}",
          task_idx, task->bytes_read_, expected_size,
          (task->bytes_read_ == expected_size ? "SUCCESS" : "FAILED"));
+
+    // Premature-resume settle (issue #705): when the bdev handler suspends
+    // mid-read (the fs transport's POSIX-AIO poll loop yields; the mem
+    // transport never does), this awaiter can resume BEFORE the handler's
+    // final `bytes_read_` store — CI logs show the same task reporting
+    // "read 0" in this check and "read 65536" one statement later. Give the
+    // handler a bounded window to finish before declaring a short read.
+    if (task->bytes_read_ != expected_size) {
+      // LCOV_EXCL_START only reachable under the issue-#705 race, which needs
+      // a yielding bdev backend (containerized POSIX-AIO fallback).
+      for (int settle = 0;
+           settle < 2000 && task->bytes_read_ != expected_size; ++settle) {
+        CLIO_CO_AWAIT(clio::run::yield(50.0));
+      }
+      // LCOV_EXCL_STOP
+    }
 
     if (task->bytes_read_ != expected_size) {
       HLOG(kError,
