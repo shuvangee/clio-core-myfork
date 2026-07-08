@@ -218,12 +218,22 @@ jobs:
           git pull
           .\bootstrap-vcpkg.bat
       - name: Configure CMake (hdf5_vol + WinFsp fuse)
+        # X_VCPKG_APPLOCAL_DEPS_SERIALIZED=ON serializes vcpkg's per-target
+        # post-build "z-applocal" DLL deployment. With HDF5_VOL=ON this job
+        # links hdf5/szip/zd/zmq + the clio runtime DLLs into many parallel
+        # test-exe targets, and under `-j` two targets would occasionally copy
+        # the SAME shared DLL into build/bin/ at once -> intermittent
+        # `error MSB3073: vcpkg z-applocal ... exited with code 32`
+        # (ERROR_SHARING_VIOLATION). Serializing the applocal step removes the
+        # race. ci-windows.yml doesn't hit this because it builds HDF5_VOL=OFF
+        # (far fewer shared DLLs). See issue: flaky windows-adapters build.
         run: |
           cmake -B build -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET="x64-windows" `
             -DVCPKG_MANIFEST_DIR="${{ github.workspace }}/installers/vcpkg" `
             -DVCPKG_OVERLAY_PORTS="${{ github.workspace }}/installers/vcpkg/overlay-ports" `
+            -DX_VCPKG_APPLOCAL_DEPS_SERIALIZED=ON `
             -DCMAKE_BUILD_TYPE=Debug `
             -DSITE="windows-2025" `
             -DBUILDNAME="adapters/msvc/x64/d" `
