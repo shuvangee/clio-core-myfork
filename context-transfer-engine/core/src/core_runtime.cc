@@ -1533,10 +1533,13 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
     CLIO_CO_AWAIT(get_task);
 
     if (get_task->return_code_ != 0u) {
+      // LCOV_EXCL_START error path: needs a GetBlob failure on a blob that
+      // CheckBlobExists just returned; not deterministically triggerable.
       HLOG(kWarning, "Failed to get blob data during reorganization");
       ipc_manager->FreeBuffer(blob_data_buffer);
       task->return_code_ = 6;  // Get blob failed
       CLIO_CO_RETURN;
+      // LCOV_EXCL_STOP
     }
 
     // Step 6.5: The blob data is now safely held in blob_data_buffer, so free
@@ -1563,6 +1566,11 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
     CLIO_CO_AWAIT(put_task);
 
     if (put_task->return_code_ != 0) {
+      // LCOV_EXCL_START error-recovery path: requires a PutBlob placement
+      // failure racing a just-freed tier, which cannot be triggered
+      // deterministically in a unit test. Observed (and exercised) in the
+      // boost (docker deps-cpu) CI job, which runs without coverage
+      // instrumentation.
       // The old placement is already gone (deleted in Step 6.5), so from here
       // the blob's bytes exist ONLY in blob_data_buffer — bailing out now
       // would lose the blob (the next GetBlob reads 0 bytes). Placement can
@@ -1602,6 +1610,7 @@ clio::run::TaskResume Runtime::ReorganizeBlobImpl(
         task->return_code_ = 7;  // Put blob failed
         CLIO_CO_RETURN;
       }
+      // LCOV_EXCL_STOP
     }
 
     ipc_manager->FreeBuffer(blob_data_buffer);
