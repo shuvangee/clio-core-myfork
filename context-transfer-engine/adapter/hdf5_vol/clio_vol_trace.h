@@ -29,7 +29,11 @@
 
 #include <hdf5.h>
 
+#ifdef _WIN32
+#include <process.h>  /* _getpid — per-process trace filenames */
+#else
 #include <unistd.h>  /* getpid — per-process trace filenames */
+#endif
 
 #include <cstdint>
 #include <cstdio>
@@ -41,6 +45,16 @@
 
 namespace clio {
 namespace trace {
+
+/* getpid() is POSIX; MSVC spells it _getpid() (<process.h>). Portable shim for
+   the per-process trace-file suffix in open_file() below. */
+inline long trace_pid() {
+#ifdef _WIN32
+  return static_cast<long>(_getpid());
+#else
+  return static_cast<long>(getpid());
+#endif
+}
 
 enum class Op { kRead, kWrite };
 enum class Sel { kWhole, kHyperslab, kPoint, kOther };
@@ -233,7 +247,7 @@ inline FileTrace *open_file(const std::string &file_name) {
   auto *ft = new FileTrace();
   /* Suffix with the pid so concurrent processes (e.g. MPI ranks) opening the same
      file path do not clobber each other's trace output. */
-  ft->file_name = safe_base(file_name) + "." + std::to_string(getpid());
+  ft->file_name = safe_base(file_name) + "." + std::to_string(trace_pid());
   ft->jsonl.open(trace_dir() + "/" + ft->file_name + ".access.jsonl",
                  std::ios::out | std::ios::trunc);
   return ft;
