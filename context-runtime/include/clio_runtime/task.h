@@ -401,8 +401,6 @@ class Task {
   clio::run::detail::FiberHandle& CoroHandle();
   clio::run::detail::FiberState& FiberStateRef();
 #endif
-  /** The subtask this coroutine is currently suspended on (see awaited_task_). */
-  Task*& AwaitedTask();
   /** Reset the per-execution STL/scalar state for reuse (RunContext::Clear). */
   void ClearRunState();
 #endif
@@ -815,17 +813,6 @@ class RunContext {
    *  allocated, never the FiberState). coro_handle_ points at this. */
   clio::run::detail::FiberState fiber_state_;
 #endif
-  /** The subtask Task this coroutine is currently suspended on inside a
-   *  co_await (nullptr when running or not suspended on a Future). Set by
-   *  Future::await_suspend_impl; read by Worker::ProcessEventQueue, which
-   *  resumes this parent ONLY when THIS specific subtask completes — not when
-   *  any sibling completes. That is what lets a coroutine issue several
-   *  subtasks concurrently and await them in a loop (e.g. parallel bdev
-   *  reads/writes in ModifyExistingData/ReadData) without an out-of-order
-   *  sibling completion resuming it against a still-running future and reading a
-   *  stale bytes_written_/bytes_read_ (the CFS write EIO / read-0 race). The GPU
-   *  await path stores the equivalent awaited_task_ in its own RunContext. */
-  Task* awaited_task_ = nullptr;
   u32 worker_id_;               /**< Worker ID executing this task */
   double yield_time_us_;        /**< Time in microseconds for task to yield */
   ctp::Timepoint block_start_; /**< Time when task was blocked (real time) */
@@ -1153,7 +1140,6 @@ CLIO_RCTX_REF(std::coroutine_handle<>, CoroHandle, coro_handle_)
 CLIO_RCTX_REF(clio::run::detail::FiberHandle, CoroHandle, coro_handle_)
 CLIO_RCTX_REF(clio::run::detail::FiberState, FiberStateRef, fiber_state_)
 #endif
-CLIO_RCTX_REF(Task*, AwaitedTask, awaited_task_)
 
 #undef CLIO_RCTX_GET
 #undef CLIO_RCTX_SET
@@ -1261,13 +1247,6 @@ bool Future<TaskT, AllocT>::await_suspend_impl(
   }
   // Store parent task for resumption tracking
   SetParentTask(task);
-  // Record WHICH subtask this coroutine is suspending on, so ProcessEventQueue
-  // resumes us only when THIS future completes — not when a concurrently-issued
-  // sibling does. Without this, awaiting several in-flight subtasks in a loop
-  // (parallel bdev writes/reads) lets an out-of-order sibling completion resume
-  // us here and read a stale result. TaskRaw() is the subtask (TaskT*) upcast
-  // to Task*.
-  task->AwaitedTask() = TaskRaw();
   // Store coroutine handle in the task's RunContext for worker to resume
   task->CoroHandle() = handle;
   task->SetYielded(true);
