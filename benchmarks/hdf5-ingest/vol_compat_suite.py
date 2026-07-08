@@ -29,8 +29,55 @@ import time
 BIN = os.environ.get("CLIO_VOL_BIN", "/workspace/build/bin")
 CLIO_HOME = os.environ.get("CLIO_HOME_DIR", "/home/iowarp")
 RUNTIME_LOG = "/tmp/clio_run_volcompat.log"
-RUNTIME_READY = "All 3 pools created successfully"
+# Count-agnostic: the compose emits "All <N> pools created successfully"; the
+# suite's own config (below) makes 2, a dev box's ~/.clio/clio.yaml may make 3.
+RUNTIME_READY = "pools created successfully"
 TMP = "/tmp/volcompat"
+
+# Self-contained runtime config. The suite must NOT depend on a pre-existing
+# ~/.clio/clio.yaml: it is absent in CI (the deps-cpu image has no such file),
+# so `clio_run start` would compose only the built-in admin pool and never emit
+# the readiness marker ("clio_run did not become ready"). We ship a minimal
+# config via CLIO_SERVER_CONF instead: a small DRAM bdev + the CTE core pool,
+# with capacities bounded to fit a constrained CI /dev/shm (docker --shm-size=2g).
+# The CTE pool is named to match clio::cte::core::kCtePoolName so the client's
+# get-or-create resolves it by name (Local routing) rather than broadcasting.
+SUITE_CONF = os.path.join(TMP, "clio_suite.yaml")
+SUITE_CONF_YAML = """\
+networking:
+  port: 9413
+  neighborhood_size: 32
+memory:
+  main_segment_size: 256MB
+  client_data_segment_size: 256MB
+  runtime_data_segment_size: 256MB
+runtime:
+  num_threads: 4
+  queue_depth: 1024
+  local_sched: "default"
+compose:
+  - mod_name: clio_bdev
+    pool_name: "ram::chi_default_bdev"
+    pool_query: local
+    pool_id: "301.0"
+    bdev_type: ram
+    capacity: "256MB"
+  - mod_name: clio_cte_core
+    pool_name: clio_cte_core
+    pool_query: local
+    pool_id: "512.0"
+    storage:
+      - path: "ram::cte_ram_tier1"
+        bdev_type: "ram"
+        capacity_limit: "256MB"
+        score: 1.0
+    dpe:
+      dpe_type: "max_bw"
+    targets:
+      neighborhood: 1
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
+"""
 
 # ---------------------------------------------------------------- write fixtures
 # Each writer builds a deterministic file at `path` via h5py. VOL on/off is set
@@ -295,7 +342,12 @@ def restart_runtime():
                 os.remove(os.path.join("/dev/shm", f))
             except OSError:
                 pass
-    env = dict(os.environ, HOME=CLIO_HOME)
+    # Provide clio_run a self-contained compose config (see SUITE_CONF_YAML) so
+    # readiness does not depend on a ~/.clio/clio.yaml that CI lacks.
+    os.makedirs(TMP, exist_ok=True)
+    with open(SUITE_CONF, "w") as cf:
+        cf.write(SUITE_CONF_YAML)
+    env = dict(os.environ, HOME=CLIO_HOME, CLIO_SERVER_CONF=SUITE_CONF)
     with open(RUNTIME_LOG, "w") as log:
         proc = subprocess.Popen([os.path.join(BIN, "clio_run"), "start"],
                                 stdout=log, stderr=log,
