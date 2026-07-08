@@ -8,6 +8,7 @@ add_subdirectory(restart)
 if(CLIO_CORE_ENABLE_DOCKER_CI)
     message(STATUS "CTE integration tests enabled (Docker CI)")
     add_subdirectory(distributed)
+    add_subdirectory(cfs_distributed)  # #685: cross-node CFS namespace test
     add_subdirectory(jarvis_deploy)
 
     # FUSE integration test requires Docker with FUSE support

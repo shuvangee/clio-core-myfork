@@ -999,6 +999,22 @@ void Worker::ProcessEventQueue() {
       continue;
     }
 
+    // Resume the parent ONLY if this event's future is the one the parent is
+    // suspended on (issue #705). SendIn registers the parent on EVERY subtask
+    // future at submit, so with several subtasks in flight (e.g. ReadData's
+    // per-block AsyncReads) an out-of-order completion would otherwise resume
+    // the parent mid-await on a DIFFERENT subtask — the await returns while
+    // the awaited handler is still running, and the caller reads its outputs
+    // early (short reads/writes) or frees buffers under it (SEGFAULT).
+    // Skipping is safe: FUTURE_COMPLETE was already set above, so when the
+    // parent's own await reaches this future it completes without suspending,
+    // and the future the parent IS waiting on delivers its own event.
+    const void* awaited = parent->AwaitedFshm();
+    if (awaited != nullptr && awaited != future.GetFutureShm().ptr_) {
+      continue;
+    }
+    parent->SetAwaitedFshm(nullptr);
+
     // Reset the is_yielded_ flag before executing the task
     parent->SetYielded(false);
 

@@ -117,6 +117,21 @@ bool ConfigManager::ServerInit() {
 
 bool ConfigManager::LoadYaml(const std::string &config_path) {
   try {
+    // An empty file yields a YAML null node: every section lookup in
+    // ParseYAML misses and the runtime silently comes up with the default
+    // config (default port, default workers, empty compose — so no storage
+    // tiers). A caller that explicitly pointed CLIO_SERVER_CONF at a file
+    // almost certainly did not mean that, and the resulting failures surface
+    // far downstream (e.g. PutBlob out-of-space on the very first write).
+    // Report it as a load failure so ClientInit warns loudly.
+    std::error_code ec;
+    const std::string real_path = ctp::ConfigParse::ExpandPath(config_path);
+    const auto size = std::filesystem::file_size(real_path, ec);
+    if (!ec && size == 0) {
+      HLOG(kError, "Config file {} exists but is empty", real_path);
+      return false;
+    }
+
     // Parse the YAML as-is (yaml port/settings win). Env overrides (CLIO_PORT
     // et al.) are applied by ClientInit/ServerInit via ApplyEnvOverrides(), not
     // here — a bare LoadYaml must reflect the file so callers parsing arbitrary
