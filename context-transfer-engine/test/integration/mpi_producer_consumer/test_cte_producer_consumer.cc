@@ -199,12 +199,15 @@ int RunConsumer() {
                               rbuf.shm_.template Cast<void>(),
                               clio::run::PoolQuery::Dynamic());
   gb.Wait();
-  if (gb->GetReturnCode() != 0 || gb->bytes_read_ != kBlobSize) {
+  // GetBlob is all-or-nothing: rc==0 means all kBlobSize bytes landed in rbuf;
+  // a short/failed cross-node read reports rc!=0 (GetBlobTask has no separate
+  // bytes-read field). The byte-for-byte check below is the payload assertion —
+  // it also catches the #714 "reads zeros" symptom even if rc were 0.
+  if (gb->GetReturnCode() != 0) {
     Log(1, role, "FAIL: cross-node GetBlob rc=" +
-                     std::to_string(gb->GetReturnCode()) + " bytes_read=" +
-                     std::to_string(gb->bytes_read_) + " (expected " +
+                     std::to_string(gb->GetReturnCode()) + " (expected " +
                      std::to_string(kBlobSize) +
-                     ") — blob payload is node-local (#714)");
+                     " bytes) — blob payload is node-local (#714)");
     ipc->FreeBuffer(rbuf);
     return 7;
   }
