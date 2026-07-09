@@ -731,10 +731,11 @@ class Client : public clio::run::ContainerClient {
   }
 
   /**
-   * Asynchronous semantic search — BM25 keyword scoring over blob bytes.
+   * Asynchronous keyword search using the maintained inverted index and BM25.
    * @param tag_regex   Full-string match against tag names (std::regex_match)
-   * @param blob_regex  Full-string match against blob names within matching tags
-   * @param query_text  Natural-language query; tokenized and scored vs blobs
+   * @param blob_regex  Full-string match against blob names within matching
+   * tags
+   * @param query_text  Query text tokenized into inverted-index lookup terms
    * @param k           Maximum number of results returned, ordered by
    *                    descending BM25 score. 0 means "no cap".
    * @param pool_query  Default Broadcast — same as BlobQuery — so the

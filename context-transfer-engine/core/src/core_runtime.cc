@@ -446,6 +446,10 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
     // per-insert indexing), so rebuild the regex search index once from the
     // final tag set (#598).
     RebuildTagSearchIndexLocked();
+    size_t indexed_count = 0;
+    CLIO_CO_AWAIT(RebuildKeywordIndex(indexed_count));
+    HLOG(kInfo, "Keyword index: rebuilt {} documents after restart",
+         indexed_count);
   }
 
   // Open WAL files if metadata_log_path is configured
@@ -531,6 +535,7 @@ Runtime::~Runtime() {
   tag_name_to_id_.clear();
   tag_id_to_info_.clear();
   tag_blob_name_to_info_.clear();
+  keyword_index_.Clear();
   storage_devices_.clear();
   target_locks_.clear();
   tag_locks_.clear();
@@ -558,6 +563,7 @@ clio::run::TaskResume Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task)
     tag_name_to_id_.clear();
     tag_id_to_info_.clear();
     tag_blob_name_to_info_.clear();
+    keyword_index_.Clear();
 
     // Reset atomic counters
     next_tag_id_minor_.store(1);
@@ -1352,6 +1358,16 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     LogTelemetry(CteOp::kPutBlob, offset, size, tag_id, now,
                  blob_info_ptr->last_read_);
     GpuCacheOnPutBlob(tag_id, blob_name, *blob_info_ptr);
+    bool indexed = false;
+    CLIO_CO_AWAIT(
+        RefreshKeywordIndex(tag_id, blob_name, *blob_info_ptr, indexed));
+    if (!indexed) {
+      keyword_index_.Remove(tag_id.major_, tag_id.minor_, blob_name);
+      HLOG(kWarning,
+           "PutBlob: keyword index refresh failed for blob '{}'; "
+           "removed stale index entry",
+           blob_name);
+    }
     task->return_code_ = 0;
   } catch (const std::exception &e) {
     HLOG(kError, "PutBlob failed with exception: {}", e.what());
@@ -1727,6 +1743,7 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
                                  blob_name;
       tag_blob_name_to_info_.erase(compound_key);
     }
+    keyword_index_.Remove(tag_id.major_, tag_id.minor_, blob_name);
 
     // Step 6: Log telemetry for DelBlob operation
     auto now = GetCurrentTimeNs();
@@ -4211,8 +4228,94 @@ clio::run::TaskResume Runtime::ClearBlob(BlobInfo &blob_info, float blob_score,
   CLIO_TASK_BODY_END
 }
 
+clio::run::TaskResume Runtime::RefreshKeywordIndex(const TagId &tag_id,
+                                                   const std::string &blob_name,
+                                                   const BlobInfo &blob_info,
+                                                   bool &indexed) {
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
+#endif
+  CLIO_TASK_BODY_BEGIN
+  indexed = false;
+  const clio::run::u64 total_size = blob_info.GetTotalSize();
+  if (total_size == 0) {
+    keyword_index_.Update(tag_id.major_, tag_id.minor_, blob_name, "", 0);
+    indexed = true;
+    CLIO_CO_RETURN;
+  }
+
+  auto *ipc_manager = CLIO_IPC;
+  ctp::ipc::FullPtr<char> buffer = ipc_manager->AllocateBuffer(total_size);
+  if (buffer.IsNull()) {
+    CLIO_CO_RETURN;
+  }
+
+  clio::run::priv::vector<BlobBlock> blocks(blob_info.blocks_);
+  clio::run::u32 read_result = 0;
+  CLIO_CO_AWAIT(ReadData(blocks, buffer.shm_.template Cast<void>(), total_size,
+                         0, read_result));
+  if (read_result == 0) {
+    keyword_index_.Update(tag_id.major_, tag_id.minor_, blob_name, buffer.ptr_,
+                          total_size);
+    indexed = true;
+  }
+  ipc_manager->FreeBuffer(buffer);
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::RebuildKeywordIndex(std::size_t &indexed_count) {
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
+#endif
+  CLIO_TASK_BODY_BEGIN
+  struct RestoredBlob {
+    TagId tag_id_;
+    std::string blob_name_;
+    std::shared_ptr<BlobInfo> blob_info_;
+  };
+
+  keyword_index_.Clear();
+  indexed_count = 0;
+  std::vector<RestoredBlob> restored_blobs;
+  tag_blob_name_to_info_.for_each(
+      [&restored_blobs](const std::string &key,
+                        const std::shared_ptr<BlobInfo> &blob_info) {
+        const size_t first_dot = key.find('.');
+        const size_t second_dot = first_dot == std::string::npos
+                                      ? std::string::npos
+                                      : key.find('.', first_dot + 1);
+        if (first_dot == std::string::npos || second_dot == std::string::npos) {
+          return;
+        }
+        try {
+          TagId tag_id{
+              static_cast<clio::run::u32>(std::stoul(key.substr(0, first_dot))),
+              static_cast<clio::run::u32>(std::stoul(
+                  key.substr(first_dot + 1, second_dot - first_dot - 1)))};
+          restored_blobs.push_back(
+              {tag_id, key.substr(second_dot + 1), blob_info});
+        } catch (const std::exception &) {
+          HLOG(kWarning,
+               "Keyword index: skipped malformed restored blob key '{}'", key);
+        }
+      },
+      ctp::priv::ForEachLock::kShared);
+
+  for (const auto &blob : restored_blobs) {
+    bool indexed = false;
+    CLIO_CO_AWAIT(RefreshKeywordIndex(blob.tag_id_, blob.blob_name_,
+                                      *blob.blob_info_, indexed));
+    if (indexed) {
+      ++indexed_count;
+    }
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 clio::run::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
-                                           clio::run::u32 &error_code) {
+                                                 clio::run::u32 &error_code) {
 #ifdef CLIO_ENABLE_BOOST_COROUTINES
   clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
 #endif
@@ -4708,38 +4811,6 @@ clio::run::TaskResume Runtime::BlobQuery(clio::run::shared_ptr<BlobQueryTask> &t
 // SemanticSearch — BM25 over blob contents
 // ==============================================================================
 
-namespace {
-
-// Tokenize raw bytes as lowercase alphanumeric runs of length >= 2.
-// Anything else (whitespace, punctuation, non-ASCII) splits a token.
-// Deliberately simple; good enough for English-ish text from labels.
-std::vector<std::string> SemSearchTokenize(const char *data, size_t size) {
-  std::vector<std::string> tokens;
-  std::string cur;
-  cur.reserve(16);
-  for (size_t i = 0; i < size; ++i) {
-    unsigned char c = static_cast<unsigned char>(data[i]);
-    if (std::isalnum(c)) {
-      cur.push_back(static_cast<char>(std::tolower(c)));
-    } else {
-      if (cur.size() >= 2) tokens.push_back(std::move(cur));
-      cur.clear();
-    }
-  }
-  if (cur.size() >= 2) tokens.push_back(std::move(cur));
-  return tokens;
-}
-
-struct SemSearchDoc {
-  TagId tag_id;
-  std::string tag_name;
-  std::string blob_name;
-  std::unordered_map<std::string, int> tf;
-  size_t length;
-};
-
-}  // namespace
-
 clio::run::TaskResume Runtime::SemanticSearch(
     clio::run::shared_ptr<SemanticSearchTask> &task) {
   CLIO_TASK_BODY_BEGIN
@@ -4748,6 +4819,12 @@ clio::run::TaskResume Runtime::SemanticSearch(
 
   std::string tag_regex_str = task->tag_regex_.str();
   std::string blob_regex_str = task->blob_regex_.str();
+  if (tag_regex_str.empty()) {
+    tag_regex_str = ".*";
+  }
+  if (blob_regex_str.empty()) {
+    blob_regex_str = ".*";
+  }
   std::string query_text = task->query_text_.str();
   clio::run::u32 k = task->k_;
 
@@ -4763,130 +4840,62 @@ clio::run::TaskResume Runtime::SemanticSearch(
     CLIO_CO_RETURN;
   }
 
-  // Step 1: pick matching (tag_name, tag_id) pairs from tag metadata
-  // (same iteration as BlobQuery).
-  std::vector<std::pair<std::string, TagId>> matching_tags;
-  tag_name_to_id_.for_each(
-      [&](const std::string &stored, const TagId &tag_id) {
-        std::string full = ResolveTagName(stored);
-        if (std::regex_match(full, tag_pattern)) {
-          matching_tags.emplace_back(full, tag_id);
-        }
-      });
-
-  // Step 2: walk the tag-blob metadata and collect (tag_id, tag_name,
-  // blob_name) triples whose blob_name matches blob_regex_. We collect names
-  // first and read bytes afterward — keeping the metadata iteration short
-  // means the for_each lambda doesn't block on bdev I/O.
-  struct Candidate { TagId tag_id; std::string tag_name; std::string blob_name; };
-  std::vector<Candidate> candidates;
-  for (const auto &tn : matching_tags) {
-    const std::string &tag_name = tn.first;
-    const TagId &tag_id = tn.second;
-    std::string prefix = std::to_string(tag_id.major_) + "." +
-                         std::to_string(tag_id.minor_) + ".";
-    tag_blob_name_to_info_.for_each(
-        [&prefix, &blob_pattern, &tag_id, &tag_name, &candidates](
-            const std::string &composite_key, const std::shared_ptr<BlobInfo> &blob_info_sp) { const BlobInfo &blob_info = *blob_info_sp; (void)blob_info;
-          (void)blob_info;
-          if (composite_key.rfind(prefix, 0) != 0) return;
-          std::string blob_name = composite_key.substr(prefix.length());
-          if (std::regex_match(blob_name, blob_pattern)) {
-            candidates.push_back({tag_id, tag_name, blob_name});
-          }
-        });
-  }
-  if (candidates.empty()) {
-    HLOG(kDebug,
-         "SemanticSearch: no candidates for tag='{}' blob='{}'",
-         tag_regex_str, blob_regex_str);
+  auto query_tokens =
+      KeywordIndex::Tokenize(query_text.data(), query_text.size());
+  std::unordered_set<std::string> unique_query_terms(query_tokens.begin(),
+                                                     query_tokens.end());
+  KeywordIndex::Snapshot snapshot = keyword_index_.Find(unique_query_terms);
+  if (snapshot.documents_.empty()) {
     CLIO_CO_RETURN;
   }
 
-  // Step 3: read each candidate's bytes, tokenize, and accumulate
-  // BM25 corpus statistics (tf per doc, doc length, df, avgdl).
-  auto *ipc_manager = CLIO_IPC;
-  std::vector<SemSearchDoc> docs;
-  docs.reserve(candidates.size());
-  for (auto &cand : candidates) {
-    std::shared_ptr<BlobInfo> info = CheckBlobExists(cand.blob_name, cand.tag_id);
-    if (info == nullptr) continue;
-    clio::run::u64 total = info->GetTotalSize();
-    if (total == 0) continue;
-
-    ctp::ipc::FullPtr<char> buf = ipc_manager->AllocateBuffer(total);
-    if (buf.IsNull()) {
-      HLOG(kWarning,
-           "SemanticSearch: AllocateBuffer({}) failed for blob '{}'; "
-           "skipping",
-           total, cand.blob_name);
-      continue;
-    }
-    ctp::ipc::ShmPtr<> shm(buf.shm_);
-    clio::run::u32 read_rc = 0;
-    CLIO_CO_AWAIT(ReadData(info->blocks_, shm, total, 0, read_rc));
-    if (read_rc != 0) {
-      HLOG(kWarning,
-           "SemanticSearch: ReadData failed for blob '{}' (rc={}); "
-           "skipping",
-           cand.blob_name, read_rc);
-      ipc_manager->FreeBuffer(buf);
-      continue;
-    }
-
-    auto tokens = SemSearchTokenize(buf.ptr_, total);
-    ipc_manager->FreeBuffer(buf);
-
-    SemSearchDoc doc;
-    doc.tag_id = cand.tag_id;
-    doc.tag_name = std::move(cand.tag_name);
-    doc.blob_name = std::move(cand.blob_name);
-    doc.length = tokens.size();
-    for (auto &t : tokens) ++doc.tf[t];
-    docs.push_back(std::move(doc));
-  }
-  if (docs.empty()) {
-    CLIO_CO_RETURN;
-  }
-
-  // Step 4: BM25. Corpus stats are computed over the working set
-  // (the matched slice), not over all CTE blobs — this is "rank
-  // within this regex" semantics. k1=1.5 / b=0.75 are the standard
-  // Okapi defaults.
+  // BM25 uses global index statistics. Regexes are applied only to the
+  // posting-list candidates, so an unscoped query does not scan all tags or
+  // blobs. k1=1.5 and b=0.75 are the standard Okapi defaults.
   constexpr double kK1 = 1.5;
   constexpr double kB = 0.75;
-  std::unordered_map<std::string, int> df;
-  double total_len = 0.0;
-  for (auto &d : docs) {
-    total_len += static_cast<double>(d.length);
-    for (auto &kv : d.tf) df[kv.first]++;
+  const double document_count =
+      static_cast<double>(snapshot.corpus_document_count_);
+  double average_length =
+      snapshot.corpus_document_count_ == 0
+          ? 1.0
+          : static_cast<double>(snapshot.corpus_token_count_) / document_count;
+  if (average_length <= 0.0) {
+    average_length = 1.0;
   }
-  double avgdl = (docs.empty() ? 1.0 : total_len / docs.size());
-  if (avgdl <= 0.0) avgdl = 1.0;
-  const size_t N = docs.size();
-
-  auto qtokens = SemSearchTokenize(query_text.data(), query_text.size());
-  std::unordered_set<std::string> uniq_q(qtokens.begin(), qtokens.end());
 
   std::vector<SemanticSearchResult> scored;
-  scored.reserve(docs.size());
-  for (auto &d : docs) {
-    double score = 0.0;
-    for (auto &q : uniq_q) {
-      auto df_it = df.find(q);
-      if (df_it == df.end()) continue;
-      auto tf_it = d.tf.find(q);
-      if (tf_it == d.tf.end()) continue;
-      double df_q = static_cast<double>(df_it->second);
-      double idf = std::log((static_cast<double>(N) - df_q + 0.5) /
-                                (df_q + 0.5) +
-                            1.0);
-      double tf_q = static_cast<double>(tf_it->second);
-      double norm =
-          1.0 - kB + kB * (static_cast<double>(d.length) / avgdl);
-      score += idf * (tf_q * (kK1 + 1.0)) / (tf_q + kK1 * norm);
+  scored.reserve(snapshot.documents_.size());
+  for (const auto &document : snapshot.documents_) {
+    TagId tag_id{document.tag_major_, document.tag_minor_};
+    std::shared_ptr<TagInfo> tag_info = tag_id_to_info_.get(tag_id);
+    std::string tag_name;
+    if (tag_info != nullptr && !tag_info->tag_name_.str().empty()) {
+      tag_name = ResolveTagName(tag_info->tag_name_.str());
     }
-    scored.emplace_back(d.tag_id, d.tag_name, d.blob_name, score);
+    if (!std::regex_match(tag_name, tag_pattern) ||
+        !std::regex_match(document.blob_name_, blob_pattern)) {
+      continue;
+    }
+
+    double score = 0.0;
+    for (const auto &term : unique_query_terms) {
+      auto frequency = document.term_frequencies_.find(term);
+      auto document_frequency = snapshot.document_frequencies_.find(term);
+      if (frequency == document.term_frequencies_.end() ||
+          document_frequency == snapshot.document_frequencies_.end()) {
+        continue;
+      }
+      const double df = static_cast<double>(document_frequency->second);
+      const double idf =
+          std::log((document_count - df + 0.5) / (df + 0.5) + 1.0);
+      const double tf = static_cast<double>(frequency->second);
+      double norm =
+          1.0 - kB +
+          kB * (static_cast<double>(document.token_count_) / average_length);
+      score += idf * (tf * (kK1 + 1.0)) / (tf + kK1 * norm);
+    }
+    scored.emplace_back(tag_id, tag_name, document.blob_name_, score);
   }
 
   std::sort(scored.begin(), scored.end(),
@@ -4898,7 +4907,7 @@ clio::run::TaskResume Runtime::SemanticSearch(
        "SemanticSearch: tag='{}' blob='{}' query='{}' -> {} results "
        "(from {} candidates)",
        tag_regex_str, blob_regex_str, query_text, task->results_.size(),
-       candidates.size());
+       snapshot.documents_.size());
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }

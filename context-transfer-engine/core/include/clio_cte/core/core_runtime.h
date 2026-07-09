@@ -34,21 +34,23 @@
 #ifndef WRPCTE_CORE_RUNTIME_H_
 #define WRPCTE_CORE_RUNTIME_H_
 
-#include <memory>
-#include <atomic>
-#include <clio_runtime/clio_runtime.h>
-#include <clio_runtime/comutex.h>
-#include <clio_runtime/corwlock.h>
-#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
-#include <clio_ctp/data_structures/ipc/ring_buffer.h>
-#include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_config.h>
 #include <clio_cte/core/core_dpe.h>
 #include <clio_cte/core/core_tasks.h>
 #include <clio_cte/core/gpu_metadata_cache.h>
+#include <clio_cte/core/keyword_index.h>
 #include <clio_cte/core/transaction_log.h>
+#include <clio_ctp/data_structures/ipc/ring_buffer.h>
+#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
+#include <clio_ctp/memory/allocator/malloc_allocator.h>
 #include <clio_ctp/search/regex_search_engine.h>
+#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/comutex.h>
+#include <clio_runtime/corwlock.h>
+
+#include <atomic>
+#include <memory>
 
 // Forward declarations to avoid circular dependency
 namespace clio::cte::core {
@@ -289,6 +291,11 @@ private:
   ctp::priv::unordered_map_ll<TagId, std::shared_ptr<TagInfo>> tag_id_to_info_; // tag_id -> TagInfo
   ctp::priv::unordered_map_ll<std::string, std::shared_ptr<BlobInfo>>
       tag_blob_name_to_info_; // "tag_id.blob_name" -> BlobInfo
+
+  // In-memory reverse keyword index. PutBlob refreshes the complete document,
+  // DelBlob removes it, and keyword search reads a consistent candidate
+  // snapshot without scanning or rereading every blob.
+  KeywordIndex keyword_index_;
 
   // Secondary search index: absolute resolved tag name -> tag id. Lets TagQuery
   // answer regex queries via a trigram prefilter instead of scanning every tag
@@ -608,6 +615,26 @@ private:
                            size_t data_size, size_t data_offset_in_blob, clio::run::u32 &error_code);
 
   /**
+   * Rebuild one blob's keyword-index document from its current complete bytes.
+   *
+   * @param tag_id Tag that owns the blob.
+   * @param blob_name Blob name within the tag.
+   * @param blob_info Current blob metadata and block layout.
+   * @param indexed Output set true when the index refresh succeeds.
+   */
+  clio::run::TaskResume RefreshKeywordIndex(const TagId &tag_id,
+                                            const std::string &blob_name,
+                                            const BlobInfo &blob_info,
+                                            bool &indexed);
+
+  /**
+   * Rebuild the in-memory keyword index from restored blob metadata and data.
+   *
+   * @param indexed_count Output number of blobs successfully indexed.
+   */
+  clio::run::TaskResume RebuildKeywordIndex(std::size_t &indexed_count);
+
+  /**
    * Log telemetry data for CTE operations
    * @param op Operation type
    * @param off Offset within blob
@@ -694,11 +721,11 @@ private:
   clio::run::TaskResume BlobQuery(clio::run::shared_ptr<BlobQueryTask> &task);
 
   /**
-   * BM25 keyword search over blob contents (Method::kSemanticSearch).
-   * Filters by tag+blob regex like BlobQuery, then tokenizes each
-   * candidate blob's bytes and scores them against query_text_ using
-   * Okapi BM25 with corpus stats computed over the matched working
-   * set. Returns top-k results sorted by descending score.
+   * Inverted-index keyword search with BM25 ranking
+   * (Method::kSemanticSearch). Query terms select candidates through reverse
+   * postings, tag+blob regexes filter those candidates, and global in-memory
+   * corpus statistics provide BM25 scores. Returns top-k results sorted by
+   * descending score without scanning or rereading the complete blob corpus.
    */
   clio::run::TaskResume SemanticSearch(clio::run::shared_ptr<SemanticSearchTask> &task);
 
@@ -741,4 +768,4 @@ private:
 
 } // namespace clio::cte::core
 
-#endif // WRPCTE_CORE_RUNTIME_H_
+#endif  // WRPCTE_CORE_RUNTIME_H_

@@ -3233,19 +3233,17 @@ struct SemanticSearchResult {
 };
 
 /**
- * SemanticSearchTask — keyword search over blob contents with BM25.
+ * SemanticSearchTask — inverted-index keyword search with BM25 ranking.
  *
- * Step 1: tag_regex_ AND blob_regex_ filter the candidate (tag, blob)
- *         pairs, exactly like BlobQuery.
- * Step 2: every candidate blob's bytes are tokenized into lowercase
- *         alphanumeric terms and BM25-scored against the same
- *         tokenization of query_text_.
- * Step 3: results are sorted descending by score and trimmed to k_.
+ * Step 1: query_text_ is tokenized into lowercase alphanumeric terms.
+ * Step 2: reverse postings select blobs containing at least one query term.
+ * Step 3: tag_regex_ AND blob_regex_ filter those candidates.
+ * Step 4: candidates are scored with global in-memory corpus statistics,
+ *         sorted descending by score, and trimmed to k_.
  *
- * BM25 corpus statistics (avgdl, df) are computed over the matched
- * working set rather than the whole CTE — the query is "find the
- * best matches *within this regex slice*", not "rank against
- * everything CTE has ever seen".
+ * PutBlob refreshes forward term frequencies and reverse postings immediately;
+ * DelBlob removes them. Query execution does not read blob payloads or scan
+ * every tag and blob.
  *
  * Regexes use std::regex_match (full-string) for parity with
  * BlobQueryTask. Use ".*pattern.*" for substring matching.

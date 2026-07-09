@@ -40,12 +40,13 @@
 
 using namespace std::chrono_literals;
 
-#include <clio_runtime/clio_runtime.h>
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_tasks.h>
+#include <clio_cte/core/keyword_index.h>
+#include <clio_runtime/admin/admin_tasks.h>
 #include <clio_runtime/bdev/bdev_client.h>
 #include <clio_runtime/bdev/bdev_tasks.h>
-#include <clio_runtime/admin/admin_tasks.h>
+#include <clio_runtime/clio_runtime.h>
 
 namespace fs = std::filesystem;
 
@@ -584,6 +585,48 @@ TEST_CASE("Performance Test Structure", "[cte][core][performance]") {
     
     INFO("Multiple operation simulation completed with " << operation_count << " operations");
   }
+}
+
+/**
+ * Verify that keyword-index replacement removes stale reverse mappings.
+ */
+TEST_CASE("KeywordIndex replaces stale terms",
+          "[cte][core][keyword-index][update]") {
+  clio::cte::core::KeywordIndex index;
+  const std::string original = "weather simulation climate climate";
+  index.Update(1, 7, "output", original.data(), original.size());
+
+  auto weather = index.Find({"weather"});
+  REQUIRE(weather.documents_.size() == 1);
+  REQUIRE(weather.documents_[0].term_frequencies_.at("climate") == 2);
+
+  const std::string replacement = "particle physics collider";
+  index.Update(1, 7, "output", replacement.data(), replacement.size());
+
+  REQUIRE(index.Find({"weather"}).documents_.empty());
+  auto physics = index.Find({"physics"});
+  REQUIRE(physics.documents_.size() == 1);
+  REQUIRE(physics.documents_[0].blob_name_ == "output");
+  REQUIRE(index.Size() == 1);
+}
+
+/**
+ * Verify that deletion removes both the document and all keyword postings.
+ */
+TEST_CASE("KeywordIndex removes deleted blobs",
+          "[cte][core][keyword-index][delete]") {
+  clio::cte::core::KeywordIndex index;
+  const std::string first = "shared keyword alpha";
+  const std::string second = "shared keyword beta";
+  index.Update(2, 1, "first", first.data(), first.size());
+  index.Update(2, 1, "second", second.data(), second.size());
+
+  REQUIRE(index.Find({"shared"}).documents_.size() == 2);
+  REQUIRE(index.Remove(2, 1, "first"));
+  auto remaining = index.Find({"shared"});
+  REQUIRE(remaining.documents_.size() == 1);
+  REQUIRE(remaining.documents_[0].blob_name_ == "second");
+  REQUIRE(index.Find({"alpha"}).documents_.empty());
 }
 
 SIMPLE_TEST_MAIN()
