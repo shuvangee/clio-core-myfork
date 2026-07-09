@@ -34,6 +34,7 @@
 #ifndef WRPCTE_CORE_RUNTIME_H_
 #define WRPCTE_CORE_RUNTIME_H_
 
+#include <memory>
 #include <atomic>
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/comutex.h>
@@ -285,8 +286,8 @@ private:
   // concurrent access)
   ctp::priv::unordered_map_ll<std::string, TagId>
       tag_name_to_id_;                                   // tag_name -> tag_id
-  ctp::priv::unordered_map_ll<TagId, TagInfo> tag_id_to_info_; // tag_id -> TagInfo
-  ctp::priv::unordered_map_ll<std::string, BlobInfo>
+  ctp::priv::unordered_map_ll<TagId, std::shared_ptr<TagInfo>> tag_id_to_info_; // tag_id -> TagInfo
+  ctp::priv::unordered_map_ll<std::string, std::shared_ptr<BlobInfo>>
       tag_blob_name_to_info_; // "tag_id.blob_name" -> BlobInfo
 
   // Secondary search index: absolute resolved tag name -> tag id. Lets TagQuery
@@ -301,14 +302,22 @@ private:
       next_tag_id_minor_; // Minor counter for TagId UniqueId generation
 
   // Map sizes for data structures (must be large enough for expected entries)
-  static const size_t kBlobMapSize = 1000000;  // 1M blobs
-  static const size_t kTagMapSize = 100000;    // 100K tags
+  // Initial bucket count only; the maps grow (rehash) as entries are added.
+  // Kept small so for_each() (which scans every bucket) stays O(entries) rather
+  // than O(1M): the old 1M/100K pre-size made every full-map scan visit a
+  // million empty buckets, which is what made metadata-heavy workloads (e.g.
+  // generic/089) crawl to a timeout (issue #680).
+  static const size_t kBlobMapSize = 100;
+  static const size_t kTagMapSize = 100;
 
   // Synchronization primitives for thread-safe access to data structures
   // Single lock per data structure ensures all operations synchronize correctly
   clio::run::CoRwLock target_lock_;  // For registered_targets_ + target_name_to_id_
-  clio::run::CoRwLock tag_map_lock_;  // For tag_name_to_id_ + tag_id_to_info_
-  clio::run::CoRwLock blob_map_lock_;  // For tag_blob_name_to_info_
+  // tag_map_lock_ and blob_map_lock_ removed: the tag/blob maps are self-locking
+  // unordered_map_ll and tag_search_ is now internally synchronized, so the outer
+  // coroutine locks were redundant and deadlock-prone (issue #680). Values are
+  // std::shared_ptr, so a concurrent erase just drops the map's reference while
+  // any in-flight handle keeps the object alive -- no use-after-free.
   // Use a set of locks based on maximum number of lanes for better concurrency
   static const size_t kMaxLocks =
       64; // Maximum number of locks (matches max lanes)
@@ -508,7 +517,7 @@ private:
    * @param tag_id Tag ID to search within
    * @return Pointer to BlobInfo if found, nullptr if not found
    */
-  BlobInfo *CheckBlobExists(const std::string &blob_name, const TagId &tag_id);
+  std::shared_ptr<BlobInfo> CheckBlobExists(const std::string &blob_name, const TagId &tag_id);
 
   /**
    * Create new blob with given parameters
@@ -517,7 +526,7 @@ private:
    * @param blob_score Score/priority for the blob
    * @return Pointer to created BlobInfo, nullptr on failure
    */
-  BlobInfo *CreateNewBlob(const std::string &blob_name, const TagId &tag_id,
+  std::shared_ptr<BlobInfo> CreateNewBlob(const std::string &blob_name, const TagId &tag_id,
                           float blob_score);
 
   /**
@@ -571,9 +580,20 @@ private:
    * @param error_code Output: 0 for success, 1 for failure
    * Returns TaskResume for coroutine-based async operations
    */
+  // start_block_idx / start_block_offset_in_blob: an optional fast-path hint for
+  // writes known to target the blob tail (e.g. an append). The scan then begins
+  // at block `start_block_idx`, whose first byte sits at `start_block_offset_in_blob`
+  // in the blob, instead of re-walking from block 0. Callers MUST pass a
+  // consistent pair (start_block_offset_in_blob == sum of blocks[0..start_block_idx)
+  // sizes) and only for writes whose region lies entirely at/after that offset;
+  // the default (0,0) reproduces the exact full-scan behavior. This turns an
+  // O(blocks) rescan per append into O(1), fixing the O(N^2) blowup on files
+  // built by millions of tiny O_APPEND writes (generic/069).
   clio::run::TaskResume ModifyExistingData(const clio::run::priv::vector<BlobBlock> &blocks,
                                      ctp::ipc::ShmPtr<> data, size_t data_size,
-                                     size_t data_offset_in_blob, clio::run::u32 &error_code);
+                                     size_t data_offset_in_blob, clio::run::u32 &error_code,
+                                     size_t start_block_idx = 0,
+                                     size_t start_block_offset_in_blob = 0);
 
   /**
    * Read existing blob data from blocks

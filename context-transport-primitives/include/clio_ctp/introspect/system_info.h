@@ -297,6 +297,24 @@ class SystemInfo {
   /** Directory of the shared library containing the given symbol. */
   CTP_DLL static std::string GetModuleDirectoryFor(void *symbol);
 
+  /// @brief Retrieves storage device hardware health statistics.
+  CTP_DLL static std::string GetDeviceHealthStats(const std::string &path);
+
+  /// @brief Derive the drive type ("hdd" or "ssd") from a pool/drive name.
+  /// A name containing the substring "hdd" (case-insensitive) is treated as
+  /// spinning disk; everything else defaults to "ssd". Extracted as a pure,
+  /// side-effect-free helper so the routing decision is unit-testable without
+  /// standing up the runtime.
+  CTP_DLL static std::string DeriveDriveType(const std::string &pool_name);
+
+  /// @brief Predicts drive failure by POSTing health metrics to a local
+  /// prediction server (Poco::Net HTTP). The endpoint is overridable via the
+  /// CLIO_PREDICT_URL environment variable (default: the Docker-host address
+  /// http://host.docker.internal:8000/predict/auto). Degrades gracefully: any
+  /// transport failure — or a build without Poco — returns a JSON object
+  /// ("{}" or {"error": ...}), never throws, and is bounded by a short timeout.
+  CTP_DLL static std::string PredictDriveFailure(const std::string &drive_type, const std::string &health_json, const std::string &drive_id);
+
   CTP_DLL static std::string GetLibrarySearchPathVar();
 
   CTP_DLL static char GetPathListSeparator();
@@ -310,8 +328,6 @@ class SystemInfo {
    *  Windows: "ucrtbase.dll" (UCRT exports the C math entry points). */
   CTP_DLL static std::string GetMathLibraryName();
 
-  /** Get device health statistics via smartctl */
-  CTP_DLL static std::string GetDeviceHealthStats(const std::string &path);
 };
 
 }  // namespace ctp

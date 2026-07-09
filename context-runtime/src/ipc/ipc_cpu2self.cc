@@ -64,16 +64,17 @@ Future<Task> IpcCpu2Self::SendIn(IpcManager *ipc,
     // enqueueing, so RouteTask / the worker have an active RunContext.
     future.GetTaskPtr()->BeginRunContext();
 
-    // Use ClientMapTask to pick a lane and enqueue.
-    if (ipc->scheduler_ != nullptr) {
-      u32 lane_id = ipc->scheduler_->ClientMapTask(ipc, future);
-      if (!ipc->worker_queues_.IsNull()) {
-        auto &dest_lane = ipc->worker_queues_->GetLane(lane_id, 0);
-        dest_lane.Push(future);
-        // Always signal — see ipc_cpu2cpu_impl.h for the race.
-        ipc->AwakenWorker(&dest_lane);
-      }
-    }
+    // Route via the runtime router (RuntimeMapTask) rather than ClientMapTask.
+    // ClientMapTask funnels EVERY task to lane 0 (the scheduler worker); a
+    // worker executing a task that self-sends a subtask (e.g. GetBlob ->
+    // bdev::AsyncRead) then enqueues onto the SAME lane it must drain. When that
+    // lane fills, the WAIT_FOR_SPACE ring Push busy-spins forever — the worker
+    // never suspends, so it can never pop to make space (producer==consumer
+    // deadlock; the genuine FUSE hangs generic/208,323,438). RuntimeMapTask
+    // distributes large I/O to dedicated I/O workers, so the subtask lands on a
+    // different worker's lane that drains independently. force_enqueue matches
+    // the non-worker branch below (never ExecHere-inline from a self-send).
+    ipc->RouteTask(future, /*force_enqueue=*/true);
   } else {
     // Non-worker thread path (e.g. ServerInit's synchronous admin pool
     // creation, where CLIO_CUR_WORKER is null): allocate the RunContext +

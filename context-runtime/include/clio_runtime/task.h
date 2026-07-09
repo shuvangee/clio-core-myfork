@@ -370,6 +370,10 @@ class Task {
   RunContext* RunCtxPtr();
   bool IsNotified() const;
   void SetNotified(bool v);
+  /** Identity of the future this task is suspended on (nullptr when not
+   *  awaiting a future). See RunContext::awaited_fshm_ / issue #705. */
+  const void* AwaitedFshm() const;
+  void SetAwaitedFshm(const void* fshm);
   /** Whether this task's coroutine/fiber has run to completion, without
    *  dereferencing the (possibly cross-thread-freed) coroutine frame. */
   bool IsCoroCompleted() const;
@@ -859,6 +863,16 @@ class RunContext {
  private:
   std::atomic<bool> is_notified_; /**< Atomic flag to prevent duplicate event
                                      queue additions */
+  /** Identity (FutureShm pointer) of the future this task is currently
+   *  suspended on, or nullptr when not awaiting a future. Set by the await
+   *  paths before suspending; ProcessEventQueue resumes the parent ONLY when
+   *  the completed subtask future matches. Without this, a parent awaiting
+   *  its subtask futures in order was resumed by ANY subtask's completion
+   *  event, returning from the await before the awaited subtask finished —
+   *  observed as short reads/writes on slow (yielding) bdev backends
+   *  (issue #705). Atomic: written on the fiber's executing worker, read on
+   *  the parent's event-queue worker. */
+  std::atomic<const void*> awaited_fshm_;
   // Set true by the top-level coroutine's final_suspend when the task
   // completes. The worker reads THIS instead of coro_handle_.done() to detect
   // completion, so it never dereferences a coroutine frame that a cross-thread
@@ -897,6 +911,7 @@ class RunContext {
         gpu_task_device_ptr_(0),
         gpu_task_size_(0),
         is_notified_(false),
+        awaited_fshm_(nullptr),
         coro_completed_(false),
         flags_() {
     gpu_flags_.Clear();
@@ -930,6 +945,7 @@ class RunContext {
         yield_count_(other.yield_count_),
         future_(std::move(other.future_)),
         is_notified_(other.is_notified_.load()),
+        awaited_fshm_(other.awaited_fshm_.load()),
         coro_completed_(other.coro_completed_.load()),
         flags_(other.flags_),
         cpu_timer_(other.cpu_timer_),
@@ -963,6 +979,7 @@ class RunContext {
       yield_count_ = other.yield_count_;
       future_ = std::move(other.future_);
       is_notified_.store(other.is_notified_.load());
+      awaited_fshm_.store(other.awaited_fshm_.load());
       coro_completed_.store(other.coro_completed_.load());
       flags_ = other.flags_;
       cpu_timer_ = other.cpu_timer_;
@@ -1041,6 +1058,7 @@ class RunContext {
     block_start_ = ctp::Timepoint();
     yield_count_ = 0;
     is_notified_.store(false);
+    awaited_fshm_.store(nullptr);
     coro_completed_.store(false);
     flags_.UnsetBits(RCTX_DID_WORK);
     cpu_timer_.time_ns_ = 0;
@@ -1193,6 +1211,18 @@ inline void Task::SetNotified(bool v) {
   }
   run_ctx_->is_notified_.store(v);
 }
+inline const void* Task::AwaitedFshm() const {
+  if (!run_ctx_) {
+    CLIO_RCTX_NULL(AwaitedFshm);
+  }
+  return run_ctx_->awaited_fshm_.load();
+}
+inline void Task::SetAwaitedFshm(const void* fshm) {
+  if (!run_ctx_) {
+    CLIO_RCTX_NULL(SetAwaitedFshm);
+  }
+  run_ctx_->awaited_fshm_.store(fshm);
+}
 inline bool Task::IsCoroCompleted() const {
   if (!run_ctx_) {
     CLIO_RCTX_NULL(IsCoroCompleted);
@@ -1247,6 +1277,15 @@ bool Future<TaskT, AllocT>::await_suspend_impl(
   }
   // Store parent task for resumption tracking
   SetParentTask(task);
+  // Record WHICH future this task is suspending on, so ProcessEventQueue only
+  // resumes it when THIS subtask completes. Every subtask future carries the
+  // parent (set at SendIn), so with several in flight an unrelated
+  // completion's event would otherwise resume the parent mid-await
+  // (issue #705).
+  {
+    auto fshm = GetFutureShm();
+    task->SetAwaitedFshm(fshm.IsNull() ? nullptr : fshm.ptr_);
+  }
   // Store coroutine handle in the task's RunContext for worker to resume
   task->CoroHandle() = handle;
   task->SetYielded(true);
@@ -1814,9 +1853,19 @@ inline void boost_await(clio::run::Future<TaskT, AllocT>& future) {
   clio::run::shared_ptr<clio::run::Task> task = clio::run::GetCurrentTask();
   if (task.IsNull()) return;
   future.SetParentTask(task);
+  // Record WHICH future this fiber is suspending on, so ProcessEventQueue
+  // only resumes it when THIS subtask completes — an unrelated subtask's
+  // completion event would otherwise resume the fiber mid-await and the
+  // caller would read the awaited task's outputs while it is still running
+  // (issue #705: short reads/writes on yielding bdev backends).
+  {
+    auto fshm = future.GetFutureShm();
+    task->SetAwaitedFshm(fshm.IsNull() ? nullptr : fshm.ptr_);
+  }
   task->SetYielded(true);
   task->SetYieldTimeUs(0.0);
   fiber_suspend_to_caller(&task->FiberStateRef());
+  task->SetAwaitedFshm(nullptr);
   task->SetYielded(false);
 }
 

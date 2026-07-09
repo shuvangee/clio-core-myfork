@@ -622,6 +622,12 @@ void IpcManager::ServerFinalize() {
   // Clear main allocator pointer
   main_allocator_ = nullptr;
 
+  // Leak scan while the SHM segments are still mapped (alloc_vector_ is not
+  // cleared here). This is the reliable trigger for the IpcManager leak scan:
+  // the CLIO_IPC global is intentionally leaked, so ~IpcManager rarely runs.
+  // No-op unless built with CTP_ALLOC_TRACK_SIZE (CLIO_CORE_ENABLE_LEAK_CHECK).
+  ReportRuntimeLeaks("ServerFinalize");
+
   is_initialized_ = false;
 }
 
@@ -647,7 +653,10 @@ void IpcManager::SetNumSchedQueues(u32 num_sched_queues) {
 
 void IpcManager::AwakenWorker(TaskLane *lane) {
   if (!lane) {
-    HLOG(kWarning, "AwakenWorker: lane is null");
+    // No lane to target — wake every worker so a task parked with no resolvable
+    // owning lane is still re-checked (lost-wakeup safety net).
+    HLOG(kWarning, "AwakenWorker: lane is null; waking all workers");
+    CLIO_WORK_ORCHESTRATOR->AwakenAllWorkers();
     return;
   }
 
@@ -676,18 +685,26 @@ void IpcManager::AwakenWorker(TaskLane *lane) {
            runtime_pid, tid, lane->IsActive(), errno);
     }
   } else {
-    HLOG(kWarning, "AwakenWorker: tid={} (invalid), cannot send signal", tid);
+    // The target lane has no worker tid (only a worker's OWN assigned_lane_
+    // ever gets a tid, so a task parked on any secondary lane reads tid==0).
+    // A targeted signal is impossible, but some worker DOES own this task's
+    // event queue, so wake them all and let the owner re-check and resume the
+    // parked parent. This closes a lost-wakeup that hung sustained O_APPEND
+    // writes (#680 generic/069): a completed PutBlob subtask emplaced its
+    // result on the parent WriteTask's event queue but could not signal, so
+    // the parent slept forever while all workers idled in epoll.
+    CLIO_WORK_ORCHESTRATOR->AwakenAllWorkers();
   }
 }
 
 IpcManagerTls *IpcManager::GetTls() {
   // One-time key registration (double-checked under the mutex). The key is
   // process-wide; the per-thread value below is what differs per thread.
-  if (!ipc_tls_key_created_) {
+  if (!ipc_tls_key_created_.load(std::memory_order_acquire)) {
     std::lock_guard<std::mutex> lk(ipc_tls_key_mutex_);
-    if (!ipc_tls_key_created_) {
+    if (!ipc_tls_key_created_.load(std::memory_order_relaxed)) {
       CTP_THREAD_MODEL->CreateTls<IpcManagerTls>(ipc_tls_key_, nullptr);
-      ipc_tls_key_created_ = true;
+      ipc_tls_key_created_.store(true, std::memory_order_release);
     }
   }
   // Lazily allocate this thread's IpcManagerTls. Its EventManager ctor runs on
@@ -1637,6 +1654,66 @@ size_t IpcManager::GetRuntimeHeapAllocatedBytes() const {
   return total;
 #else
   return 0;
+#endif
+}
+
+size_t IpcManager::ReportRuntimeLeaks(const char *phase) const {
+#if defined(CTP_ALLOC_TRACK_SIZE) && CTP_IS_HOST
+  // Private heap (NewTask/NewObj/client-ZMQ buffers). At shutdown this
+  // legitimately still holds process-lifetime runtime state (pools, config,
+  // module manager) that is only released at static teardown -- so report it at
+  // INFO, NOT as a leak, to avoid false positives. Genuinely unfreed CTP_MALLOC
+  // allocations are caught for real by the MallocAllocator destructor
+  // (ctp::ipc::AllocatorLeakChecker) which runs at static teardown, after that
+  // process-lifetime state is gone.
+  const size_t priv = CTP_MALLOC->GetCurrentlyAllocatedSize();
+  if (priv != 0) {
+    HLOG(kInfo,
+         "[leak][runtime] {}: CTP_MALLOC private heap holds {} bytes (may be "
+         "process-lifetime state; verified clean at static teardown)",
+         phase, priv);
+  }
+
+  // Per-process SHM segments the runtime's AllocateBuffer draws from. These
+  // MultiProcessAllocators are placement-constructed in shared memory and never
+  // get a C++ destructor, so this scan is the ONLY place their leaks surface.
+  // Every buffer MUST be freed by shutdown, so any outstanding bytes here are a
+  // real shared-memory leak (reported at ERROR). This is the return value.
+  size_t shm_leaked = 0;
+  {
+    std::lock_guard<std::mutex> lock(shm_mutex_);
+    for (size_t i = 0; i < alloc_vector_.size(); ++i) {
+      auto *alloc = alloc_vector_[i];
+      if (alloc == nullptr) {
+        continue;
+      }
+      const size_t out = alloc->GetCurrentlyAllocatedSize();
+      if (out != 0) {
+        shm_leaked += out;
+        HLOG(kError,
+             "[leak][runtime] {}: SHM allocator #{} leaked {} bytes "
+             "(outstanding at shutdown)",
+             phase, i, out);
+      }
+    }
+  }
+
+  if (shm_leaked == 0) {
+    HLOG(kInfo, "[leak][runtime] {}: no outstanding SHM buffers", phase);
+  } else {
+    HLOG(kError, "[leak][runtime] {}: {} total SHM bytes leaked", phase,
+         shm_leaked);
+  }
+  return shm_leaked;
+#else
+  (void)phase;
+  return 0;
+#endif
+}
+
+IpcManager::~IpcManager() {
+#if defined(CTP_ALLOC_TRACK_SIZE) && CTP_IS_HOST
+  ReportRuntimeLeaks("~IpcManager");
 #endif
 }
 
@@ -3126,13 +3203,36 @@ RouteResult IpcManager::RouteLocal(Future<Task> &future, bool force_enqueue) {
     return RouteResult::ExecHere;
   }
 
-  // Enqueue to the destination worker's lane
-  auto &dest_lane = worker_queues_->GetLane(dest_worker_id, 0);
-  bool was_empty = dest_lane.Empty();
-  dest_lane.Push(future);
-  if (was_empty) {
-    AwakenWorker(&dest_lane);
+  // Self-send deadlock avoidance: a worker force-enqueuing a subtask onto its
+  // OWN lane busy-spins in the WAIT_FOR_SPACE ring Push when the lane is full,
+  // and can never drain it — it IS the consumer, blocked here in Push rather
+  // than in its Run loop. Redirect to an alternate worker whose own thread
+  // drains it, converting the deadlock into transient backpressure. An earlier
+  // "only redirect to a non-full sibling" guard failed under the mmap-writeback
+  // storm (all lanes saturate → no non-full sibling → fell back to self-spin);
+  // redirect UNCONDITIONALLY — briefly spinning on a *sibling's* full lane is
+  // safe because that sibling's thread drains it. (generic/438: mmap read fault
+  // -> GetBlob -> bdev::AsyncRead -> SendIn all on the scheduler worker; the
+  // bdev subtask's predicted io_size is 0 so RuntimeMapTask routes it back to
+  // the scheduler worker = self.)
+  if (force_enqueue && worker && dest_worker_id == worker->GetId()) {
+    Worker *alt = scheduler_->PickAltWorker(dest_worker_id);
+    if (alt != nullptr) {
+      dest_worker_id = alt->GetId();
+    }
   }
+
+  // Enqueue to the destination worker's lane, then ALWAYS signal. Gating the
+  // wakeup on was_empty is the exact lost-wakeup race AwakenWorker's own
+  // comment warns against: the consumer can drain the lane and park in
+  // epoll_pwait2 in the window between our Empty() check and Push, so a
+  // "non-empty" observation skips a wakeup the worker actually needed. The
+  // extra SIGUSR1 is absorbed harmlessly by signalfd if the worker is already
+  // awake. (Surfaced as a permanent hang in generic/208 aio-dio once self-sent
+  // subtasks began routing to otherwise-idle I/O workers.)
+  auto &dest_lane = worker_queues_->GetLane(dest_worker_id, 0);
+  dest_lane.Push(future);
+  AwakenWorker(&dest_lane);
   return RouteResult::Local;
 }
 

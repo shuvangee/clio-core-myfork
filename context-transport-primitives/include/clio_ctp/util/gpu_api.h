@@ -368,6 +368,58 @@ class GpuApi {
 #endif
   }
 
+  /** Async memset on a stream. */
+  static void MemsetAsync(void *dst, int value, size_t size, void *stream) {
+#if CTP_ENABLE_ROCM
+    HIP_ERROR_CHECK(hipMemsetAsync(dst, value, size,
+                                   static_cast<hipStream_t>(stream)));
+#endif
+#if CTP_ENABLE_CUDA
+    CUDA_ERROR_CHECK(cudaMemsetAsync(dst, value, size,
+                                     static_cast<cudaStream_t>(stream)));
+#endif
+#if CTP_ENABLE_SYCL
+    if (stream) {
+      static_cast<sycl::queue *>(stream)->memset(dst, value, size);
+    }
+#endif
+  }
+
+  /** Non-blocking poll of a stream. Returns true once every operation
+   *  submitted to `stream` has completed, false while work is still in flight.
+   *  The "not ready" status is cleared so this is a pure query and never trips
+   *  a later error check. On a non-GPU build it returns true; under SYCL there
+   *  is no cheap non-blocking query, so it waits and then returns true. */
+  static bool StreamQuery(void *stream) {
+#if CTP_ENABLE_ROCM
+    hipError_t rc = hipStreamQuery(static_cast<hipStream_t>(stream));
+    if (rc == hipSuccess) return true;
+    if (rc == hipErrorNotReady) {
+      (void)hipGetLastError();
+      return false;
+    }
+    HIP_ERROR_CHECK(rc);
+    return true;
+#elif CTP_ENABLE_CUDA
+    cudaError_t rc = cudaStreamQuery(static_cast<cudaStream_t>(stream));
+    if (rc == cudaSuccess) return true;
+    if (rc == cudaErrorNotReady) {
+      (void)cudaGetLastError();
+      return false;
+    }
+    CUDA_ERROR_CHECK(rc);
+    return true;
+#elif CTP_ENABLE_SYCL
+    if (stream) {
+      static_cast<sycl::queue *>(stream)->wait_and_throw();
+    }
+    return true;
+#else
+    (void)stream;
+    return true;
+#endif
+  }
+
   /** Allocate device memory and copy host data into it. */
   template <typename T>
   static T *MallocAndCopy(const T *host_src, size_t copy_size,
