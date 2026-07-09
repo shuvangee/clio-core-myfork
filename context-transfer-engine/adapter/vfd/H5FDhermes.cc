@@ -35,9 +35,10 @@
  * Programmer:  Kimmy Mu
  *              March 2021
  *
- * Purpose: The clio file driver using only the HDF5 public API
- *          and buffer datasets in Clio buffering systems with
- *          multiple storage tiers.
+ * Purpose: An HDF5 Virtual File Driver that writes every byte through to an
+ *          authoritative on-disk native HDF5 file (so standard tools read it
+ *          live), while opening a CLIO CTE handle alongside as groundwork for a
+ *          future read/tiering cache.
  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -45,7 +46,6 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,23 +61,12 @@
 #include "clio_cte/core/core_client.h"
 #include <clio_ctp/util/logging.h>
 
-/**
- * Make this adapter use Clio.
- * Disabling will use POSIX.
- * */
-#define USE_HERMES
-
 /* The driver identification number, initialized at runtime */
 static hid_t H5FD_WRP_CTE_g = H5I_INVALID_HID;
 
 /* Identifiers for HDF5's error API */
 hid_t H5FDhermes_err_stack_g = H5I_INVALID_HID;
 hid_t H5FDhermes_err_class_g = H5I_INVALID_HID;
-
-/* File operations */
-#define OP_UNKNOWN 0
-#define OP_READ 1
-#define OP_WRITE 2
 
 /* POSIX I/O mode used as the third parameter to open/_open
  * when creating a new file (O_CREAT is set). */
@@ -95,23 +84,16 @@ hid_t H5FDhermes_err_class_g = H5I_INVALID_HID;
 extern "C" {
 #endif
 
-/* The description of a file/bucket belonging to this driver. */
+/* The description of a file belonging to this driver. */
 typedef struct H5FD_hermes_t {
-  H5FD_t pub;          /* public stuff, must be first           */
-  haddr_t eoa;         /* end of allocated region               */
-  haddr_t eof;         /* end of file; current file size        */
-  haddr_t pos;         /* current file I/O position             */
-  int op;              /* last operation                        */
-  hbool_t persistence; /* write to file name on close           */
-  int fd;              /* the CFS (CTE cache) descriptor         */
-  int posix_fd;        /* Model A: authoritative on-disk native file fd */
-  char *filename_;     /* the name of the file */
-  unsigned flags;      /* The flags passed from H5Fcreate/H5Fopen */
+  H5FD_t pub;      /* public stuff, must be first           */
+  haddr_t eoa;     /* end of allocated region               */
+  haddr_t eof;     /* end of file; current file size        */
+  int fd;          /* CTE cache handle (-1 if none this session) */
+  int posix_fd;    /* authoritative on-disk native file fd  */
+  char *filename_; /* the name of the file (NULL if empty)  */
+  unsigned flags;  /* the flags passed from H5Fcreate/H5Fopen */
 } H5FD_hermes_t;
-
-/* Driver-specific file access properties */
-typedef struct H5FD_hermes_fapl_t {
-} H5FD_hermes_fapl_t;
 
 /* Prototypes */
 static herr_t H5FD__hermes_term(void);
@@ -225,30 +207,29 @@ static herr_t H5FD__hermes_term(void) {
   /* Reset VFL ID */
   H5FD_WRP_CTE_g = H5I_INVALID_HID;
 
-  // TODO(llogan): Probably should add back at some point.
-  // HERMES->Finalize();
   return ret_value;
 } /* end H5FD__hermes_term() */
 
 /*-------------------------------------------------------------------------
  * Function:    H5FD__hermes_open
  *
- * Purpose:     Create and/or opens a bucket in Clio.
+ * Purpose:     Create and/or open a file. The authoritative store is a real
+ *              on-disk native HDF5 file; a CTE cache handle is opened alongside
+ *              as groundwork for a future read/tiering cache.
  *
- * Return:      Success:    A pointer to a new bucket data structure.
+ * Return:      Success:    A pointer to a new file data structure.
  *              Failure:    NULL
  *
  *-------------------------------------------------------------------------
  */
 static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr) {
+  (void)fapl_id;
+  (void)maxaddr;
   clio::cte::core::CLIO_CTE_CLIENT_INIT();
-  H5FD_hermes_t *file = NULL; /* clio VFD info          */
-  int fd = -1;
-  int o_flags = 0;
 
   /* Build the open flags */
-  o_flags = (H5F_ACC_RDWR & flags) ? O_RDWR : O_RDONLY;
+  int o_flags = (H5F_ACC_RDWR & flags) ? O_RDWR : O_RDONLY;
   if (H5F_ACC_TRUNC & flags) {
     o_flags |= O_TRUNC;
   }
@@ -259,32 +240,37 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
     o_flags |= O_EXCL;
   }
 
-  // Model A (2.1.b prototype): the AUTHORITATIVE store is a real on-disk native
-  // HDF5 file at the stripped path (clio::/tmp/foo.h5 -> /tmp/foo.h5), so
-  // standard tools (h5dump/h5ls) can read it live. CTE is a secondary cache.
+  // The AUTHORITATIVE store is a real on-disk native HDF5 file at the stripped
+  // path (clio::/tmp/foo.h5 -> /tmp/foo.h5), so standard tools (h5dump/h5ls)
+  // read it live.
   std::string native_path = clio::cae::StripClioPrefix(name);
-  int posix_fd = open(native_path.c_str(), o_flags,
-                      H5FD_WRP_CTE_POSIX_CREATE_MODE_RW);
+  int posix_fd =
+      open(native_path.c_str(), o_flags, H5FD_WRP_CTE_POSIX_CREATE_MODE_RW);
   if (posix_fd < 0) {
     // Fail-closed: no authoritative file => the open fails. We do not proceed
     // with a cache-only file.
     return nullptr;
   }
 
-#ifdef USE_HERMES
-  // Route the file through the context-filesystem chimod (cfs core) as the CTE
-  // cache tier. Best-effort: a cache-open failure must not sink the open, since
-  // the authoritative native file above already succeeded.
-  fd = CLIO_CTE_CFS->Open(name, o_flags, H5FD_WRP_CTE_POSIX_CREATE_MODE_RW);
+  // FUTURE (CTE tiering): open a CTE/CFS handle for this file so writes can
+  // populate a fast cache tier and reads can eventually be served from it.
+  // Today the handle is populated on write but NOT yet served on reads, so the
+  // open is best-effort: a cache-open failure must not sink the open (the
+  // authoritative native file already succeeded) -- fd == -1 just means "no
+  // cache this session".
+  int fd = CLIO_CTE_CFS->Open(name, o_flags, H5FD_WRP_CTE_POSIX_CREATE_MODE_RW);
   HLOG(kDebug, "");
-#else
-  fd = posix_fd;
-#endif
 
   /* Create the new file struct */
-  file = (H5FD_hermes_t *)calloc(1, sizeof(H5FD_hermes_t));
+  H5FD_hermes_t *file = (H5FD_hermes_t *)calloc(1, sizeof(H5FD_hermes_t));
   if (file == NULL) {
-    // TODO(llogan)
+    // Out of memory: release the handles we already opened instead of leaking
+    // them (and dereferencing a NULL file).
+    close(posix_fd);
+    if (fd >= 0) {
+      CLIO_CTE_CFS->Close(fd);
+    }
+    return nullptr;
   }
 
   /* Pack file */
@@ -293,11 +279,10 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
   }
   file->fd = fd;
   file->posix_fd = posix_fd;
-  file->op = OP_UNKNOWN;
   file->flags = flags;
 
-  // EOF is the authoritative on-disk size (durable across reopen/append),
-  // not a session-local counter or the cache's logical size.
+  // EOF is the authoritative on-disk size (durable across reopen/append), not a
+  // session-local counter or the cache's logical size.
   struct stat st;
   file->eof = (fstat(posix_fd, &st) == 0) ? (haddr_t)st.st_size : 0;
 
@@ -318,17 +303,18 @@ static herr_t H5FD__hermes_close(H5FD_t *_file) {
   H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
   herr_t ret_value = SUCCEED; /* Return value */
   assert(file);
-  // Model A: fsync + close the authoritative native file first — a successful
-  // close is a durability barrier (no pending dirty state), and the on-disk
-  // file is a complete valid native HDF5 image afterward.
+  // fsync + close the authoritative native file first -- a successful close is
+  // a durability barrier (no pending dirty state), and the on-disk file is a
+  // complete valid native HDF5 image afterward.
   if (file->posix_fd >= 0) {
     fsync(file->posix_fd);
     close(file->posix_fd);
   }
-#ifdef USE_HERMES
-  CLIO_CTE_CFS->Close(file->fd);
-  HLOG(kDebug, "");
-#endif
+  // Release the CTE cache handle, if this session had one.
+  if (file->fd >= 0) {
+    CLIO_CTE_CFS->Close(file->fd);
+    HLOG(kDebug, "");
+  }
   if (file->filename_) {
     free(file->filename_);
   }
@@ -339,8 +325,8 @@ static herr_t H5FD__hermes_close(H5FD_t *_file) {
 /*-------------------------------------------------------------------------
  * Function:    H5FD__hermes_cmp
  *
- * Purpose:     Compares two buckets belonging to this driver using an
- *              arbitrary (but consistent) ordering.
+ * Purpose:     Compares two files belonging to this driver using an arbitrary
+ *              (but consistent) ordering.
  *
  * Return:      Success:    A value like strcmp()
  *              Failure:    never fails (arguments were checked by the
@@ -351,11 +337,11 @@ static herr_t H5FD__hermes_close(H5FD_t *_file) {
 static int H5FD__hermes_cmp(const H5FD_t *_f1, const H5FD_t *_f2) {
   const H5FD_hermes_t *f1 = (const H5FD_hermes_t *)_f1;
   const H5FD_hermes_t *f2 = (const H5FD_hermes_t *)_f2;
-  int ret_value = 0;
-
-  ret_value = strcmp(f1->filename_, f2->filename_);
-
-  return ret_value;
+  // filename_ is only set for a non-empty name; guard against NULL so an
+  // empty-name file cannot crash strcmp.
+  const char *n1 = f1->filename_ ? f1->filename_ : "";
+  const char *n2 = f2->filename_ ? f2->filename_ : "";
+  return strcmp(n1, n2);
 } /* end H5FD__hermes_cmp() */
 
 /*-------------------------------------------------------------------------
@@ -370,20 +356,14 @@ static int H5FD__hermes_cmp(const H5FD_t *_f1, const H5FD_t *_f2) {
  */
 static herr_t H5FD__hermes_query(const H5FD_t *_file,
                                  unsigned long *flags /* out */) {
-  /* Set the VFL feature flags that this driver supports */
-  /* Notice: the Mirror VFD Writer currently uses only the clio driver as
-   * the underying driver -- as such, the Mirror VFD implementation copies
-   * these feature flags as its own. Any modifications made here must be
-   * reflected in H5FDmirror.c
-   * -- JOS 2020-01-13
-   */
-  herr_t ret_value = SUCCEED;
-
+  (void)_file;
+  // No feature flags are advertised yet (a dedicated change will advertise the
+  // sec2-compatible set). Returning 0 is conservative but disables HDF5's
+  // metadata-aggregation / data-sieve optimizations.
   if (flags) {
     *flags = 0;
-  } /* end if */
-
-  return ret_value;
+  }
+  return SUCCEED;
 } /* end H5FD__hermes_query() */
 
 /*-------------------------------------------------------------------------
@@ -399,13 +379,8 @@ static herr_t H5FD__hermes_query(const H5FD_t *_file,
  */
 static haddr_t H5FD__hermes_get_eoa(const H5FD_t *_file, H5FD_mem_t type) {
   (void)type;
-  haddr_t ret_value = HADDR_UNDEF;
-
   const H5FD_hermes_t *file = (const H5FD_hermes_t *)_file;
-
-  ret_value = file->eoa;
-
-  return ret_value;
+  return file->eoa;
 } /* end H5FD__hermes_get_eoa() */
 
 /*-------------------------------------------------------------------------
@@ -422,13 +397,9 @@ static haddr_t H5FD__hermes_get_eoa(const H5FD_t *_file, H5FD_mem_t type) {
 static herr_t H5FD__hermes_set_eoa(H5FD_t *_file, H5FD_mem_t type,
                                    haddr_t addr) {
   (void)type;
-  herr_t ret_value = SUCCEED;
-
   H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
-
   file->eoa = addr;
-
-  return ret_value;
+  return SUCCEED;
 } /* end H5FD__hermes_set_eoa() */
 
 /*-------------------------------------------------------------------------
@@ -445,24 +416,17 @@ static herr_t H5FD__hermes_set_eoa(H5FD_t *_file, H5FD_mem_t type,
  */
 static haddr_t H5FD__hermes_get_eof(const H5FD_t *_file, H5FD_mem_t type) {
   (void)type;
-  haddr_t ret_value = HADDR_UNDEF;
-
   const H5FD_hermes_t *file = (const H5FD_hermes_t *)_file;
-
-  ret_value = file->eof;
-
-  return ret_value;
+  return file->eof;
 } /* end H5FD__hermes_get_eof() */
 
 /*-------------------------------------------------------------------------
  * Function:    H5FD__hermes_read
  *
  * Purpose:     Reads SIZE bytes of data from FILE beginning at address ADDR
- *              into buffer BUF according to data transfer properties in
- *              DXPL_ID. Determine the number of file pages affected by this
- *              call from ADDR and SIZE. Utilize transfer buffer PAGE_BUF to
- *              read the data from Blobs. Exercise care for the first and last
- *              pages to prevent overwriting existing data.
+ *              into buffer BUF. Reads come from the authoritative native file;
+ *              a read of a region past the last byte ever written is
+ *              zero-filled (HDF5 treats the file as a flat byte array).
  *
  * Return:      Success:    SUCCEED. Result is stored in caller-supplied
  *                          buffer BUF.
@@ -475,36 +439,40 @@ static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
   (void)dxpl_id;
   (void)type;
   H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
-  herr_t ret_value = SUCCEED;
 
-  // Model A: read from the authoritative native file. (The CTE cache tier as a
-  // read fast-path is layered on in 2.1.c; correctness comes from native.)
+  // FUTURE (CTE read tier): consult the cache first and serve a hit from a fast
+  // tier, falling back to the native file on a miss (and populating on the
+  // way). This needs per-file tracking of which byte ranges are populated --
+  // the CFS chimod zero-fills holes and reports them as a full read, so a naive
+  // cache lookup could hand back stale zeros. Until that exists, reads come
+  // straight from the authoritative native file so correctness never depends on
+  // the cache.
   ssize_t count = pread(file->posix_fd, buf, size, static_cast<off_t>(addr));
   if (getenv("CLIO_VFD_DEBUG"))
     fprintf(stderr, "[vfd] READ  addr=%llu size=%llu got=%lld\n",
-            (unsigned long long)addr, (unsigned long long)size, (long long)count);
+            (unsigned long long)addr, (unsigned long long)size,
+            (long long)count);
   HLOG(kDebug, "");
 
-  // HDF5 treats the file as a flat byte array: a read of an allocated region
-  // that extends past the last byte ever written must come back zero-filled,
-  // not short. The chimod clamps reads to its logical size (POSIX EOF
-  // semantics), so zero-fill whatever tail it did not provide.
-  size_t got = (count > 0) ? static_cast<size_t>(count) : 0;
+  // Distinguish a genuine read error from EOF: a negative count is a failure
+  // and must NOT be masked as zero data; a short read (0 <= count < size) is
+  // EOF and the unread tail is zero-filled.
+  if (count < 0) {
+    return FAIL;
+  }
+  size_t got = static_cast<size_t>(count);
   if (got < size) {
     memset(static_cast<char *>(buf) + got, 0, size - got);
   }
-  return ret_value;
-} /* end H5FD__hermes_write() */
+  return SUCCEED;
+} /* end H5FD__hermes_read() */
 
 /*-------------------------------------------------------------------------
  * Function:    H5FD__hermes_write
  *
- * Purpose:     Writes SIZE bytes of data contained in buffer BUF to Clio
- *              buffering system according to data transfer properties in
- *              DXPL_ID. Determine the number of file pages affected by this
- *              call from ADDR and SIZE. Utilize transfer buffer PAGE_BUF to
- *              put the data into Blobs. Exercise care for the first and last
- *              pages to prevent overwriting existing data.
+ * Purpose:     Writes SIZE bytes of data from buffer BUF at file address ADDR.
+ *              The write is committed synchronously to the authoritative native
+ *              file; a short/failed write is fail-closed.
  *
  * Return:      SUCCEED/FAIL
  *
@@ -515,44 +483,39 @@ static herr_t H5FD__hermes_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
   (void)dxpl_id;
   (void)type;
   H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
-  herr_t ret_value = SUCCEED;
 
-  // Model A commit point: write-through to the authoritative native file,
-  // synchronously. A short/failed write is fail-closed (the on-disk image is
-  // the store of record).
+  // Commit point: write-through to the authoritative native file, synchronously.
   ssize_t count = pwrite(file->posix_fd, buf, size, static_cast<off_t>(addr));
   if (getenv("CLIO_VFD_DEBUG"))
     fprintf(stderr, "[vfd] WRITE addr=%llu size=%llu put=%lld\n",
-            (unsigned long long)addr, (unsigned long long)size, (long long)count);
+            (unsigned long long)addr, (unsigned long long)size,
+            (long long)count);
   if (count < 0 || static_cast<size_t>(count) < size) {
     return FAIL;
   }
 
-#ifdef USE_HERMES
-  // Populate the CTE cache tier best-effort; a cache failure must not fail the
-  // write, since the authoritative native write already succeeded.
-  CLIO_CTE_CFS->Pwrite(file->fd, buf, size, static_cast<off_t>(addr));
-  HLOG(kDebug, "");
-#endif
-  /* Track end-of-file so get_eof stays accurate within a session (HDF5
-   * checks it to validate file size; the chimod owns the durable size). */
+  // FUTURE (CTE tiering): populate the cache tier with these bytes. This is
+  // written today as groundwork but is NOT yet served on reads (see the read
+  // callback), so it is best-effort -- its failure never fails the
+  // authoritative write, and it is skipped when there is no cache handle.
+  if (file->fd >= 0) {
+    CLIO_CTE_CFS->Pwrite(file->fd, buf, size, static_cast<off_t>(addr));
+    HLOG(kDebug, "");
+  }
+
+  // Track end-of-file so get_eof stays accurate within a session (HDF5 checks
+  // it to validate file size).
   if ((haddr_t)(addr + size) > file->eof) {
     file->eof = (haddr_t)(addr + size);
   }
-  return ret_value;
+  return SUCCEED;
 } /* end H5FD__hermes_write() */
 
 /*
- * Stub routines for dynamic plugin loading
+ * Entry points for dynamic plugin loading.
  */
 H5PL_type_t H5PLget_plugin_type(void) { return H5PL_TYPE_VFD; }
 
 const void *H5PLget_plugin_info(void) { return &H5FD_hermes_g; }
-
-/** Initialize Clio */
-/*static __attribute__((constructor(101))) void init_hermes_in_vfd(void) {
-  std::cout << "IN VFD" << std::endl;
-  clio::cte::core::CLIO_CTE_CLIENT_INIT();
-}*/
 
 } // extern C
