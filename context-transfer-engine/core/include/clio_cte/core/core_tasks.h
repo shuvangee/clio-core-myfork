@@ -2343,7 +2343,13 @@ struct GetTagSizeTask : public clio::run::Task {
         tag_size_(0),
         ctime_(0),
         mtime_(0),
-        atime_(0) {}
+        atime_(0) {
+    // Seed the aggregate accumulator as "not found" so a Broadcast GetTagSize
+    // reports rc=1 only when EVERY container missed the tag; AggregateOut flips
+    // it to 0 as soon as any container reports a share (see AggregateOut). A
+    // locally-executed task overwrites this in Runtime::GetTagSize.
+    return_code_.store(1);
+  }
 
   // Emplace constructor
   CTP_CROSS_FUN explicit GetTagSizeTask(const clio::run::TaskId &task_id,
@@ -2361,6 +2367,8 @@ struct GetTagSizeTask : public clio::run::Task {
     method_ = Method::kGetTagSize;
     task_flags_.Clear();
     pool_query_ = pool_query;
+    // See the SHM constructor: seed "not found" for the Broadcast aggregate.
+    return_code_.store(1);
   }
 
   /**
@@ -2395,13 +2403,48 @@ struct GetTagSizeTask : public clio::run::Task {
   }
 
   /**
-   * AggregateOut results from a replica task
-   * Sums the tag_size_ values from multiple nodes; keeps the newest timestamps.
+   * AggregateOut results from a replica task.
+   *
+   * GetTagSize is a Broadcast SUM: the tag's bytes are spread across every
+   * container that `HashBlobToContainer` routed one of its blobs to, and each
+   * such container carries a TagInfo holding its share. A container that holds
+   * NONE of the tag's blobs has no local TagInfo and legitimately returns
+   * return_code_=1 ("not found here") with tag_size_=0 — that is a zero
+   * contribution to the sum, NOT an error for the whole query.
+   *
+   * The base Task::AggregateOut propagates any non-zero replica return code onto
+   * the aggregate, which poisoned the result: on a multi-node cluster the
+   * reader's own container often holds none of a just-written file's blobs, so
+   * its rc=1 replica made the aggregate rc=1 even though another container
+   * returned the real size. CfsIo::Open only trusts the size when rc==0, so it
+   * discarded the correct size and every cross-node read of that file returned
+   * 0 bytes (issue #714, Bug 2).
+   *
+   * Correct semantics — "found if ANY": the aggregate succeeds (rc=0) if at
+   * least one replica found the tag, summing the found replicas' shares; it
+   * stays "not found" (rc=1) only if EVERY replica missed (e.g. the tag was
+   * deleted cluster-wide — readdir's liveness check relies on this). The origin
+   * accumulator is seeded rc=1 in the constructors so that this holds
+   * regardless of the order replicas are aggregated in.
    */
   void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
-    Task::AggregateOut(other_base);
+    if (other_base.IsNull()) return;
     auto replica = other_base.template Cast<GetTagSizeTask>();
+    // Keep the base completer bookkeeping, but NOT its return-code poisoning.
+    SetCompleter(other_base->GetCompleter());
+    // Sum each container's share. A container that holds none of the tag's
+    // blobs reports tag_size_=0, so summing it is a no-op — the total is the
+    // sum of the found containers' shares.
     tag_size_ += replica->tag_size_;
+    // "found if ANY": the tag exists cluster-wide if at least one container has
+    // a local TagInfo (rc==0). Clear the "not found" seed as soon as a replica
+    // reports the tag; a not-found replica (rc=1) must NEVER poison the
+    // aggregate (that discarded correctly-summed sizes on cross-node reads --
+    // #714). rc stays 1 only if every container missed (tag deleted
+    // cluster-wide), which readdir's liveness check relies on.
+    if (replica->GetReturnCode() == 0) {
+      SetReturnCode(0);
+    }
     if (replica->ctime_ > ctime_) ctime_ = replica->ctime_;
     if (replica->mtime_ > mtime_) mtime_ = replica->mtime_;
     if (replica->atime_ > atime_) atime_ = replica->atime_;
