@@ -51,6 +51,8 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 
 // Forward declarations to avoid circular dependency
 namespace clio::cte::core {
@@ -292,10 +294,19 @@ private:
   ctp::priv::unordered_map_ll<std::string, std::shared_ptr<BlobInfo>>
       tag_blob_name_to_info_; // "tag_id.blob_name" -> BlobInfo
 
-  // In-memory reverse keyword index. PutBlob refreshes the complete document,
-  // DelBlob removes it, and keyword search reads a consistent candidate
-  // snapshot without scanning or rereading every blob.
+  // In-memory reverse keyword index. Writes mark documents dirty so repeated
+  // partial writes are coalesced into one full refresh immediately before
+  // search. DelBlob removes both the document and pending refresh.
   KeywordIndex keyword_index_;
+
+  /** Identity and metadata needed to refresh one dirty index document. */
+  struct DirtyKeywordBlob {
+    TagId tag_id_;
+    std::string blob_name_;
+  };
+
+  std::mutex keyword_index_dirty_mutex_;
+  std::unordered_map<std::string, DirtyKeywordBlob> keyword_index_dirty_;
 
   // Secondary search index: absolute resolved tag name -> tag id. Lets TagQuery
   // answer regex queries via a trigram prefilter instead of scanning every tag
@@ -626,6 +637,27 @@ private:
                                             const std::string &blob_name,
                                             const BlobInfo &blob_info,
                                             bool &indexed);
+
+  /**
+   * Mark a modified blob for a coalesced keyword-index refresh.
+   *
+   * @param tag_id Tag that owns the blob.
+   * @param blob_name Blob name within the tag.
+   */
+  void MarkKeywordIndexDirty(const TagId &tag_id,
+                             const std::string &blob_name);
+
+  /**
+   * Remove a blob from the pending keyword-index refresh set.
+   *
+   * @param tag_id Tag that owns the blob.
+   * @param blob_name Blob name within the tag.
+   */
+  void ClearKeywordIndexDirty(const TagId &tag_id,
+                              const std::string &blob_name);
+
+  /** Refresh every dirty blob once before serving a keyword query. */
+  clio::run::TaskResume RefreshDirtyKeywordIndex();
 
   /**
    * Rebuild the in-memory keyword index from restored blob metadata and data.

@@ -536,6 +536,10 @@ Runtime::~Runtime() {
   tag_id_to_info_.clear();
   tag_blob_name_to_info_.clear();
   keyword_index_.Clear();
+  {
+    std::lock_guard<std::mutex> lock(keyword_index_dirty_mutex_);
+    keyword_index_dirty_.clear();
+  }
   storage_devices_.clear();
   target_locks_.clear();
   tag_locks_.clear();
@@ -564,6 +568,10 @@ clio::run::TaskResume Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task)
     tag_id_to_info_.clear();
     tag_blob_name_to_info_.clear();
     keyword_index_.Clear();
+    {
+      std::lock_guard<std::mutex> lock(keyword_index_dirty_mutex_);
+      keyword_index_dirty_.clear();
+    }
 
     // Reset atomic counters
     next_tag_id_minor_.store(1);
@@ -1358,16 +1366,7 @@ clio::run::TaskResume Runtime::PutBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     LogTelemetry(CteOp::kPutBlob, offset, size, tag_id, now,
                  blob_info_ptr->last_read_);
     GpuCacheOnPutBlob(tag_id, blob_name, *blob_info_ptr);
-    bool indexed = false;
-    CLIO_CO_AWAIT(
-        RefreshKeywordIndex(tag_id, blob_name, *blob_info_ptr, indexed));
-    if (!indexed) {
-      keyword_index_.Remove(tag_id.major_, tag_id.minor_, blob_name);
-      HLOG(kWarning,
-           "PutBlob: keyword index refresh failed for blob '{}'; "
-           "removed stale index entry",
-           blob_name);
-    }
+    MarkKeywordIndexDirty(tag_id, blob_name);
     task->return_code_ = 0;
   } catch (const std::exception &e) {
     HLOG(kError, "PutBlob failed with exception: {}", e.what());
@@ -1744,6 +1743,7 @@ clio::run::TaskResume Runtime::DelBlob(clio::run::shared_ptr<DelBlobTask> &task)
       tag_blob_name_to_info_.erase(compound_key);
     }
     keyword_index_.Remove(tag_id.major_, tag_id.minor_, blob_name);
+    ClearKeywordIndexDirty(tag_id, blob_name);
 
     // Step 6: Log telemetry for DelBlob operation
     auto now = GetCurrentTimeNs();
@@ -4264,6 +4264,59 @@ clio::run::TaskResume Runtime::RefreshKeywordIndex(const TagId &tag_id,
   CLIO_TASK_BODY_END
 }
 
+void Runtime::MarkKeywordIndexDirty(const TagId &tag_id,
+                                    const std::string &blob_name) {
+  const std::string key = std::to_string(tag_id.major_) + "." +
+                          std::to_string(tag_id.minor_) + "." + blob_name;
+  std::lock_guard<std::mutex> lock(keyword_index_dirty_mutex_);
+  keyword_index_dirty_.insert_or_assign(key,
+                                        DirtyKeywordBlob{tag_id, blob_name});
+}
+
+void Runtime::ClearKeywordIndexDirty(const TagId &tag_id,
+                                     const std::string &blob_name) {
+  const std::string key = std::to_string(tag_id.major_) + "." +
+                          std::to_string(tag_id.minor_) + "." + blob_name;
+  std::lock_guard<std::mutex> lock(keyword_index_dirty_mutex_);
+  keyword_index_dirty_.erase(key);
+}
+
+clio::run::TaskResume Runtime::RefreshDirtyKeywordIndex() {
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
+#endif
+  CLIO_TASK_BODY_BEGIN
+  std::vector<DirtyKeywordBlob> dirty_blobs;
+  {
+    std::lock_guard<std::mutex> lock(keyword_index_dirty_mutex_);
+    dirty_blobs.reserve(keyword_index_dirty_.size());
+    for (const auto &entry : keyword_index_dirty_) {
+      dirty_blobs.push_back(entry.second);
+    }
+    keyword_index_dirty_.clear();
+  }
+
+  for (const auto &dirty : dirty_blobs) {
+    const std::string key = std::to_string(dirty.tag_id_.major_) + "." +
+                            std::to_string(dirty.tag_id_.minor_) + "." +
+                            dirty.blob_name_;
+    std::shared_ptr<BlobInfo> blob_info = tag_blob_name_to_info_.get(key);
+    if (blob_info == nullptr) {
+      keyword_index_.Remove(dirty.tag_id_.major_, dirty.tag_id_.minor_,
+                            dirty.blob_name_);
+      continue;
+    }
+    bool indexed = false;
+    CLIO_CO_AWAIT(RefreshKeywordIndex(dirty.tag_id_, dirty.blob_name_,
+                                      *blob_info, indexed));
+    if (!indexed) {
+      MarkKeywordIndexDirty(dirty.tag_id_, dirty.blob_name_);
+    }
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 clio::run::TaskResume Runtime::RebuildKeywordIndex(std::size_t &indexed_count) {
 #ifdef CLIO_ENABLE_BOOST_COROUTINES
   clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
@@ -4276,6 +4329,10 @@ clio::run::TaskResume Runtime::RebuildKeywordIndex(std::size_t &indexed_count) {
   };
 
   keyword_index_.Clear();
+  {
+    std::lock_guard<std::mutex> lock(keyword_index_dirty_mutex_);
+    keyword_index_dirty_.clear();
+  }
   indexed_count = 0;
   std::vector<RestoredBlob> restored_blobs;
   tag_blob_name_to_info_.for_each(
@@ -4813,9 +4870,13 @@ clio::run::TaskResume Runtime::BlobQuery(clio::run::shared_ptr<BlobQueryTask> &t
 
 clio::run::TaskResume Runtime::SemanticSearch(
     clio::run::shared_ptr<SemanticSearchTask> &task) {
+#ifdef CLIO_ENABLE_BOOST_COROUTINES
+  clio::run::shared_ptr<clio::run::Task> cur_task = clio::run::GetCurrentTask();
+#endif
   CLIO_TASK_BODY_BEGIN
   task->results_.clear();
   task->return_code_ = 0;
+  CLIO_CO_AWAIT(RefreshDirtyKeywordIndex());
 
   std::string tag_regex_str = task->tag_regex_.str();
   std::string blob_regex_str = task->blob_regex_.str();
