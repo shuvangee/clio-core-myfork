@@ -61,7 +61,15 @@ jobs:
               # FUSE backend + ELF interception headers (libelf/HDF5 already in image)
               apt-get update -qq
               apt-get install -y -qq libfuse3-dev fuse3 pkg-config libelf-dev
+              # h5py for the VOL compat suite, SOURCE-built (--no-binary) against
+              # the image HDF5 (/usr/local, 2.1.1) so the connector loads into
+              # h5py. A PyPI wheel bundles its own libhdf5 and cannot load a VOL
+              # built against the system HDF5. Pin the suite to this interpreter
+              # via -DPython3_EXECUTABLE below.
+              HDF5_DIR=/usr/local /usr/bin/python3 -m pip install \
+                --break-system-packages --no-binary=h5py h5py numpy
               cmake -B build-adapters \
+                -DPython3_EXECUTABLE=/usr/bin/python3 \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCLIO_CORE_ENABLE_RUNTIME=ON \
                 -DCLIO_CORE_ENABLE_CTE=ON \
@@ -151,6 +159,7 @@ jobs:
           export PKG_CONFIG_PATH="${CONDA_PREFIX}/lib/pkgconfig:${CONDA_PREFIX}/share/pkgconfig:/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           cmake -B build-adapters \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DPython3_EXECUTABLE="${CONDA_PREFIX}/bin/python3" \
             -DSITE="macos-15" \
             -DBUILDNAME="adapters/cnd/d" \
             -DCLIO_CORE_ENABLE_RUNTIME=ON \
@@ -180,6 +189,10 @@ jobs:
             eval "$(conda shell.bash hook)"
           fi
           conda activate iowarp
+          # h5py for the VOL compat suite, source-built against the conda HDF5
+          # the VOL links (a wheel's bundled libhdf5 can't load the connector).
+          HDF5_DIR="$CONDA_PREFIX" "${CONDA_PREFIX}/bin/python3" -m pip install \
+            --no-binary=h5py h5py numpy
           ctest --test-dir build-adapters --output-on-failure \
             --timeout 180 --repeat until-pass:2 \
             -R "hdf5_vol" -LE "docker|ollama"
@@ -265,4 +278,9 @@ jobs:
           }
           Write-Host "OK: $exe present (WinFsp FUSE path compiled and linked)"
       - name: Run adapter tests
-        run: ctest --test-dir build --build-config Debug --output-on-failure --timeout 120 -R "hdf5_vol|fuse" -E "copy_workspace" -LE "docker|ollama"
+        # The Python VOL compat suite (cte_hdf5_vol_compat_suite) needs h5py to
+        # load the connector, which requires h5py built against the SAME hdf5.dll
+        # as the VOL — impractical on Windows (debug/release CRT split + DLL
+        # discovery). The MSVC-built C++ VOL unit tests (cte_hdf5_vol_*) above are
+        # the Windows VOL coverage; exclude the compat suite here.
+        run: ctest --test-dir build --build-config Debug --output-on-failure --timeout 120 -R "hdf5_vol|fuse" -E "copy_workspace|compat_suite" -LE "docker|ollama"

@@ -21,7 +21,7 @@ target_include_directories(test_hdf5_vol_adapter PRIVATE
 )
 
 target_link_libraries(test_hdf5_vol_adapter
-    iowarp_hdf5_vol
+    clio_hdf5_vol
     ctp::cxx
     ${HDF5_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
@@ -76,7 +76,7 @@ target_include_directories(test_hdf5_vol_io PRIVATE
 )
 
 target_link_libraries(test_hdf5_vol_io
-    iowarp_hdf5_vol
+    clio_hdf5_vol
     clio_cte_core_runtime
     clio_cte_core_client
     clio::run::admin_runtime
@@ -117,3 +117,33 @@ install(
     TARGETS test_hdf5_vol_adapter test_hdf5_vol_io
     RUNTIME DESTINATION bin
 )
+
+# ---------------------------------------------------------------------------
+# Differential VOL compatibility suite (Python). Native VOL is the oracle;
+# each feature case is written/read through the clio VOL and compared to
+# native, plus h5diff/h5dump. Unlike the C++ unit tests above, this exercises
+# real data round-trips end to end and REQUIRES a running clio_run — the suite
+# starts/stops its own (pkill + start), so it must run alone (RUN_SERIAL).
+#
+# Runs in HONEST mode (no --expect-fail allowlist): it reports the VOL's real
+# compatibility state rather than masking gaps, so any future regression fails the
+# test. Run it for the authoritative, always-current status; do not rely on numbers
+# copied into comments/prose.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    add_test(NAME cte_hdf5_vol_compat_suite
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/benchmarks/hdf5-ingest/vol_compat_suite.py
+            --bin $<TARGET_FILE_DIR:clio_hdf5_vol>
+            --out ${CMAKE_CURRENT_BINARY_DIR}/vol_compat_results.json
+    )
+    set_tests_properties(cte_hdf5_vol_compat_suite PROPERTIES
+        TIMEOUT 900
+        RUN_SERIAL TRUE
+        RESOURCE_LOCK "clio_runtime"
+        LABELS "integration;adapter;hdf5_vol;compat;cte"
+        ENVIRONMENT "CLIO_HOME_DIR=$ENV{HOME};LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    )
+else()
+    message(STATUS "hdf5_vol: Python3 not found — skipping VOL compat suite test")
+endif()
