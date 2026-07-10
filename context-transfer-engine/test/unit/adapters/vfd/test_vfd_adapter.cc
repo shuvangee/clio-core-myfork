@@ -36,7 +36,7 @@
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/bdev/bdev_client.h"
 #include "clio_cte/core/core_client.h"
-#include "adapter/vfd/H5FDhermes.h"
+#include "adapter/vfd/H5FDclio.h"
 
 namespace {
 const char *kBackend = "/tmp/clio_cte_vfd_test.dat";
@@ -242,8 +242,8 @@ int main() {
     return 1;
   }
 
-  hid_t driver = H5FD_hermes_init();
-  CHECK(driver >= 0, "H5FD_hermes_init");
+  hid_t driver = H5FD_clio_init();
+  CHECK(driver >= 0, "H5FD_clio_init");
   hid_t fapl = ClioFapl(driver);
   CHECK(fapl >= 0, "build clio FAPL");
   std::remove(kNativeFile);

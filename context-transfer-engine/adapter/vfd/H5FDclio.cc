@@ -55,25 +55,25 @@
 #include <unistd.h>
 
 /* HDF5 header for dynamic plugin loading */
-#include "H5FDhermes.h" /* Clio file driver     */
+#include "H5FDclio.h" /* Clio file driver     */
 #include "H5PLextern.h"
 #include "adapter/cfs/cfs_io.h"
 #include "clio_cte/core/core_client.h"
 #include <clio_ctp/util/logging.h>
 
 /* The driver identification number, initialized at runtime */
-static hid_t H5FD_WRP_CTE_g = H5I_INVALID_HID;
+static hid_t H5FD_CLIO_g = H5I_INVALID_HID;
 
 /* Identifiers for HDF5's error API */
-hid_t H5FDhermes_err_stack_g = H5I_INVALID_HID;
-hid_t H5FDhermes_err_class_g = H5I_INVALID_HID;
+hid_t H5FDclio_err_stack_g = H5I_INVALID_HID;
+hid_t H5FDclio_err_class_g = H5I_INVALID_HID;
 
 /* POSIX I/O mode used as the third parameter to open/_open
  * when creating a new file (O_CREAT is set). */
 #if defined(H5_HAVE_WIN32_API)
-#define H5FD_WRP_CTE_POSIX_CREATE_MODE_RW (_S_IREAD | _S_IWRITE)
+#define H5FD_CLIO_POSIX_CREATE_MODE_RW (_S_IREAD | _S_IWRITE)
 #else
-#define H5FD_WRP_CTE_POSIX_CREATE_MODE_RW 0666
+#define H5FD_CLIO_POSIX_CREATE_MODE_RW 0666
 #endif
 
 #define MAXADDR (((haddr_t)1 << (8 * sizeof(off_t) - 1)) - 1)
@@ -85,7 +85,7 @@ extern "C" {
 #endif
 
 /* The description of a file belonging to this driver. */
-typedef struct H5FD_hermes_t {
+typedef struct H5FD_clio_t {
   H5FD_t pub;      /* public stuff, must be first           */
   haddr_t eoa;     /* end of allocated region               */
   haddr_t eof;     /* end of file; current file size        */
@@ -93,31 +93,31 @@ typedef struct H5FD_hermes_t {
   int posix_fd;    /* authoritative on-disk native file fd  */
   char *filename_; /* the name of the file (NULL if empty)  */
   unsigned flags;  /* the flags passed from H5Fcreate/H5Fopen */
-} H5FD_hermes_t;
+} H5FD_clio_t;
 
 /* Prototypes */
-static herr_t H5FD__hermes_term(void);
-static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
+static herr_t H5FD__clio_term(void);
+static H5FD_t *H5FD__clio_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr);
-static herr_t H5FD__hermes_close(H5FD_t *_file);
-static int H5FD__hermes_cmp(const H5FD_t *_f1, const H5FD_t *_f2);
-static herr_t H5FD__hermes_query(const H5FD_t *_f1, unsigned long *flags);
-static haddr_t H5FD__hermes_get_eoa(const H5FD_t *_file, H5FD_mem_t type);
-static herr_t H5FD__hermes_set_eoa(H5FD_t *_file, H5FD_mem_t type,
+static herr_t H5FD__clio_close(H5FD_t *_file);
+static int H5FD__clio_cmp(const H5FD_t *_f1, const H5FD_t *_f2);
+static herr_t H5FD__clio_query(const H5FD_t *_f1, unsigned long *flags);
+static haddr_t H5FD__clio_get_eoa(const H5FD_t *_file, H5FD_mem_t type);
+static herr_t H5FD__clio_set_eoa(H5FD_t *_file, H5FD_mem_t type,
                                    haddr_t addr);
-static haddr_t H5FD__hermes_get_eof(const H5FD_t *_file, H5FD_mem_t type);
-static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t fapl_id,
+static haddr_t H5FD__clio_get_eof(const H5FD_t *_file, H5FD_mem_t type);
+static herr_t H5FD__clio_read(H5FD_t *_file, H5FD_mem_t type, hid_t fapl_id,
                                 haddr_t addr, size_t size, void *buf);
-static herr_t H5FD__hermes_write(H5FD_t *_file, H5FD_mem_t type, hid_t fapl_id,
+static herr_t H5FD__clio_write(H5FD_t *_file, H5FD_mem_t type, hid_t fapl_id,
                                  haddr_t addr, size_t size, const void *buf);
 
-static const H5FD_class_t H5FD_hermes_g = {
+static const H5FD_class_t H5FD_clio_g = {
     H5FD_CLASS_VERSION,   /* struct version       */
-    H5FD_WRP_CTE_VALUE,   /* value                */
-    H5FD_WRP_CTE_NAME,    /* name                 */
+    H5FD_CLIO_VALUE,   /* value                */
+    H5FD_CLIO_NAME,    /* name                 */
     MAXADDR,              /* maxaddr              */
     H5F_CLOSE_STRONG,     /* fc_degree            */
-    H5FD__hermes_term,    /* terminate            */
+    H5FD__clio_term,    /* terminate            */
     NULL,                 /* sb_size              */
     NULL,                 /* sb_encode            */
     NULL,                 /* sb_decode            */
@@ -128,19 +128,19 @@ static const H5FD_class_t H5FD_hermes_g = {
     0,                    /* dxpl_size            */
     NULL,                 /* dxpl_copy            */
     NULL,                 /* dxpl_free            */
-    H5FD__hermes_open,    /* open                 */
-    H5FD__hermes_close,   /* close                */
-    H5FD__hermes_cmp,     /* cmp                  */
-    H5FD__hermes_query,   /* query                */
+    H5FD__clio_open,    /* open                 */
+    H5FD__clio_close,   /* close                */
+    H5FD__clio_cmp,     /* cmp                  */
+    H5FD__clio_query,   /* query                */
     NULL,                 /* get_type_map         */
     NULL,                 /* alloc                */
     NULL,                 /* free                 */
-    H5FD__hermes_get_eoa, /* get_eoa              */
-    H5FD__hermes_set_eoa, /* set_eoa              */
-    H5FD__hermes_get_eof, /* get_eof              */
+    H5FD__clio_get_eoa, /* get_eoa              */
+    H5FD__clio_set_eoa, /* set_eoa              */
+    H5FD__clio_get_eof, /* get_eof              */
     NULL,                 /* get_handle           */
-    H5FD__hermes_read,    /* read                 */
-    H5FD__hermes_write,   /* write                */
+    H5FD__clio_read,    /* read                 */
+    H5FD__clio_write,   /* write                */
     NULL,                 /* read_vector          */
     NULL,                 /* write_vector         */
     NULL,                 /* read_selection       */
@@ -155,7 +155,7 @@ static const H5FD_class_t H5FD_hermes_g = {
 };
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD_hermes_init
+ * Function:    H5FD_clio_init
  *
  * Purpose:     Initialize this driver by registering the driver with the
  *              library.
@@ -165,20 +165,20 @@ static const H5FD_class_t H5FD_hermes_g = {
  *
  *-------------------------------------------------------------------------
  */
-hid_t H5FD_hermes_init(void) {
+hid_t H5FD_clio_init(void) {
   hid_t ret_value = H5I_INVALID_HID; /* Return value */
 
-  if (H5I_VFL != H5Iget_type(H5FD_WRP_CTE_g)) {
-    H5FD_WRP_CTE_g = H5FDregister(&H5FD_hermes_g);
+  if (H5I_VFL != H5Iget_type(H5FD_CLIO_g)) {
+    H5FD_CLIO_g = H5FDregister(&H5FD_clio_g);
   }
 
   /* Set return value */
-  ret_value = H5FD_WRP_CTE_g;
+  ret_value = H5FD_CLIO_g;
   return ret_value;
-} /* end H5FD_hermes_init() */
+} /* end H5FD_clio_init() */
 
 /*---------------------------------------------------------------------------
- * Function:    H5FD__hermes_term
+ * Function:    H5FD__clio_term
  *
  * Purpose:     Shut down the VFD
  *
@@ -186,32 +186,32 @@ hid_t H5FD_hermes_init(void) {
  *
  *---------------------------------------------------------------------------
  */
-static herr_t H5FD__hermes_term(void) {
+static herr_t H5FD__clio_term(void) {
   herr_t ret_value = SUCCEED;
 
   /* Unregister from HDF5 error API */
-  if (H5FDhermes_err_class_g >= 0) {
-    if (H5Eunregister_class(H5FDhermes_err_class_g) < 0) {
+  if (H5FDclio_err_class_g >= 0) {
+    if (H5Eunregister_class(H5FDclio_err_class_g) < 0) {
       // TODO(llogan)
     }
 
     /* Destroy the error stack */
-    if (H5Eclose_stack(H5FDhermes_err_stack_g) < 0) {
+    if (H5Eclose_stack(H5FDclio_err_stack_g) < 0) {
       // TODO(llogan)
     } /* end if */
 
-    H5FDhermes_err_stack_g = H5I_INVALID_HID;
-    H5FDhermes_err_class_g = H5I_INVALID_HID;
+    H5FDclio_err_stack_g = H5I_INVALID_HID;
+    H5FDclio_err_class_g = H5I_INVALID_HID;
   }
 
   /* Reset VFL ID */
-  H5FD_WRP_CTE_g = H5I_INVALID_HID;
+  H5FD_CLIO_g = H5I_INVALID_HID;
 
   return ret_value;
-} /* end H5FD__hermes_term() */
+} /* end H5FD__clio_term() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_open
+ * Function:    H5FD__clio_open
  *
  * Purpose:     Create and/or open a file. The authoritative store is a real
  *              on-disk native HDF5 file; a CTE cache handle is opened alongside
@@ -222,7 +222,7 @@ static herr_t H5FD__hermes_term(void) {
  *
  *-------------------------------------------------------------------------
  */
-static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
+static H5FD_t *H5FD__clio_open(const char *name, unsigned flags,
                                  hid_t fapl_id, haddr_t maxaddr) {
   (void)fapl_id;
   (void)maxaddr;
@@ -245,7 +245,7 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
   // read it live.
   std::string native_path = clio::cae::StripClioPrefix(name);
   int posix_fd =
-      open(native_path.c_str(), o_flags, H5FD_WRP_CTE_POSIX_CREATE_MODE_RW);
+      open(native_path.c_str(), o_flags, H5FD_CLIO_POSIX_CREATE_MODE_RW);
   if (posix_fd < 0) {
     // Fail-closed: no authoritative file => the open fails. We do not proceed
     // with a cache-only file.
@@ -258,11 +258,11 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
   // open is best-effort: a cache-open failure must not sink the open (the
   // authoritative native file already succeeded) -- fd == -1 just means "no
   // cache this session".
-  int fd = CLIO_CTE_CFS->Open(name, o_flags, H5FD_WRP_CTE_POSIX_CREATE_MODE_RW);
+  int fd = CLIO_CTE_CFS->Open(name, o_flags, H5FD_CLIO_POSIX_CREATE_MODE_RW);
   HLOG(kDebug, "");
 
   /* Create the new file struct */
-  H5FD_hermes_t *file = (H5FD_hermes_t *)calloc(1, sizeof(H5FD_hermes_t));
+  H5FD_clio_t *file = (H5FD_clio_t *)calloc(1, sizeof(H5FD_clio_t));
   if (file == NULL) {
     // Out of memory: release the handles we already opened instead of leaking
     // them (and dereferencing a NULL file).
@@ -287,10 +287,10 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
   file->eof = (fstat(posix_fd, &st) == 0) ? (haddr_t)st.st_size : 0;
 
   return (H5FD_t *)file;
-} /* end H5FD__hermes_open() */
+} /* end H5FD__clio_open() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_close
+ * Function:    H5FD__clio_close
  *
  * Purpose:     Closes an HDF5 file.
  *
@@ -299,8 +299,8 @@ static H5FD_t *H5FD__hermes_open(const char *name, unsigned flags,
  *
  *-------------------------------------------------------------------------
  */
-static herr_t H5FD__hermes_close(H5FD_t *_file) {
-  H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
+static herr_t H5FD__clio_close(H5FD_t *_file) {
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
   herr_t ret_value = SUCCEED; /* Return value */
   assert(file);
   // fsync + close the authoritative native file first -- a successful close is
@@ -320,10 +320,10 @@ static herr_t H5FD__hermes_close(H5FD_t *_file) {
   }
   free(file);
   return ret_value;
-} /* end H5FD__hermes_close() */
+} /* end H5FD__clio_close() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_cmp
+ * Function:    H5FD__clio_cmp
  *
  * Purpose:     Compares two files belonging to this driver using an arbitrary
  *              (but consistent) ordering.
@@ -334,18 +334,18 @@ static herr_t H5FD__hermes_close(H5FD_t *_file) {
  *
  *-------------------------------------------------------------------------
  */
-static int H5FD__hermes_cmp(const H5FD_t *_f1, const H5FD_t *_f2) {
-  const H5FD_hermes_t *f1 = (const H5FD_hermes_t *)_f1;
-  const H5FD_hermes_t *f2 = (const H5FD_hermes_t *)_f2;
+static int H5FD__clio_cmp(const H5FD_t *_f1, const H5FD_t *_f2) {
+  const H5FD_clio_t *f1 = (const H5FD_clio_t *)_f1;
+  const H5FD_clio_t *f2 = (const H5FD_clio_t *)_f2;
   // filename_ is only set for a non-empty name; guard against NULL so an
   // empty-name file cannot crash strcmp.
   const char *n1 = f1->filename_ ? f1->filename_ : "";
   const char *n2 = f2->filename_ ? f2->filename_ : "";
   return strcmp(n1, n2);
-} /* end H5FD__hermes_cmp() */
+} /* end H5FD__clio_cmp() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_query
+ * Function:    H5FD__clio_query
  *
  * Purpose:     Set the flags that this VFL driver is capable of supporting.
  *              (listed in H5FDpublic.h)
@@ -354,7 +354,7 @@ static int H5FD__hermes_cmp(const H5FD_t *_f1, const H5FD_t *_f2) {
  *
  *-------------------------------------------------------------------------
  */
-static herr_t H5FD__hermes_query(const H5FD_t *_file,
+static herr_t H5FD__clio_query(const H5FD_t *_file,
                                  unsigned long *flags /* out */) {
   (void)_file;
   // No feature flags are advertised yet (a dedicated change will advertise the
@@ -364,10 +364,10 @@ static herr_t H5FD__hermes_query(const H5FD_t *_file,
     *flags = 0;
   }
   return SUCCEED;
-} /* end H5FD__hermes_query() */
+} /* end H5FD__clio_query() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_get_eoa
+ * Function:    H5FD__clio_get_eoa
  *
  * Purpose:     Gets the end-of-address marker for the file. The EOA marker
  *              is the first address past the last byte allocated in the
@@ -377,14 +377,14 @@ static herr_t H5FD__hermes_query(const H5FD_t *_file,
  *
  *-------------------------------------------------------------------------
  */
-static haddr_t H5FD__hermes_get_eoa(const H5FD_t *_file, H5FD_mem_t type) {
+static haddr_t H5FD__clio_get_eoa(const H5FD_t *_file, H5FD_mem_t type) {
   (void)type;
-  const H5FD_hermes_t *file = (const H5FD_hermes_t *)_file;
+  const H5FD_clio_t *file = (const H5FD_clio_t *)_file;
   return file->eoa;
-} /* end H5FD__hermes_get_eoa() */
+} /* end H5FD__clio_get_eoa() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_set_eoa
+ * Function:    H5FD__clio_set_eoa
  *
  * Purpose:     Set the end-of-address marker for the file. This function is
  *              called shortly after an existing HDF5 file is opened in order
@@ -394,16 +394,16 @@ static haddr_t H5FD__hermes_get_eoa(const H5FD_t *_file, H5FD_mem_t type) {
  *
  *-------------------------------------------------------------------------
  */
-static herr_t H5FD__hermes_set_eoa(H5FD_t *_file, H5FD_mem_t type,
+static herr_t H5FD__clio_set_eoa(H5FD_t *_file, H5FD_mem_t type,
                                    haddr_t addr) {
   (void)type;
-  H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
   file->eoa = addr;
   return SUCCEED;
-} /* end H5FD__hermes_set_eoa() */
+} /* end H5FD__clio_set_eoa() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_get_eof
+ * Function:    H5FD__clio_get_eof
  *
  * Purpose:     Returns the end-of-file marker, which is the greater of
  *              either the filesystem end-of-file or the HDF5 end-of-address
@@ -414,14 +414,14 @@ static herr_t H5FD__hermes_set_eoa(H5FD_t *_file, H5FD_mem_t type,
  *
  *-------------------------------------------------------------------------
  */
-static haddr_t H5FD__hermes_get_eof(const H5FD_t *_file, H5FD_mem_t type) {
+static haddr_t H5FD__clio_get_eof(const H5FD_t *_file, H5FD_mem_t type) {
   (void)type;
-  const H5FD_hermes_t *file = (const H5FD_hermes_t *)_file;
+  const H5FD_clio_t *file = (const H5FD_clio_t *)_file;
   return file->eof;
-} /* end H5FD__hermes_get_eof() */
+} /* end H5FD__clio_get_eof() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_read
+ * Function:    H5FD__clio_read
  *
  * Purpose:     Reads SIZE bytes of data from FILE beginning at address ADDR
  *              into buffer BUF. Reads come from the authoritative native file;
@@ -434,11 +434,11 @@ static haddr_t H5FD__hermes_get_eof(const H5FD_t *_file, H5FD_mem_t type) {
  *
  *-------------------------------------------------------------------------
  */
-static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
+static herr_t H5FD__clio_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
                                 haddr_t addr, size_t size, void *buf) {
   (void)dxpl_id;
   (void)type;
-  H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
 
   // FUTURE (CTE read tier): consult the cache first and serve a hit from a fast
   // tier, falling back to the native file on a miss (and populating on the
@@ -465,10 +465,10 @@ static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
     memset(static_cast<char *>(buf) + got, 0, size - got);
   }
   return SUCCEED;
-} /* end H5FD__hermes_read() */
+} /* end H5FD__clio_read() */
 
 /*-------------------------------------------------------------------------
- * Function:    H5FD__hermes_write
+ * Function:    H5FD__clio_write
  *
  * Purpose:     Writes SIZE bytes of data from buffer BUF at file address ADDR.
  *              The write is committed synchronously to the authoritative native
@@ -478,11 +478,11 @@ static herr_t H5FD__hermes_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
  *
  *-------------------------------------------------------------------------
  */
-static herr_t H5FD__hermes_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
+static herr_t H5FD__clio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
                                  haddr_t addr, size_t size, const void *buf) {
   (void)dxpl_id;
   (void)type;
-  H5FD_hermes_t *file = (H5FD_hermes_t *)_file;
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
 
   // Commit point: write-through to the authoritative native file, synchronously.
   ssize_t count = pwrite(file->posix_fd, buf, size, static_cast<off_t>(addr));
@@ -509,13 +509,13 @@ static herr_t H5FD__hermes_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
     file->eof = (haddr_t)(addr + size);
   }
   return SUCCEED;
-} /* end H5FD__hermes_write() */
+} /* end H5FD__clio_write() */
 
 /*
  * Entry points for dynamic plugin loading.
  */
 H5PL_type_t H5PLget_plugin_type(void) { return H5PL_TYPE_VFD; }
 
-const void *H5PLget_plugin_info(void) { return &H5FD_hermes_g; }
+const void *H5PLget_plugin_info(void) { return &H5FD_clio_g; }
 
 } // extern C

@@ -37,19 +37,19 @@
  *
  * Purpose: The public header file for the Clio driver.
  */
-#ifndef H5FDhermes_H
-#define H5FDhermes_H
+#ifndef H5FDclio_H
+#define H5FDclio_H
 
 #include <hdf5.h>
 
-#define H5FD_WRP_CTE_NAME  "hdf5_hermes_vfd"
-#define H5FD_WRP_CTE_VALUE ((H5FD_class_value_t)(3200))
+#define H5FD_CLIO_NAME  "clio_vfd"
+#define H5FD_CLIO_VALUE ((H5FD_class_value_t)(3200))
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-hid_t H5FD_hermes_init();
+hid_t H5FD_clio_init();
 
 H5PL_type_t H5PLget_plugin_type(void);
 const void* H5PLget_plugin_info(void);
@@ -58,4 +58,4 @@ const void* H5PLget_plugin_info(void);
 }
 #endif
 
-#endif /* end H5FDhermes_H */
+#endif /* end H5FDclio_H */
