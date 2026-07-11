@@ -59,6 +59,16 @@ namespace clio::cte::core {
 
 
 /**
+ * Determine whether a target is eligible for blob placement under TTL rules.
+ *
+ * @param target Target metadata, including persistence and predicted TTL.
+ * @param min_persistence_level Minimum persistence level required by the blob.
+ * @return True when the target may receive the blob.
+ */
+bool IsTargetEligibleForBlob(const TargetInfo &target,
+                             int min_persistence_level);
+
+/**
  * CTE Core Runtime Container
  * Implements target management and tag/blob operations
  */

@@ -65,6 +65,27 @@
 
 namespace clio::cte::core {
 
+/**
+ * Decide whether a target should participate in blob placement.
+ *
+ * @param target Target metadata including predicted TTL and persistence.
+ * @param min_persistence_level Required minimum persistence tier.
+ * @return True if the target can safely accept the blob.
+ */
+bool IsTargetEligibleForBlob(const TargetInfo &target,
+                             int min_persistence_level) {
+  const clio::run::u32 ttl = target.expected_ttl_days_;
+  if (ttl > 7) {
+    return true;
+  }
+  if (ttl >= 1) {
+    return static_cast<int>(target.persistence_level_) <
+           static_cast<int>(clio::run::bdev::PersistenceLevel::kLongTerm) &&
+           static_cast<int>(target.persistence_level_) >= min_persistence_level;
+  }
+  return false;
+}
+
 // Bring chi namespace items into scope for CLIO_CUR_WORKER macro
 using clio::run::chi_cur_worker_key_;
 using clio::run::Worker;
@@ -747,6 +768,7 @@ clio::run::TaskResume Runtime::RegisterTarget(clio::run::shared_ptr<RegisterTarg
         total_size;  // Total (max) capacity, fixed for the life of the target
     target_info.perf_metrics_ =
         perf_metrics;  // Store the entire PerfMetrics structure
+    target_info.expected_ttl_days_ = stats_task->predicted_ttl_days_;
     target_info.persistence_level_ = GetPersistenceLevelForTarget(target_name);
     target_info.bdev_type_ = task->bdev_type_;
 
@@ -913,6 +935,7 @@ clio::run::TaskResume Runtime::StatTargets(clio::run::shared_ptr<StatTargetsTask
         if (target_info != nullptr) {
           target_info->perf_metrics_ = perf_metrics;
           target_info->remaining_space_ = remaining_size;
+          target_info->expected_ttl_days_ = stats_task->predicted_ttl_days_;
 
           float manual_score =
               GetManualScoreForTarget(target_info->target_name_.str());
@@ -937,9 +960,84 @@ clio::run::TaskResume Runtime::StatTargets(clio::run::shared_ptr<StatTargetsTask
               t.perf_metrics_ = target_info->perf_metrics_;
               t.remaining_space_ = target_info->remaining_space_;
               t.target_score_ = target_info->target_score_;
+              t.expected_ttl_days_ = target_info->expected_ttl_days_;
               break;
             }
           }
+        }
+      }
+
+      // Evacuation Check (Cordon & Drain)
+      // Per policy:
+      //   - If TTL < 1 day: Evacuate all blobs off this target immediately.
+      //   - If 1 <= TTL <= 7 days and it is a LongTerm device: Evacuate all blobs
+      //     off this target to move them to a healthy LongTerm target.
+      bool should_evacuate = false;
+      std::string target_name_str;
+      clio::run::PoolQuery target_query;
+      {
+        clio::run::ScopedCoRwReadLock read_lock(target_lock_);
+        TargetInfo *target_info = registered_targets_.find(target_id);
+        if (target_info != nullptr) {
+          target_name_str = target_info->target_name_.str();
+          target_query = target_info->target_query_;
+          clio::run::u32 ttl = target_info->expected_ttl_days_;
+          if (ttl < 1) {
+            should_evacuate = true;
+          } else if (ttl <= 7 && target_info->persistence_level_ ==
+                                     clio::run::bdev::PersistenceLevel::kLongTerm) {
+            should_evacuate = true;
+          }
+        }
+      }
+
+      if (should_evacuate) {
+        HLOG(kWarning,
+             "StatTargets: Target %s has degraded health. Evacuating all residing blobs...",
+             target_name_str.c_str());
+
+        // Find all blobs that have blocks on this target
+        std::vector<std::pair<TagId, std::string>> blobs_to_evacuate;
+        tag_blob_name_to_info_.for_each(
+            [&](const std::string &composite_key,
+                const std::shared_ptr<BlobInfo> &blob_info_sp) {
+              const BlobInfo &blob_info = *blob_info_sp;
+              for (const auto &block : blob_info.blocks_) {
+                if (block.bdev_client_.pool_id_ == target_id) {
+                  const size_t first_sep = composite_key.find('.');
+                  const size_t second_sep =
+                      (first_sep == std::string::npos)
+                          ? std::string::npos
+                          : composite_key.find('.', first_sep + 1);
+                  if (first_sep == std::string::npos ||
+                      second_sep == std::string::npos) {
+                    break;
+                  }
+                  TagId blob_tag_id(
+                      static_cast<clio::run::u32>(
+                          std::stoul(composite_key.substr(0, first_sep))),
+                      static_cast<clio::run::u32>(
+                          std::stoul(composite_key.substr(first_sep + 1,
+                                                          second_sep - first_sep - 1))));
+                  blobs_to_evacuate.push_back(
+                      std::make_pair(blob_tag_id,
+                                     composite_key.substr(second_sep + 1)));
+                  break;
+                }
+              }
+            },
+            ctp::priv::ForEachLock::kShared);
+
+        for (const auto &pair : blobs_to_evacuate) {
+          HLOG(kInfo, "StatTargets: Evacuating blob %s off failing target %s...",
+               pair.second.c_str(), target_name_str.c_str());
+
+          // Reorganize with the same score.
+          // Since the target has degraded TTL, new target selection (ExtendBlob)
+          // will automatically route this data to a healthy device.
+          auto reorg_task = client_.AsyncReorganizeBlob(
+              pair.first, pair.second, 0.99f, target_query);
+          CLIO_CO_AWAIT(reorg_task);
         }
       }
     }
@@ -3549,6 +3647,37 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
                        }),
         ordered_targets.end());
   }
+
+  // Filter by device health (TTL) using predictive failure model.
+  //
+  // Policy (per Luke Logan):
+  //   TTL > 7 days  → always accept the device regardless of data type.
+  //   TTL 1–7 days  → only accept if the data is volatile or nonvolatile
+  //                   (i.e., NOT long-term persistent). Short-lived data
+  //                   can still safely land on a degrading drive.
+  //   TTL < 1 day   → reject the device entirely; imminent failure.
+  ordered_targets.erase(
+      std::remove_if(
+          ordered_targets.begin(), ordered_targets.end(),
+          [min_persistence_level](const TargetInfo &t) {
+            const clio::run::u32 ttl = t.expected_ttl_days_;
+            if (ttl > 7) {
+              // Healthy device – always usable.
+              return false;
+            }
+            if (ttl >= 1) {
+              // Degrading device – only allow volatile / temporary data.
+              // Reject if caller requires long-term persistence.
+              return static_cast<int>(t.persistence_level_) >=
+                     static_cast<int>(
+                         clio::run::bdev::PersistenceLevel::kLongTerm);
+            }
+            // TTL < 1 day – device is effectively dead, always reject.
+            return true;
+          }),
+      ordered_targets.end());
+  HLOG(kDebug, "ExtendBlob: {} candidate target(s) after TTL health filter",
+       ordered_targets.size());
 
   if (ordered_targets.empty()) {
     error_code = 2;

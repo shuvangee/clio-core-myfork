@@ -820,6 +820,33 @@ TEST_CASE("bdev_failure_prediction_integration", "[bdev][prediction][integration
   std::filesystem::remove(health_path, ec);
 }
 
+TEST_CASE("bdev_set_lifespan_overrides_stats", "[bdev][health][ttl]") {
+  BdevChimodFixture fixture;
+  REQUIRE(g_initialized);
+  REQUIRE(fixture.createTestFile(kDefaultFileSize));
+
+  clio::run::PoolId custom_pool_id(9141, 0);
+  clio::run::bdev::Client client(custom_pool_id);
+  bool created = BdevChimodFixture::CreateBdevAsync(
+      client, clio::run::PoolQuery::Broadcast(), fixture.getTestFile(),
+      custom_pool_id, clio::run::bdev::BdevType::kFile);
+  REQUIRE(created);
+
+  auto set_lifespan = client.AsyncSetLifespan(clio::run::PoolQuery::Local(), 3);
+  set_lifespan.Wait();
+  REQUIRE(set_lifespan->GetReturnCode() == 0);
+
+  clio::run::u64 remaining_size = 0;
+  auto stats_task = client.AsyncGetStats();
+  stats_task.Wait();
+  remaining_size = stats_task->remaining_size_;
+
+  REQUIRE(stats_task->predicted_ttl_days_ == 3);
+  REQUIRE(remaining_size > 0);
+
+  HLOG(kInfo, "Injected bdev lifespan: {} days", stats_task->predicted_ttl_days_);
+}
+
 TEST_CASE("bdev_error_conditions", "[bdev][error][edge_cases]") {
   BdevChimodFixture fixture;
 

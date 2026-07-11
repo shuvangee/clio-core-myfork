@@ -12,15 +12,19 @@
 #include <clio_ctp/serialize/msgpack_wrapper.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <thread>
 
 #include "clio_ctp/util/timer.h"
 
 namespace clio::run::bdev {
+
+Runtime::~Runtime() { StopHealthPolling(); }
 
 clio::run::TaskStat Runtime::GetTaskStats(const clio::run::Task *task) const {
   if (!task) return clio::run::TaskStat();
@@ -84,6 +88,14 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   total_writes_ = 0;
   total_bytes_read_ = 0;
   total_bytes_written_ = 0;
+
+  // Capture the device path so the poll thread can look up SMART attributes.
+  device_path_ = task->pool_name_.str();
+
+  // Start background health-poll thread.  It will periodically query the
+  // local prediction server and update predicted_ttl_days_.
+  health_poll_stop_.store(false, std::memory_order_relaxed);
+  health_poll_thread_ = std::thread(&Runtime::PollPredictionServer, this);
 
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -218,6 +230,25 @@ clio::run::TaskResume Runtime::GetStats(clio::run::shared_ptr<GetStatsTask> &tas
     task->remaining_size_ = 0;
   }
 
+  // Expose the latest ML-predicted TTL so the CTE can make
+  // TTL-aware allocation decisions without any external daemon.
+  task->predicted_ttl_days_ = predicted_ttl_days_.load(std::memory_order_relaxed);
+
+  task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+/**
+ * Update the in-memory predicted lifespan that bdev reports to callers.
+ *
+ * @param task SetLifespan task carrying the new remaining-life estimate.
+ * @return Task resume state for the CLIO scheduler.
+ */
+clio::run::TaskResume Runtime::SetLifespan(
+    clio::run::shared_ptr<SetLifespanTask> &task) {
+  CLIO_TASK_BODY_BEGIN
+  predicted_ttl_days_.store(task->lifespan_days_, std::memory_order_relaxed);
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -225,10 +256,7 @@ clio::run::TaskResume Runtime::GetStats(clio::run::shared_ptr<GetStatsTask> &tas
 
 clio::run::TaskResume Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  if (transport_) {
-    transport_->Destroy();
-    transport_.reset();
-  }
+  StopHealthPolling();
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -259,7 +287,7 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
 
-    pk.pack_map(15);
+    pk.pack_map(16);
     pk.pack("pool_name");              pk.pack(pool_name_);
     pk.pack("bdev_type");              pk.pack(static_cast<clio::run::u32>(bdev_type_));
     pk.pack("total_capacity");         pk.pack(transport_ ? transport_->GetCapacity() : 0);
@@ -280,6 +308,7 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
 
     pk.pack("device_health");          pk.pack(health_json);
     pk.pack("failure_prediction");     pk.pack(prediction_json);
+    pk.pack("predicted_ttl_days");     pk.pack(predicted_ttl_days_.load(std::memory_order_relaxed));
 
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }
@@ -289,6 +318,86 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
 }
 
 void Runtime::PostGpuContainerCreate() {}
+
+void Runtime::StopHealthPolling() {
+  health_poll_stop_.store(true, std::memory_order_relaxed);
+  if (health_poll_thread_.joinable()) {
+    health_poll_thread_.join();
+  }
+  if (transport_) {
+    transport_->Destroy();
+    transport_.reset();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PollPredictionServer
+//
+// Background thread body.  Every kHealthPollIntervalSec seconds it:
+//   1. Reads SMART attributes for this device via SystemInfo.
+//   2. Posts them to the local prediction server (server.py).
+//   3. Parses "days_remaining" from the JSON response.
+//   4. Stores the result in predicted_ttl_days_ so GetStats() can expose it
+//      to the CTE on the next poll without any external daemon involved.
+// ---------------------------------------------------------------------------
+void Runtime::PollPredictionServer() {
+  // Derive the drive type string ("hdd" or "ssd") from the pool / device name.
+  const std::string drive_type = ctp::SystemInfo::DeriveDriveType(pool_name_);
+
+  while (!health_poll_stop_.load(std::memory_order_relaxed)) {
+    try {
+      // Step 1: collect SMART attributes.
+      const std::string health_json =
+          ctp::SystemInfo::GetDeviceHealthStats(pool_name_);
+
+      // Step 2 & 3: post to prediction server and get back a JSON response
+      // that contains "days_remaining": <int> | null.
+      const std::string pred_json =
+          ctp::SystemInfo::PredictDriveFailure(drive_type, health_json, pool_name_);
+
+      // Parse days_remaining out of the JSON string.  We use a lightweight
+      // hand-rolled search to avoid pulling in a full JSON library here.
+      //  • "days_remaining": 42   → 42
+      //  • "days_remaining": null → keep current value (healthy)
+      auto extract_days = [](const std::string &json) -> clio::run::u32 {
+        const std::string key = "\"days_remaining\"";
+        auto pos = json.find(key);
+        if (pos == std::string::npos) return 999999;
+        pos += key.size();
+        // Skip whitespace and colon
+        while (pos < json.size() && (json[pos] == ' ' || json[pos] == ':')) ++pos;
+        // "null" means the server says the drive is healthy
+        if (json.size() >= pos + 4 && json.substr(pos, 4) == "null") return 999999;
+        // Parse integer
+        if (pos < json.size() && std::isdigit(static_cast<unsigned char>(json[pos]))) {
+          clio::run::u32 days = 0;
+          while (pos < json.size() &&
+                 std::isdigit(static_cast<unsigned char>(json[pos]))) {
+            days = days * 10 + static_cast<clio::run::u32>(json[pos] - '0');
+            ++pos;
+          }
+          return days;
+        }
+        return 999999;  // Unparseable → treat as healthy
+      };
+
+      clio::run::u32 new_ttl = extract_days(pred_json);
+      predicted_ttl_days_.store(new_ttl, std::memory_order_relaxed);
+
+    } catch (...) {
+      // If the prediction server is unreachable, silently retain the last
+      // known TTL rather than falsely marking the drive as dead.
+    }
+
+    // Sleep in 1-second increments so we can wake promptly on stop.
+    for (unsigned s = 0;
+         s < kHealthPollIntervalSec &&
+         !health_poll_stop_.load(std::memory_order_relaxed);
+         ++s) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  }
+}
 
 }  // namespace clio::run::bdev
 
