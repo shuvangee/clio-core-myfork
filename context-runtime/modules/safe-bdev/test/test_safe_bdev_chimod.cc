@@ -156,6 +156,11 @@ std::vector<ctp::u8> MakePattern(size_t size, ctp::u8 seed) {
   return v;
 }
 
+// Forward decl (defined later in this TU's anonymous namespace): query a
+// scalar field from safe_bdev Monitor("stats"). Used here to assert the
+// recovery-observability counters after RecoverBdev.
+long QueryStatField(clio::run::safe_bdev::Client &safe, const char *field);
+
 }  // namespace
 
 TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
@@ -292,6 +297,24 @@ TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
                                      recover_id);
     rec.Wait();
     REQUIRE(rec->GetReturnCode() == 0);
+
+    // Recovery observability: after a successful RecoverBdev the Monitor
+    // counters must show a finished rebuild -- a non-zero total (rows were
+    // rebuilt), completed == total, and no active/in-flight work remaining.
+    const long rec_total = QueryStatField(safe, "recovery_ops_total");
+    const long rec_done = QueryStatField(safe, "recovery_ops_completed");
+    const long rec_remaining = QueryStatField(safe, "recovery_ops_remaining");
+    const long rec_inflight = QueryStatField(safe, "recovery_ops_in_flight");
+    const long rec_active = QueryStatField(safe, "recovery_active");
+    HLOG(kInfo,
+         "safe_bdev EC: recovery counters total={} completed={} remaining={} "
+         "in_flight={} active={}",
+         rec_total, rec_done, rec_remaining, rec_inflight, rec_active);
+    REQUIRE(rec_total > 0);
+    REQUIRE(rec_done == rec_total);
+    REQUIRE(rec_remaining == 0);
+    REQUIRE(rec_inflight == 0);
+    REQUIRE(rec_active == 0);
 
     std::vector<ctp::u8> got;
     read_back(got);

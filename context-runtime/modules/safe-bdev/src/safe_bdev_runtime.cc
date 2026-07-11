@@ -1149,6 +1149,31 @@ clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask
   client = clio::run::bdev::Client(task->new_pool_id_);
   auto *ipc = CLIO_IPC;
 
+  // Recovery observability: count the rows this member participates in up front
+  // (a DATA column d only exists in groups with k_g > d; a PARITY member exists
+  // in every group) and publish the total so the dashboard can show
+  // rebuilt / in-flight / remaining. Reset the live counters for this run.
+  {
+    clio::run::u64 rows_to_rebuild = 0;
+    for (size_t gi = 0; gi < groups_.size(); ++gi) {
+      const Group &g = *groups_[gi];
+      if (is_data && idx >= g.k_) {
+        continue;
+      }
+      rows_to_rebuild += g.num_rows_;
+    }
+    recovery_ops_total_.store(rows_to_rebuild, std::memory_order_relaxed);
+    recovery_ops_completed_.store(0, std::memory_order_relaxed);
+    recovery_ops_in_flight_.store(0, std::memory_order_relaxed);
+    recovering_is_parity_.store(is_data ? 0u : 1u, std::memory_order_relaxed);
+    recovering_index_.store(idx, std::memory_order_relaxed);
+    recovery_active_.store(1, std::memory_order_release);
+    HLOG(kInfo,
+         "safe_bdev RecoverBdev: rebuilding {} member {} onto '{}' -- {} rows",
+         is_data ? "data" : "parity", idx, task->pool_name_.str(),
+         rows_to_rebuild);
+  }
+
   // Rebuild the failed member's chunk for every GLOBAL row it participates in.
   // A DATA member at column d participates in groups with k_g > d; a PARITY
   // member participates in EVERY group/row. Reconstruct under each row's owning
@@ -1164,6 +1189,7 @@ clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask
              "safe_bdev RecoverBdev: global row {} dirty (parity not built); "
              "cannot reconstruct failed data member",
              r);
+        recovery_active_.store(0, std::memory_order_release);
         task->return_code_ = 1;
         CLIO_CO_RETURN;
       }
@@ -1174,12 +1200,14 @@ clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask
       CLIO_CO_AWAIT(ReconstructRow(g, r, exclude_col, data_chunks,
                                    rd_ok));
       if (!rd_ok) {
+        recovery_active_.store(0, std::memory_order_release);
         task->return_code_ = 1;
         CLIO_CO_RETURN;
       }
 
       ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
       if (buf.IsNull()) {
+        recovery_active_.store(0, std::memory_order_release);
         task->return_code_ = 1;
         CLIO_CO_RETURN;
       }
@@ -1196,6 +1224,7 @@ clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask
                                  reinterpret_cast<uint8_t *>(buf.ptr_));
       }
 
+      recovery_ops_in_flight_.store(1, std::memory_order_relaxed);
       auto fut = client.AsyncWrite(MemberQuery(),
                                    MemberBlocks(ChunkOffset(r), kChunkLen),
                                    buf.shm_.template Cast<void>(), kChunkLen);
@@ -1203,12 +1232,20 @@ clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask
       const bool ok =
           (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
       ipc->FreeBuffer(buf);
+      recovery_ops_in_flight_.store(0, std::memory_order_relaxed);
       if (!ok) {
+        recovery_active_.store(0, std::memory_order_release);
         task->return_code_ = 1;
         CLIO_CO_RETURN;
       }
+      recovery_ops_completed_.fetch_add(1, std::memory_order_relaxed);
     }
   }
+
+  // Rebuild finished: all rows reconstructed and written. Stop advertising an
+  // active rebuild (counters keep completed == total so the dashboard settles
+  // on 100%).
+  recovery_active_.store(0, std::memory_order_release);
 
   // Bring the member back online on the new pool.
   MemberSlot &m = is_data ? data_members_[static_cast<size_t>(idx)]
@@ -1380,9 +1417,25 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
       std::lock_guard<std::mutex> g(row_mu_);
       dirty = static_cast<clio::run::u32>(dirty_rows_.size());
     }
+    // Snapshot the recovery counters (see safe_bdev_runtime.h). remaining is
+    // derived so the dashboard never has to reconcile total/completed itself.
+    const clio::run::u64 rec_total =
+        recovery_ops_total_.load(std::memory_order_relaxed);
+    const clio::run::u64 rec_done =
+        recovery_ops_completed_.load(std::memory_order_relaxed);
+    const clio::run::u64 rec_inflight =
+        recovery_ops_in_flight_.load(std::memory_order_relaxed);
+    const clio::run::u64 rec_remaining =
+        (rec_total > rec_done) ? (rec_total - rec_done) : 0;
+    const clio::run::u32 rec_active =
+        recovery_active_.load(std::memory_order_acquire);
+    const clio::run::u32 rec_is_par =
+        recovering_is_parity_.load(std::memory_order_relaxed);
+    const int rec_idx = recovering_index_.load(std::memory_order_relaxed);
+
     msgpack::sbuffer sbuf;
     msgpack::packer<msgpack::sbuffer> pk(sbuf);
-    pk.pack_map(9);
+    pk.pack_map(15);
     pk.pack("pool_name");     pk.pack(pool_name_);
     pk.pack("max_failures");  pk.pack(max_failures_);
     pk.pack("data_count");
@@ -1395,6 +1448,41 @@ clio::run::TaskResume Runtime::Monitor(clio::run::shared_ptr<MonitorTask> &task)
     pk.pack("reattached_members"); pk.pack(reattached_members_);
     pk.pack("alloc_log_records");
     pk.pack(static_cast<clio::run::u64>(alloc_log_.records_on_disk()));
+    // Recovery observability: live rebuild progress for the dashboard.
+    pk.pack("recovery_active");        pk.pack(rec_active);
+    pk.pack("recovery_ops_total");     pk.pack(rec_total);
+    pk.pack("recovery_ops_completed"); pk.pack(rec_done);
+    pk.pack("recovery_ops_in_flight"); pk.pack(rec_inflight);
+    pk.pack("recovery_ops_remaining"); pk.pack(rec_remaining);
+    // Per-member roster: role / index / name / pool_id / state (+ recovering
+    // flag). Powers the member list and the add / remove / recover controls in
+    // the context-visualizer safe-bdev dashboard.
+    const auto pack_members = [&](const std::vector<MemberSlot> &vec,
+                                  bool is_parity) {
+      for (const auto &m : vec) {
+        const char *st = (m.state_ == ec::EcState::kFaulty)  ? "faulty"
+                         : (m.state_ == ec::EcState::kRemoved) ? "removed"
+                                                               : "active";
+        const bool recovering = (rec_active != 0) &&
+                                ((is_parity ? 1u : 0u) == rec_is_par) &&
+                                (m.index_ == rec_idx);
+        pk.pack_map(6);
+        pk.pack("role");
+        pk.pack(std::string(is_parity ? "parity" : "data"));
+        pk.pack("index");     pk.pack(static_cast<clio::run::u32>(m.index_));
+        pk.pack("pool_name"); pk.pack(m.pool_name_);
+        pk.pack("pool_id");   pk.pack(m.pool_id_.ToU64());
+        pk.pack("state");
+        pk.pack(std::string(recovering ? "recovering" : st));
+        pk.pack("recovering");
+        pk.pack(static_cast<clio::run::u32>(recovering ? 1 : 0));
+      }
+    };
+    pk.pack("members");
+    pk.pack_array(static_cast<uint32_t>(data_members_.size() +
+                                        parity_members_.size()));
+    pack_members(data_members_, false);
+    pack_members(parity_members_, true);
     task->results_[container_id_] = std::string(sbuf.data(), sbuf.size());
   }
   task->SetReturnCode(0);

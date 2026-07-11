@@ -291,6 +291,25 @@ class Runtime : public clio::run::Container {
   clio::run::u64 max_phys_rows_;          // Physical rows available per member
   clio::run::u32 reattached_members_;     // Members recognized as already ours at Create
 
+  //==========================================================================
+  // Recovery observability. RecoverBdev rebuilds a failed member's shard for
+  // EVERY global row it participates in; each such row is one "recovery
+  // operation". These atomics let Monitor() -- and the context-visualizer
+  // safe-bdev dashboard -- report live rebuild progress: ops IN FLIGHT (the row
+  // whose reconstructed shard is being written right now) vs REMAINING (rows not
+  // yet rebuilt). They are reset at the start of every RecoverBdev call.
+  // recovery_active_ gates whether a rebuild is underway; recovering_is_parity_
+  // / recovering_index_ identify which member is being rebuilt so the dashboard
+  // can flag it. Atomic because Monitor() may run on a different worker fiber
+  // than the in-progress RecoverBdev.
+  //==========================================================================
+  std::atomic<clio::run::u64> recovery_ops_total_{0};      // rows to rebuild this run
+  std::atomic<clio::run::u64> recovery_ops_completed_{0};  // rows rebuilt so far
+  std::atomic<clio::run::u64> recovery_ops_in_flight_{0};  // row mid-write right now
+  std::atomic<clio::run::u32> recovery_active_{0};         // 1 while a rebuild runs
+  std::atomic<clio::run::u32> recovering_is_parity_{0};    // member role being rebuilt
+  std::atomic<int> recovering_index_{-1};                  // member index being rebuilt
+
   // Async-parity bookkeeping. Write writes data chunks immediately and records
   // each touched GLOBAL ROW as dirty (parity not yet current); BuildParity
   // drains the dirty set and (re)computes all parity rows under each row's
