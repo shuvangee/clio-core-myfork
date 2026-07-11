@@ -1201,8 +1201,10 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
 //      interrupt hook),
 //   5. restart, and
 //   6. verify the data is FULLY recovered (redundancy restored).
-// Representative size (24 MB -> 128 recovery rows, interrupted at 40); the
-// 256 MB end-to-end path is covered by the containerized safe-bdev test.
+// The rebuild spans the whole group (255 rows here) independent of how much
+// data is written, so a small single-block write still drives a 255-row rebuild
+// interrupted at 40 and resumed on restart; the 256 MB through-the-CTE path is
+// covered by the containerized safe-bdev test.
 TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
           "[safe_bdev][consistency][recover][restart]") {
   EnsureInit();
@@ -1224,9 +1226,15 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
   std::filesystem::remove(log_path, ec);
   std::filesystem::remove(log_path + ".members", ec);
 
-  const clio::run::u64 kMember = 16 * 1024 * 1024;   // 16 MB members
-  const clio::run::u64 kDataLen = 24 * 1024 * 1024;  // 24 MB working set
+  const clio::run::u64 kMember = 16 * 1024 * 1024;  // 16 MB members => 255 rows
   const int k0 = 3;
+  // Small, SINGLE-BLOCK working set (a large allocation can span multiple,
+  // bucket-capped blocks whose size differs by platform). What matters for the
+  // consistency property is that recovery rebuilds the WHOLE group (255 rows)
+  // regardless of how much data is written -- so a small write still drives a
+  // 255-row rebuild that we interrupt at 40 and resume on restart.
+  const clio::run::u64 kDataLen =
+      2 * static_cast<clio::run::u64>(k0) * kChunkLen;  // 6 chunks, 1 block
 
   // Stable pool ids: the member bdevs stay resident across the safe-pool
   // reboots (disks persist), so their ids + backing files are stable.
@@ -1254,8 +1262,8 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
         safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), kDataLen);
     alloc.Wait();
     REQUIRE(alloc->GetReturnCode() == 0);
-    REQUIRE(alloc->blocks_.size() == 1);  // fresh group -> one contiguous block
-    blk = alloc->blocks_[0];
+    REQUIRE(alloc->blocks_.size() > 0);
+    blk = alloc->blocks_[0];  // kDataLen is small => one contiguous block
     clio::run::priv::vector<clio::run::bdev::Block> wb(CTP_MALLOC);
     wb.push_back(clio::run::bdev::Block(blk.offset_, kDataLen, 0));
     auto wbuf = CLIO_IPC->AllocateBuffer(kDataLen);

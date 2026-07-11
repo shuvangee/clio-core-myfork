@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -432,10 +433,15 @@ void Runtime::PersistMemberManifest() const {
   for (const auto &m : parity_members_) put_member(m, 1);
   ofs.flush();
   ofs.close();
-  // Atomic replace.
-  if (std::rename(tmp.c_str(), members_manifest_path_.c_str()) != 0) {
-    HLOG(kWarning, "safe_bdev: member manifest rename '{}' -> '{}' failed", tmp,
-         members_manifest_path_);
+  // Atomic replace. std::filesystem::rename overwrites an existing destination
+  // on all platforms (unlike C's std::rename, which fails on Windows when the
+  // target already exists -- which would silently freeze the manifest after the
+  // first write and lose runtime parity/recovery updates on restart).
+  std::error_code ren_ec;
+  std::filesystem::rename(tmp, members_manifest_path_, ren_ec);
+  if (ren_ec) {
+    HLOG(kWarning, "safe_bdev: member manifest rename '{}' -> '{}' failed: {}",
+         tmp, members_manifest_path_, ren_ec.message());
   }
 }
 
