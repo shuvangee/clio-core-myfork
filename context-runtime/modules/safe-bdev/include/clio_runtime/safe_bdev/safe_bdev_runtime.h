@@ -232,6 +232,13 @@ class Runtime : public clio::run::Container {
     ec::EcRole role_ = ec::EcRole::kData;
     ec::EcState state_ = ec::EcState::kActive;
     int index_ = -1;  // data column c (DATA) or parity row j (PARITY)
+    // True while this member's shards are being rebuilt onto pool_id_ (a
+    // recovery target seated by RecoverBdev). Persisted in the member manifest
+    // so an interrupted recovery is RESUMED on restart: the member stays
+    // non-active (excluded from reads -> degraded path) until the rebuild
+    // completes. RebuildMember is idempotent, so re-running after a crash is
+    // safe.
+    bool recovering_ = false;
   };
 
   // An append-only RAID-0 stripe group. A group fixes its data-drive width k_g
@@ -285,6 +292,13 @@ class Runtime : public clio::run::Container {
   // LogGroupFreeze. Empty path => disabled (every API is a no-op), so the
   // pre-WAL behaviour is preserved unchanged.
   clio::run::bdev::AllocatorLog alloc_log_;
+  // Durable member manifest path (== alloc_log_path + ".members"; empty when
+  // the alloc log is disabled). Unlike the config member list -- which only
+  // names the STARTUP data members -- the manifest records the CURRENT full
+  // membership (data + parity, including runtime AddBdev drives and recovery
+  // replacements) plus each member's state and recovery flag, so Create()
+  // restores the real array on restart and resumes any interrupted recovery.
+  std::string members_manifest_path_;
   clio::run::u32 max_failures_;           // Fault-tolerance target (M == m_max)
   clio::run::u32 parity_level_;           // Parity members added so far (m)
   clio::run::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
@@ -473,6 +487,42 @@ class Runtime : public clio::run::Container {
   clio::run::TaskResume ReadSuperblock(bool is_parity, size_t idx,
                                  MemberSuperblock &sb,
                                  bool &present, bool &ok);
+
+  //==========================================================================
+  // Durable member manifest (membership + recovery state persistence).
+  //==========================================================================
+
+  /** One persisted member record. Mirrors a MemberSlot's durable fields. */
+  struct MemberManifestEntry {
+    clio::run::u32 role_ = 0;        // ec::EcRole (0=data, 1=parity)
+    clio::run::u32 index_ = 0;       // data column / parity row
+    clio::run::u32 pool_major_ = 0;  // member bdev pool id
+    clio::run::u32 pool_minor_ = 0;
+    clio::run::u32 node_id_ = 0;
+    clio::run::u32 state_ = 0;        // ec::EcState (0=active,1=faulty,2=removed)
+    clio::run::u32 recovering_ = 0;  // 1 if mid-recovery onto (pool_major/minor)
+    std::string pool_name_;
+  };
+
+  /** Atomically rewrite the member manifest from the live data/parity slots.
+   *  No-op when members_manifest_path_ is empty (alloc log disabled). */
+  void PersistMemberManifest() const;
+
+  /** Load the member manifest into `out`. Returns false if absent/corrupt. */
+  bool LoadMemberManifest(std::vector<MemberManifestEntry> &out) const;
+
+  /** Reconstruct + write EVERY global row this member participates in onto its
+   *  (already-seated) client, under each row's owning group's code. Idempotent:
+   *  safe to re-run after an interrupted recovery. On return `ok` reports I/O
+   *  success and `completed` is false only when the CLIO_SAFE_BDEV_RECOVER_MAX_
+   *  ROWS test hook stopped the rebuild early (recovery left in-progress). */
+  clio::run::TaskResume RebuildMember(bool is_data, int idx, bool &ok,
+                                      bool &completed);
+
+  /** After membership + groups are restored, resume any member left in the
+   *  recovering state (crash mid-RecoverBdev). Persists the manifest as members
+   *  come back online. */
+  clio::run::TaskResume ResumeRecoveries();
 
   /** Open and initialize a new group with the given width / row band. The
    *  group's rs_, block_map_ and heap_ are constructed; appended to groups_. */

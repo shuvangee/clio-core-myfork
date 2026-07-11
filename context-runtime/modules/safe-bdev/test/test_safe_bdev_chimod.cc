@@ -1123,10 +1123,9 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
       REQUIRE(CreateFileMember(client, member_file(c), id));
       members.emplace_back(member_file(c), /*node_id=*/0, client.pool_id_);
     }
-    clio::run::PoolId rparity_id(static_cast<clio::run::u32>(10590 + pidsalt), 0);
-    clio::run::bdev::Client rparity_client(rparity_id);
-    REQUIRE(CreateFileMember(rparity_client, member_file(3), rparity_id));
-    rparity_id = rparity_client.pool_id_;
+    // NOTE: parity is no longer re-created/re-added here -- Create restores the
+    // runtime-added parity member from the durable member manifest (its bdev
+    // pool from phase 1 is still resident in this in-process runtime).
 
     clio::run::safe_bdev::Client safe2(safe_id);
     auto create_task = safe2.AsyncCreate(clio::run::PoolQuery::Dynamic(),
@@ -1144,13 +1143,10 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
     // The members carry our superblock => they re-attach (not fresh/foreign).
     REQUIRE(QueryReattachedMembers(safe2) == 3);
 
-    // Re-attach parity so degraded paths remain available (data still intact;
-    // this also re-dirties rows but we only read active members here).
-    auto add_par = safe2.AsyncAddBdev(clio::run::PoolQuery::Dynamic(), member_file(3),
-                                      /*node_id=*/0, rparity_id,
-                                      /*as_parity=*/1);
-    add_par.Wait();
-    REQUIRE(add_par->GetReturnCode() == 0);
+    // Parity is now DURABLE: Create restored the runtime-added parity member
+    // from the member manifest, so it is present again without a manual re-add
+    // (parity_level == 1). Degraded paths remain available.
+    REQUIRE(QueryStatField(safe2, "parity_level") == 1);
 
     // (b) Pattern A (group 0) AND pattern B (group 1) read back correctly —
     //     data intact on the file members + correct group/allocator recovery.
@@ -1190,6 +1186,238 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
   }
   std::filesystem::remove(log_path, cleanup_ec);
   HLOG(kInfo, "safe_bdev alloc-log restart/recovery test PASSED");
+}
+
+// Consistency across a reboot WITH an interrupted recovery. Exercises the
+// durable member manifest + recovery-resume path:
+//   1. write a working set through the safe-bdev (a CTE over this safe-bdev
+//      stores its blob bytes HERE, so safe-bdev durability == CTE data
+//      durability),
+//   2. shut down + reboot (destroy + re-create the safe pool over the SAME,
+//      still-resident member bdevs -- like disks surviving a reboot) -> data
+//      intact,
+//   3. fault a data member and recover onto a spare, but
+//   4. shut down BEFORE the rebuild finishes (CLIO_SAFE_BDEV_RECOVER_MAX_ROWS
+//      interrupt hook),
+//   5. restart, and
+//   6. verify the data is FULLY recovered (redundancy restored).
+// Representative size (24 MB -> 128 recovery rows, interrupted at 40); the
+// 256 MB end-to-end path is covered by the containerized safe-bdev test.
+TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
+          "[safe_bdev][consistency][recover][restart]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  const std::filesystem::path tmp_dir = std::filesystem::temp_directory_path();
+  auto mfile = [&](int i) {
+    return (tmp_dir / ("safe_cons_" + std::to_string(getpid()) + "_" +
+                       std::to_string(i) + ".bin"))
+        .string();
+  };
+  const std::string log_path =
+      (tmp_dir / ("safe_cons_" + std::to_string(getpid()) + ".alog")).string();
+
+  std::error_code ec;
+  for (int i = 0; i < 5; ++i) std::filesystem::remove(mfile(i), ec);
+  std::filesystem::remove(log_path, ec);
+  std::filesystem::remove(log_path + ".members", ec);
+
+  const clio::run::u64 kMember = 16 * 1024 * 1024;   // 16 MB members
+  const clio::run::u64 kDataLen = 24 * 1024 * 1024;  // 24 MB working set
+  const int k0 = 3;
+
+  // Stable pool ids: the member bdevs stay resident across the safe-pool
+  // reboots (disks persist), so their ids + backing files are stable.
+  clio::run::PoolId safe_id(static_cast<clio::run::u32>(70000 + pidsalt), 0);
+  std::vector<clio::run::PoolId> d_id;
+  for (int c = 0; c < k0; ++c) {
+    d_id.emplace_back(static_cast<clio::run::u32>(71000 + pidsalt + c), 0);
+  }
+  clio::run::PoolId parity_id(static_cast<clio::run::u32>(72000 + pidsalt), 0);
+  clio::run::PoolId spare_id(static_cast<clio::run::u32>(73000 + pidsalt), 0);
+
+  auto make_member = [&](const clio::run::PoolId &id, const std::string &path) {
+    clio::run::bdev::Client c(id);
+    auto t = c.AsyncCreate(clio::run::PoolQuery::Dynamic(), path, id,
+                           clio::run::bdev::BdevType::kFile, kMember);
+    t.Wait();
+    REQUIRE(t->GetReturnCode() == 0);
+  };
+
+  const std::vector<ctp::u8> pattern = MakePattern(kDataLen, 0xC7);
+  clio::run::bdev::Block blk;
+
+  auto write_all = [&](clio::run::safe_bdev::Client &safe) {
+    auto alloc =
+        safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), kDataLen);
+    alloc.Wait();
+    REQUIRE(alloc->GetReturnCode() == 0);
+    REQUIRE(alloc->blocks_.size() == 1);  // fresh group -> one contiguous block
+    blk = alloc->blocks_[0];
+    clio::run::priv::vector<clio::run::bdev::Block> wb(CTP_MALLOC);
+    wb.push_back(clio::run::bdev::Block(blk.offset_, kDataLen, 0));
+    auto wbuf = CLIO_IPC->AllocateBuffer(kDataLen);
+    REQUIRE_FALSE(wbuf.IsNull());
+    memcpy(wbuf.ptr_, pattern.data(), kDataLen);
+    auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wb,
+                              wbuf.shm_.template Cast<void>(), kDataLen);
+    wt.Wait();
+    REQUIRE(wt->GetReturnCode() == 0);
+    REQUIRE(wt->bytes_written_ == kDataLen);
+    CLIO_IPC->FreeBuffer(wbuf);
+    auto fl = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
+    fl.Wait();
+    REQUIRE(fl->GetReturnCode() == 0);
+  };
+
+  auto verify_all = [&](clio::run::safe_bdev::Client &safe) {
+    clio::run::priv::vector<clio::run::bdev::Block> rb(CTP_MALLOC);
+    rb.push_back(clio::run::bdev::Block(blk.offset_, kDataLen, 0));
+    auto rbuf = CLIO_IPC->AllocateBuffer(kDataLen);
+    REQUIRE_FALSE(rbuf.IsNull());
+    memset(rbuf.ptr_, 0, kDataLen);
+    auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rb,
+                             rbuf.shm_.template Cast<void>(), kDataLen);
+    rt.Wait();
+    REQUIRE(rt->GetReturnCode() == 0);
+    REQUIRE(rt->bytes_read_ == kDataLen);
+    std::vector<ctp::u8> got(kDataLen);
+    memcpy(got.data(), rbuf.ptr_, kDataLen);
+    REQUIRE(got == pattern);
+    CLIO_IPC->FreeBuffer(rbuf);
+  };
+
+  auto destroy_safe = [&](clio::run::safe_bdev::Client &safe) {
+    auto fl = safe.AsyncFlushAllocLog(clio::run::PoolQuery::Dynamic(), 0);
+    fl.Wait();
+    clio::run::admin::Client admin(clio::run::kAdminPoolId);
+    auto d =
+        admin.AsyncDestroyPool(clio::run::PoolQuery::Dynamic(), safe.pool_id_);
+    d.Wait();
+    REQUIRE(d->GetReturnCode() == 0);
+    std::this_thread::sleep_for(150ms);
+  };
+
+  auto make_members = [&](std::initializer_list<clio::run::PoolId> ids,
+                          std::initializer_list<int> files) {
+    std::vector<clio::run::safe_bdev::MemberBdevDesc> m;
+    auto it = ids.begin();
+    auto fi = files.begin();
+    for (; it != ids.end(); ++it, ++fi) {
+      m.emplace_back(mfile(*fi), 0, *it);
+    }
+    return m;
+  };
+
+  // Persistent member bdevs (survive the reboots).
+  make_member(d_id[0], mfile(0));
+  make_member(d_id[1], mfile(1));
+  make_member(d_id[2], mfile(2));
+  make_member(parity_id, mfile(3));
+  make_member(spare_id, mfile(4));
+
+  // ===== PHASE 1: write the working set, add parity, shut down. =====
+  {
+    auto members = make_members({d_id[0], d_id[1], d_id[2]}, {0, 1, 2});
+    clio::run::safe_bdev::Client safe(safe_id);
+    auto ct = safe.AsyncCreate(clio::run::PoolQuery::Dynamic(), "safe_cons",
+                               safe_id, /*max_failures=*/1, members, log_path);
+    ct.Wait();
+    safe.pool_id_ = ct->new_pool_id_;
+    REQUIRE(ct->GetReturnCode() == 0);
+    auto ap = safe.AsyncAddBdev(clio::run::PoolQuery::Dynamic(), mfile(3), 0,
+                                parity_id, /*as_parity=*/1);
+    ap.Wait();
+    REQUIRE(ap->GetReturnCode() == 0);
+    write_all(safe);
+    verify_all(safe);
+    HLOG(kInfo, "safe_bdev consistency: phase1 wrote + verified working set");
+    destroy_safe(safe);
+  }
+
+  // ===== PHASE 2 (REBOOT): data intact; fault d1 + recover-onto-spare, but
+  //       INTERRUPT the rebuild; shut down before it finishes. =====
+  {
+    auto members = make_members({d_id[0], d_id[1], d_id[2]}, {0, 1, 2});
+    clio::run::safe_bdev::Client safe(safe_id);
+    auto ct = safe.AsyncCreate(clio::run::PoolQuery::Dynamic(), "safe_cons",
+                               safe_id, /*max_failures=*/1, members, log_path);
+    ct.Wait();
+    safe.pool_id_ = ct->new_pool_id_;
+    REQUIRE(ct->GetReturnCode() == 0);
+    // Parity was restored from the durable manifest (no manual re-add).
+    REQUIRE(QueryStatField(safe, "parity_level") == 1);
+    // STEP 2: data survived the clean reboot.
+    verify_all(safe);
+    HLOG(kInfo, "safe_bdev consistency: STEP2 data intact after clean reboot");
+
+    // STEP 3: fault data member 1 and recover onto the spare, but INTERRUPT the
+    // rebuild after 40 of 128 rows (simulated crash mid-recovery).
+    auto rm = safe.AsyncRemoveBdev(clio::run::PoolQuery::Dynamic(), d_id[1],
+                                   /*was_faulty=*/1);
+    rm.Wait();
+    REQUIRE(rm->GetReturnCode() == 0);
+    ctp::SystemInfo::Setenv("CLIO_SAFE_BDEV_RECOVER_MAX_ROWS", "40", 1);
+    auto rec = safe.AsyncRecoverBdev(clio::run::PoolQuery::Dynamic(), d_id[1],
+                                     mfile(4), 0, spare_id);
+    rec.Wait();
+    REQUIRE(rec->GetReturnCode() == 0);  // partial but consistent
+    const long done = QueryStatField(safe, "recovery_ops_completed");
+    const long total = QueryStatField(safe, "recovery_ops_total");
+    HLOG(kInfo, "safe_bdev consistency: interrupted recovery {}/{} rows", done,
+         total);
+    REQUIRE(total > done);  // genuinely incomplete
+    REQUIRE(done > 0);
+    // Even mid-recovery, degraded reads (spare excluded) serve correct data.
+    verify_all(safe);
+    HLOG(kInfo, "safe_bdev consistency: data intact mid-recovery (degraded)");
+
+    // STEP 4: shut down before the recovery finishes.
+    destroy_safe(safe);
+  }
+
+  // ===== PHASE 3 (RESTART): resume recovery, verify data FULLY recovered. =====
+  {
+    ctp::SystemInfo::Setenv("CLIO_SAFE_BDEV_RECOVER_MAX_ROWS", "0", 1);  // no cap
+    // Current membership: the spare replaced data member 1 (column 1).
+    auto members = make_members({d_id[0], spare_id, d_id[2]}, {0, 4, 2});
+    clio::run::safe_bdev::Client safe(safe_id);
+    auto ct = safe.AsyncCreate(clio::run::PoolQuery::Dynamic(), "safe_cons",
+                               safe_id, /*max_failures=*/1, members, log_path);
+    ct.Wait();
+    safe.pool_id_ = ct->new_pool_id_;
+    // STEP 5: Create restored membership + RESUMED and finished the recovery.
+    REQUIRE(ct->GetReturnCode() == 0);
+    REQUIRE(QueryStatField(safe, "parity_level") == 1);
+
+    // STEP 6: data is fully readable after the resumed recovery.
+    verify_all(safe);
+    HLOG(kInfo,
+         "safe_bdev consistency: STEP6 data intact after restart + resume");
+
+    // Redundancy FULLY restored: fault a DIFFERENT member (d0) and confirm the
+    // degraded read still reconstructs -- only possible if the spare (column 1)
+    // was completely rebuilt during the resumed recovery.
+    auto rm = safe.AsyncRemoveBdev(clio::run::PoolQuery::Dynamic(), d_id[0],
+                                   /*was_faulty=*/1);
+    rm.Wait();
+    REQUIRE(rm->GetReturnCode() == 0);
+    verify_all(safe);
+    HLOG(kInfo,
+         "safe_bdev consistency: redundancy restored (degraded read after "
+         "faulting a 2nd member OK) -- recovery was durable + complete");
+
+    destroy_safe(safe);
+  }
+
+  ctp::SystemInfo::Setenv("CLIO_SAFE_BDEV_RECOVER_MAX_ROWS", "0", 1);
+  for (int i = 0; i < 5; ++i) std::filesystem::remove(mfile(i), ec);
+  std::filesystem::remove(log_path, ec);
+  std::filesystem::remove(log_path + ".members", ec);
+  HLOG(kInfo,
+       "safe_bdev consistency restart + interrupted-recovery test PASSED");
 }
 
 SIMPLE_TEST_MAIN()

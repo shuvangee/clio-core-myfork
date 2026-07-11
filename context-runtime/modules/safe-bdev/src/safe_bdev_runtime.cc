@@ -36,7 +36,11 @@
 #include <clio_ctp/serialize/msgpack_wrapper.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -383,6 +387,100 @@ clio::run::TaskResume Runtime::ReconstructDataChunk(const Group &g, clio::run::u
 // Method handlers
 //===========================================================================
 
+// The member manifest uses a small hand-rolled binary format (NOT msgpack) so
+// the runtime .so pulls in no msgpack UNPACK symbol -- keeping its dynamic
+// symbol table clean for the modules that dlopen it. Layout (native-endian
+// u32; same-host restart):
+//   [magic][count]  then per member:
+//   [role][index][pool_major][pool_minor][node_id][state][recovering]
+//   [name_len][name bytes...]
+namespace {
+constexpr clio::run::u32 kMemberManifestMagic = 0x53424d31;  // "SBM1"
+}  // namespace
+
+void Runtime::PersistMemberManifest() const {
+  if (members_manifest_path_.empty()) {
+    return;
+  }
+  const std::string tmp = members_manifest_path_ + ".tmp";
+  std::ofstream ofs(tmp, std::ios::binary | std::ios::trunc);
+  if (!ofs.is_open()) {
+    HLOG(kWarning, "safe_bdev: cannot open member manifest tmp '{}'", tmp);
+    return;
+  }
+  const auto put_u32 = [&](clio::run::u32 v) {
+    ofs.write(reinterpret_cast<const char *>(&v), sizeof(v));
+  };
+  const auto put_member = [&](const MemberSlot &m, clio::run::u32 role) {
+    put_u32(role);
+    put_u32(static_cast<clio::run::u32>(m.index_));
+    put_u32(m.pool_id_.major_);
+    put_u32(m.pool_id_.minor_);
+    put_u32(m.node_id_);
+    put_u32(static_cast<clio::run::u32>(m.state_));
+    put_u32(m.recovering_ ? 1u : 0u);
+    put_u32(static_cast<clio::run::u32>(m.pool_name_.size()));
+    if (!m.pool_name_.empty()) {
+      ofs.write(m.pool_name_.data(),
+                static_cast<std::streamsize>(m.pool_name_.size()));
+    }
+  };
+  put_u32(kMemberManifestMagic);
+  put_u32(static_cast<clio::run::u32>(data_members_.size() +
+                                      parity_members_.size()));
+  for (const auto &m : data_members_) put_member(m, 0);
+  for (const auto &m : parity_members_) put_member(m, 1);
+  ofs.flush();
+  ofs.close();
+  // Atomic replace.
+  if (std::rename(tmp.c_str(), members_manifest_path_.c_str()) != 0) {
+    HLOG(kWarning, "safe_bdev: member manifest rename '{}' -> '{}' failed", tmp,
+         members_manifest_path_);
+  }
+}
+
+bool Runtime::LoadMemberManifest(std::vector<MemberManifestEntry> &out) const {
+  out.clear();
+  if (members_manifest_path_.empty()) {
+    return false;
+  }
+  std::ifstream ifs(members_manifest_path_, std::ios::binary);
+  if (!ifs.is_open()) {
+    return false;
+  }
+  const auto get_u32 = [&](clio::run::u32 &v) -> bool {
+    return static_cast<bool>(
+        ifs.read(reinterpret_cast<char *>(&v), sizeof(v)));
+  };
+  clio::run::u32 magic = 0;
+  clio::run::u32 count = 0;
+  if (!get_u32(magic) || magic != kMemberManifestMagic || !get_u32(count)) {
+    return false;
+  }
+  for (clio::run::u32 i = 0; i < count; ++i) {
+    MemberManifestEntry e;
+    clio::run::u32 name_len = 0;
+    if (!get_u32(e.role_) || !get_u32(e.index_) || !get_u32(e.pool_major_) ||
+        !get_u32(e.pool_minor_) || !get_u32(e.node_id_) || !get_u32(e.state_) ||
+        !get_u32(e.recovering_) || !get_u32(name_len)) {
+      out.clear();
+      return false;
+    }
+    if (name_len > (1u << 20)) {  // sanity bound
+      out.clear();
+      return false;
+    }
+    e.pool_name_.resize(name_len);
+    if (name_len > 0 &&
+        !ifs.read(&e.pool_name_[0], static_cast<std::streamsize>(name_len))) {
+      out.clear();
+      return false;
+    }
+    out.push_back(std::move(e));
+  }
+  return !out.empty();
+}
+
 clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   CLIO_TASK_BODY_BEGIN
 
@@ -403,6 +501,41 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
     std::lock_guard<std::mutex> g(row_mu_);
     dirty_rows_.clear();
     written_rows_.clear();
+  }
+
+  // DATA members come from the config member list and are re-attached by
+  // SUPERBLOCK identity (pool ids may change across restart -- the safe-bdev
+  // recognizes its own members by their superblocks, not their pool ids). The
+  // durable manifest augments this with what the config CANNOT express: the
+  // runtime-added PARITY members, and the per-member RECOVERY state so an
+  // interrupted recovery resumes. On a fresh create there is no manifest yet.
+  members_manifest_path_ =
+      params.alloc_log_path_.empty() ? std::string()
+                                     : (params.alloc_log_path_ + ".members");
+  std::vector<MemberManifestEntry> manifest;
+  const bool have_manifest = LoadMemberManifest(manifest);
+
+  std::vector<MemberManifestEntry> eff_parity;  // parity members from manifest
+  // data_recovering[col] == true => that data column is a recovery replacement
+  // whose rebuild must be resumed. Indexed by data column.
+  std::vector<bool> data_recovering(params.members_.size(), false);
+  if (have_manifest) {
+    for (const auto &e : manifest) {
+      if (e.role_ == 1) {
+        eff_parity.push_back(e);
+      } else if (e.recovering_ != 0 && e.index_ < data_recovering.size()) {
+        data_recovering[e.index_] = true;
+      }
+    }
+    std::sort(eff_parity.begin(), eff_parity.end(),
+              [](const MemberManifestEntry &a, const MemberManifestEntry &b) {
+                return a.index_ < b.index_;
+              });
+    HLOG(kInfo,
+         "safe_bdev Create: manifest '{}' augments membership with {} parity "
+         "member(s); {} data column(s) mid-recovery",
+         members_manifest_path_, eff_parity.size(),
+         std::count(data_recovering.begin(), data_recovering.end(), true));
   }
 
   // Initial members are DATA members; k_0 = number supplied.
@@ -520,6 +653,16 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
     ++col;
   }
 
+  // A data member restored from the manifest as mid-recovery stays non-active
+  // (kFaulty + recovering) so degraded reads serve its data until ResumeRecov-
+  // eries() finishes the rebuild below.
+  for (size_t i = 0; i < data_members_.size(); ++i) {
+    if (i < data_recovering.size() && data_recovering[i]) {
+      data_members_[i].state_ = ec::EcState::kFaulty;
+      data_members_[i].recovering_ = true;
+    }
+  }
+
   if (recovered_groups) {
     // RECOVERY: reconstruct the append-only group structure from the recovered
     // GroupRecs (in group_id order; group_id == group INDEX) using the recovered
@@ -563,6 +706,54 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
          groups_[0]->logical_span_);
   }
 
+  // Restore PARITY members from the manifest. Config carries only data members,
+  // so eff_parity is empty on a fresh create (parity is added later via
+  // AddBdev); on restart the manifest supplies the runtime-added parity drives.
+  // Each manifest parity pool is probed by superblock before adoption:
+  //   - mid-recovery (blank replacement)  -> adopt + mark recovering (rebuilt
+  //     by ResumeRecoveries below),
+  //   - superblock present AND ours       -> adopt (re-attach),
+  //   - otherwise (unreachable / foreign) -> SKIP: a stale manifest entry (the
+  //     pool was re-composed under a different id and will be re-added).
+  for (const auto &pe : eff_parity) {
+    MemberSlot slot;
+    slot.pool_id_ = clio::run::PoolId(pe.pool_major_, pe.pool_minor_);
+    slot.pool_name_ = pe.pool_name_;
+    slot.node_id_ = pe.node_id_;
+    slot.role_ = ec::EcRole::kParity;
+    slot.index_ = static_cast<int>(pe.index_);
+    const bool par_recovering = (pe.recovering_ != 0);
+
+    // Probe the candidate on a temporary client BEFORE committing it to the
+    // parity vectors (so a skip leaves no dead client behind).
+    parity_clients_.emplace_back(slot.pool_id_);
+    parity_members_.push_back(slot);
+    const size_t pj = parity_members_.size() - 1;
+    MemberSuperblock sb;
+    bool present = false;
+    bool sb_ok = false;
+    CLIO_CO_AWAIT(ReadSuperblock(/*is_parity=*/true, pj, sb, present, sb_ok));
+    const bool ours = sb_ok && present &&
+                      sb.array_major == static_cast<uint64_t>(pool_id_.major_) &&
+                      sb.array_minor == static_cast<uint64_t>(pool_id_.minor_);
+    if (par_recovering) {
+      parity_members_[pj].state_ = ec::EcState::kFaulty;  // non-active
+      parity_members_[pj].recovering_ = true;
+    } else if (ours) {
+      parity_members_[pj].state_ = ec::EcState::kActive;
+      parity_members_[pj].recovering_ = false;
+    } else {
+      // Stale/unreachable -> drop it.
+      parity_members_.pop_back();
+      parity_clients_.pop_back();
+      HLOG(kInfo,
+           "safe_bdev Create: skipping stale manifest parity member "
+           "(pool {}.{} not reachable/ours)",
+           pe.pool_major_, pe.pool_minor_);
+    }
+  }
+  parity_level_ = static_cast<clio::run::u32>(parity_members_.size());
+
   // Register a periodic task that flushes (and compacts) the WAL. Only when
   // logging is enabled. Mirrors bdev's SetPeriod + TASK_PERIODIC pattern.
   if (alloc_log_.enabled()) {
@@ -573,6 +764,12 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   // critical path; this periodic task converges them to full protection.
   client_.AsyncBuildParity(MemberQuery(), /*max_batch=*/0,
                            /*period_us=*/kBuildParityPeriodUs);
+
+  // Resume any recovery interrupted by a crash (members restored as recovering),
+  // then persist the current membership so the NEXT restart is consistent (this
+  // also writes the initial manifest on a fresh create).
+  CLIO_CO_AWAIT(ResumeRecoveries());
+  PersistMemberManifest();
 
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -1020,6 +1217,7 @@ clio::run::TaskResume Runtime::AddBdev(clio::run::shared_ptr<AddBdevTask> &task)
          groups_.size() - 2, used_rows, groups_.size() - 1, new_k, new_first_row,
          new_num_rows);
 
+    PersistMemberManifest();  // durable: new data member is part of the array
     task->return_code_ = 0;
     CLIO_CO_RETURN;
   }
@@ -1074,6 +1272,7 @@ clio::run::TaskResume Runtime::AddBdev(clio::run::shared_ptr<AddBdevTask> &task)
     }
   }
 
+  PersistMemberManifest();  // durable: new parity member is part of the array
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -1107,7 +1306,112 @@ clio::run::TaskResume Runtime::RemoveBdev(clio::run::shared_ptr<RemoveBdevTask> 
       found = true;
     }
   }
+  if (found) {
+    PersistMemberManifest();  // durable: the member is now faulty/removed
+  }
   task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::RebuildMember(bool is_data, int idx, bool &ok,
+                                             bool &completed) {
+  CLIO_TASK_BODY_BEGIN
+  ok = true;
+  completed = true;
+  auto &client = is_data ? data_clients_[static_cast<size_t>(idx)]
+                         : parity_clients_[static_cast<size_t>(idx)];
+  auto *ipc = CLIO_IPC;
+
+  // Test hook: stop after this many rows to simulate a recovery interrupted by
+  // a crash (0 / unset => rebuild everything). The manifest keeps the member
+  // marked recovering, so the next Create() resumes it.
+  clio::run::u64 max_rows = 0;
+  if (const char *env = std::getenv("CLIO_SAFE_BDEV_RECOVER_MAX_ROWS")) {
+    max_rows = std::strtoull(env, nullptr, 10);
+  }
+
+  // Count the rows this member participates in up front (a DATA column d only
+  // exists in groups with k_g > d; a PARITY member exists in every group) and
+  // publish it for the recovery dashboard. Counters are per-rebuild-pass.
+  clio::run::u64 rows_to_rebuild = 0;
+  for (size_t gi = 0; gi < groups_.size(); ++gi) {
+    const Group &g = *groups_[gi];
+    if (is_data && idx >= g.k_) continue;
+    rows_to_rebuild += g.num_rows_;
+  }
+  recovery_ops_total_.store(rows_to_rebuild, std::memory_order_relaxed);
+  recovery_ops_completed_.store(0, std::memory_order_relaxed);
+  recovery_ops_in_flight_.store(0, std::memory_order_relaxed);
+  recovering_is_parity_.store(is_data ? 0u : 1u, std::memory_order_relaxed);
+  recovering_index_.store(idx, std::memory_order_relaxed);
+  recovery_active_.store(1, std::memory_order_release);
+
+  clio::run::u64 rows_done = 0;
+  for (size_t gi = 0; gi < groups_.size(); ++gi) {
+    const Group &g = *groups_[gi];
+    if (is_data && idx >= g.k_) continue;  // column absent in this narrower group
+    for (clio::run::u64 r = g.first_row_; r < g.LastRow(); ++r) {
+      if (max_rows != 0 && rows_done >= max_rows) {
+        completed = false;  // interrupted: leave the member recovering
+        recovery_active_.store(0, std::memory_order_release);
+        CLIO_CO_RETURN;
+      }
+      if (is_data && IsRowDirty(r)) {
+        HLOG(kError,
+             "safe_bdev RebuildMember: row {} dirty (parity not built); cannot "
+             "reconstruct data member",
+             r);
+        ok = false;
+        recovery_active_.store(0, std::memory_order_release);
+        CLIO_CO_RETURN;
+      }
+      std::vector<std::vector<uint8_t>> data_chunks;
+      bool rd_ok = false;
+      const int exclude_col = is_data ? idx : -1;
+      CLIO_CO_AWAIT(ReconstructRow(g, r, exclude_col, data_chunks, rd_ok));
+      if (!rd_ok) {
+        ok = false;
+        recovery_active_.store(0, std::memory_order_release);
+        CLIO_CO_RETURN;
+      }
+      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
+      if (buf.IsNull()) {
+        ok = false;
+        recovery_active_.store(0, std::memory_order_release);
+        CLIO_CO_RETURN;
+      }
+      if (is_data) {
+        std::memcpy(buf.ptr_, data_chunks[static_cast<size_t>(idx)].data(),
+                    kChunkLen);
+      } else {
+        std::vector<const uint8_t *> ptrs(static_cast<size_t>(g.k_));
+        for (int c = 0; c < g.k_; ++c) {
+          ptrs[static_cast<size_t>(c)] =
+              data_chunks[static_cast<size_t>(c)].data();
+        }
+        g.rs_->EncodeParityShard(idx, ptrs, kChunkLen,
+                                 reinterpret_cast<uint8_t *>(buf.ptr_));
+      }
+      recovery_ops_in_flight_.store(1, std::memory_order_relaxed);
+      auto fut = client.AsyncWrite(MemberQuery(),
+                                   MemberBlocks(ChunkOffset(r), kChunkLen),
+                                   buf.shm_.template Cast<void>(), kChunkLen);
+      CLIO_CO_AWAIT(fut);
+      const bool wok =
+          (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
+      ipc->FreeBuffer(buf);
+      recovery_ops_in_flight_.store(0, std::memory_order_relaxed);
+      if (!wok) {
+        ok = false;
+        recovery_active_.store(0, std::memory_order_release);
+        CLIO_CO_RETURN;
+      }
+      recovery_ops_completed_.fetch_add(1, std::memory_order_relaxed);
+      ++rows_done;
+    }
+  }
+  recovery_active_.store(0, std::memory_order_release);
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
@@ -1141,135 +1445,104 @@ clio::run::TaskResume Runtime::RecoverBdev(clio::run::shared_ptr<RecoverBdevTask
 
   const bool is_data = (failed_col >= 0);
   const int idx = is_data ? failed_col : failed_par;
+
+  // Seat the fresh member on its new pool and mark it RECOVERING: it stays
+  // non-active (excluded from reconstruction; degraded reads serve data) until
+  // the rebuild completes. Record the recovery INTENT in the manifest BEFORE
+  // rebuilding so a crash mid-rebuild is resumed by the next Create().
   auto &client = is_data ? data_clients_[static_cast<size_t>(idx)]
                          : parity_clients_[static_cast<size_t>(idx)];
-
-  // Seat the fresh member on its new pool. It stays non-active and is excluded
-  // from reconstruction (data: exclude_col=idx) until recovery completes.
   client = clio::run::bdev::Client(task->new_pool_id_);
-  auto *ipc = CLIO_IPC;
-
-  // Recovery observability: count the rows this member participates in up front
-  // (a DATA column d only exists in groups with k_g > d; a PARITY member exists
-  // in every group) and publish the total so the dashboard can show
-  // rebuilt / in-flight / remaining. Reset the live counters for this run.
-  {
-    clio::run::u64 rows_to_rebuild = 0;
-    for (size_t gi = 0; gi < groups_.size(); ++gi) {
-      const Group &g = *groups_[gi];
-      if (is_data && idx >= g.k_) {
-        continue;
-      }
-      rows_to_rebuild += g.num_rows_;
-    }
-    recovery_ops_total_.store(rows_to_rebuild, std::memory_order_relaxed);
-    recovery_ops_completed_.store(0, std::memory_order_relaxed);
-    recovery_ops_in_flight_.store(0, std::memory_order_relaxed);
-    recovering_is_parity_.store(is_data ? 0u : 1u, std::memory_order_relaxed);
-    recovering_index_.store(idx, std::memory_order_relaxed);
-    recovery_active_.store(1, std::memory_order_release);
-    HLOG(kInfo,
-         "safe_bdev RecoverBdev: rebuilding {} member {} onto '{}' -- {} rows",
-         is_data ? "data" : "parity", idx, task->pool_name_.str(),
-         rows_to_rebuild);
-  }
-
-  // Rebuild the failed member's chunk for every GLOBAL row it participates in.
-  // A DATA member at column d participates in groups with k_g > d; a PARITY
-  // member participates in EVERY group/row. Reconstruct under each row's owning
-  // group's code. Guard dirty rows for data-member recovery.
-  for (size_t gi = 0; gi < groups_.size(); ++gi) {
-    const Group &g = *groups_[gi];
-    if (is_data && idx >= g.k_) {
-      continue;  // this data column does not exist in this (narrower) group
-    }
-    for (clio::run::u64 r = g.first_row_; r < g.LastRow(); ++r) {
-      if (is_data && IsRowDirty(r)) {
-        HLOG(kError,
-             "safe_bdev RecoverBdev: global row {} dirty (parity not built); "
-             "cannot reconstruct failed data member",
-             r);
-        recovery_active_.store(0, std::memory_order_release);
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-
-      std::vector<std::vector<uint8_t>> data_chunks;
-      bool rd_ok = false;
-      const int exclude_col = is_data ? idx : -1;
-      CLIO_CO_AWAIT(ReconstructRow(g, r, exclude_col, data_chunks,
-                                   rd_ok));
-      if (!rd_ok) {
-        recovery_active_.store(0, std::memory_order_release);
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-
-      ctp::ipc::FullPtr<char> buf = ipc->AllocateBuffer(kChunkLen);
-      if (buf.IsNull()) {
-        recovery_active_.store(0, std::memory_order_release);
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-      if (is_data) {
-        std::memcpy(buf.ptr_, data_chunks[static_cast<size_t>(idx)].data(),
-                    kChunkLen);
-      } else {
-        std::vector<const uint8_t *> ptrs(static_cast<size_t>(g.k_));
-        for (int c = 0; c < g.k_; ++c) {
-          ptrs[static_cast<size_t>(c)] =
-              data_chunks[static_cast<size_t>(c)].data();
-        }
-        g.rs_->EncodeParityShard(idx, ptrs, kChunkLen,
-                                 reinterpret_cast<uint8_t *>(buf.ptr_));
-      }
-
-      recovery_ops_in_flight_.store(1, std::memory_order_relaxed);
-      auto fut = client.AsyncWrite(MemberQuery(),
-                                   MemberBlocks(ChunkOffset(r), kChunkLen),
-                                   buf.shm_.template Cast<void>(), kChunkLen);
-      CLIO_CO_AWAIT(fut);
-      const bool ok =
-          (fut->return_code_ == 0) && (fut->bytes_written_ == kChunkLen);
-      ipc->FreeBuffer(buf);
-      recovery_ops_in_flight_.store(0, std::memory_order_relaxed);
-      if (!ok) {
-        recovery_active_.store(0, std::memory_order_release);
-        task->return_code_ = 1;
-        CLIO_CO_RETURN;
-      }
-      recovery_ops_completed_.fetch_add(1, std::memory_order_relaxed);
-    }
-  }
-
-  // Rebuild finished: all rows reconstructed and written. Stop advertising an
-  // active rebuild (counters keep completed == total so the dashboard settles
-  // on 100%).
-  recovery_active_.store(0, std::memory_order_release);
-
-  // Bring the member back online on the new pool.
   MemberSlot &m = is_data ? data_members_[static_cast<size_t>(idx)]
                           : parity_members_[static_cast<size_t>(idx)];
   m.pool_id_ = task->new_pool_id_;
   m.pool_name_ = task->pool_name_.str();
   m.node_id_ = task->node_id_;
-  m.state_ = ec::EcState::kActive;
+  m.state_ = ec::EcState::kFaulty;  // non-active until rebuild completes
+  m.recovering_ = true;
+  PersistMemberManifest();
 
-  // Stamp the fresh recovery member's superblock with this array's identity.
+  HLOG(kInfo, "safe_bdev RecoverBdev: rebuilding {} member {} onto '{}'",
+       is_data ? "data" : "parity", idx, task->pool_name_.str());
+
+  bool ok = false;
+  bool completed = false;
+  CLIO_CO_AWAIT(RebuildMember(is_data, idx, ok, completed));
+  if (!ok) {
+    // Rebuild failed (I/O / too few survivors). Leave recovering set so a retry
+    // or the next Create() can resume.
+    task->return_code_ = 1;
+    CLIO_CO_RETURN;
+  }
+  if (!completed) {
+    HLOG(kWarning,
+         "safe_bdev RecoverBdev: rebuild interrupted (test hook) -- recovery "
+         "persisted; the next Create() resumes it");
+    task->return_code_ = 0;  // partial but consistent (member still recovering)
+    CLIO_CO_RETURN;
+  }
+
+  // Rebuild finished: bring the member online and stamp its superblock.
+  m.state_ = ec::EcState::kActive;
+  m.recovering_ = false;
   {
     bool wr_ok = false;
-    CLIO_CO_AWAIT(WriteSuperblock(!is_data, static_cast<size_t>(idx),
-                                  wr_ok));
+    CLIO_CO_AWAIT(WriteSuperblock(!is_data, static_cast<size_t>(idx), wr_ok));
     if (!wr_ok) {
       HLOG(kWarning,
            "safe_bdev RecoverBdev: superblock write failed for recovered "
            "member (data reconstructed; will be re-stamped on next attach)");
     }
   }
-
+  PersistMemberManifest();
   HLOG(kInfo, "safe_bdev RecoverBdev: {} member {} recovered onto '{}'",
        is_data ? "data" : "parity", idx, task->pool_name_.str());
   task->return_code_ = 0;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::ResumeRecoveries() {
+  CLIO_TASK_BODY_BEGIN
+  // Any member left recovering (crash mid-RecoverBdev) is rebuilt from scratch
+  // now -- RebuildMember is idempotent, so re-running is safe and the member
+  // stays excluded from reads until it completes.
+  for (size_t i = 0; i < data_members_.size(); ++i) {
+    if (!data_members_[i].recovering_) continue;
+    HLOG(kInfo,
+         "safe_bdev: resuming interrupted recovery of data member {} onto '{}'",
+         i, data_members_[i].pool_name_);
+    bool ok = false;
+    bool completed = false;
+    CLIO_CO_AWAIT(RebuildMember(true, static_cast<int>(i), ok, completed));
+    if (ok && completed) {
+      data_members_[i].state_ = ec::EcState::kActive;
+      data_members_[i].recovering_ = false;
+      bool wr = false;
+      CLIO_CO_AWAIT(WriteSuperblock(false, i, wr));
+      PersistMemberManifest();
+      HLOG(kInfo, "safe_bdev: recovery of data member {} completed on restart",
+           i);
+    } else {
+      HLOG(kWarning,
+           "safe_bdev: resume of data member {} did not complete "
+           "(ok={}, completed={})",
+           i, ok, completed);
+    }
+  }
+  for (size_t j = 0; j < parity_members_.size(); ++j) {
+    if (!parity_members_[j].recovering_) continue;
+    bool ok = false;
+    bool completed = false;
+    CLIO_CO_AWAIT(RebuildMember(false, static_cast<int>(j), ok, completed));
+    if (ok && completed) {
+      parity_members_[j].state_ = ec::EcState::kActive;
+      parity_members_[j].recovering_ = false;
+      bool wr = false;
+      CLIO_CO_AWAIT(WriteSuperblock(true, j, wr));
+      PersistMemberManifest();
+    }
+  }
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }
