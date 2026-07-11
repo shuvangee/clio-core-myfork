@@ -504,6 +504,22 @@ bool Runtime::LoadMemberManifest(std::vector<MemberManifestEntry> &out) const {
     return false;
   }
   std::lock_guard<std::mutex> lk(member_log_mu_);
+
+  // Roll forward a compaction that crashed mid-replace. CompactMemberManifest
+  // fully writes+fsyncs the temp BEFORE renaming it over the log, so if the log
+  // is now ABSENT while the temp is PRESENT, the replace started (the temp is
+  // complete) but did not finish -- complete it here. A rename onto an absent
+  // target is a plain create-rename, which is atomic on EVERY platform, so this
+  // makes compaction crash-safe without relying on the replace's atomicity.
+  // (If instead the crash happened while writing the temp, the log still exists,
+  // so this branch is skipped and the stale/partial temp is ignored.)
+  namespace fs = std::filesystem;
+  const std::string tmp = members_manifest_path_ + ".compact.tmp";
+  std::error_code fec;
+  if (!fs::exists(members_manifest_path_, fec) && fs::exists(tmp, fec)) {
+    fs::rename(tmp, members_manifest_path_, fec);
+  }
+
   std::ifstream ifs(members_manifest_path_, std::ios::binary);
   if (!ifs.is_open()) {
     return false;
