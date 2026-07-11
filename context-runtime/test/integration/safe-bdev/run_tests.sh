@@ -30,10 +30,15 @@ check_prereqs() {
   docker compose version >/dev/null 2>&1 || { msg "$RED" "docker compose not found"; exit 1; }
   docker ps >/dev/null 2>&1 || { msg "$RED" "docker daemon not running"; exit 1; }
   [ -c /dev/fuse ] || { msg "$RED" "/dev/fuse not available"; exit 1; }
-  local fuse_bin="${IOWARP_CORE_ROOT}/build/bin/clio_cte_fuse"
-  [ -x "$fuse_bin" ] || { msg "$RED" "clio_cte_fuse missing -- build with -DCLIO_CTE_ENABLE_FUSE_ADAPTER=ON"; exit 1; }
-  [ -f "${IOWARP_CORE_ROOT}/build/bin/clio_runtime_ext"*.so ] 2>/dev/null || \
-    ls "${IOWARP_CORE_ROOT}/build/bin/clio_runtime_ext"*.so >/dev/null 2>&1 || \
+  # Verify built artifacts against the CONTAINER-LOCAL repo (REPO_ROOT), NOT
+  # IOWARP_CORE_ROOT. IOWARP_CORE_ROOT is the DOCKER-DAEMON-visible path used for
+  # the compose bind mount (e.g. the HOST path when running inside a devcontainer
+  # against the host's docker socket); it need not exist on the local filesystem
+  # where this script runs. The files themselves live under REPO_ROOT here.
+  local fuse_bin="${REPO_ROOT}/build/bin/clio_cte_fuse"
+  [ -x "$fuse_bin" ] || { msg "$RED" "clio_cte_fuse missing -- build with -DCLIO_CTE_ENABLE_FUSE_ADAPTER=ON (looked in ${REPO_ROOT}/build/bin)"; exit 1; }
+  [ -f "${REPO_ROOT}/build/bin/clio_runtime_ext"*.so ] 2>/dev/null || \
+    ls "${REPO_ROOT}/build/bin/clio_runtime_ext"*.so >/dev/null 2>&1 || \
     { msg "$YELLOW" "warning: clio_runtime_ext python module not found (dashboard controls need it)"; }
   msg "$GREEN" "prerequisites OK"
 }
