@@ -37,10 +37,11 @@
 #include <clio_runtime/clio_runtime.h>
 #include <clio_runtime/comutex.h>
 #include <clio_runtime/bdev/bdev_client.h>
-#include <clio_runtime/bdev/transports/block_allocator.h>  // bdev::Heap, bdev::GlobalBlockMap
+#include <clio_runtime/bdev/transports/block_allocator.h>  // bdev::Block, LiveBlock
 #include <clio_runtime/bdev/bdev_alloc_log.h>  // bdev::AllocatorLog (reused WAL)
 
 #include <cstdio>  // std::FILE
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -55,32 +56,45 @@
 #include "safe_bdev_tasks.h"
 
 /**
- * Runtime container for safe_bdev ChiMod.
+ * Runtime container for safe_bdev ChiMod (DYNAMIC VIEW-GROUP model).
  *
  * safe_bdev presents the bdev task interface (AllocateBlocks/FreeBlocks/Write/
- * Read/GetStats) over a growable array of member bdevs using append-only
- * RAID-0 stripe GROUPS on top of a dedicated-parity model:
+ * Read/GetStats) over a growable array of member bdevs, split into two logical
+ * groups on a dedicated-parity Reed-Solomon model:
  *
- *   - data_members_   are DATA members (RAID-0 striped). The vector GROWS when
- *                     a data drive is added via AddBdev(as_data).
+ *   - data_members_   are DATA members (the VIEW group). Blocks are allocated
+ *                     PER-CHUNK ROUND-ROBIN over the non-full members, each
+ *                     filling to its OWN capacity -> total data capacity =
+ *                     Sum(per-drive capacity), no stranding. GROWS via
+ *                     AddBdev(as_data).
  *   - parity_members_ are the m dedicated PARITY members (appended via
- *                     AddBdev(as_parity)); they are SHARED across all groups.
+ *                     AddBdev(as_parity)).
  *
- * A GROUP g fixes a stripe width k_g = the number of data drives that existed
- * when the group opened, and owns a contiguous band of physical ROWS
- * [first_row_g, first_row_g + num_rows_g). Group 0 covers rows [0, R0); group 1
- * covers [R0, R1); etc. (a "row" is one kChunkLen slot at the same member
- * offset on every member). Within a group the logical space is striped RAID-0
- * over that group's k_g data drives in fixed-size kChunkLen units. Because each
- * group's width is FROZEN at open time, adding a data drive opens a NEW wider
- * group and never reshuffles or re-encodes existing groups' data/parity.
+ * ADDRESSING (banding, no map). Each data member owns fixed-size kChunkLen
+ * SLOTS 0,1,2,...; a chunk's logical byte offset ENCODES its physical location:
+ *   chunk_index = off / kChunkLen
+ *   member  d   = chunk_index / kSlotsPerMember
+ *   slot    s   = chunk_index % kSlotsPerMember
+ *   within      = off % kChunkLen
+ * The chunk's physical byte offset on member d is kSuperblockSize + s*kChunkLen.
+ * Round-robin picks d for each new chunk; the member's own slot allocator picks
+ * s; the returned offset bands (d,s). Decode is pure div/mod -- nothing extra is
+ * persisted for addressing (only each member's slot allocator, via the WAL).
  *
- * For each global ROW r, parity member j holds the Reed-Solomon parity shard j
- * computed (with that row's owning group's rs_g) over the k_g FULL data chunks
- * of that row. Parity is built off the write path (deferred to a periodic
- * BuildParity task over a dirty-ROW set keyed by GLOBAL row), and reads
- * reconstruct a down data member's chunk on demand (decode from the row's
- * survivors under the owning group's code).
+ * STRIPES & PARITY (offset-aligned, variable width). A STRIPE s = the live data
+ * chunks at physical slot s across the data members deep enough to have one;
+ * parity for stripe s lives at the SAME slot s on each parity member:
+ *   parity[s] = RS(k_s, m) over { data_d[s] : member d has a LIVE chunk at s }
+ * k_s (stripe width) varies by slot (StripeMembers(s) -> the sorted data-member
+ * indices with slot s live; a member's RS data-shard index is its POSITION in
+ * that sorted list). Codecs are cached by width in rs_cache_. Membership is
+ * DERIVED from the per-member live sets, not stored. A single data chunk
+ * (k_s==1) with m==1 is a MIRROR -- narrow writes are protected immediately and
+ * widen to RS(k,m) as drives join. Parity is built off the write path (deferred
+ * to a periodic BuildParity over a dirty-SLOT set); degraded reads reconstruct a
+ * down member's chunk on demand from the stripe survivors + parity. Adding a
+ * data drive moves NO data: new writes round-robin onto it, dirtying the slots
+ * they widen so BuildParity re-derives that stripe's parity.
  */
 
 namespace clio::run::safe_bdev {
@@ -96,21 +110,32 @@ class Runtime : public clio::run::Container {
   Runtime()
       : max_failures_(1),
         parity_level_(0),
-        total_rows_(0),
-        max_phys_rows_(0),
+        rr_cursor_(0),
         reattached_members_(0) {}
   ~Runtime() override = default;
 
-  /** RAID-0 stripe unit (data shard / parity chunk length) in bytes. */
+  /** EC chunk / slot length in bytes -- the fixed unit a member bdev is split
+   *  into for erasure coding (the "1 MB" of the design; a configurable knob,
+   *  kept at 64 KiB here so small test members still hold many slots). */
   static constexpr clio::run::u64 kChunkLen = 65536;
 
   /**
    * Reserved superblock area at the front of every member bdev (absolute
    * offset 0). The member's usable region begins at offset kSuperblockSize; a
-   * member's chunk for row r is at absolute offset kSuperblockSize +
-   * r*kChunkLen.
+   * member's chunk for SLOT s is at absolute offset kSuperblockSize +
+   * s*kChunkLen.
    */
   static constexpr clio::run::u64 kSuperblockSize = 65536;
+
+  /**
+   * Banding stride: the number of kChunkLen slots each data member owns in the
+   * logical address space. A chunk on member d at slot s bands to logical offset
+   * (d*kSlotsPerMember + s)*kChunkLen, so off/kChunkLen decodes to (d,s) by
+   * div/mod. Sized so a member can hold a very large capacity while the top
+   * member's offset stays within u64 for any realistic member count
+   * (2^32 slots * 64 KiB = 256 TiB per member).
+   */
+  static constexpr clio::run::u64 kSlotsPerMember = (1ull << 32);
 
   /** Background parity-builder poll period (microseconds): 50 ms. */
   static constexpr double kBuildParityPeriodUs = 50000.0;
@@ -122,16 +147,6 @@ class Runtime : public clio::run::Container {
    *  max(kMinCompactRecords, live * kCompactGrowthFactor). Mirrors bdev. */
   static constexpr clio::run::u64 kMinCompactRecords = 1024;
   static constexpr clio::run::u64 kCompactGrowthFactor = 4;
-
-  /**
-   * Sanity bound on the number of append-only stripe groups (one per AddBdev
-   * -as-data, plus the create group). Groups are sized DYNAMICALLY — the current
-   * (widest) group spans all remaining physical rows, and adding a data drive
-   * freezes it at its high-water mark and opens a new group over what's left.
-   * So a single-group array uses the FULL member capacity; capacity is consumed
-   * only as groups actually fill. This cap just bounds metadata growth.
-   */
-  static constexpr clio::run::u32 kMaxGroups = 64;
 
   /**
    * Get live task statistics for this task instance.
@@ -169,7 +184,7 @@ class Runtime : public clio::run::Container {
   /** Recover a failed member bdev (Method::kRecoverBdev). */
   clio::run::TaskResume RecoverBdev(clio::run::shared_ptr<RecoverBdevTask> &task);
 
-  /** Build/raise parity for dirty rows (Method::kBuildParity). */
+  /** Build/raise parity for dirty slots (Method::kBuildParity). */
   clio::run::TaskResume BuildParity(clio::run::shared_ptr<BuildParityTask> &task);
 
   /** Flush/compact the persistent allocator log (Method::kFlushAllocLog). */
@@ -222,19 +237,19 @@ class Runtime : public clio::run::Container {
 
  private:
   // Per-member runtime bookkeeping. role_ (DATA vs PARITY) and index_ are FIXED
-  // for the member's lifetime — no rotation. DATA members live in
-  // data_members_ (index_ == data column == position in the vector); PARITY
+  // for the member's lifetime -- no rotation. DATA members live in
+  // data_members_ (index_ == data column d == position in the vector); PARITY
   // members live in parity_members_ (index_ == parity row j == position). A
-  // member's chunk for GLOBAL row r lives at absolute offset
-  // kSuperblockSize + r*kChunkLen.
+  // member's chunk for SLOT s lives at absolute offset kSuperblockSize +
+  // s*kChunkLen.
   struct MemberSlot {
     clio::run::PoolId pool_id_;
     std::string pool_name_;
     clio::run::u32 node_id_ = 0;
     ec::EcRole role_ = ec::EcRole::kData;
     ec::EcState state_ = ec::EcState::kActive;
-    int index_ = -1;  // data column c (DATA) or parity row j (PARITY)
-    // True while this member's shards are being rebuilt onto pool_id_ (a
+    int index_ = -1;  // data column d (DATA) or parity row j (PARITY)
+    // True while this member's chunks are being rebuilt onto pool_id_ (a
     // recovery target seated by RecoverBdev). Persisted in the member manifest
     // so an interrupted recovery is RESUMED on restart: the member stays
     // non-active (excluded from reads -> degraded path) until the rebuild
@@ -243,32 +258,43 @@ class Runtime : public clio::run::Container {
     bool recovering_ = false;
   };
 
-  // An append-only RAID-0 stripe group. A group fixes its data-drive width k_g
-  // (the number of data members that existed when it opened) and owns a band of
-  // global rows [first_row_, first_row_ + num_rows_). Its logical address range
-  // is [logical_base_, logical_base_ + k_g*num_rows_*kChunkLen); a per-group
-  // allocator (block_map_ over the free list + heap_ for the bump region) hands
-  // out logical offsets inside that range (the heap returns offsets in
-  // [0, span); we add logical_base_ so global offsets are unique, and subtract
-  // it on free). rs_ is ReedSolomon(k_g, max_failures).
-  struct Group {
-    int k_ = 0;                  // data-drive count frozen at open (k_g)
-    clio::run::u64 first_row_ = 0;     // first global row owned by this group
-    clio::run::u64 num_rows_ = 0;      // rows of kChunkLen reserved per member
-    clio::run::u64 logical_base_ = 0;  // start of this group's logical byte range
-    clio::run::u64 logical_span_ = 0;  // k_g * num_rows_ * kChunkLen
-    std::unique_ptr<ec::ReedSolomon> rs_;
-    std::unique_ptr<clio::run::bdev::GlobalBlockMap> block_map_;
-    std::unique_ptr<clio::run::bdev::Heap> heap_;
-    std::atomic<clio::run::u64> allocated_bytes_{0};
+  // Per-DATA-member slot allocator (parallel to data_members_, indexed by data
+  // column d). Each data member fills its OWN kChunkLen slots independently:
+  // high_water_ is the next never-used slot; free_ holds freed slots for reuse;
+  // live_ is the currently-live slot set (== this member's contribution to the
+  // stripes it participates in). Reconstructable purely from the live set on
+  // restart (WAL replay): high_water = max(live)+1, free = [0,high_water)\live.
+  struct MemberAlloc {
+    clio::run::u64 high_water_ = 0;      // next never-used slot
+    clio::run::u64 cap_slots_ = 0;       // usable kChunkLen slots on this member
+    std::vector<clio::run::u64> free_;   // freed slots, reusable (LIFO)
+    std::set<clio::run::u64> live_;      // currently-live slots
 
-    clio::run::u64 LogicalEnd() const { return logical_base_ + logical_span_; }
-    clio::run::u64 LastRow() const { return first_row_ + num_rows_; }  // exclusive
-    bool ContainsOffset(clio::run::u64 off) const {
-      return off >= logical_base_ && off < LogicalEnd();
+    // Slots not yet handed out (bump headroom + reusable frees).
+    clio::run::u64 RemainingSlots() const {
+      const clio::run::u64 bump_left =
+          (cap_slots_ > high_water_) ? (cap_slots_ - high_water_) : 0;
+      return bump_left + free_.size();
     }
-    bool ContainsRow(clio::run::u64 row) const {
-      return row >= first_row_ && row < LastRow();
+    bool Full() const { return RemainingSlots() == 0; }
+    // Take the next slot (reuse a freed one first, else bump). Caller must have
+    // checked !Full(). Records it live.
+    clio::run::u64 Take() {
+      clio::run::u64 s;
+      if (!free_.empty()) {
+        s = free_.back();
+        free_.pop_back();
+      } else {
+        s = high_water_++;
+      }
+      live_.insert(s);
+      return s;
+    }
+    // Release a live slot back to the free list.
+    void Release(clio::run::u64 s) {
+      if (live_.erase(s) != 0) {
+        free_.push_back(s);
+      }
     }
   };
 
@@ -278,127 +304,139 @@ class Runtime : public clio::run::Container {
   // EC / membership state. DATA and PARITY members are kept in SEPARATE vectors
   // so a data drive can be appended (growing data_members_) without disturbing
   // parity column indices. Each member vector is index-aligned with its client
-  // vector. groups_ is append-only: groups_.back() is the CURRENT (widest)
-  // group that new allocations come from.
-  std::vector<MemberSlot> data_members_;    // index_ == data column
+  // vector; data_alloc_ is index-aligned with data_members_.
+  std::vector<MemberSlot> data_members_;    // index_ == data column d
   std::vector<MemberSlot> parity_members_;  // index_ == parity row j
   std::vector<clio::run::bdev::Client> data_clients_;
   std::vector<clio::run::bdev::Client> parity_clients_;
-  // Append-only stripe groups, held by pointer so the std::atomic inside each
-  // Group never moves when the vector grows.
-  std::vector<std::unique_ptr<Group>> groups_;
-  // Persistent allocator-state log (WAL). REUSED from the bdev module. Each
-  // group's per-group allocator state is namespaced by the group's INDEX in
-  // groups_ (group_id 0,1,2,...; stable because groups_ is append-only). The
-  // append-only group geometry itself is persisted via LogGroupOpen /
-  // LogGroupFreeze. Empty path => disabled (every API is a no-op), so the
-  // pre-WAL behaviour is preserved unchanged.
+  std::vector<MemberAlloc> data_alloc_;     // per-data-member slot allocator
+  clio::run::u32 rr_cursor_;                // round-robin data-member cursor
+
+  // Reed-Solomon codec cache, keyed by stripe width k_s (data-shard count). Each
+  // codec is RS(k_s, max_failures_); a stripe of width k_s uses parity shards
+  // 0..parity_level_-1 of it. Few distinct widths, so this stays tiny.
+  std::map<int, std::unique_ptr<ec::ReedSolomon>> rs_cache_;
+
+  // Persistent allocator-state log (WAL). REUSED from the bdev module. All slot
+  // allocations are logged under a SINGLE group id (kAllocGroup) as BANDED
+  // logical offsets; on recovery, live(kAllocGroup) yields every live banded
+  // offset, each decoded back to (member d, slot s) to rebuild data_alloc_.
+  // Empty path => disabled (every API is a no-op).
+  static constexpr clio::run::u32 kAllocGroup = 0;
   clio::run::bdev::AllocatorLog alloc_log_;
+
   // Durable member manifest path (== alloc_log_path + ".members"; empty when
-  // the alloc log is disabled). Unlike the config member list -- which only
-  // names the STARTUP data members -- the manifest records the CURRENT full
-  // membership (data + parity, including runtime AddBdev drives and recovery
-  // replacements) plus each member's state and recovery flag, so Create()
-  // restores the real array on restart and resumes any interrupted recovery.
-  //
-  // The manifest is a small WRITE-AHEAD LOG (mirrors the bdev AllocatorLog):
-  // each membership change APPENDS a snapshot of the current members (a cheap
-  // fopen("ab")+fwrite -- no rename), and a periodic pass COMPACTS the log down
-  // to one record per current member (temp file + std::filesystem::rename,
-  // which replaces atomically on every platform). Replay keeps the last record
-  // per (role,index) slot. member_log_records_ is the on-disk record count that
-  // drives compaction; member_log_mu_ serialises the file I/O.
+  // the alloc log is disabled). Records the CURRENT full membership (data +
+  // parity, including runtime AddBdev drives and recovery replacements) plus
+  // each member's state and recovery flag, so Create() restores the real array
+  // on restart and resumes any interrupted recovery. It is a small WRITE-AHEAD
+  // LOG (mirrors the bdev AllocatorLog): each membership change APPENDS a
+  // snapshot of the current members (fopen("ab")+fwrite, no rename), and a
+  // periodic pass COMPACTS to one record per current member (temp file +
+  // std::filesystem::rename, atomic replace on every platform). Replay keeps the
+  // last record per (role,index) slot. member_log_records_ is the on-disk record
+  // count that drives compaction; member_log_mu_ serialises the file I/O.
   std::string members_manifest_path_;
   mutable std::mutex member_log_mu_;
   mutable clio::run::u64 member_log_records_ = 0;
   clio::run::u32 max_failures_;           // Fault-tolerance target (M == m_max)
   clio::run::u32 parity_level_;           // Parity members added so far (m)
-  clio::run::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
-  clio::run::u64 max_phys_rows_;          // Physical rows available per member
-  clio::run::u32 reattached_members_;     // Members recognized as already ours at Create
+  clio::run::u32 reattached_members_;     // Members recognized as ours at Create
 
   //==========================================================================
-  // Recovery observability. RecoverBdev rebuilds a failed member's shard for
-  // EVERY global row it participates in; each such row is one "recovery
-  // operation". These atomics let Monitor() -- and the context-visualizer
-  // safe-bdev dashboard -- report live rebuild progress: ops IN FLIGHT (the row
-  // whose reconstructed shard is being written right now) vs REMAINING (rows not
-  // yet rebuilt). They are reset at the start of every RecoverBdev call.
-  // recovery_active_ gates whether a rebuild is underway; recovering_is_parity_
-  // / recovering_index_ identify which member is being rebuilt so the dashboard
-  // can flag it. Atomic because Monitor() may run on a different worker fiber
-  // than the in-progress RecoverBdev.
+  // Recovery observability. RecoverBdev rebuilds a failed member's chunk for
+  // EVERY slot it participates in; each such slot is one "recovery operation".
+  // These atomics let Monitor() -- and the context-visualizer safe-bdev
+  // dashboard -- report live rebuild progress. Reset at the start of every
+  // RecoverBdev. Atomic because Monitor() may run on a different worker fiber
+  // than the in-progress rebuild.
   //==========================================================================
-  std::atomic<clio::run::u64> recovery_ops_total_{0};      // rows to rebuild this run
-  std::atomic<clio::run::u64> recovery_ops_completed_{0};  // rows rebuilt so far
-  std::atomic<clio::run::u64> recovery_ops_in_flight_{0};  // row mid-write right now
+  std::atomic<clio::run::u64> recovery_ops_total_{0};      // slots to rebuild
+  std::atomic<clio::run::u64> recovery_ops_completed_{0};  // slots rebuilt so far
+  std::atomic<clio::run::u64> recovery_ops_in_flight_{0};  // slot mid-write now
   std::atomic<clio::run::u32> recovery_active_{0};         // 1 while a rebuild runs
-  std::atomic<clio::run::u32> recovering_is_parity_{0};    // member role being rebuilt
-  std::atomic<int> recovering_index_{-1};                  // member index being rebuilt
+  std::atomic<clio::run::u32> recovering_is_parity_{0};    // member role rebuilt
+  std::atomic<int> recovering_index_{-1};                  // member index rebuilt
 
   // Async-parity bookkeeping. Write writes data chunks immediately and records
-  // each touched GLOBAL ROW as dirty (parity not yet current); BuildParity
-  // drains the dirty set and (re)computes all parity rows under each row's
-  // owning group's code. written_rows_ tracks every row that holds data so a
-  // parity-level increase (AddBdev as_parity) can re-dirty exactly those.
-  // Guarded by row_mu_ (never held across a co_await). A row is safe to
-  // reconstruct only when NOT dirty — degraded reads / recovery refuse a dirty
-  // (unprotected) row.
-  std::set<clio::run::u64> dirty_rows_;
-  std::set<clio::run::u64> written_rows_;
-  mutable std::mutex row_mu_;
+  // each touched SLOT as dirty (parity not yet current); BuildParity drains the
+  // dirty set and (re)computes parity for each stripe under its width's code.
+  // written_slots_ tracks every slot that currently holds data so a parity-level
+  // increase (AddBdev as_parity) can re-dirty exactly those. Guarded by slot_mu_
+  // (never held across a co_await). A slot is safe to reconstruct only when NOT
+  // dirty -- degraded reads / recovery refuse a dirty (unprotected) slot.
+  std::set<clio::run::u64> dirty_slots_;
+  std::set<clio::run::u64> written_slots_;
+  mutable std::mutex slot_mu_;
 
-  /** Mark a row as holding data and needing (re)parity. */
-  void MarkRowDirty(clio::run::u64 row) {
-    std::lock_guard<std::mutex> g(row_mu_);
-    written_rows_.insert(row);
-    dirty_rows_.insert(row);
+  /** Mark a slot as holding data and needing (re)parity. */
+  void MarkSlotDirty(clio::run::u64 s) {
+    std::lock_guard<std::mutex> g(slot_mu_);
+    written_slots_.insert(s);
+    dirty_slots_.insert(s);
   }
-  /** True if the row's parity is not yet current (unprotected). */
-  bool IsRowDirty(clio::run::u64 row) const {
-    std::lock_guard<std::mutex> g(row_mu_);
-    return dirty_rows_.count(row) != 0;
+  /** Note a slot no longer holds data (last live chunk freed): drop it from the
+   *  written set once no data member has it live. Caller ensures liveness check
+   *  already reflects the free. */
+  void ForgetSlotIfEmpty(clio::run::u64 s) {
+    for (const auto &a : data_alloc_) {
+      if (a.live_.count(s) != 0) {
+        return;  // still live somewhere -> keep tracking
+      }
+    }
+    std::lock_guard<std::mutex> g(slot_mu_);
+    written_slots_.erase(s);
+    dirty_slots_.erase(s);
+  }
+  /** True if the slot's parity is not yet current (unprotected). */
+  bool IsSlotDirty(clio::run::u64 s) const {
+    std::lock_guard<std::mutex> g(slot_mu_);
+    return dirty_slots_.count(s) != 0;
   }
 
   //==========================================================================
-  // Per-group RAID-0 address mapping. A logical byte offset L belongs to the
-  // group g whose logical range contains it (FindGroupByOffset). With
-  // local = L - g.logical_base_:
-  //   chunk     = local / kChunkLen;          within     = local % kChunkLen
-  //   data_col  = chunk % k_g;                row_in_grp = chunk / k_g
-  //   global_row = g.first_row_ + row_in_grp
-  // physical offset on DATA member data_col = kSuperblockSize +
-  // global_row*kChunkLen + within. Parity member j's chunk for the same global
-  // row is at the same physical offset kSuperblockSize + global_row*kChunkLen.
+  // Banding address helpers (pure integer decode/encode; see class comment).
   //==========================================================================
 
-  /** Absolute member-pool offset of global row `r`'s chunk start. */
-  static clio::run::u64 ChunkOffset(clio::run::u64 row) {
-    return kSuperblockSize + row * kChunkLen;
+  /** Logical byte offset of the chunk base for (member d, slot s). */
+  static clio::run::u64 BandOffset(clio::run::u32 d, clio::run::u64 s) {
+    return (static_cast<clio::run::u64>(d) * kSlotsPerMember + s) * kChunkLen;
+  }
+  /** Decode a logical byte offset into (member d, slot s, within-chunk). */
+  static void Unband(clio::run::u64 off, clio::run::u32 &d, clio::run::u64 &s,
+                     clio::run::u64 &within) {
+    const clio::run::u64 chunk = off / kChunkLen;
+    d = static_cast<clio::run::u32>(chunk / kSlotsPerMember);
+    s = chunk % kSlotsPerMember;
+    within = off % kChunkLen;
+  }
+  /** Absolute member-pool offset of slot `s`'s chunk start. */
+  static clio::run::u64 SlotPhysOffset(clio::run::u64 s) {
+    return kSuperblockSize + s * kChunkLen;
   }
 
-  /** The current (widest, last-opened) group new allocations come from. */
-  Group &CurrentGroup() { return *groups_.back(); }
-
-  /** Index of the group whose logical range contains byte offset `off`, or
-   *  -1 if none. */
-  int FindGroupByOffset(clio::run::u64 off) const {
-    for (size_t i = 0; i < groups_.size(); ++i) {
-      if (groups_[i]->ContainsOffset(off)) {
-        return static_cast<int>(i);
+  /** The data-member indices (sorted ascending) with slot `s` live -- the
+   *  membership (and RS data-shard order) of stripe `s`. */
+  std::vector<int> StripeMembers(clio::run::u64 s) const {
+    std::vector<int> mem;
+    for (size_t d = 0; d < data_alloc_.size(); ++d) {
+      if (data_alloc_[d].live_.count(s) != 0) {
+        mem.push_back(static_cast<int>(d));
       }
     }
-    return -1;
+    return mem;  // ascending by construction
   }
 
-  /** Index of the group that owns global row `row`, or -1 if none. */
-  int FindGroupByRow(clio::run::u64 row) const {
-    for (size_t i = 0; i < groups_.size(); ++i) {
-      if (groups_[i]->ContainsRow(row)) {
-        return static_cast<int>(i);
-      }
+  /** RS codec for a stripe of width `k` (RS(k, max_failures_)); cached. */
+  ec::ReedSolomon *GetCodec(int k) {
+    auto it = rs_cache_.find(k);
+    if (it == rs_cache_.end()) {
+      it = rs_cache_
+               .emplace(k, std::make_unique<ec::ReedSolomon>(
+                              k, static_cast<int>(max_failures_)))
+               .first;
     }
-    return -1;
+    return it->second.get();
   }
 
   /** Per-member pool query (members are independent local bdev pools). */
@@ -407,19 +445,18 @@ class Runtime : public clio::run::Container {
   /**
    * Automatic down-detection for a DATA member. Inspect a member-bdev future's
    * io_error_ after a chunk I/O completes: a fatal device error (DeviceFault /
-   * Disconnected) ejects data member `col` (state_ = kFaulty) so the
-   * degraded-read / reconstruct path takes over. A TRANSIENT error never faults
-   * the member.
+   * Disconnected) ejects data member `d` (state_ = kFaulty) so the degraded-read
+   * / reconstruct path takes over. A TRANSIENT error never faults the member.
    */
-  void MaybeFaultData(size_t col, clio::run::u32 io_error) {
+  void MaybeFaultData(size_t d, clio::run::u32 io_error) {
     const auto e = static_cast<ctp::IoError>(io_error);
-    if (ctp::IsFatalDevice(e) && col < data_members_.size() &&
-        data_members_[col].state_ == ec::EcState::kActive) {
-      data_members_[col].state_ = ec::EcState::kFaulty;
+    if (ctp::IsFatalDevice(e) && d < data_members_.size() &&
+        data_members_[d].state_ == ec::EcState::kActive) {
+      data_members_[d].state_ = ec::EcState::kFaulty;
       HLOG(kWarning,
            "safe_bdev: data member {} auto-faulted on fatal device error '{}' "
            "(io_error={})",
-           col, ctp::IoErrorName(e), io_error);
+           d, ctp::IoErrorName(e), io_error);
     }
   }
 
@@ -445,42 +482,34 @@ class Runtime : public clio::run::Container {
                                                          clio::run::u64 len) const;
 
   /**
-   * AsyncWrite `len` bytes from host buffer `src` to DATA member `col` at
-   * absolute member-pool offset `offset`. Auto-faults the member on a fatal
-   * io_error.
+   * AsyncWrite `len` bytes from host buffer `src` to DATA member `d` at absolute
+   * member-pool offset `offset`. Auto-faults the member on a fatal io_error.
    */
-  clio::run::TaskResume WriteDataSegment(size_t col, clio::run::u64 offset,
+  clio::run::TaskResume WriteDataSegment(size_t d, clio::run::u64 offset,
                                    const uint8_t *src, clio::run::u64 len,
                                    bool &ok);
 
   /**
    * AsyncRead `len` bytes at absolute member-pool offset `offset` from DATA
-   * member `col` into host buffer `dst`. Auto-faults the member on a fatal
+   * member `d` into host buffer `dst`. Auto-faults the member on a fatal
    * io_error.
    */
-  clio::run::TaskResume ReadDataSegment(size_t col, clio::run::u64 offset, uint8_t *dst,
+  clio::run::TaskResume ReadDataSegment(size_t d, clio::run::u64 offset, uint8_t *dst,
                                   clio::run::u64 len, bool &ok);
 
   /**
-   * Reconstruct the FULL kChunkLen chunk of DATA member `data_col` for global
-   * row `row` (owned by group `g`) by gathering k_g survivors among that
-   * group's k_g data + m parity members' chunks at that row (excluding faulty /
-   * `exclude_col` data member), DecodeData under g.rs_. `out` receives
-   * kChunkLen bytes. Returns false if too few survivors.
+   * Reconstruct ALL k_s data chunks of stripe `s` from active survivors
+   * (DecodeData under the width-k_s code), optionally excluding data member
+   * `exclude_member`. `stripe` is StripeMembers(s) (the sorted data-member
+   * indices in this stripe); `out` receives k_s buffers of kChunkLen bytes
+   * indexed by stripe POSITION (shard index). Returns false on too few
+   * survivors.
    */
-  clio::run::TaskResume ReconstructDataChunk(const Group &g, clio::run::u64 row,
-                                       int data_col, int exclude_col,
-                                       std::vector<uint8_t> &out, bool &ok);
-
-  /**
-   * Reconstruct ALL k_g data chunks for global row `row` (owned by group `g`)
-   * from active survivors (DecodeData under g.rs_), optionally excluding data
-   * column `exclude_col`. `out` receives k_g buffers of kChunkLen bytes.
-   * Returns false on too few survivors.
-   */
-  clio::run::TaskResume ReconstructRow(const Group &g, clio::run::u64 row, int exclude_col,
-                                 std::vector<std::vector<uint8_t>> &out,
-                                 bool &ok);
+  clio::run::TaskResume ReconstructStripe(clio::run::u64 s,
+                                    const std::vector<int> &stripe,
+                                    int exclude_member,
+                                    std::vector<std::vector<uint8_t>> &out,
+                                    bool &ok);
 
   /**
    * Serialize this array's identity for a member into a zero-padded
@@ -536,35 +565,18 @@ class Runtime : public clio::run::Container {
   void WriteMemberRecord(std::FILE *f, const MemberSlot &m,
                          clio::run::u32 role) const;
 
-  /** Reconstruct + write EVERY global row this member participates in onto its
-   *  (already-seated) client, under each row's owning group's code. Idempotent:
-   *  safe to re-run after an interrupted recovery. On return `ok` reports I/O
-   *  success and `completed` is false only when the CLIO_SAFE_BDEV_RECOVER_MAX_
-   *  ROWS test hook stopped the rebuild early (recovery left in-progress). */
+  /** Reconstruct + write EVERY slot this member participates in onto its
+   *  (already-seated) client. Idempotent: safe to re-run after an interrupted
+   *  recovery. On return `ok` reports I/O success and `completed` is false only
+   *  when the CLIO_SAFE_BDEV_RECOVER_MAX_ROWS test hook stopped the rebuild
+   *  early (recovery left in-progress). */
   clio::run::TaskResume RebuildMember(bool is_data, int idx, bool &ok,
                                       bool &completed);
 
-  /** After membership + groups are restored, resume any member left in the
-   *  recovering state (crash mid-RecoverBdev). Persists the manifest as members
-   *  come back online. */
+  /** After membership is restored, resume any member left in the recovering
+   *  state (crash mid-RecoverBdev). Persists the manifest as members come back
+   *  online. */
   clio::run::TaskResume ResumeRecoveries();
-
-  /** Open and initialize a new group with the given width / row band. The
-   *  group's rs_, block_map_ and heap_ are constructed; appended to groups_. */
-  void OpenGroup(int k, clio::run::u64 first_row, clio::run::u64 num_rows,
-                 clio::run::u64 logical_base);
-
-  /**
-   * Rebuild group `gi`'s per-group allocator (heap bump + free list) from a
-   * recovered live set. `live` offsets are GLOBAL logical offsets, so the
-   * group-local offset = global - group.logical_base_. Mirrors bdev's
-   * InitializeAllocatorFromLive (Heap::InitFromLive over the local offsets, +
-   * GlobalBlockMap::SeedFreeRange for the gaps below the bump). Also sets the
-   * group's allocated_bytes_ to the sum of live sizes. Call AFTER OpenGroup so
-   * the group's heap_/block_map_ exist.
-   */
-  void SeedGroupAllocatorFromLive(
-      size_t gi, const std::vector<clio::run::bdev::LiveBlock> &live);
 };
 
 }  // namespace clio::run::safe_bdev

@@ -161,6 +161,83 @@ std::vector<ctp::u8> MakePattern(size_t size, ctp::u8 seed) {
 // recovery-observability counters after RecoverBdev.
 long QueryStatField(clio::run::safe_bdev::Client &safe, const char *field);
 
+// --- Multi-block I/O helpers -------------------------------------------------
+// The dynamic view-group layout allocates PER-CHUNK round-robin, so a request
+// of N chunks comes back as N blocks banded across the data members (NOT one
+// contiguous block). Tests must therefore carry the FULL block list through
+// write + read; these helpers do that (the pattern buffer maps to the blocks in
+// order, exactly like the CTE uses a bdev).
+
+/** Sum of a block list's sizes (== total logical bytes it covers). */
+clio::run::u64 BlocksLen(const std::vector<clio::run::bdev::Block> &blocks) {
+  clio::run::u64 n = 0;
+  for (const auto &b : blocks) n += b.size_;
+  return n;
+}
+
+/** Rebuild a runtime priv::vector<Block> from a std::vector<Block>. */
+clio::run::priv::vector<clio::run::bdev::Block> ToPriv(
+    const std::vector<clio::run::bdev::Block> &blocks) {
+  clio::run::priv::vector<clio::run::bdev::Block> v(CTP_MALLOC);
+  for (const auto &b : blocks) v.push_back(b);
+  return v;
+}
+
+/** Allocate `io_len` bytes; return the FULL block list (across members). */
+std::vector<clio::run::bdev::Block> AllocBlocks(clio::run::safe_bdev::Client &safe,
+                                                clio::run::u64 io_len) {
+  auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
+  alloc.Wait();
+  REQUIRE(alloc->GetReturnCode() == 0);
+  REQUIRE(alloc->blocks_.size() > 0);
+  std::vector<clio::run::bdev::Block> v;
+  for (size_t i = 0; i < alloc->blocks_.size(); ++i) v.push_back(alloc->blocks_[i]);
+  return v;
+}
+
+/** Write `pattern` (== BlocksLen(blocks)) across the block list. */
+void WriteBlocks(clio::run::safe_bdev::Client &safe,
+                 const std::vector<clio::run::bdev::Block> &blocks,
+                 const std::vector<ctp::u8> &pattern) {
+  const clio::run::u64 len = pattern.size();
+  auto wb = ToPriv(blocks);
+  auto wbuf = CLIO_IPC->AllocateBuffer(len);
+  REQUIRE_FALSE(wbuf.IsNull());
+  memcpy(wbuf.ptr_, pattern.data(), len);
+  auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wb,
+                            wbuf.shm_.template Cast<void>(), len);
+  wt.Wait();
+  REQUIRE(wt->GetReturnCode() == 0);
+  REQUIRE(wt->bytes_written_ == len);
+  CLIO_IPC->FreeBuffer(wbuf);
+}
+
+/** Read the block list back into `out` (sized to BlocksLen(blocks)). */
+void ReadBlocks(clio::run::safe_bdev::Client &safe,
+                const std::vector<clio::run::bdev::Block> &blocks,
+                std::vector<ctp::u8> &out) {
+  const clio::run::u64 len = BlocksLen(blocks);
+  auto rb = ToPriv(blocks);
+  auto rbuf = CLIO_IPC->AllocateBuffer(len);
+  REQUIRE_FALSE(rbuf.IsNull());
+  memset(rbuf.ptr_, 0, len);
+  auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rb,
+                           rbuf.shm_.template Cast<void>(), len);
+  rt.Wait();
+  REQUIRE(rt->GetReturnCode() == 0);
+  REQUIRE(rt->bytes_read_ == len);
+  out.resize(len);
+  memcpy(out.data(), rbuf.ptr_, len);
+  CLIO_IPC->FreeBuffer(rbuf);
+}
+
+/** Flush the async parity builder as a durability barrier. */
+void FlushParity(clio::run::safe_bdev::Client &safe) {
+  auto flush = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
+  flush.Wait();
+  REQUIRE(flush->GetReturnCode() == 0);
+}
+
 }  // namespace
 
 TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
@@ -218,42 +295,13 @@ TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
   // --- Allocate a logical block spanning MULTIPLE chunks so it stripes across
   //     all data members, write a known pattern, read it back. ---
   const clio::run::u64 io_len = 2 * static_cast<clio::run::u64>(k) * kChunkLen;  // 6 chunks
-  auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
-  alloc.Wait();
-  REQUIRE(alloc->GetReturnCode() == 0);
-  REQUIRE(alloc->blocks_.size() > 0);
-  clio::run::bdev::Block block = alloc->blocks_[0];
+  std::vector<clio::run::bdev::Block> blocks = AllocBlocks(safe, io_len);
 
   std::vector<ctp::u8> pattern = MakePattern(io_len, 0x5A);
-
-  clio::run::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
-  wblocks.push_back(block);
-
-  auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
-  REQUIRE_FALSE(wbuf.IsNull());
-  memcpy(wbuf.ptr_, pattern.data(), io_len);
-  auto write_task = safe.AsyncWrite(
-      clio::run::PoolQuery::Dynamic(), wblocks,
-      wbuf.shm_.template Cast<void>(), io_len);
-  write_task.Wait();
-  REQUIRE(write_task->GetReturnCode() == 0);
-  REQUIRE(write_task->bytes_written_ == io_len);
+  WriteBlocks(safe, blocks, pattern);
 
   auto read_back = [&](std::vector<ctp::u8> &out) {
-    clio::run::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
-    rblocks.push_back(block);
-    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(rbuf.IsNull());
-    memset(rbuf.ptr_, 0, io_len);
-    auto read_task = safe.AsyncRead(
-        clio::run::PoolQuery::Dynamic(), rblocks,
-        rbuf.shm_.template Cast<void>(), io_len);
-    read_task.Wait();
-    REQUIRE(read_task->GetReturnCode() == 0);
-    REQUIRE(read_task->bytes_read_ == io_len);
-    out.resize(io_len);
-    memcpy(out.data(), rbuf.ptr_, io_len);
-    CLIO_IPC->FreeBuffer(rbuf);
+    ReadBlocks(safe, blocks, out);
   };
 
   // (1) Happy-path roundtrip.
@@ -333,7 +381,6 @@ TEST_CASE("safe_bdev_ec_roundtrip_recovery", "[safe_bdev][ec][recovery]") {
     HLOG(kInfo, "safe_bdev EC: degraded read after recovery (member 0 faulty) OK");
   }
 
-  CLIO_IPC->FreeBuffer(wbuf);
   HLOG(kInfo, "safe_bdev EC end-to-end test PASSED");
 }
 
@@ -374,24 +421,12 @@ TEST_CASE("safe_bdev_raid0_striping", "[safe_bdev][ec][striping]") {
 
   // Allocate/write a buffer > k*kChunkLen so it lands on different members.
   const clio::run::u64 io_len = 2 * static_cast<clio::run::u64>(k) * kChunkLen;  // 6 chunks
-  auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
-  alloc.Wait();
-  REQUIRE(alloc->GetReturnCode() == 0);
-  clio::run::bdev::Block block = alloc->blocks_[0];
-  // Expect the allocator to hand out logical offset 0 for the first alloc.
-  REQUIRE(block.offset_ == 0);
+  std::vector<clio::run::bdev::Block> blocks = AllocBlocks(safe, io_len);
+  // First alloc, first chunk -> data member 0, slot 0 -> banded logical off 0.
+  REQUIRE(blocks[0].offset_ == 0);
 
   std::vector<ctp::u8> pattern = MakePattern(io_len, 0x3C);
-  clio::run::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
-  wblocks.push_back(block);
-  auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
-  REQUIRE_FALSE(wbuf.IsNull());
-  memcpy(wbuf.ptr_, pattern.data(), io_len);
-  auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wblocks,
-                            wbuf.shm_.template Cast<void>(), io_len);
-  wt.Wait();
-  REQUIRE(wt->GetReturnCode() == 0);
-  CLIO_IPC->FreeBuffer(wbuf);
+  WriteBlocks(safe, blocks, pattern);
 
   // Verify physically: chunk ci lands on data member (ci % k) at member offset
   // kSuperblockSize + (ci/k)*kChunkLen. Read each data member directly via its
@@ -530,48 +565,21 @@ TEST_CASE("safe_bdev_partial_chunk", "[safe_bdev][ec][partial]") {
   // A partial-chunk write: 100000 bytes spans chunk 0 (full 64KiB) + part of
   // chunk 1, i.e. an arbitrary, non-chunk-aligned length.
   const clio::run::u64 io_len = 100000;
-  auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
-  alloc.Wait();
-  REQUIRE(alloc->GetReturnCode() == 0);
-  clio::run::bdev::Block block = alloc->blocks_[0];
-
+  std::vector<clio::run::bdev::Block> blocks = AllocBlocks(safe, io_len);
   std::vector<ctp::u8> pattern = MakePattern(io_len, 0x9E);
-  clio::run::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
-  wblocks.push_back(clio::run::bdev::Block(block.offset_, io_len, 0));
-  auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
-  REQUIRE_FALSE(wbuf.IsNull());
-  memcpy(wbuf.ptr_, pattern.data(), io_len);
-  auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wblocks,
-                            wbuf.shm_.template Cast<void>(), io_len);
-  wt.Wait();
-  REQUIRE(wt->GetReturnCode() == 0);
-  REQUIRE(wt->bytes_written_ == io_len);
-  CLIO_IPC->FreeBuffer(wbuf);
+  WriteBlocks(safe, blocks, pattern);
 
   // Flush parity, fault a data member, degraded read of the partial range.
-  auto flush = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
-  flush.Wait();
-  REQUIRE(flush->GetReturnCode() == 0);
+  FlushParity(safe);
 
   auto rm = safe.AsyncRemoveBdev(clio::run::PoolQuery::Dynamic(), data_ids[1],
                                  /*was_faulty=*/1);
   rm.Wait();
   REQUIRE(rm->GetReturnCode() == 0);
 
-  clio::run::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
-  rblocks.push_back(clio::run::bdev::Block(block.offset_, io_len, 0));
-  auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
-  REQUIRE_FALSE(rbuf.IsNull());
-  memset(rbuf.ptr_, 0, io_len);
-  auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rblocks,
-                           rbuf.shm_.template Cast<void>(), io_len);
-  rt.Wait();
-  REQUIRE(rt->GetReturnCode() == 0);
-  REQUIRE(rt->bytes_read_ == io_len);
-  std::vector<ctp::u8> got(io_len);
-  memcpy(got.data(), rbuf.ptr_, io_len);
+  std::vector<ctp::u8> got;
+  ReadBlocks(safe, blocks, got);
   REQUIRE(got == pattern);
-  CLIO_IPC->FreeBuffer(rbuf);
   HLOG(kInfo, "safe_bdev partial-chunk write/degraded-read OK ({} bytes)",
        io_len);
 }
@@ -660,45 +668,14 @@ TEST_CASE("safe_bdev_superblock_reattach", "[safe_bdev][superblock][reattach]") 
 
   // Write + flush + read a multi-chunk block so the members hold real data.
   const clio::run::u64 io_len = static_cast<clio::run::u64>(k) * kChunkLen;
-  auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
-  alloc.Wait();
-  REQUIRE(alloc->GetReturnCode() == 0);
-  REQUIRE(alloc->blocks_.size() > 0);
-  clio::run::bdev::Block block = alloc->blocks_[0];
+  std::vector<clio::run::bdev::Block> blocks = AllocBlocks(safe, io_len);
   std::vector<ctp::u8> pattern = MakePattern(io_len, 0x77);
-
+  WriteBlocks(safe, blocks, pattern);
+  FlushParity(safe);
   {
-    clio::run::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
-    wblocks.push_back(block);
-    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(wbuf.IsNull());
-    memcpy(wbuf.ptr_, pattern.data(), io_len);
-    auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wblocks,
-                              wbuf.shm_.template Cast<void>(), io_len);
-    wt.Wait();
-    REQUIRE(wt->GetReturnCode() == 0);
-    REQUIRE(wt->bytes_written_ == io_len);
-    CLIO_IPC->FreeBuffer(wbuf);
-  }
-  {
-    auto flush = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
-    flush.Wait();
-    REQUIRE(flush->GetReturnCode() == 0);
-  }
-  {
-    clio::run::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
-    rblocks.push_back(block);
-    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(rbuf.IsNull());
-    memset(rbuf.ptr_, 0, io_len);
-    auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rblocks,
-                             rbuf.shm_.template Cast<void>(), io_len);
-    rt.Wait();
-    REQUIRE(rt->GetReturnCode() == 0);
-    std::vector<ctp::u8> got(io_len);
-    memcpy(got.data(), rbuf.ptr_, io_len);
+    std::vector<ctp::u8> got;
+    ReadBlocks(safe, blocks, got);
     REQUIRE(got == pattern);
-    CLIO_IPC->FreeBuffer(rbuf);
   }
   HLOG(kInfo, "safe_bdev SB: phase 1 (fresh create + roundtrip) OK");
 
@@ -828,66 +805,35 @@ TEST_CASE("safe_bdev_add_data_no_reshuffle",
                                    /*node_id=*/0, parity_id, /*as_parity=*/1);
   add_par.Wait();
   REQUIRE(add_par->GetReturnCode() == 0);
-  REQUIRE(QueryStatField(safe, "num_groups") == 1);
+  REQUIRE(QueryStatField(safe, "data_count") == 2);
 
-  // Generic alloc+write+flush+read+verify helper. Returns the block so the
-  // caller can re-read it later (to assert it stays unchanged).
   auto write_pattern = [&](clio::run::u64 io_len, ctp::u8 seed,
-                           clio::run::bdev::Block &out_block,
+                           std::vector<clio::run::bdev::Block> &out_blocks,
                            std::vector<ctp::u8> &out_pattern) {
-    auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
-    alloc.Wait();
-    REQUIRE(alloc->GetReturnCode() == 0);
-    REQUIRE(alloc->blocks_.size() > 0);
-    out_block = alloc->blocks_[0];
+    out_blocks = AllocBlocks(safe, io_len);
     out_pattern = MakePattern(io_len, seed);
-
-    clio::run::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
-    wblocks.push_back(clio::run::bdev::Block(out_block.offset_, io_len, 0));
-    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(wbuf.IsNull());
-    memcpy(wbuf.ptr_, out_pattern.data(), io_len);
-    auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wblocks,
-                              wbuf.shm_.template Cast<void>(), io_len);
-    wt.Wait();
-    REQUIRE(wt->GetReturnCode() == 0);
-    REQUIRE(wt->bytes_written_ == io_len);
-    CLIO_IPC->FreeBuffer(wbuf);
-
-    auto flush = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
-    flush.Wait();
-    REQUIRE(flush->GetReturnCode() == 0);
+    WriteBlocks(safe, out_blocks, out_pattern);
+    FlushParity(safe);
   };
 
-  auto read_verify = [&](const clio::run::bdev::Block &block, clio::run::u64 io_len,
+  auto read_verify = [&](const std::vector<clio::run::bdev::Block> &blocks,
                          const std::vector<ctp::u8> &expect) {
-    clio::run::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
-    rblocks.push_back(clio::run::bdev::Block(block.offset_, io_len, 0));
-    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(rbuf.IsNull());
-    memset(rbuf.ptr_, 0, io_len);
-    auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rblocks,
-                             rbuf.shm_.template Cast<void>(), io_len);
-    rt.Wait();
-    REQUIRE(rt->GetReturnCode() == 0);
-    REQUIRE(rt->bytes_read_ == io_len);
-    std::vector<ctp::u8> got(io_len);
-    memcpy(got.data(), rbuf.ptr_, io_len);
+    std::vector<ctp::u8> got;
+    ReadBlocks(safe, blocks, got);
     REQUIRE(got == expect);
-    CLIO_IPC->FreeBuffer(rbuf);
   };
 
-  // --- Pattern A in group 0 (k=2): 4 chunks. ---
+  // --- Pattern A written while k=2 (round-robin over 2 data members). ---
   const clio::run::u64 lenA = 2 * static_cast<clio::run::u64>(k0) * kChunkLen;  // 4 chunks
-  clio::run::bdev::Block blockA;
+  std::vector<clio::run::bdev::Block> blockA;
   std::vector<ctp::u8> patternA;
   write_pattern(lenA, 0xA1, blockA, patternA);
-  read_verify(blockA, lenA, patternA);
-  HLOG(kInfo, "safe_bdev add-data: pattern A written+verified in group 0 "
-              "(offset {}, {} bytes)", blockA.offset_, lenA);
+  read_verify(blockA, patternA);
+  HLOG(kInfo, "safe_bdev add-data: pattern A written+verified with 2 data "
+              "members ({} bytes)", lenA);
 
-  // --- AddBdev a 3rd DATA member: must succeed (no longer an error) and open
-  //     group 1 (k=3). ---
+  // --- AddBdev a 3rd DATA member: succeeds with NO data movement; the
+  //     round-robin now spreads new writes over 3 members. ---
   clio::run::PoolId data3_id(static_cast<clio::run::u32>(10170 + pidsalt), 0);
   clio::run::bdev::Client data3_client(data3_id);
   REQUIRE(CreateRamMember(data3_client, member_name(2), data3_id));
@@ -897,37 +843,34 @@ TEST_CASE("safe_bdev_add_data_no_reshuffle",
   auto add_data = safe.AsyncAddBdev(clio::run::PoolQuery::Dynamic(), member_name(2),
                                     /*node_id=*/0, data3_id, /*as_parity=*/0);
   add_data.Wait();
-  REQUIRE(add_data->GetReturnCode() == 0);  // <-- the fix: no longer an error
-  REQUIRE(QueryStatField(safe, "num_groups") == 2);
+  REQUIRE(add_data->GetReturnCode() == 0);
   REQUIRE(QueryStatField(safe, "data_count") == 3);
-  HLOG(kInfo, "safe_bdev add-data: 3rd data member added, num_groups=2");
+  HLOG(kInfo, "safe_bdev add-data: 3rd data member added (data_count=3)");
 
-  // --- Pattern B in group 1 (k=3): 6 chunks. ---
+  // --- Pattern B written now that k=3 (spreads over 3 data drives). ---
   const clio::run::u64 lenB = 2 * 3 * kChunkLen;  // 6 chunks across 3 data drives
-  clio::run::bdev::Block blockB;
+  std::vector<clio::run::bdev::Block> blockB;
   std::vector<ctp::u8> patternB;
   write_pattern(lenB, 0xB2, blockB, patternB);
-  read_verify(blockB, lenB, patternB);
-  // Group 1's logical offsets must lie ABOVE group 0's range.
-  REQUIRE(blockB.offset_ >= lenA);
-  HLOG(kInfo, "safe_bdev add-data: pattern B written+verified in group 1 "
-              "(offset {}, {} bytes)", blockB.offset_, lenB);
+  read_verify(blockB, patternB);
+  HLOG(kInfo, "safe_bdev add-data: pattern B written+verified with 3 data "
+              "members ({} bytes)", lenB);
 
   // --- NO RESHUFFLE: re-read pattern A; it must be UNCHANGED. ---
-  read_verify(blockA, lenA, patternA);
+  read_verify(blockA, patternA);
   HLOG(kInfo, "safe_bdev add-data: pattern A UNCHANGED after add (no reshuffle)");
 
-  // --- Fault data member 0 (shared by BOTH groups) and confirm degraded reads
-  //     reconstruct in BOTH groups, each under its own k. ---
+  // --- Fault data member 0 and confirm degraded reads reconstruct BOTH
+  //     patterns (each stripe under its own variable width). ---
   auto rm = safe.AsyncRemoveBdev(clio::run::PoolQuery::Dynamic(), data_ids[0],
                                  /*was_faulty=*/1);
   rm.Wait();
   REQUIRE(rm->GetReturnCode() == 0);
 
-  read_verify(blockA, lenA, patternA);  // group 0 (k=2) degraded
-  HLOG(kInfo, "safe_bdev add-data: degraded read of pattern A (group 0, k=2) OK");
-  read_verify(blockB, lenB, patternB);  // group 1 (k=3) degraded
-  HLOG(kInfo, "safe_bdev add-data: degraded read of pattern B (group 1, k=3) OK");
+  read_verify(blockA, patternA);  // pattern A degraded
+  HLOG(kInfo, "safe_bdev add-data: degraded read of pattern A OK");
+  read_verify(blockB, patternB);  // pattern B degraded
+  HLOG(kInfo, "safe_bdev add-data: degraded read of pattern B OK");
 
   HLOG(kInfo, "safe_bdev add-data no-reshuffle test PASSED");
 }
@@ -974,8 +917,8 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
   const clio::run::u64 lenB = 2 * 3 * kChunkLen;                          // 6 chunks
   std::vector<ctp::u8> patternA = MakePattern(lenA, 0xA1);
   std::vector<ctp::u8> patternB = MakePattern(lenB, 0xB2);
-  clio::run::bdev::Block blockA;
-  clio::run::bdev::Block blockB;
+  std::vector<clio::run::bdev::Block> blockA;
+  std::vector<clio::run::bdev::Block> blockB;
 
   // Member pool ids (reused verbatim in phase 2 so each bdev pool re-opens the
   // SAME backing file).
@@ -986,47 +929,18 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
   // A write+flush(parity) helper bound to a given safe client.
   auto write_pattern = [&](clio::run::safe_bdev::Client &safe, clio::run::u64 io_len,
                            const std::vector<ctp::u8> &pattern,
-                           clio::run::bdev::Block &out_block) {
-    auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), io_len);
-    alloc.Wait();
-    REQUIRE(alloc->GetReturnCode() == 0);
-    REQUIRE(alloc->blocks_.size() > 0);
-    out_block = alloc->blocks_[0];
-
-    clio::run::priv::vector<clio::run::bdev::Block> wblocks(CTP_MALLOC);
-    wblocks.push_back(clio::run::bdev::Block(out_block.offset_, io_len, 0));
-    auto wbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(wbuf.IsNull());
-    memcpy(wbuf.ptr_, pattern.data(), io_len);
-    auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wblocks,
-                              wbuf.shm_.template Cast<void>(), io_len);
-    wt.Wait();
-    REQUIRE(wt->GetReturnCode() == 0);
-    REQUIRE(wt->bytes_written_ == io_len);
-    CLIO_IPC->FreeBuffer(wbuf);
-
-    auto flush = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
-    flush.Wait();
-    REQUIRE(flush->GetReturnCode() == 0);
+                           std::vector<clio::run::bdev::Block> &out_blocks) {
+    out_blocks = AllocBlocks(safe, io_len);
+    WriteBlocks(safe, out_blocks, pattern);
+    FlushParity(safe);
   };
 
   auto read_verify = [&](clio::run::safe_bdev::Client &safe,
-                         const clio::run::bdev::Block &block, clio::run::u64 io_len,
+                         const std::vector<clio::run::bdev::Block> &blocks,
                          const std::vector<ctp::u8> &expect) {
-    clio::run::priv::vector<clio::run::bdev::Block> rblocks(CTP_MALLOC);
-    rblocks.push_back(clio::run::bdev::Block(block.offset_, io_len, 0));
-    auto rbuf = CLIO_IPC->AllocateBuffer(io_len);
-    REQUIRE_FALSE(rbuf.IsNull());
-    memset(rbuf.ptr_, 0, io_len);
-    auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rblocks,
-                             rbuf.shm_.template Cast<void>(), io_len);
-    rt.Wait();
-    REQUIRE(rt->GetReturnCode() == 0);
-    REQUIRE(rt->bytes_read_ == io_len);
-    std::vector<ctp::u8> got(io_len);
-    memcpy(got.data(), rbuf.ptr_, io_len);
+    std::vector<ctp::u8> got;
+    ReadBlocks(safe, blocks, got);
     REQUIRE(got == expect);
-    CLIO_IPC->FreeBuffer(rbuf);
   };
 
   // ======================================================================
@@ -1058,15 +972,14 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
                                      /*node_id=*/0, parity_id, /*as_parity=*/1);
     add_par.Wait();
     REQUIRE(add_par->GetReturnCode() == 0);
-    REQUIRE(QueryStatField(safe, "num_groups") == 1);
+    REQUIRE(QueryStatField(safe, "data_count") == 2);
 
-    // Pattern A in group 0 (k=2).
+    // Pattern A written while k=2.
     write_pattern(safe, lenA, patternA, blockA);
-    read_verify(safe, blockA, lenA, patternA);
-    HLOG(kInfo, "safe_bdev alog: phase1 pattern A in group 0 (offset {})",
-         blockA.offset_);
+    read_verify(safe, blockA, patternA);
+    HLOG(kInfo, "safe_bdev alog: phase1 pattern A written (k=2)");
 
-    // Add a 3rd DATA member => opens group 1 (k=3).
+    // Add a 3rd DATA member (no data movement; new writes now span 3 members).
     clio::run::bdev::Client data3_client(data3_id);
     REQUIRE(CreateFileMember(data3_client, member_file(2), data3_id));
     data3_id = data3_client.pool_id_;
@@ -1075,15 +988,12 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
                                       /*node_id=*/0, data3_id, /*as_parity=*/0);
     add_data.Wait();
     REQUIRE(add_data->GetReturnCode() == 0);
-    REQUIRE(QueryStatField(safe, "num_groups") == 2);
     REQUIRE(QueryStatField(safe, "data_count") == 3);
 
-    // Pattern B in group 1 (k=3); its logical offset is above group 0's range.
+    // Pattern B written now that k=3.
     write_pattern(safe, lenB, patternB, blockB);
-    read_verify(safe, blockB, lenB, patternB);
-    REQUIRE(blockB.offset_ >= lenA);
-    HLOG(kInfo, "safe_bdev alog: phase1 pattern B in group 1 (offset {})",
-         blockB.offset_);
+    read_verify(safe, blockB, patternB);
+    HLOG(kInfo, "safe_bdev alog: phase1 pattern B written (k=3)");
 
     // Explicit one-shot alloc-log flush barrier (mirrors bdev's WAL test): the
     // PoolManager DestroyPool does not invoke the container Destroy handler, so
@@ -1110,7 +1020,7 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
   // ======================================================================
   // PHASE 2 (RESTART): create a NEW safe-bdev pool over the SAME member files
   //          (re-opened bdev pools) + SAME alloc_log_path + SAME safe pool id.
-  //          Assert recovery: num_groups==2, A and B intact, and a fresh alloc
+  //          Assert recovery: data_count==3, A and B intact, and a fresh alloc
   //          does NOT collide with the recovered live blocks.
   // ======================================================================
   {
@@ -1135,40 +1045,29 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
     safe2.pool_id_ = create_task->new_pool_id_;
     REQUIRE(create_task->GetReturnCode() == 0);
 
-    // (a) The append-only group structure recovered: 2 groups, 3 data members.
-    const long ng = QueryStatField(safe2, "num_groups");
-    HLOG(kInfo, "safe_bdev alog: RESTART recovered num_groups={}", ng);
-    REQUIRE(ng == 2);
+    // (a) Membership recovered: 3 data members, all re-attached; parity was
+    //     restored from the durable member manifest without a manual re-add.
     REQUIRE(QueryStatField(safe2, "data_count") == 3);
-    // The members carry our superblock => they re-attach (not fresh/foreign).
     REQUIRE(QueryReattachedMembers(safe2) == 3);
-
-    // Parity is now DURABLE: Create restored the runtime-added parity member
-    // from the member manifest, so it is present again without a manual re-add
-    // (parity_level == 1). Degraded paths remain available.
     REQUIRE(QueryStatField(safe2, "parity_level") == 1);
 
-    // (b) Pattern A (group 0) AND pattern B (group 1) read back correctly —
-    //     data intact on the file members + correct group/allocator recovery.
-    read_verify(safe2, blockA, lenA, patternA);
-    HLOG(kInfo, "safe_bdev alog: RESTART pattern A intact (group 0, offset {})",
-         blockA.offset_);
-    read_verify(safe2, blockB, lenB, patternB);
-    HLOG(kInfo, "safe_bdev alog: RESTART pattern B intact (group 1, offset {})",
-         blockB.offset_);
+    // (b) Pattern A AND pattern B read back correctly -- data intact on the file
+    //     members + correct per-member slot-allocator recovery from the WAL.
+    read_verify(safe2, blockA, patternA);
+    read_verify(safe2, blockB, patternB);
+    HLOG(kInfo, "safe_bdev alog: RESTART patterns A+B intact after recovery");
 
-    // (c) A fresh allocation must NOT overlap the recovered live blocks of A/B.
-    auto alloc = safe2.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), kChunkLen);
-    alloc.Wait();
-    REQUIRE(alloc->GetReturnCode() == 0);
-    REQUIRE(alloc->blocks_.size() > 0);
-    const clio::run::bdev::Block nb = alloc->blocks_[0];
-    REQUIRE_FALSE(RangesOverlap(nb.offset_, nb.size_, blockA.offset_, lenA));
-    REQUIRE_FALSE(RangesOverlap(nb.offset_, nb.size_, blockB.offset_, lenB));
-    HLOG(kInfo,
-         "safe_bdev alog: RESTART fresh alloc at offset {} (size {}) does NOT "
-         "collide with recovered A/B",
-         nb.offset_, nb.size_);
+    // (c) A fresh allocation must NOT overlap any recovered live chunk of A/B.
+    std::vector<clio::run::bdev::Block> nb = AllocBlocks(safe2, kChunkLen);
+    for (const auto &fb : nb) {
+      for (const auto &ab : blockA) {
+        REQUIRE_FALSE(RangesOverlap(fb.offset_, fb.size_, ab.offset_, ab.size_));
+      }
+      for (const auto &bb : blockB) {
+        REQUIRE_FALSE(RangesOverlap(fb.offset_, fb.size_, bb.offset_, bb.size_));
+      }
+    }
+    HLOG(kInfo, "safe_bdev alog: RESTART fresh alloc does NOT collide with A/B");
 
     clio::run::admin::Client admin(clio::run::kAdminPoolId);
     auto destroy = admin.AsyncDestroyPool(clio::run::PoolQuery::Dynamic(),
@@ -1226,15 +1125,14 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
   std::filesystem::remove(log_path, ec);
   std::filesystem::remove(log_path + ".members", ec);
 
-  const clio::run::u64 kMember = 16 * 1024 * 1024;  // 16 MB members => 255 rows
+  const clio::run::u64 kMember = 16 * 1024 * 1024;  // 16 MB members => 255 slots
   const int k0 = 3;
-  // Small, SINGLE-BLOCK working set (a large allocation can span multiple,
-  // bucket-capped blocks whose size differs by platform). What matters for the
-  // consistency property is that recovery rebuilds the WHOLE group (255 rows)
-  // regardless of how much data is written -- so a small write still drives a
-  // 255-row rebuild that we interrupt at 40 and resume on restart.
-  const clio::run::u64 kDataLen =
-      2 * static_cast<clio::run::u64>(k0) * kChunkLen;  // 6 chunks, 1 block
+  // Recovery now rebuilds exactly the faulted member's LIVE slots (not a whole
+  // fixed group), so the working set must be large enough that the faulted data
+  // member owns > 40 slots -- otherwise the 40-slot interrupt hook would finish
+  // the rebuild instead of leaving it incomplete. With k0=3, 180 chunks spread
+  // round-robin => ~60 slots per data member.
+  const clio::run::u64 kDataLen = 180 * kChunkLen;  // 180 chunks -> ~60 slots/member
 
   // Stable pool ids: the member bdevs stay resident across the safe-pool
   // reboots (disks persist), so their ids + backing files are stable.
@@ -1255,46 +1153,18 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
   };
 
   const std::vector<ctp::u8> pattern = MakePattern(kDataLen, 0xC7);
-  clio::run::bdev::Block blk;
+  std::vector<clio::run::bdev::Block> blks;
 
   auto write_all = [&](clio::run::safe_bdev::Client &safe) {
-    auto alloc =
-        safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), kDataLen);
-    alloc.Wait();
-    REQUIRE(alloc->GetReturnCode() == 0);
-    REQUIRE(alloc->blocks_.size() > 0);
-    blk = alloc->blocks_[0];  // kDataLen is small => one contiguous block
-    clio::run::priv::vector<clio::run::bdev::Block> wb(CTP_MALLOC);
-    wb.push_back(clio::run::bdev::Block(blk.offset_, kDataLen, 0));
-    auto wbuf = CLIO_IPC->AllocateBuffer(kDataLen);
-    REQUIRE_FALSE(wbuf.IsNull());
-    memcpy(wbuf.ptr_, pattern.data(), kDataLen);
-    auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wb,
-                              wbuf.shm_.template Cast<void>(), kDataLen);
-    wt.Wait();
-    REQUIRE(wt->GetReturnCode() == 0);
-    REQUIRE(wt->bytes_written_ == kDataLen);
-    CLIO_IPC->FreeBuffer(wbuf);
-    auto fl = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
-    fl.Wait();
-    REQUIRE(fl->GetReturnCode() == 0);
+    blks = AllocBlocks(safe, kDataLen);
+    WriteBlocks(safe, blks, pattern);
+    FlushParity(safe);
   };
 
   auto verify_all = [&](clio::run::safe_bdev::Client &safe) {
-    clio::run::priv::vector<clio::run::bdev::Block> rb(CTP_MALLOC);
-    rb.push_back(clio::run::bdev::Block(blk.offset_, kDataLen, 0));
-    auto rbuf = CLIO_IPC->AllocateBuffer(kDataLen);
-    REQUIRE_FALSE(rbuf.IsNull());
-    memset(rbuf.ptr_, 0, kDataLen);
-    auto rt = safe.AsyncRead(clio::run::PoolQuery::Dynamic(), rb,
-                             rbuf.shm_.template Cast<void>(), kDataLen);
-    rt.Wait();
-    REQUIRE(rt->GetReturnCode() == 0);
-    REQUIRE(rt->bytes_read_ == kDataLen);
-    std::vector<ctp::u8> got(kDataLen);
-    memcpy(got.data(), rbuf.ptr_, kDataLen);
+    std::vector<ctp::u8> got;
+    ReadBlocks(safe, blks, got);
     REQUIRE(got == pattern);
-    CLIO_IPC->FreeBuffer(rbuf);
   };
 
   auto destroy_safe = [&](clio::run::safe_bdev::Client &safe) {
@@ -1362,7 +1232,7 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
     HLOG(kInfo, "safe_bdev consistency: STEP2 data intact after clean reboot");
 
     // STEP 3: fault data member 1 and recover onto the spare, but INTERRUPT the
-    // rebuild after 40 of 128 rows (simulated crash mid-recovery).
+    // rebuild after 40 of its ~60 live slots (simulated crash mid-recovery).
     auto rm = safe.AsyncRemoveBdev(clio::run::PoolQuery::Dynamic(), d_id[1],
                                    /*was_faulty=*/1);
     rm.Wait();
@@ -1426,6 +1296,144 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
   std::filesystem::remove(log_path + ".members", ec);
   HLOG(kInfo,
        "safe_bdev consistency restart + interrupted-recovery test PASSED");
+}
+
+// Capacity behaviour of the dynamic view-group layout. Scenario (scaled): start
+// with ONE data drive, fill it heavily (~84% -- mirrors 216 MB of a 256 MB
+// drive), add a second data drive, write the same again, add parity, then verify
+// everything reads back. This asserts the redesign's WIN: adding a data drive
+// makes its FULL capacity available (per-chunk round-robin, no group freeze), so
+// the second heavy write fits entirely -- unlike the old append-only layout,
+// which stranded the added drive (fitting only ~5/13 blocks in phase 2).
+TEST_CASE("safe_bdev_capacity_add_data_then_parity",
+          "[safe_bdev][capacity]") {
+  EnsureInit();
+  REQUIRE(g_initialized);
+  std::this_thread::sleep_for(100ms);
+
+  const int pidsalt = static_cast<int>(getpid() & 0xFFF);
+  const std::filesystem::path tmp_dir = std::filesystem::temp_directory_path();
+  auto mfile = [&](int i) {
+    return (tmp_dir / ("safe_cap_" + std::to_string(getpid()) + "_" +
+                       std::to_string(i) + ".bin"))
+        .string();
+  };
+  const std::string log_path =
+      (tmp_dir / ("safe_cap_" + std::to_string(getpid()) + ".alog")).string();
+  std::error_code ec;
+  for (int i = 0; i < 3; ++i) std::filesystem::remove(mfile(i), ec);
+  std::filesystem::remove(log_path, ec);
+  std::filesystem::remove(log_path + ".members", ec);
+
+  // Members are kMemberRamSize (4 MB) => ~63 usable chunk-rows each. We write in
+  // 256 KB (4-chunk) single blocks and target ~84% of a drive per phase.
+  clio::run::PoolId safe_id(static_cast<clio::run::u32>(80000 + pidsalt), 0);
+  clio::run::PoolId d0_id(static_cast<clio::run::u32>(81000 + pidsalt), 0);
+  clio::run::PoolId d1_id(static_cast<clio::run::u32>(81001 + pidsalt), 0);
+  clio::run::PoolId par_id(static_cast<clio::run::u32>(82000 + pidsalt), 0);
+
+  clio::run::bdev::Client c0(d0_id), c1(d1_id), cp(par_id);
+  REQUIRE(CreateFileMember(c0, mfile(0), d0_id));
+  REQUIRE(CreateFileMember(c1, mfile(1), d1_id));
+  REQUIRE(CreateFileMember(cp, mfile(2), par_id));
+
+  clio::run::safe_bdev::Client safe(safe_id);
+  {
+    std::vector<clio::run::safe_bdev::MemberBdevDesc> m;
+    m.emplace_back(mfile(0), 0, d0_id);
+    auto ct = safe.AsyncCreate(clio::run::PoolQuery::Dynamic(), "safe_cap",
+                               safe_id, /*max_failures=*/1, m, log_path);
+    ct.Wait();
+    safe.pool_id_ = ct->new_pool_id_;
+    REQUIRE(ct->GetReturnCode() == 0);
+  }
+
+  const clio::run::u64 BLK = 4 * kChunkLen;  // 256 KB == 4 chunks (round-robin)
+  std::vector<std::pair<std::vector<clio::run::bdev::Block>,
+                        std::vector<ctp::u8>>>
+      stored;
+  int seed = 0;
+
+  auto try_write = [&]() -> bool {
+    // Non-asserting alloc: this loop deliberately probes until the array is
+    // full, so a failed allocation is an expected outcome, not a test failure.
+    auto alloc = safe.AsyncAllocateBlocks(clio::run::PoolQuery::Dynamic(), BLK);
+    alloc.Wait();
+    if (alloc->GetReturnCode() != 0 || alloc->blocks_.empty()) return false;
+    std::vector<clio::run::bdev::Block> blocks;
+    for (size_t i = 0; i < alloc->blocks_.size(); ++i) {
+      blocks.push_back(alloc->blocks_[i]);
+    }
+    auto pat = MakePattern(BLK, static_cast<ctp::u8>(0x40 + (seed++ & 0x3F)));
+    auto wb = ToPriv(blocks);
+    auto wbuf = CLIO_IPC->AllocateBuffer(BLK);
+    if (wbuf.IsNull()) return false;
+    memcpy(wbuf.ptr_, pat.data(), BLK);
+    auto wt = safe.AsyncWrite(clio::run::PoolQuery::Dynamic(), wb,
+                              wbuf.shm_.template Cast<void>(), BLK);
+    wt.Wait();
+    const bool ok = (wt->GetReturnCode() == 0 && wt->bytes_written_ == BLK);
+    CLIO_IPC->FreeBuffer(wbuf);
+    if (ok) stored.emplace_back(std::move(blocks), std::move(pat));
+    return ok;
+  };
+
+  const int target = 13;  // ~84% of a 63-slot drive at 4 chunks/block
+
+  // PHASE 1: one data drive. All `target` blocks fit (< a full drive).
+  int s1 = 0;
+  for (int i = 0; i < target; ++i) {
+    if (try_write()) ++s1;
+  }
+  HLOG(kInfo, "safe_bdev capacity: phase1 (1 data drive) stored {}/{} blocks",
+       s1, target);
+  REQUIRE(s1 == target);
+
+  // Add a second data drive. NO group freeze / NO stranding: the per-chunk
+  // round-robin now fills the new drive too, so the FULL aggregate capacity
+  // (Sum of per-drive capacity) becomes available with no data movement.
+  auto add_d = safe.AsyncAddBdev(clio::run::PoolQuery::Dynamic(), mfile(1), 0,
+                                 d1_id, /*as_parity=*/0);
+  add_d.Wait();
+  REQUIRE(add_d->GetReturnCode() == 0);
+
+  // PHASE 2: write the same amount again. Under the dynamic view-group model it
+  // ALL fits -- the second drive's space is fully usable. (The old append-only
+  // layout stranded it, fitting only ~5/13 blocks here.)
+  int s2 = 0;
+  for (int i = 0; i < target; ++i) {
+    if (try_write()) ++s2;
+  }
+  HLOG(kInfo, "safe_bdev capacity: phase2 (2 data drives) stored {}/{} blocks",
+       s2, target);
+  REQUIRE(s2 == target);  // FULL capacity, no stranding -- the redesign's win
+
+  // Add a parity drive and build parity over everything written.
+  auto add_p = safe.AsyncAddBdev(clio::run::PoolQuery::Dynamic(), mfile(2), 0,
+                                 par_id, /*as_parity=*/1);
+  add_p.Wait();
+  REQUIRE(add_p->GetReturnCode() == 0);
+  auto bp = safe.AsyncBuildParity(clio::run::PoolQuery::Dynamic(), 0);
+  bp.Wait();
+  REQUIRE(bp->GetReturnCode() == 0);
+
+  // Everything that WAS stored must read back byte-for-byte.
+  for (auto &blk_pat : stored) {
+    std::vector<ctp::u8> got;
+    ReadBlocks(safe, blk_pat.first, got);
+    REQUIRE(got == blk_pat.second);
+  }
+  HLOG(kInfo,
+       "safe_bdev capacity: stored+verified {} of {} attempted blocks "
+       "(phase1={}, phase2={})",
+       stored.size(), 2 * target, s1, s2);
+
+  clio::run::admin::Client admin(clio::run::kAdminPoolId);
+  auto d = admin.AsyncDestroyPool(clio::run::PoolQuery::Dynamic(), safe.pool_id_);
+  d.Wait();
+  for (int i = 0; i < 3; ++i) std::filesystem::remove(mfile(i), ec);
+  std::filesystem::remove(log_path, ec);
+  std::filesystem::remove(log_path + ".members", ec);
 }
 
 SIMPLE_TEST_MAIN()

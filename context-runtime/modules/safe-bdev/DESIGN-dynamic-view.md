@@ -1,6 +1,7 @@
 # Safe BDev — Dynamic View-Group Design
 
-**Status:** proposal (for review before implementation)
+**Status:** implemented (per-chunk round-robin + banded addressing + per-slot
+variable-width parity; all safe-bdev ctests pass, incl. the full-capacity test)
 **Supersedes:** the append-only, physically-row-aligned "stripe groups" layout.
 **Goal:** full capacity utilization when drives are added to a partially-filled
 array, keeping erasure-coded reliability. Priority is **space + reliability over
@@ -66,31 +67,33 @@ Each cell satisfies `k + m = N`, `m = f`. E.g. 8 drives surviving 2 failures =
 targets — a stripe reaches width `k` only once that many data drives have written
 into it (narrower stripes are protected as mirrors meanwhile, §4.1).
 
-## 3. Addressing (logical chunk index → physical via a small map)
+## 3. Addressing (banding: the offset encodes member + slot)
 
-The safe-bdev exposes a logical, 1 MB-chunked address space. The **logical chunk
-index** of an offset is `off / 1MB` (the simple op above).
-
-Each logical chunk is assigned to a physical **(data member `d`, slot `s`)** by
-**per-chunk round-robin** over the non-full data members, and that assignment is
-recorded in a **chunk map**:
+Each data member owns 1 MB **slots** `0, 1, 2, …`. A chunk's logical offset
+**encodes its physical location directly** — pure integer math, no lookup table:
 
 ```
-chunk_map[logical_chunk] = (data member d, slot s)     # slot = 1 MB unit on d
-physical byte offset on d = superblock + s · 1MB
+chunk_index = off / 1MB
+member  d   = chunk_index / SLOTS_PER_MEMBER      # SLOTS_PER_MEMBER = fixed cap, e.g. 2^32
+slot    s   = chunk_index % SLOTS_PER_MEMBER
+physical byte offset on member d = superblock + s · 1MB
 ```
 
-- Round-robin over an **available, growing** set of members (skip-full, drives
-  added over time, plus frees) is **not** a fixed formula — a formula would
-  either strand capacity (the current groups) or force data movement on add. The
-  map is what buys **full capacity + no data movement** at once.
-- The map is small and shrinks with the 1 MB chunk (16× fewer entries than a
-  64 KiB chunk): one `(d, s)` per LIVE chunk (`d` a small int, `s` a slot index).
-  It is rebuilt on restart by replaying the allocator WAL (§7) and bounded by
-  compaction — no separate on-disk structure.
-- `d` is the member's stable positional index (never rotates, even across
-  remove/recover); the CTE stores opaque offsets so nothing external depends on
-  the layout.
+- Per-chunk **round-robin** picks the member `d` for each new chunk; that
+  member's own allocator picks the slot `s`; the returned offset is
+  `(d · SLOTS_PER_MEMBER + s) · 1MB`.
+- Decode is a plain `div`/`mod` (this is the "`off / 1MB` = chunk" op). There is
+  **nothing extra to persist for addressing** — only each member's slot
+  allocator (WAL, §7). No chunk map.
+- `d` is the member's **stable positional index** (never rotates, even across
+  remove/recover — a recovered member keeps its index), so held offsets stay
+  valid across membership changes.
+- Offsets are **sparse** (each member occupies a band of the address space), but
+  the CTE stores bdev offsets opaquely, so nothing external depends on them being
+  dense/contiguous.
+- `SLOTS_PER_MEMBER` caps a member at `SLOTS_PER_MEMBER · 1MB`; with `2^32` slots
+  that's 4 PiB/member, and `num_members · SLOTS_PER_MEMBER · 1MB` stays within
+  u64 for any realistic member count.
 
 ## 4. Stripes & parity (offset-aligned, variable width)
 
@@ -131,7 +134,7 @@ covered, just less space-efficiently until the array grows. (If you'd rather
 
 **Allocate** — **per-chunk round-robin**: each 1 MB logical chunk in the request
 is assigned to the next non-full data member (cursor advances per chunk), taking
-that member's next free slot; the assignment is recorded in the chunk map. A
+that member's next free slot; the returned offset bands member+slot (§3). A
 multi-chunk request therefore spreads across members and comes back as a block
 list (adjacent same-member chunks coalesced).
 
@@ -177,13 +180,14 @@ after a crash (as today). Keyed by offset instead of group row.
 - **Superblocks**: array identity + role + index (unchanged).
 - **Member-manifest WAL**: membership + recovery state (unchanged; the WAL +
   roll-forward work already landed).
-- The **chunk map** (logical chunk → `(d, s)`) is rebuilt by replaying the
-  allocator WAL — it is not a separate on-disk structure. Stripe membership and
-  parity are then re-derived from the per-member live sets.
+- Addressing needs nothing persisted — the offset bands member+slot (§3).
+  Each member's slot allocator (high-water + free list + live set) is rebuilt by
+  replaying the allocator WAL; stripe membership and parity are then re-derived
+  from the per-member live sets.
 
 ## 8. Migration from the current layout
 
-The on-disk format changes (per-member chunk allocation + chunk-map addressing vs
+The on-disk format changes (per-member chunk allocation + banded addressing vs
 group/row records). Safe-bdev is still WIP (PR #663), so the plan is to **bump
 the superblock/WAL format version and NOT migrate in place** — pre-existing
 arrays are recreated, and a version mismatch is refused rather than
@@ -196,7 +200,8 @@ preserving.)
 |---|---|---|
 | Superblock | 64 KiB / member | fixed per member |
 | Parity storage | `m` parity drives | `m/(k+m)` of raw; the EC cost |
-| Allocator WAL + chunk map | 1 record / live 1 MB chunk (`d` + slot) | grows with live chunks; 1 MB granularity keeps it 16× smaller than 64 KiB; WAL-derived + compacted |
+| Per-member allocator WAL | 1 record / live 1 MB chunk (member + slot) | grows with live chunks; 1 MB granularity keeps it 16× smaller than 64 KiB; WAL-derived + compacted |
+| Addressing map | **none** | banded encoding is formulaic (§3) |
 | Member-manifest WAL | tens of bytes / member | bounded by member count |
 | RS codec cache | one codec per distinct stripe width | ≤ num data members |
 
@@ -204,11 +209,10 @@ preserving.)
 
 - **Allocation granularity** — **per-chunk round-robin** over 1 MB EC chunks; a
   region touches `off / 1MB` chunks. *(settled)*
-- **Addressing** — a **chunk map** (logical chunk → `(d, s)`), rebuilt from the
-  allocator WAL. This replaces the earlier "banded, no-map" sketch — round-robin
-  over an available/growing set with no data movement isn't formulaic, so the
-  map is required (and the 1 MB chunk keeps it cheap). *(the "BAND" idea is
-  dropped)*
+- **Addressing** — **banding**: the offset encodes (member, slot), decoded by
+  `div`/`mod` (§3). No lookup map; only per-member slot allocators are persisted
+  (via the WAL). Round-robin decides the member at alloc time; the offset carries
+  it thereafter, so held offsets survive add/remove/recover. *(settled)*
 - **Sub-`m+1`-width stripes** — allowed; narrow writes are protected as a mirror
   (`RS(1, 1)`) and widen to `RS(k, m)` as drives join (see §4.1). *(accepted)*
 - **Parity placement** — **dedicated** parity members. *(confirmed)*
