@@ -40,9 +40,11 @@
 #include <clio_runtime/bdev/transports/block_allocator.h>  // bdev::Heap, bdev::GlobalBlockMap
 #include <clio_runtime/bdev/bdev_alloc_log.h>  // bdev::AllocatorLog (reused WAL)
 
+#include <cstdio>  // std::FILE
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
 #include <vector>
 
 #include <clio_ctp/io/io_error.h>  // ctp::IoError, ctp::IsFatalDevice
@@ -298,7 +300,17 @@ class Runtime : public clio::run::Container {
   // membership (data + parity, including runtime AddBdev drives and recovery
   // replacements) plus each member's state and recovery flag, so Create()
   // restores the real array on restart and resumes any interrupted recovery.
+  //
+  // The manifest is a small WRITE-AHEAD LOG (mirrors the bdev AllocatorLog):
+  // each membership change APPENDS a snapshot of the current members (a cheap
+  // fopen("ab")+fwrite -- no rename), and a periodic pass COMPACTS the log down
+  // to one record per current member (temp file + std::filesystem::rename,
+  // which replaces atomically on every platform). Replay keeps the last record
+  // per (role,index) slot. member_log_records_ is the on-disk record count that
+  // drives compaction; member_log_mu_ serialises the file I/O.
   std::string members_manifest_path_;
+  mutable std::mutex member_log_mu_;
+  mutable clio::run::u64 member_log_records_ = 0;
   clio::run::u32 max_failures_;           // Fault-tolerance target (M == m_max)
   clio::run::u32 parity_level_;           // Parity members added so far (m)
   clio::run::u64 total_rows_;             // Physical rows available (== max_phys_rows_)
@@ -504,12 +516,25 @@ class Runtime : public clio::run::Container {
     std::string pool_name_;
   };
 
-  /** Atomically rewrite the member manifest from the live data/parity slots.
-   *  No-op when members_manifest_path_ is empty (alloc log disabled). */
-  void PersistMemberManifest() const;
+  /** APPEND a snapshot of the current data/parity members to the member-log
+   *  WAL (cheap; no rewrite/rename). No-op when logging is disabled. */
+  void PersistMemberManifest();
 
-  /** Load the member manifest into `out`. Returns false if absent/corrupt. */
+  /** COMPACT the member-log WAL to one record per current member (temp file +
+   *  atomic rename). Called after Create restores membership and periodically
+   *  once the on-disk record count grows past a threshold. */
+  void CompactMemberManifest();
+
+  /** True if the member log has grown enough to warrant compaction. */
+  bool MemberManifestNeedsCompaction() const;
+
+  /** Replay the member-log WAL into `out`, keeping the last record per
+   *  (role,index) slot. Returns false if absent/empty. */
   bool LoadMemberManifest(std::vector<MemberManifestEntry> &out) const;
+
+  /** Write one member record to an open file handle (append or compact). */
+  void WriteMemberRecord(std::FILE *f, const MemberSlot &m,
+                         clio::run::u32 role) const;
 
   /** Reconstruct + write EVERY global row this member participates in onto its
    *  (already-seated) client, under each row's owning group's code. Idempotent:

@@ -42,8 +42,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
+
+#ifndef _WIN32
+#include <unistd.h>  // ::fsync, ::fileno (member-log durability)
+#endif
 
 namespace clio::run::safe_bdev {
 
@@ -388,61 +393,109 @@ clio::run::TaskResume Runtime::ReconstructDataChunk(const Group &g, clio::run::u
 // Method handlers
 //===========================================================================
 
-// The member manifest uses a small hand-rolled binary format (NOT msgpack) so
-// the runtime .so pulls in no msgpack UNPACK symbol -- keeping its dynamic
-// symbol table clean for the modules that dlopen it. Layout (native-endian
-// u32; same-host restart):
-//   [magic][count]  then per member:
+// The member manifest is a small WRITE-AHEAD LOG (mirrors the bdev
+// AllocatorLog). It carries NO msgpack -- a hand-rolled, append-friendly binary
+// stream of variable-length member records (native-endian u32; same-host):
 //   [role][index][pool_major][pool_minor][node_id][state][recovering]
-//   [name_len][name bytes...]
-namespace {
-constexpr clio::run::u32 kMemberManifestMagic = 0x53424d31;  // "SBM1"
-}  // namespace
+//   [name_len][name bytes...]  (repeated)
+// A membership change APPENDS a snapshot of every current member (cheap
+// fopen("ab") -- no rename); replay keeps the LAST record per (role,index)
+// slot; and CompactMemberManifest() periodically rewrites the log to one record
+// per member (temp file + atomic std::filesystem::rename, which -- unlike C's
+// std::rename -- replaces an existing file on every platform, including
+// Windows). A crash mid-append leaves a partial trailing record that replay
+// simply stops at.
 
-void Runtime::PersistMemberManifest() const {
+void Runtime::WriteMemberRecord(std::FILE *f, const MemberSlot &m,
+                                clio::run::u32 role) const {
+  const auto put_u32 = [&](clio::run::u32 v) {
+    std::fwrite(&v, sizeof(v), 1, f);
+  };
+  put_u32(role);
+  put_u32(static_cast<clio::run::u32>(m.index_));
+  put_u32(m.pool_id_.major_);
+  put_u32(m.pool_id_.minor_);
+  put_u32(m.node_id_);
+  put_u32(static_cast<clio::run::u32>(m.state_));
+  put_u32(m.recovering_ ? 1u : 0u);
+  put_u32(static_cast<clio::run::u32>(m.pool_name_.size()));
+  if (!m.pool_name_.empty()) {
+    std::fwrite(m.pool_name_.data(), 1, m.pool_name_.size(), f);
+  }
+}
+
+void Runtime::PersistMemberManifest() {
   if (members_manifest_path_.empty()) {
     return;
   }
-  const std::string tmp = members_manifest_path_ + ".tmp";
-  std::ofstream ofs(tmp, std::ios::binary | std::ios::trunc);
-  if (!ofs.is_open()) {
-    HLOG(kWarning, "safe_bdev: cannot open member manifest tmp '{}'", tmp);
+  std::lock_guard<std::mutex> lk(member_log_mu_);
+  std::FILE *f = std::fopen(members_manifest_path_.c_str(), "ab");
+  if (f == nullptr) {
+    HLOG(kWarning, "safe_bdev: cannot open member log '{}' for append",
+         members_manifest_path_);
     return;
   }
-  const auto put_u32 = [&](clio::run::u32 v) {
-    ofs.write(reinterpret_cast<const char *>(&v), sizeof(v));
-  };
-  const auto put_member = [&](const MemberSlot &m, clio::run::u32 role) {
-    put_u32(role);
-    put_u32(static_cast<clio::run::u32>(m.index_));
-    put_u32(m.pool_id_.major_);
-    put_u32(m.pool_id_.minor_);
-    put_u32(m.node_id_);
-    put_u32(static_cast<clio::run::u32>(m.state_));
-    put_u32(m.recovering_ ? 1u : 0u);
-    put_u32(static_cast<clio::run::u32>(m.pool_name_.size()));
-    if (!m.pool_name_.empty()) {
-      ofs.write(m.pool_name_.data(),
-                static_cast<std::streamsize>(m.pool_name_.size()));
-    }
-  };
-  put_u32(kMemberManifestMagic);
-  put_u32(static_cast<clio::run::u32>(data_members_.size() +
-                                      parity_members_.size()));
-  for (const auto &m : data_members_) put_member(m, 0);
-  for (const auto &m : parity_members_) put_member(m, 1);
-  ofs.flush();
-  ofs.close();
-  // Atomic replace. std::filesystem::rename overwrites an existing destination
-  // on all platforms (unlike C's std::rename, which fails on Windows when the
-  // target already exists -- which would silently freeze the manifest after the
-  // first write and lose runtime parity/recovery updates on restart).
-  std::error_code ren_ec;
-  std::filesystem::rename(tmp, members_manifest_path_, ren_ec);
-  if (ren_ec) {
-    HLOG(kWarning, "safe_bdev: member manifest rename '{}' -> '{}' failed: {}",
-         tmp, members_manifest_path_, ren_ec.message());
+  for (const auto &m : data_members_) WriteMemberRecord(f, m, 0);
+  for (const auto &m : parity_members_) WriteMemberRecord(f, m, 1);
+  std::fflush(f);
+#ifndef _WIN32
+  int fd = ::fileno(f);
+  if (fd >= 0) {
+    ::fsync(fd);
   }
+#endif
+  std::fclose(f);
+  member_log_records_ += data_members_.size() + parity_members_.size();
+}
+
+void Runtime::CompactMemberManifest() {
+  if (members_manifest_path_.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> lk(member_log_mu_);
+  const std::string tmp = members_manifest_path_ + ".compact.tmp";
+  std::FILE *f = std::fopen(tmp.c_str(), "wb");
+  if (f == nullptr) {
+    return;
+  }
+  clio::run::u64 written = 0;
+  for (const auto &m : data_members_) {
+    WriteMemberRecord(f, m, 0);
+    ++written;
+  }
+  for (const auto &m : parity_members_) {
+    WriteMemberRecord(f, m, 1);
+    ++written;
+  }
+  std::fflush(f);
+#ifndef _WIN32
+  int fd = ::fileno(f);
+  if (fd >= 0) {
+    ::fsync(fd);
+  }
+#endif
+  std::fclose(f);
+  std::error_code ec;
+  std::filesystem::rename(tmp, members_manifest_path_, ec);
+  if (ec) {
+    std::filesystem::remove(tmp, ec);
+    HLOG(kWarning, "safe_bdev: member log compaction rename failed: {}",
+         ec.message());
+    return;
+  }
+  member_log_records_ = written;
+}
+
+bool Runtime::MemberManifestNeedsCompaction() const {
+  clio::run::u64 recs = 0;
+  {
+    std::lock_guard<std::mutex> lk(member_log_mu_);
+    recs = member_log_records_;
+  }
+  // Compact once the log holds several appends' worth of records. Membership is
+  // tiny, so a small floor keeps the file bounded without churning.
+  const clio::run::u64 live = data_members_.size() + parity_members_.size();
+  return recs > std::max<clio::run::u64>(64, live * 8);
 }
 
 bool Runtime::LoadMemberManifest(std::vector<MemberManifestEntry> &out) const {
@@ -450,39 +503,48 @@ bool Runtime::LoadMemberManifest(std::vector<MemberManifestEntry> &out) const {
   if (members_manifest_path_.empty()) {
     return false;
   }
+  std::lock_guard<std::mutex> lk(member_log_mu_);
   std::ifstream ifs(members_manifest_path_, std::ios::binary);
   if (!ifs.is_open()) {
     return false;
   }
   const auto get_u32 = [&](clio::run::u32 &v) -> bool {
-    return static_cast<bool>(
-        ifs.read(reinterpret_cast<char *>(&v), sizeof(v)));
+    return static_cast<bool>(ifs.read(reinterpret_cast<char *>(&v), sizeof(v)));
   };
-  clio::run::u32 magic = 0;
-  clio::run::u32 count = 0;
-  if (!get_u32(magic) || magic != kMemberManifestMagic || !get_u32(count)) {
-    return false;
-  }
-  for (clio::run::u32 i = 0; i < count; ++i) {
+  // Replay the whole log; the LAST record for a (role,index) slot wins. Keyed
+  // + iterated in (role,index) order for a stable membership order.
+  std::map<clio::run::u64, MemberManifestEntry> latest;
+  clio::run::u64 total = 0;
+  while (true) {
     MemberManifestEntry e;
     clio::run::u32 name_len = 0;
-    if (!get_u32(e.role_) || !get_u32(e.index_) || !get_u32(e.pool_major_) ||
+    if (!get_u32(e.role_)) {
+      break;  // clean EOF
+    }
+    if (e.role_ > 1) {
+      break;  // corrupt / foreign -> stop at the valid prefix
+    }
+    if (!get_u32(e.index_) || !get_u32(e.pool_major_) ||
         !get_u32(e.pool_minor_) || !get_u32(e.node_id_) || !get_u32(e.state_) ||
         !get_u32(e.recovering_) || !get_u32(name_len)) {
-      out.clear();
-      return false;
+      break;  // partial trailing record (crash mid-append) -> stop
     }
     if (name_len > (1u << 20)) {  // sanity bound
-      out.clear();
-      return false;
+      break;
     }
     e.pool_name_.resize(name_len);
     if (name_len > 0 &&
         !ifs.read(&e.pool_name_[0], static_cast<std::streamsize>(name_len))) {
-      out.clear();
-      return false;
+      break;
     }
-    out.push_back(std::move(e));
+    const clio::run::u64 key =
+        (static_cast<clio::run::u64>(e.role_) << 32) | e.index_;
+    latest[key] = std::move(e);
+    ++total;
+  }
+  member_log_records_ = total;  // on-disk record count -> drives compaction
+  for (auto &kv : latest) {
+    out.push_back(std::move(kv.second));
   }
   return !out.empty();
 }
@@ -772,10 +834,11 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
                            /*period_us=*/kBuildParityPeriodUs);
 
   // Resume any recovery interrupted by a crash (members restored as recovering),
-  // then persist the current membership so the NEXT restart is consistent (this
-  // also writes the initial manifest on a fresh create).
+  // then COMPACT the member log to a clean one-record-per-member snapshot so the
+  // NEXT restart replays a bounded log (this also writes the initial log on a
+  // fresh create).
   CLIO_CO_AWAIT(ResumeRecoveries());
-  PersistMemberManifest();
+  CompactMemberManifest();
 
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -1682,6 +1745,11 @@ clio::run::TaskResume Runtime::FlushAllocLog(
       std::max<clio::run::u64>(kMinCompactRecords, live * kCompactGrowthFactor);
   if (on_disk > threshold) {
     alloc_log_.Compact();
+  }
+  // Periodically compact the member-log WAL on the same cadence, once its
+  // appended records have grown past its (much smaller) threshold.
+  if (MemberManifestNeedsCompaction()) {
+    CompactMemberManifest();
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
