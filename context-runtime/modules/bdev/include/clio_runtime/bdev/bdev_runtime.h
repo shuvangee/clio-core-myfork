@@ -16,6 +16,8 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <thread>
 
 namespace clio::run::bdev {
 
@@ -32,7 +34,7 @@ class Runtime : public clio::run::Container {
               total_bytes_read_(0), total_bytes_written_(0) {
     start_time_ = std::chrono::high_resolution_clock::now();
   }
-  ~Runtime() override = default;
+  ~Runtime() override;
 
   /**
    * Get live task statistics for this task instance.
@@ -45,6 +47,7 @@ class Runtime : public clio::run::Container {
   clio::run::TaskResume Write(clio::run::shared_ptr<WriteTask> &task);
   clio::run::TaskResume Read(clio::run::shared_ptr<ReadTask> &task);
   clio::run::TaskResume GetStats(clio::run::shared_ptr<GetStatsTask> &task);
+  clio::run::TaskResume SetLifespan(clio::run::shared_ptr<SetLifespanTask> &task);
   clio::run::TaskResume Update(clio::run::shared_ptr<UpdateTask> &task);
   clio::run::TaskResume Monitor(clio::run::shared_ptr<MonitorTask> &task);
   clio::run::TaskResume Destroy(clio::run::shared_ptr<DestroyTask> &task);
@@ -85,8 +88,41 @@ class Runtime : public clio::run::Container {
   std::atomic<clio::run::u64> total_bytes_read_;
   std::atomic<clio::run::u64> total_bytes_written_;
   std::chrono::high_resolution_clock::time_point start_time_;
-  
+
   PerfMetrics perf_metrics_;
+
+  // Predictive device health: estimated days until drive failure.
+  // Populated by a background thread that periodically queries the
+  // local prediction server (server.py). Default 999999 = healthy.
+  std::atomic<clio::run::u32> predicted_ttl_days_{999999};
+
+  // Path to the device file this bdev owns (set in Init, used for SMART reads)
+  std::string device_path_;
+
+  // Background health-poll thread and its stop flag.
+  std::thread health_poll_thread_;
+  std::atomic<bool> health_poll_stop_{false};
+
+  // How often (seconds) to re-poll the prediction server.
+  static constexpr unsigned kHealthPollIntervalSec = 300;  // every 5 minutes
+
+  // URL of the local prediction server.  Override via CLIO_PRED_SERVER env var.
+  static constexpr const char *kDefaultPredServerUrl =
+      "http://127.0.0.1:8000/predict/auto";
+
+  /**
+   * Reads SMART attributes from the OS for device_path_ and posts them to the
+   * local prediction server.  Runs on health_poll_thread_.
+   */
+  void PollPredictionServer();
+
+  /**
+   * Stop the background health poll thread and destroy the bdev transport.
+   *
+   * This is shared by Destroy() and the destructor so shutdown is safe even if
+   * the container is torn down without the explicit destroy task.
+   */
+  void StopHealthPolling();
 
   size_t GetWorkerID(clio::run::RunContext& rctx);
 

@@ -641,17 +641,18 @@ struct ReadTask : public clio::run::Task {
  */
 struct GetStatsTask : public clio::run::Task {
   // Task-specific data (no inputs)
-  OUT PerfMetrics metrics_;      // Performance metrics
+  OUT PerfMetrics metrics_;            // Performance metrics
   OUT clio::run::u64 remaining_size_;  // Remaining allocatable space
+  OUT clio::run::u32 predicted_ttl_days_; // Predicted device TTL in days (999999 = healthy)
 
   /** SHM default constructor */
-  GetStatsTask() : clio::run::Task(), remaining_size_(0) {}
+  GetStatsTask() : clio::run::Task(), remaining_size_(0), predicted_ttl_days_(999999) {}
 
   /** Emplace constructor */
   explicit GetStatsTask(const clio::run::TaskId &task_node,
                         const clio::run::PoolId &pool_id,
                         const clio::run::PoolQuery &pool_query)
-      : clio::run::Task(task_node, pool_id, pool_query, 10), remaining_size_(0) {
+      : clio::run::Task(task_node, pool_id, pool_query, 10), remaining_size_(0), predicted_ttl_days_(999999) {
     // Initialize task
     task_id_ = task_node;
     pool_id_ = pool_id;
@@ -671,7 +672,7 @@ struct GetStatsTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(metrics_, remaining_size_);
+    ar(metrics_, remaining_size_, predicted_ttl_days_);
   }
 
   /**
@@ -684,12 +685,60 @@ struct GetStatsTask : public clio::run::Task {
     // Copy GetStatsTask-specific fields
     metrics_ = other->metrics_;
     remaining_size_ = other->remaining_size_;
+    predicted_ttl_days_ = other->predicted_ttl_days_;
   }
 
   /** AggregateOut replica results into this task */
   void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
     Task::AggregateOut(other_base);
     Copy(other_base.template Cast<GetStatsTask>());
+  }
+};
+
+/**
+ * SetLifespanTask - Inject a predicted remaining device lifetime in days.
+ *
+ * This task lets tests and administrative flows override the current health
+ * signal that bdev reports through GetStats/Monitor. A value of 999999 is
+ * treated as healthy, while smaller values are consumed by CTE's TTL filter.
+ */
+struct SetLifespanTask : public clio::run::Task {
+  IN clio::run::u32 lifespan_days_;
+
+  CTP_CROSS_FUN SetLifespanTask()
+      : clio::run::Task(), lifespan_days_(999999) {}
+
+  CTP_CROSS_FUN explicit SetLifespanTask(
+      const clio::run::TaskId &task_node, const clio::run::PoolId &pool_id,
+      const clio::run::PoolQuery &pool_query, clio::run::u32 lifespan_days)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kSetLifespan),
+        lifespan_days_(lifespan_days) {
+    task_id_ = task_node;
+    pool_id_ = pool_id;
+    method_ = Method::kSetLifespan;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+    ar(lifespan_days_);
+  }
+
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+  }
+
+  void Copy(const ctp::ipc::FullPtr<SetLifespanTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+    lifespan_days_ = other->lifespan_days_;
+  }
+
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<SetLifespanTask>());
   }
 };
 
