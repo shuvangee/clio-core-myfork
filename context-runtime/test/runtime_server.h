@@ -112,9 +112,19 @@ class RuntimeServer {
    * the runtime lives. Returns true if the process was spawned (use
    * WaitForReady() to confirm it actually came up).
    */
+  /**
+   * @param detached  Spawn the daemon with NO controlling console/terminal
+   *   (Windows: DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP; POSIX:
+   *   POSIX_SPAWN_SETSID). This is the console-less spawn from issue #721, where
+   *   the ZeroMQ transport failed to initialize Winsock ("WSASTARTUP not yet
+   *   performed") and the daemon stayed alive but unreachable. A serviceable
+   *   daemon after a detached spawn proves the transport initializes regardless
+   *   of console.
+   */
   bool Start(unsigned port = 10500,
              const std::string &bind_addr = "127.0.0.1",
-             bool ephemeral = false) {
+             bool ephemeral = false,
+             bool detached = false) {
     port_ = port;
     SetEnv("CLIO_PORT", std::to_string(port));
     SetEnv("CLIO_BIND_ADDR", bind_addr);
@@ -151,8 +161,13 @@ class RuntimeServer {
     ZeroMemory(&pi_, sizeof(pi_));
     std::vector<char> mutable_cmd(cmd.begin(), cmd.end());
     mutable_cmd.push_back('\0');
+    // #721: a console-less spawn. DETACHED_PROCESS gives the child no console;
+    // CREATE_NEW_PROCESS_GROUP detaches it from this process's Ctrl-C group.
+    // This is the flag combination under which the daemon's ZeroMQ transport
+    // failed WSAStartup and went silently dead.
+    DWORD flags = detached ? (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP) : 0;
     BOOL ok = CreateProcessA(nullptr, mutable_cmd.data(), nullptr, nullptr,
-                             TRUE, 0, nullptr, nullptr, &si, &pi_);
+                             TRUE, flags, nullptr, nullptr, &si, &pi_);
     if (hlog != INVALID_HANDLE_VALUE) CloseHandle(hlog);
     if (!ok) return false;
     started_ = true;
@@ -163,13 +178,27 @@ class RuntimeServer {
     posix_spawn_file_actions_addopen(&actions, 1, log.c_str(),
                                      O_WRONLY | O_CREAT | O_TRUNC, 0644);
     posix_spawn_file_actions_adddup2(&actions, 1, 2);
+    // #721 (POSIX analogue): start a new session so the daemon has NO
+    // controlling terminal, mirroring the Windows DETACHED_PROCESS spawn.
+    posix_spawnattr_t attr;
+    posix_spawnattr_t *attrp = nullptr;
+#ifdef POSIX_SPAWN_SETSID
+    if (detached) {
+      posix_spawnattr_init(&attr);
+      posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSID);
+      attrp = &attr;
+    }
+#else
+    (void)detached;
+#endif
     const char *argv_plain[] = {exe.c_str(), "start", nullptr};
     const char *argv_eph[] = {exe.c_str(), "start", "--ephemeral", nullptr};
-    int rc = posix_spawn(&pid_, exe.c_str(), &actions, nullptr,
+    int rc = posix_spawn(&pid_, exe.c_str(), &actions, attrp,
                          const_cast<char *const *>(ephemeral ? argv_eph
                                                              : argv_plain),
                          environ);
     posix_spawn_file_actions_destroy(&actions);
+    if (attrp != nullptr) posix_spawnattr_destroy(attrp);
     if (rc != 0) {
       pid_ = -1;
       return false;

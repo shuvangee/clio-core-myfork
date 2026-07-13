@@ -342,6 +342,34 @@ set_target_properties(${EXTERNAL_CLIENT_TEST_TARGET} PROPERTIES
 )
 endif()
 
+# #721 console-less (detached) daemon spawn. Verifies the daemon's transport
+# initializes and stays serviceable when spawned WITHOUT a controlling console
+# (the Windows WSAStartup regression). POSIX-only for now: like the IPC
+# transport-modes test above, it includes runtime_server.h whose Windows path
+# pulls <windows.h>, which clashes with the ctp lightbeam <winsock2.h> headers
+# (issue #476). On POSIX it exercises the POSIX_SPAWN_SETSID (no-controlling-tty)
+# spawn + a TCP client round-trip through the daemon's ROUTER.
+if(NOT WIN32)
+add_executable(clio_run_detached_spawn_tests test_daemon_detached_spawn.cc)
+target_include_directories(clio_run_detached_spawn_tests PRIVATE
+  ${CLIO_RUN_ROOT}/include
+  ${CLIO_RUN_ROOT}/test  # For simple_test.h / runtime_server.h
+)
+target_link_libraries(clio_run_detached_spawn_tests
+  clio_run_cxx
+  ctp::cxx
+  ${CMAKE_THREAD_LIBS_INIT}
+)
+add_dependencies(clio_run_detached_spawn_tests clio_run)
+target_compile_definitions(clio_run_detached_spawn_tests PRIVATE
+  CLIO_RUN_EXE="$<TARGET_FILE:clio_run>")
+set_target_properties(clio_run_detached_spawn_tests PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+endif()
+
 # Create Runtime Cleanup test executable
 add_executable(${RUNTIME_CLEANUP_TEST_TARGET} ${RUNTIME_CLEANUP_TEST_SOURCES})
 
@@ -834,6 +862,20 @@ if(CLIO_CORE_ENABLE_TESTS)
     ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     TIMEOUT 120
   )
+
+  # #721: console-less daemon spawn stays serviceable. Spawns its own daemon on
+  # port 10615 — serialize with the other live-runtime tests.
+  add_test(
+    NAME cr_detached_spawn
+    COMMAND clio_run_detached_spawn_tests
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cr_detached_spawn PROPERTIES
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10615"
+    RESOURCE_LOCK "clio_runtime_port"
+    TIMEOUT 120
+    LABELS "runtime;transport;detached"
+  )
   endif()
 
   # Runtime Cleanup Tests
@@ -1006,6 +1048,7 @@ if(CLIO_CORE_ENABLE_TESTS)
       cr_external_client_multiple_clients
       cr_external_client_without_server
       cr_external_client_operations
+      cr_detached_spawn
       cr_client_retry_server_restart_tcp
       cr_client_retry_server_restart_ipc
       cr_client_retry_server_restart_shm
