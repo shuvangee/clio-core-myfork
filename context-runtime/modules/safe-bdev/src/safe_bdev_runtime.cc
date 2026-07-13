@@ -800,7 +800,14 @@ clio::run::TaskResume Runtime::AllocateBlocks(
     clio::run::bdev::Block block(off, seg, 0);
     task->blocks_.push_back(block);
     alloc_log_.LogAlloc(kAllocGroup, off, seg, 0);
-    MarkSlotDirty(s);
+    // Do NOT dirty the slot here. Parity tracks COMMITTED (written) data, not
+    // reservations: an allocated-but-unwritten slot holds no meaningful bytes,
+    // and dirtying it lets the async BuildParity encode parity over UNWRITTEN
+    // data. Worse, such a stale build (started between alloc and the write) can
+    // land AFTER the write's parity flush and overwrite the correct parity with
+    // garbage -- a timing-dependent corruption. Write (and stripe-narrowing
+    // Free) are what dirty a slot; a widening add-drive is covered because the
+    // new member's WRITE dirties the stripes it joins.
     remaining -= seg;
   }
 
