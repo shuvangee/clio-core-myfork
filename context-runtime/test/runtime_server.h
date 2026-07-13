@@ -66,6 +66,19 @@
 #include "clio_ctp/introspect/system_info.h"
 #include "clio_ctp/util/config_parse.h"
 
+// Downstream POSIX tests that include this header (test_clio_run_cli,
+// test_cte_fallback, ...) call kill()/waitpid()/open() directly and have long
+// relied on it to pull the declarations. Keep providing them on POSIX: only
+// <windows.h> was the #476 clash with the ctp lightbeam <winsock2.h> — these
+// POSIX headers do not conflict, and the block is skipped on Windows. (The
+// process spawn/wait/kill this header itself needs now live in ctp::SystemInfo.)
+#ifndef _WIN32
+#include <csignal>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 // Defined in clio::run::test; tests reach it as clio::run::test::RuntimeServer.
 namespace clio {
 namespace run {
