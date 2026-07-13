@@ -214,6 +214,23 @@ class Client : public clio::run::ContainerClient {
     return ipc_manager->Send(task);
   }
 
+  /**
+   * Set the predicted lifespan reported by bdev.
+   *
+   * @param pool_query Pool query used to route the override to the target.
+   * @param lifespan_days Remaining lifespan in days. Large values mean healthy
+   *     storage; small values let tests simulate a degrading device.
+   */
+  clio::run::Future<clio::run::bdev::SetLifespanTask> AsyncSetLifespan(
+      const clio::run::PoolQuery& pool_query, clio::run::u32 lifespan_days) {
+    auto* ipc_manager = CLIO_CPU_IPC;
+
+    auto task = ipc_manager->NewTask<clio::run::bdev::SetLifespanTask>(
+        clio::run::CreateTaskId(), pool_id_, pool_query, lifespan_days);
+
+    return ipc_manager->Send(task);
+  }
+
 };
 
 }  // namespace clio::run::bdev

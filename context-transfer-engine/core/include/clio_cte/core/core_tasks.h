@@ -223,6 +223,7 @@ struct TargetInfo {
   clio::run::u64 remaining_space_;  // Remaining allocatable space in bytes
   clio::run::u64 max_capacity_;     // Total (max) capacity in bytes, fixed at register
   clio::run::bdev::PerfMetrics perf_metrics_;  // Performance metrics from bdev
+  clio::run::u32 expected_ttl_days_; // Predictive device TTL (defaults to 999999)
   clio::run::bdev::PersistenceLevel persistence_level_;
   // Underlying bdev type, captured at RegisterTarget time. Used by the
   // GPU metadata cache projection to decide whether a blob landed in a
@@ -239,6 +240,7 @@ struct TargetInfo {
         target_score_(0.0f),
         remaining_space_(0),
         max_capacity_(0),
+        expected_ttl_days_(999999),
         persistence_level_(clio::run::bdev::PersistenceLevel::kVolatile),
         bdev_type_(clio::run::bdev::BdevType::kFile) {}
 
@@ -253,6 +255,7 @@ struct TargetInfo {
         target_score_(0.0f),
         remaining_space_(0),
         max_capacity_(0),
+        expected_ttl_days_(999999),
         persistence_level_(clio::run::bdev::PersistenceLevel::kVolatile) {}
 #endif
 
@@ -269,6 +272,7 @@ struct TargetInfo {
         remaining_space_(other.remaining_space_),
         max_capacity_(other.max_capacity_),
         perf_metrics_(other.perf_metrics_),
+        expected_ttl_days_(other.expected_ttl_days_),
         persistence_level_(other.persistence_level_),
         bdev_type_(other.bdev_type_) {}
 
@@ -286,6 +290,7 @@ struct TargetInfo {
       remaining_space_ = other.remaining_space_;
       max_capacity_ = other.max_capacity_;
       perf_metrics_ = other.perf_metrics_;
+      expected_ttl_days_ = other.expected_ttl_days_;
       persistence_level_ = other.persistence_level_;
       bdev_type_ = other.bdev_type_;
     }
