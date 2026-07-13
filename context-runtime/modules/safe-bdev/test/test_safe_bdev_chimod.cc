@@ -1100,10 +1100,10 @@ TEST_CASE("safe_bdev_alloc_log_restart_recovery",
 //      interrupt hook),
 //   5. restart, and
 //   6. verify the data is FULLY recovered (redundancy restored).
-// The rebuild spans the whole group (255 rows here) independent of how much
-// data is written, so a small single-block write still drives a 255-row rebuild
-// interrupted at 40 and resumed on restart; the 256 MB through-the-CTE path is
-// covered by the containerized safe-bdev test.
+// Recovery rebuilds exactly the faulted member's live slots, so the working set
+// is sized (many small writes -> ~60 slots/member) so the 40-slot interrupt
+// leaves the rebuild incomplete and resumable on restart; the 256 MB
+// through-the-CTE path is covered by the containerized safe-bdev test.
 TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
           "[safe_bdev][consistency][recover][restart]") {
   EnsureInit();
@@ -1130,9 +1130,15 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
   // Recovery now rebuilds exactly the faulted member's LIVE slots (not a whole
   // fixed group), so the working set must be large enough that the faulted data
   // member owns > 40 slots -- otherwise the 40-slot interrupt hook would finish
-  // the rebuild instead of leaving it incomplete. With k0=3, 180 chunks spread
-  // round-robin => ~60 slots per data member.
-  const clio::run::u64 kDataLen = 180 * kChunkLen;  // 180 chunks -> ~60 slots/member
+  // the rebuild instead of leaving it incomplete. We build that up with MANY
+  // SMALL writes rather than one huge I/O: a single multi-MB allocate/write/read
+  // would exhaust the IPC buffer pool on some platforms (macOS). kNumWrites x
+  // kWriteChunks(6) = 180 chunks spread round-robin over 3 members => ~60 slots
+  // per data member, while every individual I/O stays as small as the other
+  // passing tests.
+  const int kNumWrites = 30;
+  const clio::run::u64 kWriteLen =
+      2 * static_cast<clio::run::u64>(k0) * kChunkLen;  // 6 chunks per write
 
   // Stable pool ids: the member bdevs stay resident across the safe-pool
   // reboots (disks persist), so their ids + backing files are stable.
@@ -1152,19 +1158,29 @@ TEST_CASE("safe_bdev_consistency_restart_interrupted_recovery",
     REQUIRE(t->GetReturnCode() == 0);
   };
 
-  const std::vector<ctp::u8> pattern = MakePattern(kDataLen, 0xC7);
-  std::vector<clio::run::bdev::Block> blks;
+  // Each entry: the blocks of one small write + the exact bytes written, so
+  // verify_all can read every write back and byte-compare (mirrors the capacity
+  // test's per-block store).
+  std::vector<std::pair<std::vector<clio::run::bdev::Block>, std::vector<ctp::u8>>>
+      stored;
 
   auto write_all = [&](clio::run::safe_bdev::Client &safe) {
-    blks = AllocBlocks(safe, kDataLen);
-    WriteBlocks(safe, blks, pattern);
+    stored.clear();
+    for (int i = 0; i < kNumWrites; ++i) {
+      auto blocks = AllocBlocks(safe, kWriteLen);
+      auto pat = MakePattern(kWriteLen, static_cast<ctp::u8>(0xC7 + i));
+      WriteBlocks(safe, blocks, pat);
+      stored.emplace_back(std::move(blocks), std::move(pat));
+    }
     FlushParity(safe);
   };
 
   auto verify_all = [&](clio::run::safe_bdev::Client &safe) {
-    std::vector<ctp::u8> got;
-    ReadBlocks(safe, blks, got);
-    REQUIRE(got == pattern);
+    for (auto &sp : stored) {
+      std::vector<ctp::u8> got;
+      ReadBlocks(safe, sp.first, got);
+      REQUIRE(got == sp.second);
+    }
   };
 
   auto destroy_safe = [&](clio::run::safe_bdev::Client &safe) {
