@@ -110,6 +110,12 @@ static herr_t H5FD__clio_read(H5FD_t *_file, H5FD_mem_t type, hid_t fapl_id,
                                 haddr_t addr, size_t size, void *buf);
 static herr_t H5FD__clio_write(H5FD_t *_file, H5FD_mem_t type, hid_t fapl_id,
                                  haddr_t addr, size_t size, const void *buf);
+static herr_t H5FD__clio_get_handle(H5FD_t *_file, hid_t fapl,
+                                    void **file_handle);
+static herr_t H5FD__clio_flush(H5FD_t *_file, hid_t dxpl_id, bool closing);
+static herr_t H5FD__clio_truncate(H5FD_t *_file, hid_t dxpl_id, bool closing);
+static herr_t H5FD__clio_lock(H5FD_t *_file, bool rw);
+static herr_t H5FD__clio_unlock(H5FD_t *_file);
 
 static const H5FD_class_t H5FD_clio_g = {
     H5FD_CLASS_VERSION,   /* struct version       */
@@ -137,18 +143,18 @@ static const H5FD_class_t H5FD_clio_g = {
     NULL,                 /* free                 */
     H5FD__clio_get_eoa, /* get_eoa              */
     H5FD__clio_set_eoa, /* set_eoa              */
-    H5FD__clio_get_eof, /* get_eof              */
-    NULL,                 /* get_handle           */
-    H5FD__clio_read,    /* read                 */
-    H5FD__clio_write,   /* write                */
-    NULL,                 /* read_vector          */
-    NULL,                 /* write_vector         */
-    NULL,                 /* read_selection       */
-    NULL,                 /* write_selection      */
-    NULL,                 /* flush                */
-    NULL,                 /* truncate             */
-    NULL,                 /* lock                 */
-    NULL,                 /* unlock               */
+    H5FD__clio_get_eof,    /* get_eof            */
+    H5FD__clio_get_handle, /* get_handle         */
+    H5FD__clio_read,       /* read               */
+    H5FD__clio_write,      /* write              */
+    NULL,                  /* read_vector        */
+    NULL,                  /* write_vector       */
+    NULL,                  /* read_selection     */
+    NULL,                  /* write_selection    */
+    H5FD__clio_flush,      /* flush              */
+    H5FD__clio_truncate,   /* truncate           */
+    H5FD__clio_lock,       /* lock               */
+    H5FD__clio_unlock,     /* unlock             */
     NULL,                 /* del                  */
     NULL,                 /* ctl                  */
     H5FD_FLMAP_DICHOTOMY  /* fl_map               */
@@ -510,6 +516,120 @@ static herr_t H5FD__clio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
   }
   return SUCCEED;
 } /* end H5FD__clio_write() */
+
+/*-------------------------------------------------------------------------
+ * Function:    H5FD__clio_get_handle
+ *
+ * Purpose:     Returns the POSIX file descriptor of the authoritative native
+ *              file, for consumers (tools, the core VFD) that expect a real OS
+ *              handle. Behaves like sec2.
+ *
+ * Return:      SUCCEED/FAIL
+ *
+ *-------------------------------------------------------------------------
+ */
+static herr_t H5FD__clio_get_handle(H5FD_t *_file, hid_t fapl,
+                                    void **file_handle) {
+  (void)fapl;
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
+  if (!file_handle) {
+    return FAIL;
+  }
+  *file_handle = &(file->posix_fd);
+  return SUCCEED;
+} /* end H5FD__clio_get_handle() */
+
+/*-------------------------------------------------------------------------
+ * Function:    H5FD__clio_flush
+ *
+ * Purpose:     Durability barrier: fsync the authoritative native file so a
+ *              successful H5Fflush/H5Dflush leaves no pending dirty state on
+ *              disk. Fail-closed if the fsync fails.
+ *
+ * Return:      SUCCEED/FAIL
+ *
+ *-------------------------------------------------------------------------
+ */
+static herr_t H5FD__clio_flush(H5FD_t *_file, hid_t dxpl_id, bool closing) {
+  (void)dxpl_id;
+  (void)closing;
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
+  if (file->posix_fd >= 0 && fsync(file->posix_fd) < 0) {
+    return FAIL; /* never report a flush that did not persist */
+  }
+  return SUCCEED;
+} /* end H5FD__clio_flush() */
+
+/*-------------------------------------------------------------------------
+ * Function:    H5FD__clio_truncate
+ *
+ * Purpose:     Truncate the authoritative native file to the end-of-address
+ *              marker so close-to-EOA yields the correct on-disk file size
+ *              (a byte-exact native image). Behaves like sec2.
+ *
+ * Return:      SUCCEED/FAIL
+ *
+ *-------------------------------------------------------------------------
+ */
+static herr_t H5FD__clio_truncate(H5FD_t *_file, hid_t dxpl_id, bool closing) {
+  (void)dxpl_id;
+  (void)closing;
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
+  if (file->eof != file->eoa) {
+    if (file->posix_fd >= 0 &&
+        ftruncate(file->posix_fd, (off_t)file->eoa) < 0) {
+      return FAIL;
+    }
+    // Keep the CTE cache's logical size in step (best-effort; populate-only
+    // tier, see the write callback).
+    if (file->fd >= 0) {
+      CLIO_CTE_CFS->FtruncateFd(file->fd, (off_t)file->eoa);
+    }
+    file->eof = file->eoa;
+  }
+  return SUCCEED;
+} /* end H5FD__clio_truncate() */
+
+/*-------------------------------------------------------------------------
+ * Function:    H5FD__clio_lock / H5FD__clio_unlock
+ *
+ * Purpose:     Advisory whole-file locking (flock) on the authoritative native
+ *              fd, for file locking / SWMR / concurrent-tool safety. Behaves
+ *              like sec2: non-blocking flock, and a filesystem that does not
+ *              support locking (ENOSYS) is not treated as an error.
+ *
+ * Return:      SUCCEED/FAIL
+ *
+ *-------------------------------------------------------------------------
+ */
+static herr_t H5FD__clio_lock(H5FD_t *_file, bool rw) {
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
+  if (file->posix_fd < 0) {
+    return SUCCEED;
+  }
+  int lock_flags = (rw ? LOCK_EX : LOCK_SH) | LOCK_NB;
+  if (flock(file->posix_fd, lock_flags) < 0) {
+    if (errno == ENOSYS) {
+      return SUCCEED; /* locking unsupported here: not an error (sec2 parity) */
+    }
+    return FAIL;
+  }
+  return SUCCEED;
+} /* end H5FD__clio_lock() */
+
+static herr_t H5FD__clio_unlock(H5FD_t *_file) {
+  H5FD_clio_t *file = (H5FD_clio_t *)_file;
+  if (file->posix_fd < 0) {
+    return SUCCEED;
+  }
+  if (flock(file->posix_fd, LOCK_UN) < 0) {
+    if (errno == ENOSYS) {
+      return SUCCEED;
+    }
+    return FAIL;
+  }
+  return SUCCEED;
+} /* end H5FD__clio_unlock() */
 
 /*
  * Entry points for dynamic plugin loading.
