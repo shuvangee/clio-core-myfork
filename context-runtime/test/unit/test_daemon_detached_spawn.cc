@@ -16,8 +16,10 @@
  * transport initialized regardless of console.
  *
  * Cross-platform on purpose (no fork()): the Windows path is the one that
- * regressed, so this test must build and run on Windows CI. It uses only
- * RuntimeServer (CreateProcess/posix_spawn) and an in-process client.
+ * regressed, so this test builds and runs on Windows CI too. It uses only
+ * RuntimeServer (whose spawn/wait/kill go through ctp::SystemInfo, so no
+ * <windows.h> leaks in to clash with the client's <winsock2.h>) and an
+ * in-process client.
  */
 #include "../simple_test.h"
 #include "../runtime_server.h"
