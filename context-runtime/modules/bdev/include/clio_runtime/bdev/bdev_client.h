@@ -64,7 +64,8 @@ class Client : public clio::run::ContainerClient {
       const std::string& pool_name, const clio::run::PoolId& custom_pool_id,
       BdevType bdev_type, clio::run::u64 total_size = 0,
       clio::run::u32 io_depth = 32, clio::run::u32 alignment = 4096,
-      const PerfMetrics* perf_metrics = nullptr) {
+      const PerfMetrics* perf_metrics = nullptr,
+      const std::string& alloc_log_path = "") {
     auto* ipc_manager = CLIO_CPU_IPC;
 
     // CreateTask should always use admin pool, never the client's pool_id_
@@ -84,7 +85,8 @@ class Client : public clio::run::ContainerClient {
         custom_pool_id,   // target pool ID to create (explicit from user)
         this,             // Client pointer for PostWait
         // CreateParams arguments (perf_metrics is optional, defaults used if nullptr):
-        bdev_type, total_size, io_depth, safe_alignment, perf_metrics);
+        bdev_type, total_size, io_depth, safe_alignment, perf_metrics,
+        alloc_log_path);
 
     // Submit to runtime
     return ipc_manager->Send(task);
@@ -198,6 +200,28 @@ class Client : public clio::run::ContainerClient {
     auto *ipc_manager = CLIO_CPU_IPC;
     auto task = ipc_manager->NewTask<MonitorTask>(
         clio::run::CreateTaskId(), pool_id_, pool_query, query);
+    return ipc_manager->Send(task);
+  }
+
+  /**
+   * Flush (and periodically compact) the allocator-state log - asynchronous.
+   * When period_us > 0 the task is registered as TASK_PERIODIC so the
+   * runtime re-runs it on the given interval.
+   * @param pool_query Pool query for routing
+   * @param period_us Period in microseconds (0 = one-shot)
+   */
+  clio::run::Future<FlushAllocLogTask> AsyncFlushAllocLog(
+      const clio::run::PoolQuery& pool_query, double period_us = 0) {
+    auto* ipc_manager = CLIO_CPU_IPC;
+
+    auto task = ipc_manager->NewTask<FlushAllocLogTask>(
+        clio::run::CreateTaskId(), pool_id_, pool_query);
+
+    if (period_us > 0) {
+      task->SetPeriod(period_us, clio::run::kMicro);
+      task->SetFlags(TASK_PERIODIC);
+    }
+
     return ipc_manager->Send(task);
   }
 

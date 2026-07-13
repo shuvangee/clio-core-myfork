@@ -309,6 +309,11 @@ struct RegisterTargetTask : public clio::run::Task {
   IN clio::run::u64 total_size_;                 // Total size for allocation
   IN clio::run::PoolQuery target_query_;  // Target pool query for bdev API calls
   IN clio::run::PoolId bdev_id_;          // PoolId to create for the underlying bdev
+  // 0 = create a new bdev at bdev_id_ (default, as before); 1 = bind to the
+  // ALREADY-EXISTING pool at bdev_id_ without creating it (e.g. a safe-bdev
+  // pool). When attaching, the handler validates the pool via GetStats and
+  // skips AsyncCreate.
+  IN clio::run::u32 attach_existing_;
 
   // SHM constructor
   CTP_CROSS_FUN RegisterTargetTask()
@@ -316,20 +321,23 @@ struct RegisterTargetTask : public clio::run::Task {
         target_name_(CLIO_PRIV_ALLOC),
         bdev_type_(clio::run::bdev::BdevType::kFile),
         total_size_(0),
-        bdev_id_(clio::run::PoolId::GetNull()) {}
+        bdev_id_(clio::run::PoolId::GetNull()),
+        attach_existing_(0) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit RegisterTargetTask(
       const clio::run::TaskId &task_id, const clio::run::PoolId &pool_id,
       const clio::run::PoolQuery &pool_query, const std::string &target_name,
       clio::run::bdev::BdevType bdev_type, clio::run::u64 total_size,
-      const clio::run::PoolQuery &target_query, const clio::run::PoolId &bdev_id)
+      const clio::run::PoolQuery &target_query, const clio::run::PoolId &bdev_id,
+      clio::run::u32 attach_existing = 0)
       : clio::run::Task(task_id, pool_id, pool_query, Method::kRegisterTarget),
         target_name_(CLIO_PRIV_ALLOC, target_name),
         bdev_type_(bdev_type),
         total_size_(total_size),
         target_query_(target_query),
-        bdev_id_(bdev_id) {
+        bdev_id_(bdev_id),
+        attach_existing_(attach_existing) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kRegisterTarget;
@@ -343,7 +351,8 @@ struct RegisterTargetTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeIn(Archive &ar) {
     Task::SerializeIn(ar);
-    ar(target_name_, bdev_type_, total_size_, target_query_, bdev_id_);
+    ar(target_name_, bdev_type_, total_size_, target_query_, bdev_id_,
+       attach_existing_);
   }
 
   /**
@@ -372,6 +381,7 @@ struct RegisterTargetTask : public clio::run::Task {
     total_size_ = other->total_size_;
     target_query_ = other->target_query_;
     bdev_id_ = other->bdev_id_;
+    attach_existing_ = other->attach_existing_;
   }
 
   /**

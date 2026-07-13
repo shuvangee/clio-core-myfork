@@ -160,6 +160,10 @@ struct CreateParams {
   // Persistence level for this block device
   PersistenceLevel persistence_level_ = PersistenceLevel::kVolatile;
 
+  // Path to the persistent allocator-state log (WAL). Empty => logging
+  // disabled (no file created), preserving pre-WAL behavior.
+  std::string alloc_log_path_;
+
   // Required: chimod library name for module manager
   static constexpr const char *chimod_lib_name = "clio_bdev";
 
@@ -201,11 +205,13 @@ struct CreateParams {
 
   // Constructor with optional performance metrics (as last parameter)
   CreateParams(BdevType bdev_type, clio::run::u64 total_size, clio::run::u32 io_depth,
-               clio::run::u32 alignment, const PerfMetrics *perf_metrics = nullptr)
+               clio::run::u32 alignment, const PerfMetrics *perf_metrics = nullptr,
+               const std::string &alloc_log_path = "")
       : bdev_type_(bdev_type),
         total_size_(total_size),
         io_depth_(io_depth),
-        alignment_(alignment) {
+        alignment_(alignment),
+        alloc_log_path_(alloc_log_path) {
     // Set performance metrics (use provided metrics or defaults)
     if (perf_metrics != nullptr) {
       perf_metrics_ = *perf_metrics;
@@ -234,7 +240,8 @@ struct CreateParams {
   // Serialization support for cereal
   template <class Archive>
   void serialize(Archive &ar) {
-    ar(bdev_type_, total_size_, io_depth_, alignment_, perf_metrics_, persistence_level_);
+    ar(bdev_type_, total_size_, io_depth_, alignment_, perf_metrics_,
+       persistence_level_, alloc_log_path_);
   }
 
   /**
@@ -301,6 +308,11 @@ struct CreateParams {
       if (perf["iops"]) {
         perf_metrics_.iops_ = perf["iops"].as<double>();
       }
+    }
+
+    // Load allocator-state log path (optional). Empty => logging disabled.
+    if (config["alloc_log"]) {
+      alloc_log_path_ = config["alloc_log"].as<std::string>();
     }
 
     if (config["persistence_level"]) {
@@ -465,9 +477,10 @@ struct WriteTask : public clio::run::Task {
   IN ctp::ipc::ShmPtr<> data_;              // Data to write (pointer-based)
   IN size_t length_;                    // Size of data to write
   OUT clio::run::u64 bytes_written_;          // Number of bytes actually written
+  OUT clio::run::u32 io_error_;               // ctp::IoError category (0 == kOk)
 
   /** SHM default constructor */
-  CTP_CROSS_FUN WriteTask() : clio::run::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_written_(0) {}
+  CTP_CROSS_FUN WriteTask() : clio::run::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_written_(0), io_error_(0) {}
 
   /** Emplace constructor */
   CTP_CROSS_FUN explicit WriteTask(const clio::run::TaskId &task_node, const clio::run::PoolId &pool_id,
@@ -478,7 +491,8 @@ struct WriteTask : public clio::run::Task {
         blocks_(blocks),
         data_(data),
         length_(length),
-        bytes_written_(0) {
+        bytes_written_(0),
+        io_error_(0) {
   }
 
   /** Destructor - free buffer if TASK_DATA_OWNER is set */
@@ -507,7 +521,7 @@ struct WriteTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(bytes_written_);
+    ar(bytes_written_, io_error_);
   }
 
   /** Fix up priv::vector SVO pointer after cudaMemcpy D→H */
@@ -533,6 +547,7 @@ struct WriteTask : public clio::run::Task {
     data_ = other->data_;
     length_ = other->length_;
     bytes_written_ = other->bytes_written_;
+    io_error_ = other->io_error_;
   }
 };
 
@@ -546,9 +561,10 @@ struct ReadTask : public clio::run::Task {
   INOUT size_t
       length_;  // Size of data buffer (IN: buffer size, OUT: actual size)
   OUT clio::run::u64 bytes_read_;  // Number of bytes actually read
+  OUT clio::run::u32 io_error_;    // ctp::IoError category (0 == kOk)
 
   /** SHM default constructor */
-  CTP_CROSS_FUN ReadTask() : clio::run::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_read_(0) {}
+  CTP_CROSS_FUN ReadTask() : clio::run::Task(), blocks_(CLIO_PRIV_ALLOC), length_(0), bytes_read_(0), io_error_(0) {}
 
   /** Emplace constructor */
   CTP_CROSS_FUN explicit ReadTask(const clio::run::TaskId &task_node, const clio::run::PoolId &pool_id,
@@ -559,7 +575,8 @@ struct ReadTask : public clio::run::Task {
         blocks_(blocks),
         data_(data),
         length_(length),
-        bytes_read_(0) {
+        bytes_read_(0),
+        io_error_(0) {
   }
 
   /** Destructor - free buffer if TASK_DATA_OWNER is set */
@@ -587,7 +604,7 @@ struct ReadTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(length_, bytes_read_);
+    ar(length_, bytes_read_, io_error_);
     // Use BULK_XFER to actually transfer the read data back
     ar.bulk(data_, length_, BULK_XFER);
   }
@@ -615,6 +632,7 @@ struct ReadTask : public clio::run::Task {
     data_ = other->data_;
     length_ = other->length_;
     bytes_read_ = other->bytes_read_;
+    io_error_ = other->io_error_;
   }
 };
 
@@ -721,6 +739,51 @@ struct SetLifespanTask : public clio::run::Task {
   void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
     Task::AggregateOut(other_base);
     Copy(other_base.template Cast<SetLifespanTask>());
+  }
+};
+
+/**
+ * FlushAllocLogTask - Periodic task that flushes (and compacts) the
+ * persistent allocator-state log. Registered as TASK_PERIODIC from Create
+ * when an alloc_log_path is configured. Carries no I/O parameters.
+ */
+struct FlushAllocLogTask : public clio::run::Task {
+  /** SHM default constructor */
+  CTP_CROSS_FUN FlushAllocLogTask() : clio::run::Task() {}
+
+  /** Emplace constructor */
+  CTP_CROSS_FUN explicit FlushAllocLogTask(const clio::run::TaskId &task_node,
+                                           const clio::run::PoolId &pool_id,
+                                           const clio::run::PoolQuery &pool_query)
+      : clio::run::Task(task_node, pool_id, pool_query, Method::kFlushAllocLog) {
+    task_id_ = task_node;
+    pool_id_ = pool_id;
+    method_ = Method::kFlushAllocLog;
+    task_flags_.Clear();
+    pool_query_ = pool_query;
+  }
+
+  /** Serialize IN and INOUT parameters */
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeIn(Archive &ar) {
+    Task::SerializeIn(ar);
+  }
+
+  /** Serialize OUT and INOUT parameters */
+  template <typename Archive>
+  CTP_CROSS_FUN void SerializeOut(Archive &ar) {
+    Task::SerializeOut(ar);
+  }
+
+  /** Copy from another FlushAllocLogTask */
+  void Copy(const ctp::ipc::FullPtr<FlushAllocLogTask> &other) {
+    Task::Copy(other.template Cast<Task>());
+  }
+
+  /** AggregateOut replica results into this task */
+  void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
+    Task::AggregateOut(other_base);
+    Copy(other_base.template Cast<FlushAllocLogTask>());
   }
 };
 

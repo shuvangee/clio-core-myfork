@@ -419,16 +419,29 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
             device.path_ + "_node" + std::to_string(target_node);
         clio::run::PoolQuery target_query =
             clio::run::PoolQuery::DirectHash(target_node);
-        clio::run::PoolId bdev_id(512 + static_cast<clio::run::u32>(device_idx),
-                            1 + target_node);
+
+        // When this storage device binds to an ALREADY-EXISTING pool (e.g. a
+        // safe-bdev pool composed elsewhere), route the target at that pool id
+        // directly and tell the handler to attach (not create). Otherwise use
+        // the per-node 512+idx scheme and create a fresh bdev as before.
+        clio::run::u32 attach_existing = 0;
+        clio::run::PoolId bdev_id;
+        if (device.HasExistingPool()) {
+          bdev_id = device.existing_pool_id_;
+          attach_existing = 1;
+        } else {
+          bdev_id = clio::run::PoolId(512 + static_cast<clio::run::u32>(device_idx),
+                                1 + target_node);
+        }
 
         HLOG(kDebug,
              "Registering target ({}): {} ({}, {} bytes) on node {} (i={}) "
-             "with bdev_id=({},{})",
+             "with bdev_id=({},{}) attach_existing={}",
              client_.pool_id_, target_path, device.bdev_type_, capacity_bytes,
-             target_node, i, bdev_id.major_, bdev_id.minor_);
+             target_node, i, bdev_id.major_, bdev_id.minor_, attach_existing);
         auto reg_task = client_.AsyncRegisterTarget(
-            target_path, bdev_type, capacity_bytes, target_query, bdev_id);
+            target_path, bdev_type, capacity_bytes, target_query, bdev_id,
+            clio::run::PoolQuery::Dynamic(), attach_existing);
         CLIO_CO_AWAIT(reg_task);
         clio::run::u32 result = reg_task->GetReturnCode();
         if (result == 0) {
@@ -685,35 +698,49 @@ clio::run::TaskResume Runtime::RegisterTarget(clio::run::shared_ptr<RegisterTarg
     std::string bdev_pool_name =
         target_name;  // Use target_name as the bdev pool name
 
-    HLOG(kDebug, "Creating bdev with pool ID: major={}, minor={}",
-         bdev_pool_id.major_, bdev_pool_id.minor_);
+    const bool attach_existing = (task->attach_existing_ != 0);
 
-    // Create the bdev container using the client
-    clio::run::PoolQuery pool_query = clio::run::PoolQuery::Dynamic();
-    HLOG(kDebug,
-         "RegisterTarget: Creating bdev with custom_pool_id=({},{}), "
-         "target_name={}",
-         bdev_pool_id.major_, bdev_pool_id.minor_, target_name);
-    auto create_task = bdev_client.AsyncCreate(
-        pool_query, target_name, bdev_pool_id, bdev_type, total_size);
-    CLIO_CO_AWAIT(create_task);
-    HLOG(kDebug,
-         "RegisterTarget: After create, create_task->new_pool_id_=({},{}), "
-         "create_task->return_code_={}",
-         create_task->new_pool_id_.major_, create_task->new_pool_id_.minor_,
-         create_task->return_code_.load());
-    bdev_client.pool_id_ = create_task->new_pool_id_;
-    bdev_client.return_code_ = create_task->return_code_;
-    HLOG(kDebug,
-         "RegisterTarget: After assignment, bdev_client.pool_id_=({},{})",
-         bdev_client.pool_id_.major_, bdev_client.pool_id_.minor_);
+    if (attach_existing) {
+      // ATTACH path: bind to an ALREADY-EXISTING pool (e.g. a safe-bdev pool)
+      // at bdev_pool_id WITHOUT creating it. The pool must implement the bdev
+      // task interface (AllocateBlocks/FreeBlocks/Write/Read/GetStats), which
+      // safe-bdev does. Routing is purely by pool id, so the module name is
+      // never referenced here.
+      bdev_client.Init(bdev_pool_id);
+      HLOG(kDebug,
+           "RegisterTarget: ATTACH to existing pool ({},{}), target_name={}",
+           bdev_pool_id.major_, bdev_pool_id.minor_, target_name);
+    } else {
+      HLOG(kDebug, "Creating bdev with pool ID: major={}, minor={}",
+           bdev_pool_id.major_, bdev_pool_id.minor_);
 
-    // Check if creation was successful
-    if (bdev_client.return_code_ != 0) {
-      HLOG(kError, "Failed to create bdev container {} : {}", target_name,
-           bdev_client.return_code_);
-      task->return_code_ = 1;
-      CLIO_CO_RETURN;
+      // Create the bdev container using the client
+      clio::run::PoolQuery pool_query = clio::run::PoolQuery::Dynamic();
+      HLOG(kDebug,
+           "RegisterTarget: Creating bdev with custom_pool_id=({},{}), "
+           "target_name={}",
+           bdev_pool_id.major_, bdev_pool_id.minor_, target_name);
+      auto create_task = bdev_client.AsyncCreate(
+          pool_query, target_name, bdev_pool_id, bdev_type, total_size);
+      CLIO_CO_AWAIT(create_task);
+      HLOG(kDebug,
+           "RegisterTarget: After create, create_task->new_pool_id_=({},{}), "
+           "create_task->return_code_={}",
+           create_task->new_pool_id_.major_, create_task->new_pool_id_.minor_,
+           create_task->return_code_.load());
+      bdev_client.pool_id_ = create_task->new_pool_id_;
+      bdev_client.return_code_ = create_task->return_code_;
+      HLOG(kDebug,
+           "RegisterTarget: After assignment, bdev_client.pool_id_=({},{})",
+           bdev_client.pool_id_.major_, bdev_client.pool_id_.minor_);
+
+      // Check if creation was successful
+      if (bdev_client.return_code_ != 0) {
+        HLOG(kError, "Failed to create bdev container {} : {}", target_name,
+             bdev_client.return_code_);
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
+      }
     }
 
     // Get the TargetId (bdev_client's pool_id) for indexing
@@ -728,10 +755,21 @@ clio::run::TaskResume Runtime::RegisterTarget(clio::run::shared_ptr<RegisterTarg
       }
     }
 
-    // Get actual statistics from bdev using AsyncGetStats method
+    // Get actual statistics from bdev using AsyncGetStats method. For the
+    // ATTACH path this doubles as a liveness probe: a failed GetStats means
+    // the existing pool is not reachable, so we refuse to register it.
     clio::run::u64 remaining_size;
     auto stats_task = bdev_client.AsyncGetStats();
     CLIO_CO_AWAIT(stats_task);
+    if (attach_existing && stats_task->GetReturnCode() != 0) {
+      HLOG(kError,
+           "RegisterTarget: existing pool ({},{}) failed GetStats (rc={}); "
+           "refusing to bind target '{}'",
+           bdev_pool_id.major_, bdev_pool_id.minor_,
+           stats_task->GetReturnCode(), target_name);
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
     clio::run::bdev::PerfMetrics perf_metrics = stats_task->metrics_;
     remaining_size = stats_task->remaining_size_;
 
@@ -762,10 +800,28 @@ clio::run::TaskResume Runtime::RegisterTarget(clio::run::shared_ptr<RegisterTarg
       target_info.target_score_ =
           0.0f;  // Will be calculated based on performance metrics
     }
-    target_info.remaining_space_ =
-        total_size;  // Use actual remaining space from bdev
-    target_info.max_capacity_ =
-        total_size;  // Total (max) capacity, fixed for the life of the target
+    if (attach_existing) {
+      // For an attached pool the config has no authoritative capacity; the
+      // existing pool's GetStats is the source of truth for free space.
+      target_info.remaining_space_ = remaining_size;
+      // Existing pools (e.g. safe-bdev) may report default/zero perf metrics.
+      // DPE selection needs a nonzero bandwidth to consider the target, so
+      // fall back to a reasonable default when the pool didn't supply one.
+      // (target_score_ from config still drives ranking; this just keeps the
+      // target eligible.)
+      if (perf_metrics.read_bandwidth_mbps_ <= 0.0) {
+        perf_metrics.read_bandwidth_mbps_ = 1000.0;  // 1 GB/s placeholder
+      }
+      if (perf_metrics.write_bandwidth_mbps_ <= 0.0) {
+        perf_metrics.write_bandwidth_mbps_ = 1000.0;  // 1 GB/s placeholder
+      }
+    } else {
+      target_info.remaining_space_ =
+          total_size;  // Use actual remaining space from bdev
+    }
+    // Max (total) capacity, fixed for the life of the target. Attached pools
+    // have no authoritative config capacity, so use their reported free space.
+    target_info.max_capacity_ = attach_existing ? remaining_size : total_size;
     target_info.perf_metrics_ =
         perf_metrics;  // Store the entire PerfMetrics structure
     target_info.expected_ttl_days_ = stats_task->predicted_ttl_days_;
