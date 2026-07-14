@@ -22,6 +22,7 @@ import glob
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -33,6 +34,15 @@ RUNTIME_LOG = "/tmp/clio_run_volcompat.log"
 # suite's own config (below) makes 2, a dev box's ~/.clio/clio.yaml may make 3.
 RUNTIME_READY = "pools created successfully"
 TMP = "/tmp/volcompat"
+
+# CTest maps this exit code to "Skipped" (wired via SKIP_RETURN_CODE in the
+# adapter CMakeLists). This is a DIFFERENTIAL test whose oracle is a native HDF5
+# stack: every write/read arm runs as a subprocess of THIS interpreter and needs
+# h5py, plus the HDF5 CLI tools (h5diff/h5dump/h5ls) it cross-checks the VOL file
+# with. On a host without that toolchain there is nothing to compare against, so
+# the suite reports SKIP rather than a wall of false FAILs — a missing h5py is an
+# environment gap, not a VOL incompatibility.
+SKIP_RC = 125
 
 # Self-contained runtime config. The suite must NOT depend on a pre-existing
 # ~/.clio/clio.yaml: it is absent in CI (the deps-cpu image has no such file),
@@ -410,6 +420,24 @@ def _dump_restart_diagnostics(proc, env):
         pass
 
 
+def _compile_c(binp, srcp):
+    """Compile a single C test, preferring the HDF5 wrapper h5cc and falling back
+    to gcc + -lhdf5. Returns the CompletedProcess of whichever compiler ran, or
+    None if neither h5cc nor gcc is installed. Selecting the compiler with
+    shutil.which first is deliberate: invoking a non-existent h5cc directly raises
+    FileNotFoundError, which previously aborted the whole suite instead of letting
+    the gcc fallback run."""
+    comp = None
+    if shutil.which("h5cc"):
+        comp = subprocess.run(["h5cc", "-o", binp, srcp], capture_output=True,
+                              text=True, env=_env(False))
+    if (comp is None or comp.returncode != 0) and shutil.which("gcc"):
+        comp = subprocess.run(["gcc", "-o", binp, srcp, "-I/usr/local/include",
+                               "-L/usr/local/lib", "-lhdf5"],
+                              capture_output=True, text=True, env=_env(False))
+    return comp
+
+
 def _run_c_tests():
     """Compile + run the isolated C tests through the VOL. Returns
     {name: {"pass": bool}}; each C program exits 0 on pass. These cover ops h5py
@@ -424,14 +452,11 @@ def _run_c_tests():
     for name, src in tests.items():
         binp = os.path.join(TMP, name)
         srcp = os.path.join(src_dir, src)
-        comp = subprocess.run(["h5cc", "-o", binp, srcp], capture_output=True,
-                              text=True, env=_env(False))
-        if comp.returncode != 0:
-            comp = subprocess.run(["gcc", "-o", binp, srcp, "-I/usr/local/include",
-                                   "-L/usr/local/lib", "-lhdf5"],
-                                  capture_output=True, text=True, env=_env(False))
-        if comp.returncode != 0:
-            print(f"  {name:<20} COMPILE-FAIL  {comp.stderr.strip()[-120:]}")
+        comp = _compile_c(binp, srcp)
+        if comp is None or comp.returncode != 0:
+            detail = (comp.stderr.strip()[-120:] if comp is not None
+                      else "no C compiler (h5cc/gcc) found")
+            print(f"  {name:<20} COMPILE-FAIL  {detail}")
             out[name] = {"pass": False}
             continue
         r = subprocess.run([binp], capture_output=True, text=True,
@@ -457,9 +482,8 @@ def _run_trace_check():
     binp = os.path.join(TMP, "c_selection")  # reuse the c_selection binary
     srcp = os.path.join(src_dir, "vol_c_selection_test.c")
     if not os.path.exists(binp):
-        comp = subprocess.run(["h5cc", "-o", binp, srcp], capture_output=True,
-                              text=True, env=_env(False))
-        if comp.returncode != 0:
+        comp = _compile_c(binp, srcp)
+        if comp is None or comp.returncode != 0:
             print(f"  {'telemetry':<20} COMPILE-FAIL")
             return {"telemetry": {"pass": False}}
     tdir = os.path.join(TMP, "trace")
@@ -569,6 +593,24 @@ def driver(args):
         print(f"FAILING — VOL not yet compatible for: {sorted(failed)}")
     return 1 if unexpected else 0
 
+
+def _missing_deps():
+    """External dependencies the suite hard-requires but that may be absent.
+    Returns a human-readable list (empty when all present). h5py must import in
+    THIS interpreter — the write/read arms are subprocesses of sys.executable —
+    and the HDF5 CLI tools are the differential oracle. Missing any of them means
+    the suite cannot produce a meaningful comparison, so main() reports SKIP."""
+    missing = []
+    try:
+        import h5py  # noqa: F401
+    except Exception:
+        missing.append("python module 'h5py'")
+    for tool in ("h5diff", "h5dump", "h5ls"):
+        if shutil.which(tool) is None:
+            missing.append(tool)
+    return missing
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--worker", action="store_true")
@@ -588,6 +630,13 @@ def main():
     if a.worker:
         worker(a.case, a.action, a.file)
         return 0
+    missing = _missing_deps()
+    if missing:
+        print("SKIP: VOL compat suite needs a native HDF5 toolchain that is not "
+              "installed on this host (" + ", ".join(missing) + "). This suite "
+              "differentially compares the clio VOL against native HDF5, so it is "
+              "skipped rather than reported as failing.")
+        return SKIP_RC
     try:
         return driver(a)
     finally:
