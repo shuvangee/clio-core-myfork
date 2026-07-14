@@ -26,7 +26,13 @@
  */
 #include <hdf5.h>
 
+#include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -366,6 +372,83 @@ int main() {
     CHECK(H5Lexists(rb, "a", H5P_DEFAULT) <= 0, "6: B has no cross-talk from A");
     CHECK(H5Fclose(ra) >= 0 && H5Fclose(rb) >= 0, "6: close both (read)");
     std::printf("[vfd-suite] ok 6: two files open simultaneously (no cross-talk)\n");
+  }
+
+  // === 7. flush callback + get_handle ====================================
+  // After H5Fflush the native file is a valid HDF5 image readable independently
+  // of the VFD (the flush callback ran and the write-through reached the fd).
+  // NOTE: this observes the *functional* barrier, not the fsync-to-platter --
+  // an in-process read hits the same page cache, so durability itself is not
+  // unit-observable. get_handle must hand back the authoritative POSIX fd.
+  {
+    const char *kClioFl = "clio::/tmp/clio_cte_vfd_flush.h5";
+    const char *kNativeFl = "/tmp/clio_cte_vfd_flush.h5";
+    std::remove(kNativeFl);
+    hid_t f = H5Fcreate(kClioFl, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
+    CHECK(f >= 0, "7: create");
+    CHECK(WriteDset(f, "d", H5T_NATIVE_INT32, MakeI32(kSmall)), "7: write");
+    CHECK(H5Fflush(f, H5F_SCOPE_GLOBAL) >= 0, "7: H5Fflush (flush callback)");
+    // The HDF5 superblock signature must be on the fd now, read via plain POSIX.
+    int rfd = ::open(kNativeFl, O_RDONLY);
+    CHECK(rfd >= 0, "7: POSIX-open native file mid-session");
+    unsigned char sig[8] = {0};
+    ssize_t n = ::pread(rfd, sig, sizeof(sig), 0);
+    ::close(rfd);
+    const unsigned char kHdf5Sig[8] = {0x89, 'H', 'D', 'F',  '\r',
+                                       '\n', 0x1a, '\n'};
+    CHECK(n == 8 && std::memcmp(sig, kHdf5Sig, 8) == 0,
+          "7: valid HDF5 superblock on disk after H5Fflush");
+    // get_handle returns the authoritative POSIX fd -- verify it is THIS file's
+    // fd (same device+inode as the native path), not merely some valid fd.
+    void *vh = nullptr;
+    CHECK(H5Fget_vfd_handle(f, H5P_DEFAULT, &vh) >= 0, "7: H5Fget_vfd_handle");
+    CHECK(vh != nullptr, "7: handle non-null");
+    int gfd = *static_cast<int *>(vh);
+    struct stat gst, nst;
+    CHECK(gfd >= 0 && ::fstat(gfd, &gst) == 0, "7: get_handle fd is valid");
+    CHECK(::stat(kNativeFl, &nst) == 0 && gst.st_dev == nst.st_dev &&
+              gst.st_ino == nst.st_ino,
+          "7: get_handle fd points at the authoritative native file");
+    CHECK(H5Fclose(f) >= 0, "7: close");
+    std::printf("[vfd-suite] ok 7: flush callback + get_handle\n");
+  }
+
+  // NOTE: the truncate callback is exercised on every close (HDF5 sizes the
+  // file to EOA there) and is covered transitively -- a broken truncate would
+  // corrupt the image, which the round-trip / h5diff / tool-matrix sections
+  // catch. There is no clean *isolated* truncate assertion at this layer:
+  // HDF5's EOA is not exposed independently of the driver's own get_eof, and
+  // comparing on-disk size to sec2 is confounded by the metadata-aggregation
+  // feature flags (a separate change) that alter HDF5's allocation.
+
+  // === 8. lock excludes a concurrent opener; unlock releases =============
+  // Force HDF5 file locking on, so create takes an exclusive flock via the lock
+  // callback. flock conflicts across independent open descriptions (even same
+  // process), so an independent flock is denied while held and granted after
+  // the VFD unlocks on close.
+  {
+    const char *kClioLk = "clio::/tmp/clio_cte_vfd_lock.h5";
+    const char *kNativeLk = "/tmp/clio_cte_vfd_lock.h5";
+    std::remove(kNativeLk);
+    hid_t fapl_lk = H5Pcopy(fapl);
+    CHECK(fapl_lk >= 0, "8: H5Pcopy fapl");
+    CHECK(H5Pset_file_locking(fapl_lk, /*use*/ true, /*ignore_disabled*/ false) >= 0,
+          "8: force file locking on");
+    hid_t f = H5Fcreate(kClioLk, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_lk);
+    CHECK(f >= 0, "8: create (VFD takes exclusive lock)");
+    int p = ::open(kNativeLk, O_RDWR);
+    CHECK(p >= 0, "8: POSIX-open native file");
+    errno = 0;
+    int held = ::flock(p, LOCK_EX | LOCK_NB);
+    CHECK(held < 0 && (errno == EWOULDBLOCK || errno == EAGAIN),
+          "8: independent flock denied while the VFD holds the lock");
+    CHECK(H5Fclose(f) >= 0, "8: close (VFD unlocks)");
+    int freed = ::flock(p, LOCK_EX | LOCK_NB);
+    CHECK(freed == 0, "8: independent flock granted after the VFD unlocks");
+    ::flock(p, LOCK_UN);
+    ::close(p);
+    H5Pclose(fapl_lk);
+    std::printf("[vfd-suite] ok 8: lock excludes a concurrent opener; unlock releases\n");
   }
 
   H5Pclose(fapl);
