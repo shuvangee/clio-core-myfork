@@ -16,6 +16,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <thread>
@@ -25,6 +27,142 @@
 namespace clio::run::bdev {
 
 Runtime::~Runtime() { StopHealthPolling(); }
+
+// ---------------------------------------------------------------------------
+// Perf-stats persistence (issue #747)
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr const char *kPerfStatsHeader = "clio_bdev_perf_v1";
+}  // namespace
+
+std::string Runtime::MakePerfStatsPath(const std::string &pool_name) {
+  // Master off-switch: CLIO_BDEV_PERSIST_STATS=0 disables persistence
+  // entirely (e.g. benchmarks that must start from a cold model).
+  if (ctp::SystemInfo::Getenv("CLIO_BDEV_PERSIST_STATS") == "0") {
+    return std::string();
+  }
+  std::string dir = ctp::SystemInfo::Getenv("CLIO_BDEV_STATS_DIR");
+  if (dir.empty()) {
+    std::string home = ctp::SystemInfo::GetHomeDir();
+    if (home.empty()) {
+      return std::string();  // nowhere to persist
+    }
+    dir = home + "/.clio/bdev_perf";
+  }
+  // Sanitize the pool name (it may be a filesystem path or "ram::name")
+  // into a flat file name.
+  std::string name = pool_name;
+  for (char &c : name) {
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '-') {
+      c = '_';
+    }
+  }
+  return dir + "/" + name + ".perf";
+}
+
+bool Runtime::SavePerfStatsFile(const std::string &path,
+                                const PerfMetrics &metrics,
+                                float model_wall_read,
+                                float model_wall_write) {
+  if (path.empty()) return false;
+  try {
+    namespace fs = std::filesystem;
+    fs::create_directories(fs::path(path).parent_path());
+    // Write to a tmp file then rename so a crash mid-write never leaves a
+    // truncated stats file for the next session to trip over.
+    const std::string tmp = path + ".tmp";
+    {
+      std::ofstream ofs(tmp, std::ios::trunc);
+      if (!ofs.is_open()) return false;
+      ofs << kPerfStatsHeader << "\n"
+          << "read_bandwidth_mbps " << metrics.read_bandwidth_mbps_ << "\n"
+          << "write_bandwidth_mbps " << metrics.write_bandwidth_mbps_ << "\n"
+          << "read_latency_us " << metrics.read_latency_us_ << "\n"
+          << "write_latency_us " << metrics.write_latency_us_ << "\n"
+          << "iops " << metrics.iops_ << "\n"
+          << "model_wall_read " << model_wall_read << "\n"
+          << "model_wall_write " << model_wall_write << "\n";
+      if (!ofs.good()) return false;
+    }
+    std::error_code ec;
+    fs::remove(path, ec);  // Windows rename does not overwrite
+    fs::rename(tmp, path, ec);
+    return !ec;
+  } catch (const std::exception &) {
+    return false;
+  }
+}
+
+bool Runtime::LoadPerfStatsFile(const std::string &path, PerfMetrics &metrics,
+                                float &model_wall_read,
+                                float &model_wall_write) {
+  if (path.empty()) return false;
+  std::ifstream ifs(path);
+  if (!ifs.is_open()) return false;
+  std::string header;
+  if (!std::getline(ifs, header) || header != kPerfStatsHeader) {
+    return false;
+  }
+  PerfMetrics m;
+  float wall_read = 0.0f;
+  float wall_write = 0.0f;
+  std::string key;
+  double value = 0.0;
+  while (ifs >> key >> value) {
+    if (key == "read_bandwidth_mbps") m.read_bandwidth_mbps_ = value;
+    else if (key == "write_bandwidth_mbps") m.write_bandwidth_mbps_ = value;
+    else if (key == "read_latency_us") m.read_latency_us_ = value;
+    else if (key == "write_latency_us") m.write_latency_us_ = value;
+    else if (key == "iops") m.iops_ = value;
+    else if (key == "model_wall_read") wall_read = static_cast<float>(value);
+    else if (key == "model_wall_write") wall_write = static_cast<float>(value);
+    // Unknown keys are ignored (forward compatibility).
+  }
+  metrics = m;
+  model_wall_read = wall_read;
+  model_wall_write = wall_write;
+  return true;
+}
+
+void Runtime::LoadPerfStats() {
+  perf_stats_path_ = MakePerfStatsPath(pool_name_);
+  PerfMetrics m;
+  float wall_read = 0.0f;
+  float wall_write = 0.0f;
+  if (!LoadPerfStatsFile(perf_stats_path_, m, wall_read, wall_write)) {
+    return;  // first session for this bdev — keep configured defaults
+  }
+  perf_metrics_ = m;
+  // Seed the learned wall-clock model so InferWallClockTime (which GetStats
+  // derives its bandwidth from) starts warm instead of at the 1.0 seed.
+  if (wall_read > 0.0f && Method::kRead < method_model_wall_.size()) {
+    method_model_wall_[Method::kRead] = wall_read;
+  }
+  if (wall_write > 0.0f && Method::kWrite < method_model_wall_.size()) {
+    method_model_wall_[Method::kWrite] = wall_write;
+  }
+  HLOG(kInfo,
+       "bdev '{}': restored perf stats from {} (read {} MB/s, write {} MB/s)",
+       pool_name_, perf_stats_path_, perf_metrics_.read_bandwidth_mbps_,
+       perf_metrics_.write_bandwidth_mbps_);
+}
+
+void Runtime::SavePerfStats(bool force) {
+  if (perf_stats_path_.empty()) return;
+  auto now = std::chrono::steady_clock::now();
+  if (!force &&
+      std::chrono::duration<double>(now - last_perf_save_).count() <
+          kPerfSaveThrottleSec) {
+    return;
+  }
+  last_perf_save_ = now;
+  float wall_read = (Method::kRead < method_model_wall_.size())
+                        ? method_model_wall_[Method::kRead] : 0.0f;
+  float wall_write = (Method::kWrite < method_model_wall_.size())
+                         ? method_model_wall_[Method::kWrite] : 0.0f;
+  SavePerfStatsFile(perf_stats_path_, perf_metrics_, wall_read, wall_write);
+}
 
 clio::run::TaskStat Runtime::GetTaskStats(const clio::run::Task *task) const {
   if (!task) return clio::run::TaskStat();
@@ -96,6 +234,12 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   // local prediction server and update predicted_ttl_days_.
   health_poll_stop_.store(false, std::memory_order_relaxed);
   health_poll_thread_ = std::thread(&Runtime::PollPredictionServer, this);
+
+  // Restore persisted performance stats from a previous session (issue
+  // #747) so the latency-bandwidth model does not have to be re-estimated
+  // on every startup. Overrides the configured defaults when a stats file
+  // exists.
+  LoadPerfStats();
 
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -234,6 +378,24 @@ clio::run::TaskResume Runtime::GetStats(clio::run::shared_ptr<GetStatsTask> &tas
   // TTL-aware allocation decisions without any external daemon.
   task->predicted_ttl_days_ = predicted_ttl_days_.load(std::memory_order_relaxed);
 
+  // Cache the derived metrics and persist them (throttled) so the next
+  // session starts from this one's estimates (issue #747). Merge field-wise:
+  // a zero derived value (model not warmed up yet) must not clobber a
+  // configured/restored stat.
+  if (task->metrics_.read_bandwidth_mbps_ > 0.0) {
+    perf_metrics_.read_bandwidth_mbps_ = task->metrics_.read_bandwidth_mbps_;
+  }
+  if (task->metrics_.write_bandwidth_mbps_ > 0.0) {
+    perf_metrics_.write_bandwidth_mbps_ = task->metrics_.write_bandwidth_mbps_;
+  }
+  if (task->metrics_.read_latency_us_ > 0.0) {
+    perf_metrics_.read_latency_us_ = task->metrics_.read_latency_us_;
+  }
+  if (task->metrics_.write_latency_us_ > 0.0) {
+    perf_metrics_.write_latency_us_ = task->metrics_.write_latency_us_;
+  }
+  SavePerfStats(/*force=*/false);
+
   task->return_code_ = 0;
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -256,6 +418,9 @@ clio::run::TaskResume Runtime::SetLifespan(
 
 clio::run::TaskResume Runtime::Destroy(clio::run::shared_ptr<DestroyTask> &task) {
   CLIO_TASK_BODY_BEGIN
+  // Final perf-stats save (unthrottled) so the next session inherits
+  // everything learned in this one (issue #747).
+  SavePerfStats(/*force=*/true);
   StopHealthPolling();
   task->return_code_ = 0;
   CLIO_CO_RETURN;
