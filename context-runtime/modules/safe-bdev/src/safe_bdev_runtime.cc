@@ -1060,6 +1060,80 @@ clio::run::TaskResume Runtime::AddBdev(clio::run::shared_ptr<AddBdevTask> &task)
   const bool as_parity = (task->as_parity_ != 0);
 
   if (!as_parity) {
+    clio::run::u32 lowest_ttl = 7;
+    int failing_data_idx = -1;
+    int failing_parity_idx = -1;
+
+    for (size_t i = 0; i < data_clients_.size(); ++i) {
+      if (data_members_[i].state_ != ec::EcState::kActive) continue;
+      auto stats = data_clients_[i].AsyncGetStats();
+      CLIO_CO_AWAIT(stats);
+      if (stats->return_code_ == 0 && stats->predicted_ttl_days_ < lowest_ttl) {
+        lowest_ttl = stats->predicted_ttl_days_;
+        failing_data_idx = static_cast<int>(i);
+        failing_parity_idx = -1;
+      }
+    }
+    for (size_t i = 0; i < parity_clients_.size(); ++i) {
+      if (parity_members_[i].state_ != ec::EcState::kActive) continue;
+      auto stats = parity_clients_[i].AsyncGetStats();
+      CLIO_CO_AWAIT(stats);
+      if (stats->return_code_ == 0 && stats->predicted_ttl_days_ < lowest_ttl) {
+        lowest_ttl = stats->predicted_ttl_days_;
+        failing_parity_idx = static_cast<int>(i);
+        failing_data_idx = -1;
+      }
+    }
+
+    if (failing_data_idx >= 0 || failing_parity_idx >= 0) {
+      bool is_data_fail = failing_data_idx >= 0;
+      int failed_idx = is_data_fail ? failing_data_idx : failing_parity_idx;
+      const clio::run::PoolId &failed_pool_id = is_data_fail
+          ? data_members_[static_cast<size_t>(failed_idx)].pool_id_
+          : parity_members_[static_cast<size_t>(failed_idx)].pool_id_;
+
+      HLOG(kInfo,
+           "safe_bdev AddBdev: degrading {} member {} has TTL={} days (<7); "
+           "preemptively migrating its data onto new member '{}'",
+           is_data_fail ? "data" : "parity", failed_idx, lowest_ttl,
+           task->pool_name_.str());
+
+      // Mark the degrading member faulty BEFORE recovery so ReconstructRow
+      // skips it and reads from survivors + parity.
+      if (is_data_fail) {
+        data_members_[static_cast<size_t>(failed_idx)].state_ =
+            ec::EcState::kFaulty;
+      } else {
+        parity_members_[static_cast<size_t>(failed_idx)].state_ =
+            ec::EcState::kFaulty;
+      }
+
+      // Drive the recovery: reconstruct all of the failing member's chunks
+      // onto the new pool, then bring the slot back online pointing at
+      // the new pool.
+      auto rec_fut = client_.AsyncRecoverBdev(
+          MemberQuery(), failed_pool_id, task->pool_name_.str(),
+          task->node_id_, task->member_pool_id_);
+      CLIO_CO_AWAIT(rec_fut);
+
+      if (rec_fut->return_code_ != 0) {
+        HLOG(kError,
+             "safe_bdev AddBdev: preemptive migration failed (rc={}); "
+             "member '{}' not added",
+             rec_fut->return_code_.load(), task->pool_name_.str());
+        task->return_code_ = 1;
+        CLIO_CO_RETURN;
+      }
+
+      HLOG(kInfo,
+           "safe_bdev AddBdev: preemptive migration complete - {} member {} "
+           "rebuilt onto '{}'",
+           is_data_fail ? "data" : "parity", failed_idx,
+           task->pool_name_.str());
+      task->return_code_ = 0;
+      CLIO_CO_RETURN;
+    }
+
     // Add a DATA member: append it empty (fresh slot allocator sized from its
     // own capacity). NO data movement -- the round-robin cursor now includes it,
     // so new writes land on it and dirty the slots they widen, which BuildParity
