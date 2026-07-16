@@ -74,6 +74,18 @@ add_executable(test_reorganize_blob
     test_reorganize_blob.cc
 )
 
+# Internal data organizer (issue #738): factory/frecency-score/config units
+# plus the end-to-end periodic DynamicReorganize promote/demote flow.
+add_executable(test_data_organizer
+    test_data_organizer.cc
+)
+
+# I/O emulation (issue #747): Context::emulate_ on PutBlob/GetBlob (modeled
+# time, buffer untouched, WAL skipped) + bdev perf-stats persistence.
+add_executable(test_io_emulation
+    test_io_emulation.cc
+)
+
 # BDEV leak stress: PutBlob/DelBlob loop for a wall-clock minute, then assert
 # the bdev used capacity is 0 and the runtime leak-checker heap counter is flat.
 add_executable(test_bdev_leak_stress
@@ -294,6 +306,30 @@ target_link_libraries(test_reorganize_blob
     clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
     clio::run::admin_client       # Admin module client
     clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
+    ctp::cxx                    # ClioCtp library
+    ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+# Link test_data_organizer - using simple_test.h framework (NOT Catch2)
+target_link_libraries(test_data_organizer
+    clio_cte_core_runtime         # CTE core runtime library
+    clio_cte_core_client          # CTE core client library
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (required for runtime mode)
+    clio::run::bdev_client        # Bdev client for BdevType enum
+    ctp::cxx                    # ClioCtp library
+    ${CMAKE_THREAD_LIBS_INIT}    # Threading support
+)
+
+# Link test_io_emulation - using simple_test.h framework (NOT Catch2)
+target_link_libraries(test_io_emulation
+    clio_cte_core_runtime         # CTE core runtime library
+    clio_cte_core_client          # CTE core client library
+    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
+    clio::run::admin_client       # Admin module client
+    clio::run::bdev_runtime       # Bdev module runtime (perf-stats persistence helpers)
     clio::run::bdev_client        # Bdev client for BdevType enum
     ctp::cxx                    # ClioCtp library
     ${CMAKE_THREAD_LIBS_INIT}    # Threading support
@@ -686,6 +722,35 @@ set_tests_properties(
         ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
 )
 
+# Add data organizer tests (issue #738)
+# NOTE: like the reorganize tests, the cases share global fixture state
+# (blobs put in one case are checked/cleaned in later cases), so they run
+# together in a single process.
+add_test(NAME cte_data_organizer_all
+    COMMAND test_data_organizer)
+
+set_tests_properties(
+    cte_data_organizer_all
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout
+        LABELS "unit;organizer;cte"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+)
+
+# Add I/O emulation tests (issue #747)
+# NOTE: like the reorganize tests, the cases share global fixture state, so
+# they run together in a single process.
+add_test(NAME cte_io_emulation_all
+    COMMAND test_io_emulation)
+
+set_tests_properties(
+    cte_io_emulation_all
+    PROPERTIES
+        TIMEOUT 300  # 5 minute timeout
+        LABELS "unit;emulation;cte"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1"
+)
+
 # ---------------------------------------------------------------------------
 # CLIO_FORCE_NET stress variants (one per CTE task-path test binary)
 # Route every non-Local task through the loopback run-to-run network path so
@@ -786,6 +851,8 @@ set_tests_properties(
     cte_tiered_dram_default_all
     cte_block_reuse_all
     cte_reorganize_all
+    cte_data_organizer_all
+    cte_io_emulation_all
     PROPERTIES LABELS "msan_skip"
 )
 
@@ -824,6 +891,8 @@ set_tests_properties(
     cte_tiered_dram_default_all
     cte_block_reuse_all
     cte_reorganize_all
+    cte_data_organizer_all
+    cte_io_emulation_all
     PROPERTIES
         RESOURCE_LOCK "clio_runtime"
         FIXTURES_REQUIRED "clio_test_cleanup_fixture"
@@ -867,6 +936,8 @@ set_property(TEST
     cte_tiered_dram_default_all
     cte_block_reuse_all
     cte_reorganize_all
+    cte_data_organizer_all
+    cte_io_emulation_all
     APPEND PROPERTY ENVIRONMENT "CLIO_PORT=10500"
 )
 # All cte_functional_* tests run test_core_functionality (9 test cases, each
@@ -894,7 +965,7 @@ set_tests_properties(
 # ------------------------------------------------------------------------------
 # Install Targets
 # ------------------------------------------------------------------------------
-set(_CTE_TEST_TARGETS cte_core_unit_tests cte_core_functionality_simple_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_blob_block_reuse test_reorganize_blob)
+set(_CTE_TEST_TARGETS cte_core_unit_tests cte_core_functionality_simple_tests test_core_functionality test_query test_cte_config_dpe test_tag_operations test_core_client_config test_core_runtime_coverage test_tiered_storage_stress test_tiered_storage_dram_default test_blob_block_reuse test_reorganize_blob test_data_organizer test_io_emulation)
 # (The legacy test_cte_gpu_coroutine / test_gpu_core / test_gpu_create targets
 # and their ctest registrations were removed along with the GPU runtime. CTE
 # GPU coverage now lives in test_cte_devmem_putget (cte_devmem_putget_cuda).)
