@@ -65,8 +65,24 @@
 static hid_t H5FD_CLIO_g = H5I_INVALID_HID;
 
 /* Identifiers for HDF5's error API */
-hid_t H5FDclio_err_stack_g = H5I_INVALID_HID;
 hid_t H5FDclio_err_class_g = H5I_INVALID_HID;
+static hid_t H5FDclio_err_major_g = H5I_INVALID_HID;
+static hid_t H5FDclio_err_minor_g = H5I_INVALID_HID;
+
+/* Push a driver error onto HDF5's default error stack. Callbacks still return
+ * FAIL/NULL to signal the failure to the library; this records a diagnosable
+ * reason (incl. errno) that composes with HDF5's own stack and is surfaced by
+ * the normal H5Eprint auto-handler at the API boundary -- instead of failing
+ * silently. No-op until the class is registered by H5FD_clio_init(). */
+#define H5FD_CLIO_ERROR(msg)                                               \
+  do {                                                                     \
+    if (H5FDclio_err_class_g >= 0) {                                       \
+      H5Epush2(H5E_DEFAULT, __FILE__, __func__, __LINE__,                  \
+               H5FDclio_err_class_g, H5FDclio_err_major_g,                 \
+               H5FDclio_err_minor_g, "%s (errno=%d: %s)", (msg), errno,    \
+               strerror(errno));                                           \
+    }                                                                      \
+  } while (0)
 
 /* POSIX I/O mode used as the third parameter to open/_open
  * when creating a new file (O_CREAT is set). */
@@ -174,6 +190,20 @@ static const H5FD_class_t H5FD_clio_g = {
 hid_t H5FD_clio_init(void) {
   hid_t ret_value = H5I_INVALID_HID; /* Return value */
 
+  /* Register the driver's HDF5 error class + messages once. Without this,
+   * term() unregistered a class that init() never registered, so the error
+   * path was dead and failures were silent. */
+  if (H5FDclio_err_class_g < 0) {
+    H5FDclio_err_class_g =
+        H5Eregister_class("CLIO VFD", H5FD_CLIO_NAME, "0.1");
+    if (H5FDclio_err_class_g >= 0) {
+      H5FDclio_err_major_g =
+          H5Ecreate_msg(H5FDclio_err_class_g, H5E_MAJOR, "CLIO VFD I/O");
+      H5FDclio_err_minor_g = H5Ecreate_msg(H5FDclio_err_class_g, H5E_MINOR,
+                                           "operation failed");
+    }
+  }
+
   if (H5I_VFL != H5Iget_type(H5FD_CLIO_g)) {
     H5FD_CLIO_g = H5FDregister(&H5FD_clio_g);
   }
@@ -195,19 +225,14 @@ hid_t H5FD_clio_init(void) {
 static herr_t H5FD__clio_term(void) {
   herr_t ret_value = SUCCEED;
 
-  /* Unregister from HDF5 error API */
+  /* Unregister from HDF5 error API (also frees the class's messages). */
   if (H5FDclio_err_class_g >= 0) {
     if (H5Eunregister_class(H5FDclio_err_class_g) < 0) {
       // TODO(llogan)
     }
-
-    /* Destroy the error stack */
-    if (H5Eclose_stack(H5FDclio_err_stack_g) < 0) {
-      // TODO(llogan)
-    } /* end if */
-
-    H5FDclio_err_stack_g = H5I_INVALID_HID;
     H5FDclio_err_class_g = H5I_INVALID_HID;
+    H5FDclio_err_major_g = H5I_INVALID_HID;
+    H5FDclio_err_minor_g = H5I_INVALID_HID;
   }
 
   /* Reset VFL ID */
@@ -254,7 +279,8 @@ static H5FD_t *H5FD__clio_open(const char *name, unsigned flags,
       open(native_path.c_str(), o_flags, H5FD_CLIO_POSIX_CREATE_MODE_RW);
   if (posix_fd < 0) {
     // Fail-closed: no authoritative file => the open fails. We do not proceed
-    // with a cache-only file.
+    // with a cache-only file. Record errno on the driver error stack.
+    H5FD_CLIO_ERROR("open() of authoritative native file failed");
     return nullptr;
   }
 
@@ -271,7 +297,10 @@ static H5FD_t *H5FD__clio_open(const char *name, unsigned flags,
   H5FD_clio_t *file = (H5FD_clio_t *)calloc(1, sizeof(H5FD_clio_t));
   if (file == NULL) {
     // Out of memory: release the handles we already opened instead of leaking
-    // them (and dereferencing a NULL file).
+    // them (and dereferencing a NULL file). calloc does not reliably set errno,
+    // so set it explicitly for an accurate error message.
+    errno = ENOMEM;
+    H5FD_CLIO_ERROR("calloc() of VFD file struct failed");
     close(posix_fd);
     if (fd >= 0) {
       CLIO_CTE_CFS->Close(fd);
@@ -313,7 +342,10 @@ static herr_t H5FD__clio_close(H5FD_t *_file) {
   // a durability barrier (no pending dirty state), and the on-disk file is a
   // complete valid native HDF5 image afterward.
   if (file->posix_fd >= 0) {
-    fsync(file->posix_fd);
+    if (fsync(file->posix_fd) < 0) {
+      H5FD_CLIO_ERROR("fsync() on close failed");
+      ret_value = FAIL; /* fail-closed: a close that did not persist fails */
+    }
     close(file->posix_fd);
   }
   // Release the CTE cache handle, if this session had one.
@@ -464,6 +496,7 @@ static herr_t H5FD__clio_read(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
   // and must NOT be masked as zero data; a short read (0 <= count < size) is
   // EOF and the unread tail is zero-filled.
   if (count < 0) {
+    H5FD_CLIO_ERROR("pread() of authoritative native file failed");
     return FAIL;
   }
   size_t got = static_cast<size_t>(count);
@@ -497,6 +530,7 @@ static herr_t H5FD__clio_write(H5FD_t *_file, H5FD_mem_t type, hid_t dxpl_id,
             (unsigned long long)addr, (unsigned long long)size,
             (long long)count);
   if (count < 0 || static_cast<size_t>(count) < size) {
+    H5FD_CLIO_ERROR("pwrite() to authoritative native file failed/short");
     return FAIL;
   }
 
@@ -555,6 +589,7 @@ static herr_t H5FD__clio_flush(H5FD_t *_file, hid_t dxpl_id, bool closing) {
   (void)closing;
   H5FD_clio_t *file = (H5FD_clio_t *)_file;
   if (file->posix_fd >= 0 && fsync(file->posix_fd) < 0) {
+    H5FD_CLIO_ERROR("fsync() in flush failed");
     return FAIL; /* never report a flush that did not persist */
   }
   return SUCCEED;
@@ -578,6 +613,7 @@ static herr_t H5FD__clio_truncate(H5FD_t *_file, hid_t dxpl_id, bool closing) {
   if (file->eof != file->eoa) {
     if (file->posix_fd >= 0 &&
         ftruncate(file->posix_fd, (off_t)file->eoa) < 0) {
+      H5FD_CLIO_ERROR("ftruncate() of authoritative native file failed");
       return FAIL;
     }
     // Keep the CTE cache's logical size in step (best-effort; populate-only

@@ -240,6 +240,16 @@ bool HasTool(const char *tool) {
 int RunCmd(const std::string &cmd) {
   return std::system((cmd + " >/dev/null 2>&1").c_str());
 }
+
+// H5Ewalk callback: set *data if any error on the stack is the driver's own
+// push, identified by the message text the driver emits.
+herr_t FindClioErr(unsigned n, const H5E_error2_t *err, void *data) {
+  (void)n;
+  if (err && err->desc && std::strstr(err->desc, "authoritative native file")) {
+    *static_cast<bool *>(data) = true;
+  }
+  return 0;
+}
 }  // namespace
 
 int main() {
@@ -449,6 +459,28 @@ int main() {
     ::close(p);
     H5Pclose(fapl_lk);
     std::printf("[vfd-suite] ok 8: lock excludes a concurrent opener; unlock releases\n");
+  }
+
+  // === 9. fail-closed error reporting ====================================
+  // A failed operation must fail closed AND leave a diagnosable driver error on
+  // the HDF5 error stack, not fail silently. Open a non-existent file; suppress
+  // the auto-printer so the expected stack doesn't clutter output, and walk the
+  // stack to confirm the driver's own error (not just HDF5's) was recorded.
+  {
+    H5E_auto2_t old_func = nullptr;
+    void *old_data = nullptr;
+    H5Eget_auto2(H5E_DEFAULT, &old_func, &old_data);
+    H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+    H5Eclear2(H5E_DEFAULT);
+    hid_t missing = H5Fopen("clio::/tmp/clio_cte_vfd_absent_xyz.h5",
+                            H5F_ACC_RDONLY, fapl);
+    bool found_clio_err = false;
+    H5Ewalk2(H5E_DEFAULT, H5E_WALK_UPWARD, FindClioErr, &found_clio_err);
+    H5Eset_auto2(H5E_DEFAULT, old_func, old_data);
+    CHECK(missing < 0, "9: H5Fopen of a missing file must fail closed");
+    CHECK(found_clio_err,
+          "9: the driver pushed a diagnosable error onto the HDF5 stack");
+    std::printf("[vfd-suite] ok 9: fail-closed error reporting\n");
   }
 
   H5Pclose(fapl);
