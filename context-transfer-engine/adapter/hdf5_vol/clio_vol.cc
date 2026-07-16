@@ -143,6 +143,11 @@ static void drain_dataset_puts(clio_dataset_t *dset) {
 struct clio_wrap_ctx_t {
   hid_t under_vol_id;
   void *under_wrap_ctx;
+  /* The clio_file_t the wrapped-over container belongs to, so datasets
+     re-wrapped during H5Literate/H5Ovisit iteration inherit their file (and
+     thus its CLIO_VOL_TRACE FileTrace). Without it, iterated datasets get a
+     null file and their reads/writes go untraced. */
+  clio_file_t *parent_file;
 };
 
 /* ========================================================================
@@ -201,6 +206,7 @@ static herr_t clio_get_wrap_ctx(const void *obj, void **wrap_ctx) {
   ctx->under_vol_id = o->under_vol_id;
   H5Iinc_ref(ctx->under_vol_id);
   ctx->under_wrap_ctx = nullptr;
+  ctx->parent_file = o->parent_file;
   H5VLget_wrap_ctx(o->under_object, o->under_vol_id, &ctx->under_wrap_ctx);
   *wrap_ctx = ctx;
   return 0;
@@ -219,17 +225,20 @@ static void *clio_wrap_object(void *under_obj, H5I_type_t obj_type,
                                 under_wrap_ctx);
   if (!under) return nullptr;
 
-  /* parent_file is unknown during iteration, so everything wrapped here falls
-     back to the native VOL (correct, just uncached). A wrapped *dataset* must
-     still be a full clio_dataset_t (non-cacheable), or a later
-     dataset_read/close would mis-cast it. */
+  /* The stable dataset *path* is still unknown during iteration, so wrapped
+     datasets stay non-cacheable (make_dataset_wrapper keys cacheability on a
+     non-empty path) and their transfers fall back to the native VOL. But the
+     parent file IS known via the wrap context, so thread it through: a wrapped
+     dataset then inherits file->trace and its reads/writes are recorded by
+     CLIO_VOL_TRACE (previously they were silently dropped). */
+  clio_file_t *parent_file = ctx ? ctx->parent_file : nullptr;
   if (obj_type == H5I_DATASET) {
-    return make_dataset_wrapper(under, under_vol_id, nullptr, nullptr);
+    return make_dataset_wrapper(under, under_vol_id, parent_file, nullptr);
   }
   auto *o = new clio_obj_t;
   o->under_object = under;
   o->under_vol_id = under_vol_id;
-  o->parent_file = nullptr;
+  o->parent_file = parent_file;
   return o;
 }
 
