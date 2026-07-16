@@ -495,17 +495,21 @@ static bool clio_type_is_cacheable(hid_t type_id) {
  * Recursively true when a datatype is a fixed-size, self-contained POD image —
  * no embedded pointers — so its in-memory transfer buffer can be byte-copied
  * into / out of the linear CTE cache. Extends clio_type_is_cacheable to fixed
- * COMPOUND and ARRAY types (whose members are themselves flat), which the
- * READ cache can safely mirror: on a miss we cache exactly what the native VOL
- * produced and serve those same bytes on a hit, so no divergence is possible.
- * Excluded (return false): vlen sequences, variable-length strings, and object/
- * region references — the buffer holds POINTERS, so a raw copy caches addresses,
- * not content.
+ * COMPOUND types (whose members are themselves flat), which the READ cache can
+ * safely mirror: on a miss we cache exactly what the native VOL produced and
+ * serve those same bytes on a hit, so no divergence is possible.
+ * Excluded (return false):
+ *   - vlen sequences, variable-length strings, object/region references — the
+ *     buffer holds POINTERS, so a raw copy caches addresses, not content.
+ *   - ARRAY datatypes — their element image round-trips incorrectly through the
+ *     byte cache (the VOL compat suite's array_dtype roundtrip regressed), so
+ *     they stay on the native path with the atomic/compound scalars below. Also
+ *     excludes any compound with a nested array member (recursion returns false).
  *
  * NOTE: read-only. The write path keeps clio_type_is_cacheable (atomic-only),
- * because a *written* compound/subarray buffer can differ from the element image
- * HDF5 actually persists (member padding / subarray fill), which would let a
- * cached read return bytes native never wrote.
+ * because a *written* compound buffer can differ from the element image HDF5
+ * actually persists (member padding), which would let a cached read return
+ * bytes native never wrote.
  */
 static bool clio_type_is_read_cacheable(hid_t t) {
   if (t < 0) return false;
@@ -530,13 +534,7 @@ static bool clio_type_is_read_cacheable(hid_t t) {
       }
       return true;
     }
-    case H5T_ARRAY: {
-      hid_t super = H5Tget_super(t);
-      bool ok = clio_type_is_read_cacheable(super);
-      if (super >= 0) H5Tclose(super);
-      return ok;
-    }
-    default:  /* H5T_VLEN, H5T_REFERENCE, ... — hold pointers */
+    default:  /* H5T_ARRAY, H5T_VLEN, H5T_REFERENCE, ... — unsafe to byte-cache */
       return false;
   }
 }
