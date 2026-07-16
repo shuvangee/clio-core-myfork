@@ -1110,10 +1110,10 @@ add_executable(test_cte_existing_pool
 target_link_libraries(test_cte_existing_pool
     clio_cte_core_runtime         # CTE core runtime library
     clio_cte_core_client          # CTE core client library
-    clio::run::admin_runtime      # Admin module runtime (required for runtime mode)
-    clio::run::admin_client       # Admin module client
-    clio::run::bdev_runtime       # Bdev module runtime (member bdev)
-    clio::run::bdev_client        # Bdev client for BdevType enum
+    clio_admin_runtime      # Admin module runtime (required for runtime mode)
+    clio_admin_client       # Admin module client
+    clio_bdev_runtime       # Bdev module runtime (member bdev)
+    clio_bdev_client        # Bdev client for BdevType enum
     clio_safe_bdev_runtime       # safe-bdev runtime (existing pool target)
     clio_safe_bdev_client        # safe-bdev client (compose the pool)
     ctp::cxx                    # ClioCtp library
@@ -1138,4 +1138,47 @@ install(TARGETS test_cte_existing_pool
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
 )
+
+
+# ------------------------------------------------------------------------------
+# Safe-BDEV recovery stress test: 4 file bdevs + 1 RAM bdev under safe-bdev
+# (max_failures=1) bound to CTE. Injects a bdev fault and verifies CTE can
+# still read data back via EC reconstruction.
+# ------------------------------------------------------------------------------
+add_executable(test_safe_bdev_recovery_e2e
+    test_safe_bdev_recovery_e2e.cc
+)
+
+target_link_libraries(test_safe_bdev_recovery_e2e
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio_admin_runtime
+    clio_admin_client
+    clio_bdev_runtime
+    clio_bdev_client
+    clio_safe_bdev_runtime
+    clio_safe_bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+add_test(NAME cte_safe_bdev_recovery_e2e
+    COMMAND test_safe_bdev_recovery_e2e)
+
+set_tests_properties(
+    cte_safe_bdev_recovery_e2e
+    PROPERTIES
+        TIMEOUT 300
+        LABELS "unit;core;cte;safe_bdev;recovery;msan_skip"
+        RESOURCE_LOCK "chimaera_runtime"
+        FIXTURES_REQUIRED "chimaera_test_cleanup_fixture"
+        ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CHI_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+)
+
+install(TARGETS test_safe_bdev_recovery_e2e
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
 endif()  # TARGET clio_safe_bdev_runtime
