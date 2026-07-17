@@ -420,6 +420,30 @@ def _dump_restart_diagnostics(proc, env):
         pass
 
 
+def _hdf5_prefix():
+    """Return the install prefix of the HDF5 that this suite links against, or
+    None. The suite is launched by ctest with an explicit interpreter path
+    (e.g. <conda>/bin/python3), so the HDF5 headers/libs it exercises live under
+    that interpreter's prefix (<conda>/include, <conda>/lib). Deriving the prefix
+    from sys.executable keeps the on-the-fly C compiler pointed at the same HDF5
+    as the h5py arms, instead of a hardcoded /usr/local that may not have it."""
+    prefix = os.path.dirname(os.path.dirname(os.path.abspath(sys.executable)))
+    if os.path.isfile(os.path.join(prefix, "include", "hdf5.h")):
+        return prefix
+    return None
+
+
+def _find_h5cc():
+    """Locate the h5cc wrapper, preferring one next to the running interpreter
+    (the HDF5 this suite actually uses) over anything on PATH."""
+    prefix = _hdf5_prefix()
+    if prefix:
+        cand = os.path.join(prefix, "bin", "h5cc")
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return shutil.which("h5cc")
+
+
 def _compile_c(binp, srcp):
     """Compile a single C test, preferring the HDF5 wrapper h5cc and falling back
     to gcc + -lhdf5. Returns the CompletedProcess of whichever compiler ran, or
@@ -428,12 +452,18 @@ def _compile_c(binp, srcp):
     FileNotFoundError, which previously aborted the whole suite instead of letting
     the gcc fallback run."""
     comp = None
-    if shutil.which("h5cc"):
-        comp = subprocess.run(["h5cc", "-o", binp, srcp], capture_output=True,
+    h5cc = _find_h5cc()
+    if h5cc:
+        comp = subprocess.run([h5cc, "-o", binp, srcp], capture_output=True,
                               text=True, env=_env(False))
     if (comp is None or comp.returncode != 0) and shutil.which("gcc"):
-        comp = subprocess.run(["gcc", "-o", binp, srcp, "-I/usr/local/include",
-                               "-L/usr/local/lib", "-lhdf5"],
+        # Point gcc at the HDF5 under the running interpreter's prefix (the same
+        # one the h5py arms use); fall back to /usr/local for standalone runs.
+        prefix = _hdf5_prefix()
+        inc = os.path.join(prefix, "include") if prefix else "/usr/local/include"
+        lib = os.path.join(prefix, "lib") if prefix else "/usr/local/lib"
+        comp = subprocess.run(["gcc", "-o", binp, srcp, "-I" + inc,
+                               "-L" + lib, "-Wl,-rpath," + lib, "-lhdf5"],
                               capture_output=True, text=True, env=_env(False))
     return comp
 
