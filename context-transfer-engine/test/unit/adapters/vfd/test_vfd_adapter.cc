@@ -735,6 +735,58 @@ int main() {
     std::printf("[vfd-suite] ok 14: del removes both native file and CTE tag\n");
   }
 
+  // === 15. no-pending-dirty-state barrier: H5Fflush finalizes the image ======
+  // An independent sec2 reader (no VFD; the writer stays open and is never
+  // closed) reads the dataset back from the native file only AFTER H5Fflush: the
+  // read fails before the flush (HDF5 metadata still buffered) and succeeds
+  // after, so it is the flush -- not write-through alone -- that leaves a
+  // complete, consistent on-disk image. Consistency only, not fsync-to-platter:
+  // an in-process read hits the page cache. Locking is off so the reader is not
+  // blocked by the writer.
+  {
+    const char *kClioDur = "clio::/tmp/clio_cte_vfd_durable.h5";
+    const char *kNativeDur = "/tmp/clio_cte_vfd_durable.h5";
+    std::remove(kNativeDur);
+    std::vector<int32_t> w = MakeI32(kSmall);
+
+    hid_t wfapl = H5Pcopy(fapl);
+    CHECK(wfapl >= 0 && H5Pset_file_locking(wfapl, false, true) >= 0,
+          "15: writer FAPL (locking off)");
+    hid_t rfapl = H5Pcreate(H5P_FILE_ACCESS);
+    CHECK(rfapl >= 0 && H5Pset_file_locking(rfapl, false, true) >= 0,
+          "15: reader FAPL (locking off)");
+
+    hid_t f = H5Fcreate(kClioDur, H5F_ACC_TRUNC, H5P_DEFAULT, wfapl);
+    CHECK(f >= 0, "15: create");
+    CHECK(WriteDset(f, "durable", H5T_NATIVE_INT32, w), "15: write");
+
+    // Open the native file with sec2 (no VFD) and read the dataset back
+    // byte-clean; false if it is not yet a complete HDF5 image. The pre-flush
+    // call is expected to error, so suppress the auto-printer around it.
+    auto independent_read_ok = [&]() -> bool {
+      H5E_auto2_t af = nullptr;
+      void *ad = nullptr;
+      H5Eget_auto2(H5E_DEFAULT, &af, &ad);
+      H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+      hid_t rf = H5Fopen(kNativeDur, H5F_ACC_RDONLY, rfapl);
+      bool ok = rf >= 0 && ReadDsetEq(rf, "durable", H5T_NATIVE_INT32, w);
+      if (rf >= 0) H5Fclose(rf);
+      H5Eset_auto2(H5E_DEFAULT, af, ad);
+      return ok;
+    };
+
+    CHECK(!independent_read_ok(),
+          "15: pre-flush image is incomplete to an independent reader");
+    CHECK(H5Fflush(f, H5F_SCOPE_GLOBAL) >= 0, "15: H5Fflush (the barrier)");
+    CHECK(independent_read_ok(),
+          "15: post-flush data fully persisted + readable without the VFD");
+
+    CHECK(H5Fclose(f) >= 0, "15: close writer");
+    H5Pclose(rfapl);
+    H5Pclose(wfapl);
+    std::printf("[vfd-suite] ok 15: no-pending-dirty-state barrier (flush finalizes the image)\n");
+  }
+
   H5Pclose(fapl);
 
   // === 4. Native tool matrix on the VFD's file (NO VFD loaded) ============

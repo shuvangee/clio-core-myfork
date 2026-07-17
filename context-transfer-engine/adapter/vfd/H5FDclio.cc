@@ -720,9 +720,12 @@ static herr_t H5FD__clio_flush(H5FD_t *_file, hid_t dxpl_id, bool closing) {
   (void)dxpl_id;
   (void)closing;
   H5FD_clio_t *file = (H5FD_clio_t *)_file;
+  // Persist the authoritative native file; fail-closed so a flush that did not
+  // reach disk never reports success. Writes are write-through, so the native
+  // file is the only store holding data to flush.
   if (file->posix_fd >= 0 && fsync(file->posix_fd) < 0) {
     H5FD_CLIO_ERROR("fsync() in flush failed");
-    return FAIL; /* never report a flush that did not persist */
+    return FAIL;
   }
   return SUCCEED;
 } /* end H5FD__clio_flush() */
