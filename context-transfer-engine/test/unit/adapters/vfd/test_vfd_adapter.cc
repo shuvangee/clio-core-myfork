@@ -42,6 +42,7 @@
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/bdev/bdev_client.h"
 #include "clio_cte/core/core_client.h"
+#include "adapter/cfs/cfs_io.h"
 #include "adapter/vfd/H5FDclio.h"
 
 namespace {
@@ -481,6 +482,257 @@ int main() {
     CHECK(found_clio_err,
           "9: the driver pushed a diagnosable error onto the HDF5 stack");
     std::printf("[vfd-suite] ok 9: fail-closed error reporting\n");
+  }
+
+  // === 10. feature-flag effect: on-disk size matches sec2 =================
+  // With the metadata-aggregation feature flags advertised by query(), HDF5
+  // lays the file out the same way it does for sec2, so identical content yields
+  // an identical on-disk byte size. Before those flags the VFD produced a
+  // smaller, differently-aggregated file -- so this both proves the flags took
+  // effect and pins truncate/close sizing against the sec2 oracle. (Byte content
+  // isn't compared: HDF5 stamps object modification times, which differ by
+  // instant but not in size.)
+  {
+    const char *kSec2 = "/tmp/clio_cte_vfd_flagsec2.h5";
+    const char *kClioFf = "clio::/tmp/clio_cte_vfd_flagvfd.h5";
+    const char *kNativeFf = "/tmp/clio_cte_vfd_flagvfd.h5";
+    std::remove(kSec2);
+    std::remove(kNativeFf);
+    hid_t s = H5Fcreate(kSec2, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    CHECK(s >= 0 && WriteRich(s) && H5Fclose(s) >= 0, "10: sec2 write+close");
+    hid_t v = H5Fcreate(kClioFf, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
+    CHECK(v >= 0 && WriteRich(v) && H5Fclose(v) >= 0, "10: VFD write+close");
+    struct stat ss, vs;
+    CHECK(::stat(kSec2, &ss) == 0 && ::stat(kNativeFf, &vs) == 0,
+          "10: stat both files");
+    CHECK(ss.st_size == vs.st_size,
+          "10: VFD on-disk size == sec2 (metadata-aggregation flags in effect)");
+    std::printf("[vfd-suite] ok 10: feature-flag effect (size parity with sec2)\n");
+  }
+
+  // === 11. SWMR I/O (validates the SUPPORTS_SWMR_IO feature flag) =========
+  // SWMR needs the latest file format + an extendible dataset. HDF5 accepts an
+  // SWMR-write transition only because the driver advertises SUPPORTS_SWMR_IO;
+  // then write-through + flush must make appended data visible to a *concurrent*
+  // SWMR reader (a separate handle on the same native file) after H5Drefresh.
+  // File locking is disabled on the FAPL (standard for SWMR): the writer's
+  // advisory flock would otherwise block the in-process reader -- same as sec2.
+  {
+    const char *kClioSwmr = "clio::/tmp/clio_cte_vfd_swmr.h5";
+    const char *kNativeSwmr = "/tmp/clio_cte_vfd_swmr.h5";
+    std::remove(kNativeSwmr);
+    hid_t fapl_sw = H5Pcopy(fapl);
+    CHECK(fapl_sw >= 0, "11: H5Pcopy");
+    CHECK(H5Pset_libver_bounds(fapl_sw, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) >= 0,
+          "11: set latest libver (required for SWMR)");
+    CHECK(H5Pset_file_locking(fapl_sw, /*use*/ false, /*ignore*/ true) >= 0,
+          "11: disable file locking for SWMR");
+
+    // Writer: create + unlimited chunked dataset seeded with 3 rows.
+    hid_t f = H5Fcreate(kClioSwmr, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_sw);
+    CHECK(f >= 0, "11: H5Fcreate (latest format)");
+    hsize_t dims[1] = {3}, maxd[1] = {H5S_UNLIMITED}, chunk[1] = {4};
+    hid_t sp = H5Screate_simple(1, dims, maxd);
+    hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    H5Pset_chunk(dcpl, 1, chunk);
+    hid_t d = H5Dcreate2(f, "swmr", H5T_NATIVE_INT32, sp, H5P_DEFAULT, dcpl,
+                         H5P_DEFAULT);
+    int seed[3] = {10, 11, 12};
+    CHECK(d >= 0 && H5Dwrite(d, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                             seed) >= 0,
+          "11: seed write");
+    H5Pclose(dcpl);
+    H5Sclose(sp);
+
+    // Transition to SWMR write -- accepted only because the VFD advertises SWMR.
+    CHECK(H5Fstart_swmr_write(f) >= 0,
+          "11: H5Fstart_swmr_write (VFD accepts SWMR I/O)");
+
+    // Append 2 rows and flush (the SWMR barrier).
+    hsize_t newsize[1] = {5};
+    CHECK(H5Dset_extent(d, newsize) >= 0, "11: extend to 5 rows");
+    hid_t fsp = H5Dget_space(d);
+    hsize_t start[1] = {3}, cnt[1] = {2};
+    H5Sselect_hyperslab(fsp, H5S_SELECT_SET, start, nullptr, cnt, nullptr);
+    hid_t msp = H5Screate_simple(1, cnt, nullptr);
+    int more[2] = {13, 14};
+    CHECK(H5Dwrite(d, H5T_NATIVE_INT32, msp, fsp, H5P_DEFAULT, more) >= 0,
+          "11: append write");
+    H5Sclose(msp);
+    H5Sclose(fsp);
+    CHECK(H5Dflush(d) >= 0, "11: H5Dflush (SWMR barrier)");
+
+    // Concurrent SWMR reader (separate handle) must see all 5 rows after refresh.
+    hid_t rf = H5Fopen(kClioSwmr, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, fapl_sw);
+    CHECK(rf >= 0, "11: SWMR reader open");
+    hid_t rd = H5Dopen2(rf, "swmr", H5P_DEFAULT);
+    CHECK(rd >= 0 && H5Drefresh(rd) >= 0, "11: reader open + refresh");
+    hid_t rsp = H5Dget_space(rd);
+    hsize_t cur[1] = {0};
+    H5Sget_simple_extent_dims(rsp, cur, nullptr);
+    int got[5] = {0, 0, 0, 0, 0};
+    const int exp[5] = {10, 11, 12, 13, 14};
+    bool ok = (cur[0] == 5) &&
+              H5Dread(rd, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                      got) >= 0 &&
+              std::memcmp(got, exp, sizeof(exp)) == 0;
+    H5Sclose(rsp);
+    H5Dclose(rd);
+    H5Fclose(rf);
+    CHECK(ok, "11: SWMR reader sees appended data via write-through + flush");
+
+    H5Dclose(d);
+    H5Fclose(f);
+    H5Pclose(fapl_sw);
+    std::printf("[vfd-suite] ok 11: SWMR I/O (write-through visible to reader)\n");
+  }
+
+  // === 12. driver FAPL: H5Pset_fapl_clio round-trip ======================
+  // The supported way to select the driver and carry config. Set the driver via
+  // the CLIO setter with the cache DISABLED (native-only path), confirm the FAPL
+  // actually carries the CLIO driver + a driver-info block (fapl_size/copy round
+  // the config), and that a full rich round-trip works through it.
+  {
+    hid_t fapl_nc = H5Pcreate(H5P_FILE_ACCESS);
+    CHECK(fapl_nc >= 0, "12: H5Pcreate");
+    CHECK(H5Pset_fapl_clio(fapl_nc, /*cache_enabled*/ 0) >= 0,
+          "12: H5Pset_fapl_clio (cache off)");
+    CHECK(H5Pget_driver(fapl_nc) == H5FD_clio_init(),
+          "12: FAPL driver is the CLIO VFD");
+    // The driver-info block must carry the exact config we set -- proving
+    // fapl_copy round-trips the value, not merely that a block exists. The probe
+    // layout matches H5FD_clio_fapl_t's first field; both values must survive.
+    struct ClioFaplProbe {
+      hbool_t cache_enabled;
+    };
+    const void *di0 = H5Pget_driver_info(fapl_nc);
+    CHECK(di0 != nullptr &&
+              static_cast<const ClioFaplProbe *>(di0)->cache_enabled == 0,
+          "12: FAPL round-trips cache_enabled=false");
+    hid_t fapl_c = H5Pcreate(H5P_FILE_ACCESS);
+    CHECK(fapl_c >= 0 && H5Pset_fapl_clio(fapl_c, /*cache_enabled*/ 1) >= 0,
+          "12: H5Pset_fapl_clio (cache on)");
+    const void *di1 = H5Pget_driver_info(fapl_c);
+    CHECK(di1 != nullptr &&
+              static_cast<const ClioFaplProbe *>(di1)->cache_enabled == 1,
+          "12: FAPL round-trips cache_enabled=true");
+    H5Pclose(fapl_c);
+    const char *kClioFapl = "clio::/tmp/clio_cte_vfd_fapl.h5";
+    std::remove("/tmp/clio_cte_vfd_fapl.h5");
+    hid_t f = H5Fcreate(kClioFapl, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_nc);
+    CHECK(f >= 0 && WriteRich(f) && H5Fclose(f) >= 0,
+          "12: write+close via setter");
+    hid_t f2 = H5Fopen(kClioFapl, H5F_ACC_RDONLY, fapl_nc);
+    CHECK(f2 >= 0 && VerifyRich(f2) && H5Fclose(f2) >= 0,
+          "12: rich round-trip via H5Pset_fapl_clio (cache off)");
+    H5Pclose(fapl_nc);
+
+    // The setter rejects a plist that is not a file access property list
+    // (suppress the auto-printer -- the rejection pushes an expected error).
+    hid_t not_fapl = H5Pcreate(H5P_DATASET_CREATE);
+    H5E_auto2_t of = nullptr;
+    void *od = nullptr;
+    H5Eget_auto2(H5E_DEFAULT, &of, &od);
+    H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+    herr_t bad = H5Pset_fapl_clio(not_fapl, 1);
+    H5Eset_auto2(H5E_DEFAULT, of, od);
+    CHECK(bad < 0, "12: H5Pset_fapl_clio rejects a non-FAPL plist");
+    H5Pclose(not_fapl);
+    std::printf("[vfd-suite] ok 12: driver FAPL (H5Pset_fapl_clio round-trip)\n");
+  }
+
+  // === 13. vectored I/O (read_vector / write_vector) =====================
+  // Force HDF5 down the vector path: request selection I/O on the transfer
+  // plist. With the driver's selection callbacks NULL but read_vector/
+  // write_vector implemented, HDF5 translates selection I/O to vector I/O.
+  // Confirm the vector callbacks actually ran (exported counters advanced) AND
+  // the data round-trips byte-clean.
+  {
+    extern unsigned long H5FDclio_read_vector_calls_g;
+    extern unsigned long H5FDclio_write_vector_calls_g;
+    const char *kClioVec = "clio::/tmp/clio_cte_vfd_vec.h5";
+    std::remove("/tmp/clio_cte_vfd_vec.h5");
+    hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
+    CHECK(dxpl >= 0 && H5Pset_selection_io(dxpl, H5D_SELECTION_IO_MODE_ON) >= 0,
+          "13: request selection I/O on the transfer plist");
+
+    const unsigned long w0 = H5FDclio_write_vector_calls_g;
+    const unsigned long r0 = H5FDclio_read_vector_calls_g;
+    std::vector<int32_t> w = MakeI32(kSmall);
+
+    hid_t f = H5Fcreate(kClioVec, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
+    CHECK(f >= 0, "13: create");
+    hsize_t dims[1] = {kSmall};
+    hid_t sp = H5Screate_simple(1, dims, nullptr);
+    hid_t d = H5Dcreate2(f, "vec", H5T_NATIVE_INT32, sp, H5P_DEFAULT, H5P_DEFAULT,
+                         H5P_DEFAULT);
+    CHECK(d >= 0 && H5Dwrite(d, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, dxpl,
+                             w.data()) >= 0,
+          "13: H5Dwrite (selection/vector I/O)");
+    H5Dclose(d);
+    H5Sclose(sp);
+    CHECK(H5Fclose(f) >= 0, "13: close");
+
+    std::vector<int32_t> got(kSmall, 0);
+    hid_t f2 = H5Fopen(kClioVec, H5F_ACC_RDONLY, fapl);
+    hid_t d2 = H5Dopen2(f2, "vec", H5P_DEFAULT);
+    CHECK(d2 >= 0 && H5Dread(d2, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, dxpl,
+                             got.data()) >= 0,
+          "13: H5Dread (selection/vector I/O)");
+    H5Dclose(d2);
+    H5Fclose(f2);
+    H5Pclose(dxpl);
+
+    CHECK(std::memcmp(got.data(), w.data(), kSmall * sizeof(int32_t)) == 0,
+          "13: vectored round-trip byte-clean");
+    CHECK(H5FDclio_write_vector_calls_g > w0,
+          "13: write_vector was actually exercised");
+    CHECK(H5FDclio_read_vector_calls_g > r0,
+          "13: read_vector was actually exercised");
+    std::printf("[vfd-suite] ok 13: vectored I/O (read_vector/write_vector exercised)\n");
+  }
+
+  // === 14. del callback: H5Fdelete removes BOTH stores ====================
+  // A correct delete must leave NEITHER store orphaned: the authoritative native
+  // file AND the CTE cache tag. Create+write a file (populating both), confirm
+  // both exist, H5Fdelete through the VFD, then confirm both are gone (verified
+  // on the HDF5 side via stat/reopen and on the CLIO side via the CFS tag) so a
+  // deleted file leaves nothing behind in either the filesystem or CTE.
+  {
+    const char *kClioDel = "clio::/tmp/clio_cte_vfd_del.h5";
+    const char *kNativeDel = "/tmp/clio_cte_vfd_del.h5";
+    std::remove(kNativeDel);
+    hid_t f = H5Fcreate(kClioDel, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
+    CHECK(f >= 0, "14: create");
+    CHECK(WriteDset(f, "d", H5T_NATIVE_INT32, MakeI32(kSmall)), "14: write");
+    CHECK(H5Fclose(f) >= 0, "14: close");
+
+    // Precondition: BOTH stores now exist.
+    struct stat nst;
+    CHECK(::stat(kNativeDel, &nst) == 0, "14: native file exists before delete");
+    struct stat cst;
+    CHECK(CLIO_CTE_CFS->StatPath(kClioDel, &cst) == 0,
+          "14: CTE cache tag exists before delete");
+
+    // Delete through the VFD (drives H5FD__clio_del via H5Fdelete).
+    CHECK(H5Fdelete(kClioDel, fapl) >= 0, "14: H5Fdelete succeeds");
+
+    // Postcondition (HDF5 side): native file gone; it no longer opens.
+    errno = 0;
+    CHECK(::stat(kNativeDel, &nst) != 0 && errno == ENOENT,
+          "14: native file removed after H5Fdelete");
+    H5E_auto2_t of = nullptr;
+    void *od = nullptr;
+    H5Eget_auto2(H5E_DEFAULT, &of, &od);
+    H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+    hid_t reopened = H5Fopen(kClioDel, H5F_ACC_RDONLY, fapl);
+    H5Eset_auto2(H5E_DEFAULT, of, od);
+    CHECK(reopened < 0, "14: deleted file no longer opens");
+
+    // Postcondition (CLIO side): the CTE cache tag is gone, not orphaned.
+    CHECK(CLIO_CTE_CFS->StatPath(kClioDel, &cst) != 0,
+          "14: CTE cache tag removed after H5Fdelete (not orphaned)");
+    std::printf("[vfd-suite] ok 14: del removes both native file and CTE tag\n");
   }
 
   H5Pclose(fapl);

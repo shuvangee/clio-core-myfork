@@ -50,6 +50,11 @@ extern "C" {
 #endif
 
 hid_t H5FD_clio_init();
+/* Select the CLIO VFD and attach its tiering policy.
+ *   cache_enabled: populate the CTE cache tier (false = native-only, which
+ *                  avoids the current write-amplification of the populate-only
+ *                  cache). */
+herr_t H5Pset_fapl_clio(hid_t fapl_id, hbool_t cache_enabled);
 
 H5PL_type_t H5PLget_plugin_type(void);
 const void* H5PLget_plugin_info(void);
