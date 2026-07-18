@@ -31,52 +31,35 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * Programmer:  Kimmy Mu
- *              April 2021
+#ifndef WRPCTE_CORE_DPE_MAX_BW_DPE_H_
+#define WRPCTE_CORE_DPE_MAX_BW_DPE_H_
+
+#include <clio_cte/core/dpe/dpe.h>
+
+namespace clio::cte::core {
+
+/**
+ * Max Bandwidth Data Placement Engine
  *
- * Purpose: The public header file for the Clio driver.
+ * Ranks score-eligible targets by measured performance: write bandwidth for
+ * large transfers, average latency for small ones (below kLatencyThreshold).
+ * Preferred-tier targets come first; higher-tier fallbacks after, worst
+ * performer first so the fastest tiers are consumed last.
  */
-#ifndef H5FDhermes_H
-#define H5FDhermes_H
+class MaxBwDpe : public DataPlacementEngine {
+public:
+  MaxBwDpe();
 
-#include <dlfcn.h>
-#include <hdf5.h>
-#include <stdio.h>
+  std::vector<TargetInfo> SelectTargets(const std::vector<TargetInfo>& targets,
+                                       float blob_score,
+                                       clio::run::u64 data_size) override;
 
-#include <clio_ctp/util/logging.h>
+  DpeType GetType() const override { return DpeType::kMaxBW; }
 
-#define H5FD_WRP_CTE_NAME  "hdf5_hermes_vfd"
-#define H5FD_WRP_CTE_VALUE ((H5FD_class_value_t)(3200))
+private:
+  static constexpr clio::run::u64 kLatencyThreshold = 32 * 1024; // 32KB threshold
+};
 
-#define CLIO_CTE_FORWARD_DECL(func_, ret_, args_) \
-  typedef ret_(*real_t_##func_##_) args_;       \
-  ret_(*real_##func_##_) args_ = NULL;
+} // namespace clio::cte::core
 
-#define MAP_OR_FAIL(func_)                                                  \
-  if (!(real_##func_##_)) {                                                 \
-    real_##func_##_ = (real_t_##func_##_)dlsym(RTLD_NEXT, #func_);          \
-    if (!(real_##func_##_)) {                                               \
-      HLOG(kError, "HERMES Adapter failed to map symbol: {}", #func_);      \
-      exit(1);                                                              \
-    }                                                                       \
-  }
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-hid_t H5FD_hermes_init();
-herr_t H5Pset_fapl_hermes(hid_t fapl_id, hbool_t persistence, size_t page_size);
-
-H5PL_type_t H5PLget_plugin_type(void);
-const void* H5PLget_plugin_info(void);
-
-CLIO_CTE_FORWARD_DECL(H5_init_library, herr_t, ());
-CLIO_CTE_FORWARD_DECL(H5_term_library, herr_t, ());
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* end H5FDhermes_H */
+#endif // WRPCTE_CORE_DPE_MAX_BW_DPE_H_
