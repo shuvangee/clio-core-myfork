@@ -49,6 +49,7 @@
 // ============================================================================
 
 #include "fuse_cte.h"  // cte_fuse_ops (the operation table) + FUSE headers
+#include "fuse_cte_args.h"
 
 #include <cerrno>   // errno
 #include <climits>
@@ -56,6 +57,11 @@
 #include <cstdlib>  // atoi, getenv
 #include <cstring>  // strncmp, strerror
 #include <fcntl.h>
+
+#ifdef __APPLE__
+#include <string>
+#include <vector>
+#endif  // __APPLE__
 
 #ifndef _WIN32
 #include <unistd.h>  // getuid, getgid, read
@@ -88,13 +94,38 @@ static ssize_t cte_custom_read(int fd, void *buf, size_t buf_len,
 #endif  // !__APPLE__ && FUSE_VERSION >= 3.14
 #endif  // _WIN32
 
+#ifdef __APPLE__
+/**
+ * Normalize macFUSE arguments and run the macOS FUSE event loop.
+ *
+ * @param argc Number of command-line arguments.
+ * @param argv Original command-line arguments.
+ * @return The exit status returned by fuse_main.
+ */
+static int RunMacFuse(int argc, char *argv[]) {
+  std::vector<std::string> args(argv, argv + argc);
+  args = clio::cte::fuse::NormalizeMacFuseArgs(args);
+  std::vector<char *> fuse_argv;
+  fuse_argv.reserve(args.size() + 1);
+  for (std::string &arg : args) {
+    fuse_argv.push_back(arg.data());
+  }
+  const int fuse_argc = static_cast<int>(fuse_argv.size());
+  fuse_argv.push_back(nullptr);
+  return fuse_main(fuse_argc, fuse_argv.data(), &cte_fuse_ops, nullptr);
+}
+#endif  // __APPLE__
+
 int main(int argc, char *argv[]) {
-#if defined(_WIN32) || defined(__APPLE__)
-  // Native Windows (WinFsp) and macOS (macFUSE): no Apptainer-style
-  // /dev/fuse fd injection. fuse_main() parses argv (on Windows the
-  // mountpoint is a drive letter like "Z:" or a host directory) and drives
-  // the FUSE protocol. The callbacks and the entire CTE data path below them
-  // are identical to the Linux build.
+#if defined(__APPLE__)
+  // macFUSE 5.2.0's FSKit backend dereferences a null volume name. Supply a
+  // stable default while preserving a volume name explicitly chosen by users.
+  return RunMacFuse(argc, argv);
+#elif defined(_WIN32)
+  // Native Windows (WinFsp): no Apptainer-style /dev/fuse fd injection.
+  // fuse_main() parses argv (the mountpoint is a drive letter like "Z:" or a
+  // host directory) and drives the FUSE protocol. The callbacks and the entire
+  // CTE data path below them are identical to the Linux build.
   return fuse_main(argc, argv, &cte_fuse_ops, nullptr);
 #else
   // Apptainer's --fusemount opens /dev/fuse on the host, performs the

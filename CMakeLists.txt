@@ -1074,13 +1074,16 @@ endif()
 if(CLIO_CORE_ENABLE_RPATH)
     set(CMAKE_SKIP_BUILD_RPATH FALSE)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
     if(APPLE)
+        # Keep dependency search relative to the installed binary. Adding link
+        # directories here can put stale /usr/local libraries before sibling
+        # Clio libraries when an external dependency such as macFUSE lives there.
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
         set(CMAKE_MACOSX_RPATH TRUE)
         set(CMAKE_INSTALL_RPATH "@loader_path;@loader_path/../lib")
         set(CMAKE_BUILD_RPATH "${CMAKE_BINARY_DIR}/bin")
     elseif(UNIX)
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
         set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
         set(CMAKE_BUILD_RPATH "${CMAKE_BINARY_DIR}/bin")
     endif()

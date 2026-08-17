@@ -54,6 +54,7 @@ set(CLIO_FUSE3_LIBRARY_DIRS "${FUSE3_LIBRARY_DIRS}" CACHE INTERNAL "")
 set(CLIO_FUSE3_LIBRARIES "${FUSE3_LIBRARIES}" CACHE INTERNAL "")
 
 add_executable(clio_cte_fuse
+    fuse_cte_args.cc
     fuse_cte.cc       # FUSE operation callbacks (unit-tested, coverage-tracked)
     fuse_cte_main.cc) # process entry / mount glue (coverage-excluded)
 
