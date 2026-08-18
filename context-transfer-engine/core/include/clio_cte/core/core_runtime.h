@@ -935,6 +935,19 @@ private:
 
 private:
   /**
+   * Reserve physical bdev prefixes occupied by metadata restored at restart.
+   *
+   * Fresh bdev allocators start at offset zero even when their backing files
+   * already contain data. This scans restored primary and replica placements,
+   * reserves each nonvolatile target through its highest occupied byte, and
+   * updates the target's remaining-space accounting before writes resume.
+   *
+   * @param error_code Output: zero on success, nonzero if reconstruction fails.
+   */
+  clio::run::TaskResume ReserveRecoveredBlockRanges(
+      clio::run::u32 &error_code);
+
+  /**
    * Helper function to compute hash-based pool query for blob operations
    * @param tag_id Tag ID for the blob
    * @param blob_name Blob name

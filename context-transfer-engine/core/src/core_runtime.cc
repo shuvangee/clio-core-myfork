@@ -761,6 +761,14 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   if (is_restart_) {
     RestoreMetadataFromLog();
     ReplayTransactionLogs();
+    clio::run::u32 reserve_error = 0;
+    CLIO_CO_AWAIT(ReserveRecoveredBlockRanges(reserve_error));
+    if (reserve_error != 0) {
+      HLOG(kError,
+           "CTE restart failed to reserve recovered bdev block ranges");
+      task->return_code_ = reserve_error;
+      CLIO_CO_RETURN;
+    }
     // Both paths populate the tag table directly (bypassing GetOrAssignTagId's
     // per-insert indexing), so rebuild the regex search index once from the
     // final tag set (#598).
@@ -5092,16 +5100,125 @@ void Runtime::RebuildTagSearchIndexLocked() {
   // yields the full path. Used after WAL/metadata restore, where tags are
   // inserted directly (bypassing GetOrAssignTagId's per-insert indexing).
   tag_search_.Clear();
-  std::vector<std::pair<TagId, std::string>> tags;
-  tag_id_to_info_.for_each([&](const TagId & /*id*/, const std::shared_ptr<TagInfo> &info_sp) { const TagInfo &info = *info_sp; (void)info;
-    tags.emplace_back(info.tag_id_, info.tag_name_.str());
-  });
-  for (const auto &tag : tags) {
-    std::string abs = ResolveTagName(tag.second);
+  std::vector<std::pair<std::string, TagId>> tags;
+  tag_id_to_info_.for_each(
+      [&](const TagId & /*id*/, const std::shared_ptr<TagInfo> &info_sp) {
+        const TagInfo &info = *info_sp;
+        tags.emplace_back(info.tag_name_.str(), info.tag_id_);
+      });
+
+  // unordered_map_ll::for_each holds the map lock while invoking its callback.
+  // ResolveTagName reads tag_id_to_info_ recursively, so resolving inside the
+  // callback re-enters the same map and deadlocks during restart. Resolve from
+  // the snapshot only after for_each has released the map lock.
+  for (const auto &[stored_name, tag_id] : tags) {
+    std::string abs = ResolveTagName(stored_name);
     if (!abs.empty()) {
-      tag_search_.Insert(abs, tag.first);
+      tag_search_.Insert(abs, tag_id);
     }
   }
+}
+
+clio::run::TaskResume Runtime::ReserveRecoveredBlockRanges(
+    clio::run::u32 &error_code) {
+  CLIO_TASK_BODY_BEGIN
+  struct Reservation {
+    clio::run::PoolId pool_id_;
+    clio::run::bdev::Client client_;
+    clio::run::PoolQuery query_;
+    clio::run::u64 high_water_ = 0;
+    clio::run::u64 max_capacity_ = 0;
+  };
+
+  error_code = 0;
+  std::vector<Reservation> reservations;
+  {
+    clio::run::ScopedCoRwReadLock read_lock(target_lock_);
+    for (const TargetInfo &target : target_list_) {
+      if (target.persistence_level_ ==
+          clio::run::bdev::PersistenceLevel::kVolatile) {
+        continue;
+      }
+      reservations.push_back(
+          {target.bdev_client_.pool_id_, target.bdev_client_,
+           target.target_query_, 0, target.max_capacity_});
+    }
+  }
+
+  bool invalid_placement = false;
+  auto record_block = [&](const BlobBlock &block) {
+    clio::run::u64 footprint =
+        block.capacity_ != 0 ? block.capacity_ : block.size_;
+    if (footprint >
+        std::numeric_limits<clio::run::u64>::max() - block.target_offset_) {
+      invalid_placement = true;
+      return;
+    }
+    for (Reservation &reservation : reservations) {
+      if (reservation.pool_id_ == block.bdev_client_.pool_id_) {
+        reservation.high_water_ =
+            std::max(reservation.high_water_, block.target_offset_ + footprint);
+        return;
+      }
+    }
+  };
+
+  // Snapshot only placement values in the callback. unordered_map_ll holds
+  // its map lock during for_each, so no callback may re-enter the blob map.
+  tag_blob_name_to_info_.for_each(
+      [&](const std::string & /*key*/,
+          const std::shared_ptr<BlobInfo> &blob_info) {
+        for (const BlobBlock &block : blob_info->blocks_) record_block(block);
+        for (const Replica &replica : blob_info->replicas_) {
+          for (const BlobBlock &block : replica.blocks_) record_block(block);
+        }
+      });
+  if (invalid_placement) {
+    HLOG(kError, "Recovered bdev placement overflows its physical range");
+    error_code = 1;
+    CLIO_CO_RETURN;
+  }
+
+  for (Reservation &reservation : reservations) {
+    if (reservation.high_water_ == 0) continue;
+    auto allocation = reservation.client_.AsyncAllocateBlocks(
+        reservation.query_, reservation.high_water_);
+    CLIO_CO_AWAIT(allocation);
+    if (allocation->GetReturnCode() != 0 || allocation->blocks_.empty()) {
+      HLOG(kError, "Failed to reserve {} recovered bytes on bdev pool ({},{})",
+           reservation.high_water_, reservation.pool_id_.major_,
+           reservation.pool_id_.minor_);
+      error_code = 2;
+      CLIO_CO_RETURN;
+    }
+    const auto &first_block = allocation->blocks_[0];
+    if (first_block.offset_ != 0 ||
+        first_block.size_ < reservation.high_water_) {
+      HLOG(kError,
+           "Recovered bdev reservation on pool ({},{}) did not cover "
+           "[0,{}): returned offset={}, size={}",
+           reservation.pool_id_.major_, reservation.pool_id_.minor_,
+           reservation.high_water_, first_block.offset_, first_block.size_);
+      error_code = 3;
+      CLIO_CO_RETURN;
+    }
+
+    clio::run::ScopedCoRwWriteLock write_lock(target_lock_);
+    TargetInfo *target = registered_targets_.find(reservation.pool_id_);
+    clio::run::u64 remaining =
+        reservation.max_capacity_ > reservation.high_water_
+            ? reservation.max_capacity_ - reservation.high_water_
+            : 0;
+    if (target != nullptr) target->remaining_space_ = remaining;
+    for (TargetInfo &listed_target : target_list_) {
+      if (listed_target.bdev_client_.pool_id_ == reservation.pool_id_) {
+        listed_target.remaining_space_ = remaining;
+        break;
+      }
+    }
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
 }
 
 TagId Runtime::GetOrCreateTagChain(const std::string &name,

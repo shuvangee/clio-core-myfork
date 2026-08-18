@@ -12,11 +12,10 @@
  *                  chimod's interposed pool (DRAM primary + persistent disk
  *                  replica each), verify both copies, flush metadata.
  *   --verify-blobs Phase 2 (after runtime reboot): RestartContainers, then
- *                  verify the DRAM primaries are GONE (volatile blocks are
- *                  filtered at replay) while every disk replica is intact
- *                  and byte-correct — and that a plain GetBlob through the
- *                  interposer serves from the replica and re-populates the
- *                  DRAM cache.
+ *                  write a new persistent blob, verify the DRAM primaries are
+ *                  GONE (volatile blocks are filtered at replay) while every
+ *                  old disk replica is intact and byte-correct, and verify a
+ *                  plain GetBlob serves from disk and re-populates DRAM.
  */
 
 #include <cstdio>
@@ -35,7 +34,8 @@
 
 static constexpr int kNumBlobs = 50;
 static constexpr clio::run::u64 kBlobSize = 4096;
-static const char* kTagName = "repl_persist_tag";
+static const char* kTagName = "/repl/persist/tag";
+static const char* kPostRestartBlob = "post_restart_probe";
 
 static std::string BlobName(int i) {
   return "persist_blob_" + std::to_string(i);
@@ -146,6 +146,36 @@ static int VerifyBlobs() {
   ctp::ipc::FullPtr<char> buf = CLIO_IPC->AllocateBuffer(kBlobSize);
   if (buf.IsNull()) {
     HLOG(kError, "Phase 2: SHM allocation failed");
+    return 1;
+  }
+
+  // Allocate new persistent data before reading the recovered replicas. A
+  // restarted file bdev must reserve the ranges named by restored metadata;
+  // otherwise this first write starts at offset zero and silently overwrites
+  // one of the replicas that the checks below are about to validate.
+  memset(buf.ptr_, 'Z', kBlobSize);
+  auto post_restart_put =
+      repl_io.AsyncPutBlob(tag_id, kPostRestartBlob, 0, kBlobSize,
+                           ctp::ipc::ShmPtr<>(buf.shm_));
+  post_restart_put.Wait();
+  if (post_restart_put->GetReturnCode() != 0) {
+    HLOG(kError, "Phase 2: post-restart PutBlob failed rc={}",
+         post_restart_put->GetReturnCode());
+    return 1;
+  }
+  bool post_restart_replicated = false;
+  for (int attempt = 0; attempt < 500 && !post_restart_replicated; ++attempt) {
+    auto size = cte.AsyncGetBlobSize(tag_id, kPostRestartBlob,
+                                     clio::run::PoolQuery::Dynamic(), 1);
+    size.Wait();
+    post_restart_replicated =
+        size->GetReturnCode() == 0 && size->size_ == kBlobSize;
+    if (!post_restart_replicated) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+  }
+  if (!post_restart_replicated) {
+    HLOG(kError, "Phase 2: post-restart replica never appeared");
     return 1;
   }
 
