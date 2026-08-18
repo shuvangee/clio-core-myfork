@@ -250,10 +250,13 @@ bool FsBdevTransport::InitializeWorkerIOContexts() {
   // this costs a vector of empty structs, not file descriptors.
   const size_t reserved =
       num_workers + clio::run::WorkOrchestrator::ElasticHeadroom();
+  std::lock_guard<std::mutex> lock(io_contexts_mu_);
   io_contexts_.resize(reserved);
   bool success = true;
   for (size_t i = 0; i < num_workers; ++i) {
-    if (!io_contexts_[i].Init(file_path_, io_depth_, static_cast<clio::run::u32>(i))) {
+    io_contexts_[i] = std::make_unique<WorkerIOContext>();
+    if (!io_contexts_[i]->Init(file_path_, io_depth_,
+                               static_cast<clio::run::u32>(i))) {
       success = false;
     }
   }
@@ -261,16 +264,24 @@ bool FsBdevTransport::InitializeWorkerIOContexts() {
 }
 
 void FsBdevTransport::CleanupWorkerIOContexts() {
+  std::lock_guard<std::mutex> lock(io_contexts_mu_);
   for (auto &ctx : io_contexts_) {
-    ctx.Cleanup();
+    if (ctx != nullptr) {
+      ctx->Cleanup();
+    }
   }
+  io_contexts_.clear();
 }
 
 WorkerIOContext *FsBdevTransport::GetWorkerIOContext(size_t worker_id) {
+  std::lock_guard<std::mutex> lock(io_contexts_mu_);
   if (worker_id >= io_contexts_.size()) {
-    return nullptr;
+    io_contexts_.resize(worker_id + 1);
   }
-  WorkerIOContext *ctx = &io_contexts_[worker_id];
+  if (io_contexts_[worker_id] == nullptr) {
+    io_contexts_[worker_id] = std::make_unique<WorkerIOContext>();
+  }
+  WorkerIOContext *ctx = io_contexts_[worker_id].get();
   if (!ctx->is_initialized_) {
     if (!ctx->Init(file_path_, io_depth_, static_cast<clio::run::u32>(worker_id))) {
       return nullptr;

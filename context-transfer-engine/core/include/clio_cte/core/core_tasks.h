@@ -858,6 +858,8 @@ static constexpr clio::run::u32 REPLICA_UPDATE_ONLY = 0x8;
 static constexpr clio::run::u32 REPLICA_VERIFY_COMPLETE = 0x10;
 /** Return code of an UPDATE_ONLY replica write against an absent slot. */
 static constexpr clio::run::u32 kReplicaAbsentRc = 12;
+/** Return code of GetBlob when the requested primary blob does not exist. */
+static constexpr clio::run::u32 kCteBlobNotFoundRc = 13;
 
 /**
  * One replica of a blob's data (issue #886): an independent block list,
@@ -1068,11 +1070,12 @@ struct BlobInfo {
   // drainer waits only on pin holders, and pin holders only wait on bdev I/O.
   // Same atomic_ref discipline as write_owner_ above.
   clio::run::u64 read_state_;
-  // Maintained mirror of sum(blocks_[i].size_). GetTotalSize() returns this in
-  // O(1) instead of an O(blocks) sum; every blocks_ mutation MUST keep it in
-  // sync (ExtendBlob updates it incrementally; cold paths call
-  // RecomputeTotalSize()). Without it, a file built by millions of tiny
-  // O_APPEND writes pays an O(blocks) sum on every put -> O(N^2) (generic/069).
+  // Atomically accessed mirror of sum(blocks_[i].size_). GetTotalSize() returns
+  // this in O(1) instead of racing an O(blocks) sum against a concurrent
+  // ExtendBlob; every blocks_ mutation MUST keep it in sync (ExtendBlob updates
+  // it incrementally; cold paths call RecomputeTotalSize()). Without it, a file
+  // built by millions of tiny O_APPEND writes pays an O(blocks) sum on every
+  // put -> O(N^2) (generic/069).
   clio::run::u64 total_size_cache_;
   // Monotonic counter bumped by EVERY mutation of blocks_ (issue #817). It is
   // copied into ShmBlobRecord::placement_gen_, which a client reads before and
@@ -1274,7 +1277,7 @@ struct BlobInfo {
         preallocated_size_(other.preallocated_size_),
         write_owner_(0),  // a fresh copy is unlocked; never inherit lock state
         read_state_(0),  // ...and has no readers pinned
-        total_size_cache_(other.total_size_cache_),
+        total_size_cache_(other.GetTotalSize()),
         placement_gen_(other.placement_gen_) {
     prealloc_lock_.Init();
   }
@@ -1294,7 +1297,7 @@ struct BlobInfo {
       compress_preset_ = other.compress_preset_;
       trace_key_ = other.trace_key_;
       preallocated_size_ = other.preallocated_size_;
-      total_size_cache_ = other.total_size_cache_;
+      StoreTotalSize(other.GetTotalSize());
       placement_gen_ = other.placement_gen_;
     }
     return *this;
@@ -1337,18 +1340,48 @@ struct BlobInfo {
   // that does not update the cache incrementally (Resize/Truncate/WAL replay/
   // restore) -- these are cold paths where the O(blocks) recompute is fine.
   CTP_CROSS_FUN void RecomputeTotalSize() {
-    total_size_cache_ = ComputeTotalSizeSlow();
+    StoreTotalSize(ComputeTotalSizeSlow());
   }
 
-  // O(1) total size. Returns the maintained cache; a debug/sanitizer build
-  // asserts it still equals the authoritative sum so any missed mutation site
-  // is caught during testing before it can corrupt a size in release.
-  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
-#if !defined(NDEBUG) && CTP_IS_HOST
-    assert(ComputeTotalSizeSlow() == total_size_cache_ &&
-           "BlobInfo::total_size_cache_ drifted from sum(blocks_)");
+  /**
+   * Atomically replace the maintained primary-blob size.
+   * @param size New logical size in bytes.
+   */
+  CTP_CROSS_FUN void StoreTotalSize(clio::run::u64 size) {
+#if CTP_IS_HOST
+    ctp::ipc::atomic_ref<clio::run::u64>(total_size_cache_).store(size);
+#else
+    total_size_cache_ = size;
 #endif
+  }
+
+  /**
+   * Atomically grow the maintained primary-blob size.
+   * @param size Number of logical bytes added.
+   * @return Logical size before the addition.
+   */
+  CTP_CROSS_FUN clio::run::u64 AddTotalSize(clio::run::u64 size) {
+#if CTP_IS_HOST
+    return ctp::ipc::atomic_ref<clio::run::u64>(total_size_cache_)
+        .fetch_add(size);
+#else
+    clio::run::u64 old = total_size_cache_;
+    total_size_cache_ += size;
+    return old;
+#endif
+  }
+
+  /**
+   * Return the maintained primary-blob logical size in O(1).
+   * @return Current logical size in bytes.
+   */
+  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
+#if CTP_IS_HOST
+    auto &size = const_cast<clio::run::u64 &>(total_size_cache_);
+    return ctp::ipc::atomic_ref<clio::run::u64>(size).load();
+#else
     return total_size_cache_;
+#endif
   }
 
 #if CTP_IS_HOST
@@ -1727,6 +1760,16 @@ GLOBAL_CROSS_CONST clio::run::u32 kCtePutDroppable = 0x2u;
  * this put would take ownership of bytes the tier may discard.
  */
 GLOBAL_CROSS_CONST clio::run::u32 kCteDroppabilityConflictRc = 14;
+
+/**
+ * GetBlobTask::flags_ bits.
+ *
+ * A consistent read bypasses the client-side shared-memory payload shortcut
+ * and serializes the runtime read with PutBlob using the blob's write token.
+ * This is required by filesystem consumers that must never observe a mixture
+ * of bytes from an in-place write racing the read.
+ */
+GLOBAL_CROSS_CONST clio::run::u32 kCteGetConsistent = 0x1u;
 
 /**
  * CTE Telemetry data structure for performance monitoring

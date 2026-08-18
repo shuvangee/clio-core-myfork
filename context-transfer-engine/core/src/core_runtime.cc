@@ -401,7 +401,7 @@ bool Runtime::BuildShmBlobRecord(const BlobInfo &info, ShmBlobRecord *out) {
     return false;
   }
   *out = ShmBlobRecord();
-  out->total_size_ = info.total_size_cache_;
+  out->total_size_ = info.GetTotalSize();
   out->last_modified_ = info.last_modified_;
   out->last_read_ = info.last_read_;
   out->score_ = info.score_;
@@ -2362,7 +2362,7 @@ clio::run::TaskResume Runtime::WriteReplicaData(
     // failed attempt allocated belong to the replica now and must not leak.
     Replica *rep = blob_info.GetReplica(replica_idx, /*create=*/true);
     rep->blocks_ = std::move(staging.blocks_);
-    rep->total_size_cache_ = staging.total_size_cache_;
+    rep->total_size_cache_ = staging.GetTotalSize();
     if (error_code == 0) {
       rep->score_ = rep_score;
     }
@@ -2481,9 +2481,6 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
     clio::run::u64 size = task->size_;
     clio::run::u32 flags = task->flags_;
 
-    // Suppress unused variable warning for flags - may be used in future
-    (void)flags;
-
     // Vectored get (issue #820): N regions, each read into its OWN buffer, all
     // served from the single block snapshot taken below — so the whole read is
     // one consistent view of the blob rather than N independent ones. `size`
@@ -2525,8 +2522,27 @@ clio::run::TaskResume Runtime::GetBlobImpl(clio::run::shared_ptr<TaskT> &task) {
 
     // If blob doesn't exist, error
     if (blob_info_ptr == nullptr) {
-      task->return_code_ = 1;
+      task->return_code_ = kCteBlobNotFoundRc;
       CLIO_CO_RETURN;
+    }
+
+    // Filesystem reads require a stable CONTENT snapshot, not merely stable
+    // block placement. Reader pins below prevent extent reuse, but ordinary
+    // PutBlob updates existing extents in place and deliberately does not
+    // drain those pins. Take the same per-blob token as PutBlob when the
+    // caller requests consistency, keeping the token through ReadData so an
+    // overlapping writer cannot expose a mixture of old and new bytes.
+    BlobWriteLockGuard consistent_read_guard(nullptr, 0);
+    if ((flags & kCteGetConsistent) != 0) {
+      clio::run::u64 lock_tok =
+          reinterpret_cast<clio::run::u64>(task.get());
+      while (!blob_info_ptr->TryLockWrite(lock_tok)) {
+        CLIO_CO_AWAIT(clio::run::yield(BlobWriteLockPollUs()));
+      }
+      // Arm the non-allocating guard only after acquisition. Set the token
+      // first so the destructor can never observe a blob without its owner.
+      consistent_read_guard.tok_ = lock_tok;
+      consistent_read_guard.blob_ = blob_info_ptr.get();
     }
 
     // Replica-targeted read (issue #886): Context::replica_ == N > 0 serves
@@ -3087,7 +3103,7 @@ clio::run::TaskResume Runtime::ReorganizeBlobInternal(
     // cross-process SHM readers are covered by the placement_gen_ bump + the
     // mirror re-publish below.
     blob_info.blocks_ = std::move(staging.blocks_);
-    blob_info.total_size_cache_ = staging.total_size_cache_;
+    blob_info.StoreTotalSize(staging.GetTotalSize());
     blob_info.score_ = placed_score;
     blob_info.BumpPlacementGen();
 
@@ -3370,7 +3386,7 @@ clio::run::TaskResume Runtime::ReorganizeReplicaInternal(
     // mirror publishes the PRIMARY's layout, which this move never touched.
     rep = blob_info.GetReplica(replica_idx, /*create=*/false);
     rep->blocks_ = std::move(staging.blocks_);
-    rep->total_size_cache_ = staging.total_size_cache_;
+    rep->total_size_cache_ = staging.GetTotalSize();
     rep->score_ = placed_score;
 
     // WAL: one kExtendReplica record captures the whole move (logged after
@@ -6128,7 +6144,7 @@ void Runtime::ReplayTransactionLogs() {
         std::shared_ptr<BlobInfo> blob_info_ptr = tag_blob_name_to_info_.get(composite_key);
         if (blob_info_ptr) {
           blob_info_ptr->blocks_.clear();
-          blob_info_ptr->total_size_cache_ = 0;  // blocks_ cleared
+          blob_info_ptr->StoreTotalSize(0);  // blocks_ cleared
         }
         blobs_replayed++;
 
@@ -6525,8 +6541,8 @@ std::shared_ptr<BlobInfo> Runtime::CreateNewBlob(const std::string &blob_name,
   // checkout as ~1-6 zeroed leading blocks per 245 MB of fresh pages.
   // Adopting the existing entry sends both racers through ONE BlobInfo,
   // whose write token then serializes them as designed.
-  const bool won =
-      tag_blob_name_to_info_.insert(composite_key, new_blob_info).inserted;
+  auto insert_result =
+      tag_blob_name_to_info_.insert(composite_key, new_blob_info);
   // Re-fetch through get(): it copies the shared_ptr UNDER the map's read
   // lock (the InsertResult's value pointer is only stable while the bucket
   // lock is held, and a concurrent DelBlob may erase the node).
@@ -6535,7 +6551,7 @@ std::shared_ptr<BlobInfo> Runtime::CreateNewBlob(const std::string &blob_name,
   if (blob_info_ptr == nullptr) {
     return nullptr;  // created-then-deleted race; caller reports failure
   }
-  if (!won) {
+  if (!insert_result.inserted) {
     return blob_info_ptr;  // lost the create race; the winner's blob IS the
   }                        //   blob (skip the duplicate WAL create record)
   // issue #783: mirror into the SHM cache. Best-effort and AFTER the
@@ -6546,7 +6562,7 @@ std::shared_ptr<BlobInfo> Runtime::CreateNewBlob(const std::string &blob_name,
   // once the content is actually there.
 
   // WAL: log blob creation
-  if (!blob_txn_logs_.empty()) {
+  if (insert_result.inserted && !blob_txn_logs_.empty()) {
     clio::run::u32 wid = CLIO_CUR_WORKER->GetWorkerStats().worker_id_;
     TxnCreateNewBlob txn;
     txn.tag_major_ = tag_id.major_;
@@ -6680,12 +6696,12 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
       // as the blocks_ mutation. Otherwise a concurrent reader (GetBlob/
       // GetBlobInfo do not hold the per-blob write token) could run during a
       // later co_await and observe grown blocks_ with a stale cache.
-      blob_info.total_size_cache_ += fill;
+      blob_info.AddTotalSize(fill);
     }
   }
   if (additional_size == 0) {
     // Entirely satisfied from spare capacity; no allocation needed.
-    blob_info.total_size_cache_ = required_size;
+    blob_info.StoreTotalSize(required_size);
     error_code = 0;
     CLIO_CO_RETURN;
   }
@@ -6850,7 +6866,7 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
                           target_info_copy.target_query_, b.offset_, logical,
                           physical);
       blob_info.blocks_.push_back(new_block);
-      blob_info.total_size_cache_ += logical;
+      blob_info.AddTotalSize(logical);
       physical_sum += physical;
       need -= logical;
     }
@@ -6893,7 +6909,7 @@ clio::run::TaskResume Runtime::ExtendBlob(BlobInfo &blob_info, clio::run::u64 of
   // Success: we allocated exactly `additional_size`, so the blob now spans
   // required_size (== offset + size). Update the O(1) size cache incrementally
   // instead of re-summing every block -- this is what keeps append O(1).
-  blob_info.total_size_cache_ = required_size;
+  blob_info.StoreTotalSize(required_size);
   error_code = 0;  // Success
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
@@ -6988,7 +7004,7 @@ clio::run::TaskResume Runtime::ResizeBlob(BlobInfo &blob_info, clio::run::u64 ne
   blob_info.BumpPlacementGen();
   // The kept blocks span exactly [0, new_size) (the boundary block was trimmed),
   // so the O(1) size cache is precisely new_size.
-  blob_info.total_size_cache_ = new_size;
+  blob_info.StoreTotalSize(new_size);
 
   // Free the dropped blocks, grouped by pool, and credit remaining_space_
   // (mirrors FreeAllBlobBlocks).
@@ -7513,7 +7529,7 @@ clio::run::TaskResume Runtime::FreeAllBlobBlocks(BlobInfo &blob_info,
 
   // Clear all blocks
   blob_info.blocks_.clear();
-  blob_info.total_size_cache_ = 0;  // blocks_ emptied: size cache is now 0
+  blob_info.StoreTotalSize(0);  // blocks_ emptied: size cache is now 0
   blob_info.BumpPlacementGen();     // #817: every block just became reusable
   error_code = 0;
   CLIO_CO_RETURN;

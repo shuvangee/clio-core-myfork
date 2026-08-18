@@ -627,11 +627,19 @@ clio::run::TaskResume Runtime::Read(clio::run::shared_ptr<ReadTask> &task) {
     clio::run::u64 page_off = cur % kFsPageSize;
     clio::run::u64 to_read = std::min(kFsPageSize - page_off, want - done);
     auto g = cte_.AsyncGetBlob(tag_id, PageName(cur), page_off, to_read,
-                               /*flags*/ 0u, dst + done,
+                               clio::cte::core::kCteGetConsistent, dst + done,
                                clio::run::PoolQuery::Dynamic());
     CLIO_CO_AWAIT(g);
-    // A miss/short read just leaves the pre-zeroed bytes as zeros (a hole is
-    // not an error), so the return code is intentionally ignored here.
+    // A missing page is a sparse hole and remains zero-filled. Any other CTE
+    // failure is real I/O failure: do not silently turn corrupted/failed reads
+    // into successful zero bytes (which makes consumers such as Git report
+    // misleading decompression errors later).
+    if (g->GetReturnCode() != 0 &&
+        g->GetReturnCode() != clio::cte::core::kCteBlobNotFoundRc) {
+      task->bytes_read_ = done;
+      task->return_code_ = EIO;
+      CLIO_CO_RETURN;
+    }
     done += to_read;
     cur += to_read;
   }
