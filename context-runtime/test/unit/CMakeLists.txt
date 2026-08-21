@@ -40,6 +40,19 @@ set(LOCAL_TASK_ARCHIVE_TEST_SOURCES
   test_local_task_archive.cc
 )
 
+# Task-stat model persistence test executable (issue #956)
+set(TASK_STAT_MODEL_TEST_TARGET clio_run_task_stat_model_tests)
+set(TASK_STAT_MODEL_TEST_SOURCES
+  test_task_stat_model.cc
+)
+
+# Web dashboard test executable (issue #990). Needs Poco: the dashboard's HTTP
+# transport is Poco::Net, and the test drives it with Poco's HTTP client.
+set(VIZ_TEST_TARGET clio_run_viz_tests)
+set(VIZ_TEST_SOURCES
+  test_viz_server.cc
+)
+
 # Per-Process Shared Memory test executable
 set(PER_PROCESS_SHM_TEST_TARGET clio_run_per_process_shm_tests)
 set(PER_PROCESS_SHM_TEST_SOURCES
@@ -86,6 +99,12 @@ set(IPC_TRANSPORT_MODES_TEST_SOURCES
 set(CLIENT_RETRY_TEST_TARGET clio_run_client_retry_tests)
 set(CLIENT_RETRY_TEST_SOURCES
   test_client_retry.cc
+)
+
+# Bdev AllocPolicy test executable (pure host: no server, no IPC, no GPU)
+set(BDEV_ALLOC_POLICY_TEST_TARGET clio_run_bdev_alloc_policy_tests)
+set(BDEV_ALLOC_POLICY_TEST_SOURCES
+  test_bdev_alloc_policy.cc
 )
 
 # Queue-depth flurry test executable (issue #822)
@@ -219,6 +238,67 @@ set_target_properties(${LOCAL_TASK_ARCHIVE_TEST_TARGET} PROPERTIES
 set_target_properties(${LOCAL_TASK_ARCHIVE_TEST_TARGET} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+# Create Task-Stat Model test executable (issue #956)
+add_executable(${TASK_STAT_MODEL_TEST_TARGET} ${TASK_STAT_MODEL_TEST_SOURCES})
+
+target_include_directories(${TASK_STAT_MODEL_TEST_TARGET} PRIVATE
+  ${CLIO_RUN_ROOT}/include
+  ${CLIO_RUN_ROOT}/test  # For simple_test.h
+  ${CLIO_RUN_ROOT}/modules/admin/include  # For admin tasks
+  ${CLIO_RUN_ROOT}/modules/bdev/include   # For bdev tasks
+)
+
+target_link_libraries(${TASK_STAT_MODEL_TEST_TARGET}
+  clio_admin_runtime          # Admin module runtime
+  clio_admin_client           # Admin module client
+  clio_bdev_runtime           # Bdev module runtime
+  clio_bdev_client            # Bdev module client
+  ctp::cxx                       # ClioCtp library
+  ${CMAKE_THREAD_LIBS_INIT}       # Threading support
+)
+
+set_target_properties(${TASK_STAT_MODEL_TEST_TARGET} PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+)
+
+set_target_properties(${TASK_STAT_MODEL_TEST_TARGET} PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# Create web dashboard test executable (issue #990). Skipped entirely when Poco
+# is absent: without it the build has no HTTP transport to test.
+if(Poco_FOUND)
+  add_executable(${VIZ_TEST_TARGET} ${VIZ_TEST_SOURCES})
+
+  target_include_directories(${VIZ_TEST_TARGET} PRIVATE
+    ${CLIO_RUN_ROOT}/include
+    ${CLIO_RUN_ROOT}/test  # For simple_test.h
+    ${CLIO_RUN_ROOT}/modules/admin/include  # For admin tasks
+  )
+
+  target_link_libraries(${VIZ_TEST_TARGET}
+    clio_admin_runtime          # Admin module runtime (starts the dashboard)
+    clio_admin_client           # Admin module client
+    clio_bdev_runtime           # Composed by the default config
+    clio_bdev_client
+    ctp::cxx                    # ClioCtp library
+    Poco::Net                   # HTTP client used to drive the dashboard
+    Poco::Foundation
+    ${CMAKE_THREAD_LIBS_INIT}   # Threading support
+  )
+
+  # The test fetches /viz/clio_admin/index.html, so the assets have to be staged
+  # next to the libraries before it runs.
+  add_dependencies(${VIZ_TEST_TARGET} clio_admin_viz)
+
+  set_target_properties(${VIZ_TEST_TARGET} PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+endif()
 
 # Create Per-Process Shared Memory test executable.
 # POSIX-only: uses fork()/waitpid()/setenv() — no Windows equivalent that
@@ -462,6 +542,42 @@ set_target_properties(${IPC_TRANSPORT_MODES_TEST_TARGET} PROPERTIES
 )
 endif()
 
+# Create Shutdown Battletest executable (issue #710).
+# POSIX-only: drives the daemon with signals (SIGSTOP/SIGKILL), posix_spawn
+# and waitpid. Emulates the #526 start->load->stop churn and asserts zero
+# stale artifacts after every cycle.
+set(SHUTDOWN_BATTLETEST_TARGET clio_run_shutdown_battletest)
+if(NOT WIN32)
+add_executable(${SHUTDOWN_BATTLETEST_TARGET} test_shutdown_battletest.cc)
+
+target_include_directories(${SHUTDOWN_BATTLETEST_TARGET} PRIVATE
+  ${CLIO_RUN_ROOT}/include
+  ${CLIO_RUN_ROOT}/test  # For simple_test.h / runtime_server.h
+  ${CLIO_RUN_ROOT}/modules/bdev/include
+  ${CLIO_RUN_ROOT}/modules/admin/include
+)
+
+target_link_libraries(${SHUTDOWN_BATTLETEST_TARGET}
+  clio_run_cxx               # Main CLIO Runtime library
+  clio_bdev_client        # Bdev module client (load-client mode)
+  clio_admin_client       # Admin module client
+  ctp::cxx                  # ClioCtp library
+  ${CMAKE_THREAD_LIBS_INIT}  # Threading support
+)
+
+# RuntimeServer launches clio_run; the harness also shells out to it for
+# stop/status.
+add_dependencies(${SHUTDOWN_BATTLETEST_TARGET} clio_run)
+target_compile_definitions(${SHUTDOWN_BATTLETEST_TARGET} PRIVATE
+  CLIO_RUN_EXE="$<TARGET_FILE:clio_run>")
+
+set_target_properties(${SHUTDOWN_BATTLETEST_TARGET} PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+endif()
+
 # Create Client Retry test executable.
 # POSIX-only: uses <sys/wait.h> / fork() for parent-child retry orchestration.
 if(NOT WIN32)
@@ -530,6 +646,36 @@ set_target_properties(${QUEUE_DEPTH_FLURRY_TEST_TARGET} PROPERTIES
 )
 endif()
 
+# Create Bdev AllocPolicy test executable.
+# Exercises CreateParams (serialization + YAML `alloc:` parsing) and drives
+# MemBdevTransport directly, so it needs no runtime server and no GPU.
+add_executable(${BDEV_ALLOC_POLICY_TEST_TARGET} ${BDEV_ALLOC_POLICY_TEST_SOURCES})
+
+target_include_directories(${BDEV_ALLOC_POLICY_TEST_TARGET} PRIVATE
+  ${CLIO_RUN_ROOT}/include
+  ${CLIO_RUN_ROOT}/test  # For simple_test.h
+  ${CLIO_RUN_ROOT}/modules/admin/include
+  ${CLIO_RUN_ROOT}/modules/bdev/include
+)
+
+target_link_libraries(${BDEV_ALLOC_POLICY_TEST_TARGET}
+  clio_bdev_runtime           # MemBdevTransport lives here
+  clio_bdev_client            # Bdev module client
+  clio_admin_client           # Admin module client
+  clio_run_cxx                # Main CLIO Runtime library
+  ctp::cxx                    # ClioCtp library
+  ${CMAKE_THREAD_LIBS_INIT}   # Threading support
+)
+
+set_target_properties(${BDEV_ALLOC_POLICY_TEST_TARGET} PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+)
+
+set_target_properties(${BDEV_ALLOC_POLICY_TEST_TARGET} PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 
 # GPU runtime tests removed — kernels now submit tasks to the CPU
 # runtime via gpu2cpu_queue (see test/unit/gpu/test_sycl_*.cc).
@@ -592,6 +738,39 @@ if(CLIO_CORE_ENABLE_CUDA)
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     TIMEOUT 120
     LABELS "gpu;cuda;stress"
+  )
+endif()
+
+# gpu2cpu ring backpressure: a producer-only kernel that submits far more tasks
+# than `queue_depth` parks inside ring_buffer::Emplace()'s wait-for-space spin.
+# Asserts the CPU consumer still drains every one of them. See the file header
+# for how this relates to the gsbench chunks*snaps > queue_depth deadlock.
+if(CLIO_CORE_ENABLE_CUDA)
+  add_cuda_executable(test_gpu2cpu_backpressure FALSE
+    gpu/test_gpu2cpu_backpressure_gpu.cc
+    INCLUDE_DIRS
+      ${CLIO_RUN_ROOT}/include
+      ${CLIO_RUN_ROOT}/test
+      ${CLIO_RUN_ROOT}/modules/MOD_NAME/include
+      ${CLIO_RUN_ROOT}/modules/admin/include
+    LINK_LIBS
+      clio_run_cxx
+      clio_run_cxx_gpu
+      clio_admin_client
+      clio_MOD_NAME_client
+      ctp::cuda_cxx
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  set_target_properties(test_gpu2cpu_backpressure PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  add_test(NAME cr_gpu2cpu_backpressure_cuda COMMAND test_gpu2cpu_backpressure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cr_gpu2cpu_backpressure_cuda PROPERTIES
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10501"
+    TIMEOUT 180
+    LABELS "gpu;cuda;backpressure"
   )
 endif()
 
@@ -667,6 +846,36 @@ if(CLIO_CORE_ENABLE_TESTS)
   # Single ctest entry runs the whole binary in one clio_run init/finalize cycle.
   # Previously 8 redundant entries each invoked the full unfiltered binary, which
   # serialized via RESOURCE_LOCK but multiplied clio_run shutdown ZMQ-race exposure.
+  # Task-stat model persistence (issue #956). Own ctest entry => own process:
+  # it brings up an in-process runtime and CLIO_INIT is once-per-process.
+  add_test(
+    NAME cr_task_stat_model_tests
+    COMMAND ${TASK_STAT_MODEL_TEST_TARGET}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cr_task_stat_model_tests PROPERTIES
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_TEST_MODE=1;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+    TIMEOUT 300
+  )
+
+  # Web dashboard (issue #990). Own ctest entry => own process: it brings up an
+  # in-process runtime, and CLIO_INIT is once-per-process. The dashboard binds an
+  # ephemeral port (CLIO_VIZ_PORT=0, set by the test itself) so a concurrently
+  # running daemon cannot collide with it -- only the RPC port needs the shared
+  # lock that CLIO_PORT implies.
+  if(Poco_FOUND)
+    add_test(
+      NAME cr_viz_tests
+      COMMAND ${VIZ_TEST_TARGET}
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    set_tests_properties(cr_viz_tests PROPERTIES
+      ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;CLIO_TEST_MODE=1;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
+      TIMEOUT 300
+      RESOURCE_LOCK "clio_runtime_port"
+    )
+  endif()
+
   add_test(
     NAME cr_unit_tests
     COMMAND ${TEST_TARGET}
@@ -912,7 +1121,7 @@ if(CLIO_CORE_ENABLE_TESTS)
   )
   set_tests_properties(cr_detached_spawn PROPERTIES
     ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10615"
-    RESOURCE_LOCK "clio_runtime_port"
+    RESOURCE_LOCK "clio_runtime"
     TIMEOUT 120
     LABELS "runtime;transport;detached"
   )
@@ -926,6 +1135,17 @@ if(CLIO_CORE_ENABLE_TESTS)
   set_tests_properties(cr_runtime_cleanup_tests PROPERTIES
     ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
     TIMEOUT 120
+  )
+
+  # Bdev AllocPolicy Tests (no server, no GPU — safe to run anywhere)
+  add_test(
+    NAME cr_bdev_alloc_policy_tests
+    COMMAND ${BDEV_ALLOC_POLICY_TEST_TARGET}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+  )
+  set_tests_properties(cr_bdev_alloc_policy_tests PROPERTIES
+    ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+    TIMEOUT 300
   )
 
   # IPC Errors Tests
@@ -983,6 +1203,38 @@ if(CLIO_CORE_ENABLE_TESTS)
     TIMEOUT 300
   )
   endif()  # NOT WIN32 (ipc_transport_modes tests)
+
+  # Shutdown Battletest (issue #710) — POSIX-only. Each scenario runs in its
+  # own process on a dedicated port (10600) and RUN_SERIAL so no other
+  # runtime-spawning test races it. Cycle count: CLIO_SHUTDOWN_BT_ITERS
+  # (default 24, mirroring the #526 pipeline's 24 runs).
+  if(NOT WIN32)
+  set(_bt_env "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10600")
+  foreach(_bt_case
+      "churn|Graceful Churn|1800"
+      "load|Churn Under Load|1800"
+      "force|Force Under Load|1800"
+      "watchdog|Watchdog Bound|600"
+      "wedged|Wedged Runtime|600"
+      "crash|Crash Recovery|600"
+      "transports|Transport Churn|1800")
+    string(REPLACE "|" ";" _bt_parts "${_bt_case}")
+    list(GET _bt_parts 0 _bt_tag)
+    list(GET _bt_parts 1 _bt_name)
+    list(GET _bt_parts 2 _bt_timeout)
+    add_test(
+      NAME cr_shutdown_bt_${_bt_tag}
+      COMMAND ${SHUTDOWN_BATTLETEST_TARGET} "ShutdownBattletest - ${_bt_name}"
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+    set_tests_properties(cr_shutdown_bt_${_bt_tag} PROPERTIES
+      ENVIRONMENT "${_bt_env}"
+      TIMEOUT ${_bt_timeout}
+      RUN_SERIAL TRUE
+      LABELS "shutdown_battletest"
+    )
+  endforeach()
+  endif()  # NOT WIN32 (shutdown battletest)
 
   # Queue-depth flurry test (issue #822): tiny queue_depth + task flurry must
   # not hang (the TIMEOUT is the hang detector).
@@ -1208,6 +1460,7 @@ set(_install_test_targets
   ${UNORDERED_MAP_LL_TEST_TARGET}
   ${SAVE_LOAD_TASK_TEST_TARGET}
   ${LOCAL_TASK_ARCHIVE_TEST_TARGET}
+  ${TASK_STAT_MODEL_TEST_TARGET}
   ${STREAMING_TEST_TARGET}
   ${RUNTIME_CLEANUP_TEST_TARGET}
   ${IPC_ERRORS_TEST_TARGET}
@@ -1218,10 +1471,14 @@ if(NOT WIN32)
     ${EXTERNAL_CLIENT_TEST_TARGET}
     ${CLIENT_RETRY_TEST_TARGET}
     ${IPC_TRANSPORT_MODES_TEST_TARGET}
+    ${SHUTDOWN_BATTLETEST_TARGET}
   )
 endif()
 if(CLIO_CORE_ENABLE_CAE)
   list(APPEND _install_test_targets ${AUTOGEN_COVERAGE_TEST_TARGET})
+endif()
+if(Poco_FOUND)
+  list(APPEND _install_test_targets ${VIZ_TEST_TARGET})
 endif()
 install(TARGETS ${_install_test_targets} RUNTIME DESTINATION bin)
 
@@ -1272,7 +1529,7 @@ if(CLIO_CORE_ENABLE_MPI)
     )
     set_tests_properties(cr_mpi_bdev_transport_all_modes PROPERTIES
       ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
-      RESOURCE_LOCK "clio_runtime_port"
+      RESOURCE_LOCK "clio_runtime"
       TIMEOUT 300
     )
 
@@ -1287,7 +1544,7 @@ if(CLIO_CORE_ENABLE_MPI)
     )
     set_tests_properties(cr_mpi_bdev_transport_minimal PROPERTIES
       ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
-      RESOURCE_LOCK "clio_runtime_port"
+      RESOURCE_LOCK "clio_runtime"
       TIMEOUT 180
     )
   endif()

@@ -34,6 +34,7 @@
 #ifndef CLIO_RUNTIME_INCLUDE_CONTAINER_H_
 #define CLIO_RUNTIME_INCLUDE_CONTAINER_H_
 
+#include <atomic>
 #include <cmath>
 #include <clio_ctp/data_structures/serialization/global_serialize.h>
 #include <iostream>
@@ -49,7 +50,9 @@
 #include "clio_runtime/task.h"
 #include "clio_runtime/task_archives.h"
 #include "clio_runtime/local_task_archives.h"
+#include "clio_runtime/task_stat_model.h"
 #include "clio_runtime/types.h"
+#include "clio_runtime/viz/viz_server.h"
 
 // Forward declarations to avoid circular dependencies
 namespace clio::run {
@@ -117,6 +120,11 @@ class Container {
   std::vector<float> method_mape_wall_;   ///< Per-method wall clock MAPE
   std::vector<std::string> method_names_;  ///< Per-method human-readable names
   float learning_rate_ = 0.2f;      ///< SGD learning rate for model updates
+  /** Set by every model write, cleared once the weights have been written to
+   *  disk, so the periodic flush skips containers that learned nothing since
+   *  the last save. Atomic because task completions on many workers set it
+   *  concurrently. */
+  std::atomic<bool> model_dirty_{false};
   /** Default RPC visibility for this container (from compose
    *  container_visibility). */
   MethodProperty container_visibility_;
@@ -267,11 +275,19 @@ class Container {
 
   /**
    * Predict CPU time: a * (compute + 1).
+   *
+   * The model is per CONTAINER (issue #994): the coefficients read here are
+   * the ones this container's own completed tasks reinforced. Nothing is
+   * shared with the pool's other containers on this node or with the static
+   * container, so a container that backs a slower device (or was recovered
+   * from another node) cannot drag its neighbours' predictions, and every
+   * task begin/end touches only the container it ran on.
+   *
    * @param method_id Method being executed
    * @param stat Task statistics from GetTaskStats()
    * @return Predicted CPU time in microseconds
    */
-  float InferCpuTime(u32 method_id, const TaskStat &stat) {
+  float InferCpuTime(u32 method_id, const TaskStat &stat) const {
     float x = static_cast<float>(stat.compute_) + 1.0f;
     if (method_id < method_model_.size()) {
       return method_model_[method_id] * x;
@@ -285,7 +301,7 @@ class Container {
    * @param stat Task statistics from GetTaskStats()
    * @return Predicted wall clock time in microseconds
    */
-  float InferWallClockTime(u32 method_id, const TaskStat &stat) {
+  float InferWallClockTime(u32 method_id, const TaskStat &stat) const {
     float x = stat.wall_time_ + 1.0f;
     if (method_id < method_model_wall_.size()) {
       return method_model_wall_[method_id] * x;
@@ -294,37 +310,83 @@ class Container {
   }
 
   /**
-   * Update CPU model coefficient after task completion.
+   * Update this container's CPU model coefficient after task completion.
    * SGD: a' <- a - LR * (e / x), where e = predicted - real.
    */
   void ReinforceCpuModel(u32 method_id, float pred_cpu, float real_cpu,
                          const TaskStat &stat) {
     if (method_id >= method_model_.size()) return;
+    float lr = learning_rate_;
     float x = static_cast<float>(stat.compute_) + 1.0f;
     float e = pred_cpu - real_cpu;
-    method_model_[method_id] -= learning_rate_ * (e / x);
+    method_model_[method_id] -= lr * (e / x);
     if (real_cpu > 0) {
       float ape = std::abs(e) / real_cpu;
-      method_mape_[method_id] = (1.0f - learning_rate_) * method_mape_[method_id]
-                               + learning_rate_ * ape;
+      method_mape_[method_id] =
+          (1.0f - lr) * method_mape_[method_id] + lr * ape;
     }
+    model_dirty_.store(true, std::memory_order_relaxed);
   }
 
   /**
-   * Update wall clock model coefficient after task completion.
-   * SGD: b' <- b - LR * (e / x), where e = predicted - real.
+   * Update this container's wall clock model coefficient after task
+   * completion. SGD: b' <- b - LR * (e / x), where e = predicted - real.
    */
   void ReinforceWallModel(u32 method_id, float pred_wall, float real_wall,
                           const TaskStat &stat) {
     if (method_id >= method_model_wall_.size()) return;
+    float lr = learning_rate_;
     float x = stat.wall_time_ + 1.0f;
     float e = pred_wall - real_wall;
-    method_model_wall_[method_id] -= learning_rate_ * (e / x);
+    method_model_wall_[method_id] -= lr * (e / x);
     if (real_wall > 0) {
       float ape = std::abs(e) / real_wall;
-      method_mape_wall_[method_id] = (1.0f - learning_rate_) * method_mape_wall_[method_id]
-                                    + learning_rate_ * ape;
+      method_mape_wall_[method_id] =
+          (1.0f - lr) * method_mape_wall_[method_id] + lr * ape;
     }
+    model_dirty_.store(true, std::memory_order_relaxed);
+  }
+
+  /**
+   * Seed a method's CPU / wall-clock coefficient directly, bypassing SGD.
+   * For modules that restore their own measured device profile at Create time
+   * (bdev does this from its perf-stats file) so inference starts warm instead
+   * of at the 1.0 seed. Writes land on THIS container only.
+   */
+  void SetMethodCpuCoef(u32 method_id, float coef) {
+    if (method_id >= method_model_.size()) return;
+    method_model_[method_id] = coef;
+    model_dirty_.store(true, std::memory_order_relaxed);
+  }
+  void SetMethodWallCoef(u32 method_id, float coef) {
+    if (method_id >= method_model_wall_.size()) return;
+    method_model_wall_[method_id] = coef;
+    model_dirty_.store(true, std::memory_order_relaxed);
+  }
+
+  /**
+   * Snapshot this container's per-method weights, keyed by method name, for
+   * persistence or introspection. Defined in task_stat_model.cc.
+   */
+  TaskStatModelSnapshot ExportModel() const;
+
+  /**
+   * Overwrite this container's weights from a previously saved snapshot,
+   * matching entries by method NAME. Methods missing from the snapshot keep
+   * whatever DefineModel seeded; names the binary no longer defines are
+   * ignored. Defined in task_stat_model.cc.
+   * @return number of methods restored.
+   */
+  size_t ImportModel(const TaskStatModelSnapshot &snapshot);
+
+  /** @return true if this container's model has been updated since the last
+   *  ClearModelDirty() — used to skip rewriting an unchanged model file. */
+  bool IsModelDirty() const {
+    return model_dirty_.load(std::memory_order_relaxed);
+  }
+  /** Mark this container's weights as persisted. */
+  void ClearModelDirty() {
+    model_dirty_.store(false, std::memory_order_relaxed);
   }
 
   /**
@@ -339,10 +401,16 @@ class Container {
     return 0.0f;
   }
 
+  // Model accessors: this container's own weights, i.e. exactly what the
+  // scheduler uses for tasks routed to it.
   const std::vector<float>& GetMethodModel() const { return method_model_; }
   const std::vector<float>& GetMethodMapeVec() const { return method_mape_; }
-  const std::vector<float>& GetMethodModelWall() const { return method_model_wall_; }
-  const std::vector<float>& GetMethodMapeWallVec() const { return method_mape_wall_; }
+  const std::vector<float>& GetMethodModelWall() const {
+    return method_model_wall_;
+  }
+  const std::vector<float>& GetMethodMapeWallVec() const {
+    return method_mape_wall_;
+  }
   const std::vector<std::string>& GetMethodNames() const { return method_names_; }
   float GetLearningRate() const { return learning_rate_; }
 
@@ -454,6 +522,49 @@ class Container {
    */
   virtual void Migrate(u32 dest_node_id) {
     (void)dest_node_id;
+  }
+
+  /**
+   * Register this ChiMod's web-dashboard routes.
+   *
+   * Called TWICE-over: once at module-load time on a throwaway
+   * default-constructed prototype instance (ModuleManager::LoadChiMod) -- so a
+   * module's pages and its /api/mod/<mod>/create form exist BEFORE any pool of
+   * the module does -- and again per container by
+   * PoolManager::RegisterContainer (a no-op thanks to first-wins route
+   * registration). The ChiMod's `viz/` asset directory (if it ships one) is
+   * mounted at /viz/<mod_name> by the same hooks, so an override only needs to
+   * add the endpoints its pages fetch:
+   *
+   *   void RegisterViz(viz::VizServer &viz, const std::string &mod) override {
+   *     viz.AddRoute({"GET", "/api/mod/" + mod + "/{pool}/stats", mod,
+   *                   "Per-pool device stats",
+   *                   [](const viz::Request &req, viz::Response &resp) { ... }});
+   *   }
+   *
+   * Registration is idempotent: the first (method, path) wins, so being called
+   * once per container (and once per pool of the same ChiMod) is harmless.
+   *
+   * Handlers run on the dashboard's own HTTP thread pool, NOT on a worker: they
+   * may read node-local manager state and may submit a task and wait on its
+   * Future, but they are not coroutines and must not co_await.
+   *
+   * Because the load-time call runs on an UNINITIALIZED prototype that is
+   * destroyed immediately after, neither this method's body nor any handler it
+   * registers may read container state or capture `this`. Capture by value and
+   * reach state through the manager singletons or a locally-constructed
+   * client (Client(pool_id) resolved from the request), as above. A module
+   * that violates this and captures `this` must call
+   * viz.RemoveModule(mod_name) before the container dies, or a later request
+   * runs the handler over freed memory.
+   *
+   * @param viz The node-local viz server / route registry
+   * @param mod_name This container's ChiMod name (what get_chimod_name()
+   *                 reports, and the name its assets are mounted under)
+   */
+  virtual void RegisterViz(viz::VizServer &viz, const std::string &mod_name) {
+    (void)viz;
+    (void)mod_name;
   }
 
   /**

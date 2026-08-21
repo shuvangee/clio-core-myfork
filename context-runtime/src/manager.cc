@@ -36,22 +36,33 @@
  */
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <thread>
 
 #include "clio_runtime/admin/admin_client.h"
 #include "clio_runtime/restart_log.h"
 #include "clio_runtime/singletons.h"
 
+#ifdef CLIO_COVERAGE
+// The force/watchdog stop paths end in std::_Exit, which skips the gcov
+// at-exit flush; declared here so those paths can dump counters explicitly.
+extern "C" void __gcov_dump(void);
+#endif
+
 // Global pointer variable definition for CLIO Runtime manager singleton
 CLIO_RUN_DEFINE_GLOBAL_PTR_VAR_CC(clio::run::RuntimeManager, g_runtime_manager);
 
 static void RuntimeManagerCleanupAtExit() {
-  if (g_runtime_manager) {
-    delete g_runtime_manager;
-    g_runtime_manager = nullptr;
+  // exchange, not load-then-store: this runs from atexit while other threads
+  // may still be resolving CLIO_RUNTIME_MANAGER, and claiming the pointer in
+  // one step means it can never be deleted twice.
+  if (auto *manager = g_runtime_manager.exchange(nullptr,
+                                                 std::memory_order_acq_rel)) {
+    delete manager;
   }
 }
 
@@ -169,17 +180,32 @@ bool RuntimeManager::ClientInit() {
   // The admin container is already created by the runtime, so we just
   // construct the admin client directly with the admin pool ID
   HLOG(kDebug, "Initializing CLIO_ADMIN singleton");
-  // IMPORTANT: Check g_admin directly, NOT CLIO_ADMIN macro
-  // CLIO_ADMIN uses GetGlobalPtrVar which auto-creates with default constructor!
-  if (g_admin == nullptr) {
+  // IMPORTANT: Publish g_admin directly, NOT via the CLIO_ADMIN macro.
+  // CLIO_ADMIN goes through GetGlobalPtrVar, which default-constructs; the
+  // admin client must be built with kAdminPoolId instead.
+  //
+  // The CAS matters as much as the pool id: a plain "if null then assign" is
+  // the same check-then-set that let two PoolManagers exist at once (#929).
+  // Losing that race here would leave two admin clients, with the published
+  // one not necessarily the one this thread went on to use.
+  clio::run::admin::Client *existing_admin = g_admin.load(std::memory_order_acquire);
+  if (existing_admin == nullptr) {
     HLOG(kInfo, "ClientInit: Creating admin client with kAdminPoolId={}",
          clio::run::kAdminPoolId);
-    g_admin = new clio::run::admin::Client(clio::run::kAdminPoolId);
-    HLOG(kInfo, "ClientInit: Admin client created, pool_id_={}",
-         g_admin->pool_id_);
+    auto *fresh_admin = new clio::run::admin::Client(clio::run::kAdminPoolId);
+    if (g_admin.compare_exchange_strong(existing_admin, fresh_admin,
+                                        std::memory_order_acq_rel,
+                                        std::memory_order_acquire)) {
+      HLOG(kInfo, "ClientInit: Admin client created, pool_id_={}",
+           fresh_admin->pool_id_);
+    } else {
+      delete fresh_admin;
+      HLOG(kInfo, "ClientInit: lost the admin publish race, pool_id_={}",
+           existing_admin->pool_id_);
+    }
   } else {
     HLOG(kInfo, "ClientInit: g_admin already exists, pool_id_={}",
-         g_admin->pool_id_);
+         existing_admin->pool_id_);
   }
 
   is_client_initialized_ = true;
@@ -478,11 +504,20 @@ void RuntimeManager::ServerFinalize() {
   // StopWorkers / ClearClientPool below.
   ctp::lbm::sock::SetSocketLibShutdown();
 
+  // Stop the web dashboard first (issue #990). Its request handlers submit
+  // tasks and wait on Futures, so they must be drained before the workers stop:
+  // a handler that started after StopWorkers() would wait out its whole timeout
+  // for a task nothing will ever run. Stop() waits for in-flight requests.
+  if (auto *viz = CLIO_VIZ) {
+    viz->Stop();
+  }
+
   // Flush in-flight (non-periodic) tasks and the net queues while the workers
   // are still running, so client/runtime work completes on its normal path and
   // its task + Future allocations are reclaimed instead of being abandoned by
-  // the abrupt StopWorkers() below.
-  DrainPendingTasks();
+  // the abrupt StopWorkers() below. The budget is the stop grace period
+  // (default 5000 ms; overridden by clio_run stop --grace-period).
+  DrainPendingTasks(stop_grace_period_ms_.load());
 
   // Stop workers and finalize server components
   auto *work_orchestrator = CLIO_WORK_ORCHESTRATOR;
@@ -528,7 +563,91 @@ void RuntimeManager::ServerFinalize() {
   if (!is_client_mode_) {
     is_initialized_ = false;
   }
+
+  // Signal the RequestStop watchdog (if any) that teardown completed so it
+  // stands down instead of force-exiting. Must be the last statement here.
+  finalize_complete_.store(true);
 }
+
+namespace {
+/** Extra time beyond the drain grace period that the stop watchdog allows the
+ *  full teardown (worker joins, container destruction) before force-exiting. */
+constexpr u64 kShutdownTeardownMarginMs = 15000;
+/** Delay before a forced stop kills the process, letting the worker that ran
+ *  the StopRuntime handler flush the task ack to the client. */
+constexpr u64 kForceAckFlushMs = 500;
+
+/**
+ * Unlink this runtime's filesystem artifacts, flush coverage counters, and
+ * terminate the process WITHOUT running atexit handlers or static destructors.
+ * Used by the force-stop and watchdog paths, where running the normal
+ * teardown is either unwanted (force) or already wedged (watchdog) — atexit
+ * would re-enter ServerFinalize from a non-main thread and deadlock.
+ * @param exit_code process exit code (0 = forced stop, 2 = watchdog escalation)
+ */
+[[noreturn]] void ForceProcessExit(int exit_code) {
+  auto *ipc_manager = CLIO_IPC;
+  if (ipc_manager) {
+    ipc_manager->UnlinkOwnArtifacts();
+  }
+#ifdef CLIO_COVERAGE
+  __gcov_dump();
+#endif
+  std::_Exit(exit_code);
+}
+}  // namespace
+
+void RuntimeManager::RequestStop(StopMode mode, u32 grace_period_ms) {
+  if (!is_runtime_mode_) {
+    HLOG(kWarning, "RequestStop: ignored - not in runtime mode");
+    return;
+  }
+  if (mode == StopMode::kGraceful && grace_period_ms == 0) {
+    grace_period_ms = stop_grace_period_ms_.load();
+  }
+  if (stop_requested_.exchange(true)) {
+    HLOG(kDebug, "RequestStop: stop already in progress");
+    return;
+  }
+  stop_grace_period_ms_.store(grace_period_ms);
+
+  if (mode == StopMode::kForce) {
+    HLOG(kInfo, "RequestStop: forced stop - process exits in {} ms",
+         kForceAckFlushMs);
+    std::thread([]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(kForceAckFlushMs));
+      ForceProcessExit(0);
+    }).detach();
+    return;
+  }
+
+  HLOG(kInfo,
+       "RequestStop: graceful stop requested (grace period: {} ms); main loop "
+       "will run the full teardown",
+       grace_period_ms);
+  // Watchdog: guarantee the process dies even if the graceful teardown wedges
+  // (stuck worker join, hung container destroy). Uses stderr instead of HLOG
+  // at escalation time — the logging system may be part of what wedged.
+  const u64 deadline_ms =
+      static_cast<u64>(grace_period_ms) + kShutdownTeardownMarginMs;
+  std::thread([this, deadline_ms]() {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(deadline_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+      if (finalize_complete_.load()) {
+        return;  // teardown finished; normal process exit proceeds
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    std::fprintf(stderr,
+                 "RequestStop watchdog: graceful teardown exceeded %llu ms - "
+                 "forcing exit (code 2)\n",
+                 static_cast<unsigned long long>(deadline_ms));
+    ForceProcessExit(2);
+  }).detach();
+}
+
+bool RuntimeManager::IsStopRequested() const { return stop_requested_.load(); }
 
 bool RuntimeManager::IsInitialized() const { return is_initialized_; }
 

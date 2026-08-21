@@ -840,6 +840,38 @@ class IpcManager {
   void SetNodeState(u64 node_id, NodeState new_state);
 
   /**
+   * Record that traffic was just received from this peer (issue #856).
+   *
+   * Called on every inbound task/response. SWIM's probes ride ordinary admin
+   * tasks, so a merely STARVED node can miss its probe window and be declared
+   * dead — which is destructive, since recovery then redistributes a live
+   * node's containers. Bytes arriving from a peer prove it is alive
+   * regardless, and NoteInbound records that evidence.
+   */
+  void NoteInbound(u64 node_id);
+
+  /**
+   * Seconds since traffic was last received from this peer, or a very large
+   * value if we have never heard from it. Used to veto a spurious death.
+   */
+  float SecondsSinceInbound(u64 node_id) const;
+
+  /**
+   * Monotonic counter of CONFIRMED membership changes seen by this node
+   * (issue #856): bumped whenever a peer is marked dead or alive.
+   *
+   * "Leader" in this runtime is not consensus — every node computes
+   * `lowest alive id` from its own SWIM view — so during churn two nodes can
+   * briefly both believe they lead, and a node may die, rejoin, and die
+   * again. Recovery claims are therefore scoped by (epoch, dead node) rather
+   * than by node alone: a duplicate coordinator inside one epoch is refused,
+   * while a genuinely later death is a distinct, recoverable event.
+   */
+  u64 GetMembershipEpoch() const {
+    return membership_epoch_.load(std::memory_order_acquire);
+  }
+
+  /**
    * Set self-fenced status (partition detection)
    * @param fenced true if this node should fence itself
    */
@@ -1369,6 +1401,33 @@ class IpcManager {
    */
   size_t ClearUserIpcs();
 
+  /**
+   * Unlink this runtime's own filesystem artifacts without unmapping memory.
+   *
+   * Removes the directory entries this runtime created in the per-user memfd
+   * directory: the main/queue segment symlinks, any on-demand data-segment
+   * symlinks owned by this pid, and the local control socket files. The
+   * backing memfds stay alive through this process's file descriptors and
+   * mappings, so already-mapped memory remains valid (unlink-only, no
+   * shm_destroy). Lock-free and async-signal-tolerant enough to be called
+   * from the shutdown watchdog / force-stop threads.
+   *
+   * @return Number of filesystem entries removed
+   */
+  size_t UnlinkOwnArtifacts();
+
+  /**
+   * Unlink only the memfd-directory entries owned by THIS process: on-demand
+   * data segments (clio_<pid>_<idx>) and per-thread MPSC receive segments
+   * (clio-<pid>-<tid>). Safe in CLIENT mode — never touches the runtime's
+   * named segments or sockets. Called from ClientFinalize so short-lived
+   * clients (CLI tools, benchmarks) don't accumulate dead symlinks that
+   * only the next runtime start would reap.
+   *
+   * @return Number of filesystem entries removed
+   */
+  size_t UnlinkOwnPidEntries();
+
  private:
   // Pool query resolution helpers
   std::vector<PoolQuery> ResolveLocalQuery(const PoolQuery &query,
@@ -1705,6 +1764,8 @@ class IpcManager {
 
   // Hostfile management
   std::unordered_map<u64, Host> hostfile_map_;  // Map node_id -> Host
+  /** Confirmed membership changes; see GetMembershipEpoch (issue #856). */
+  std::atomic<u64> membership_epoch_{0};
   mutable std::vector<Host>
       hosts_cache_;  // Cached vector of hosts for GetAllHosts
   mutable bool hosts_cache_valid_ = false;  // Flag to track cache validity

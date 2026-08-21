@@ -15,7 +15,7 @@ target_include_directories(clio_cte_vfd_unit_tests SYSTEM PUBLIC
 
 target_link_libraries(clio_cte_vfd_unit_tests
     clio_vfd         # the driver under test
-    clio_cte_cfs_adapter
+    clio_cte_filesystem_client  # descriptor layer + chimod client
     clio_cte_filesystem_client
     clio_cte_core_client
     ctp::cxx
@@ -41,7 +41,7 @@ target_include_directories(clio_cte_vfd_no_runtime_tests SYSTEM PUBLIC
 
 target_link_libraries(clio_cte_vfd_no_runtime_tests
     clio_vfd
-    clio_cte_cfs_adapter
+    clio_cte_filesystem_client  # descriptor layer + chimod client
     clio_cte_filesystem_client
     clio_cte_core_client
     ctp::cxx
@@ -61,8 +61,10 @@ if(CLIO_CORE_ENABLE_TESTS)
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
     set_tests_properties(clio_cte_vfd_unit_tests PROPERTIES
+        # CLIO_RESTART_LOG comes from the top-level per-test isolation default;
+        # see the VOL I/O suite's note.
         ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
-        RESOURCE_LOCK "clio_runtime_port"
+        RESOURCE_LOCK "clio_runtime"
         TIMEOUT 120
         LABELS "msan_skip")
 

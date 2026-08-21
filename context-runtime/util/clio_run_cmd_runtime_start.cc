@@ -47,7 +47,22 @@ bool InitializeAdminChiMod() {
     HLOG(kDebug, "Admin pool creation handled by PoolManager::ServerInit()");
 
     if (!pool_manager->HasPool(clio::run::kAdminPoolId)) {
-      HLOG(kError, "Admin pool creation reported success but pool is not found");
+      // HasPool answers false for two very different states -- "the pool
+      // manager is not initialized" and "the pool genuinely is not there" --
+      // and the old message could not tell them apart. This check has fired
+      // intermittently right after ServerInit reported the pool created,
+      // killing the daemon at startup (issue #924, seen as a cr_detached_spawn
+      // failure on macos-14). Say which state it is, so the next occurrence
+      // answers the question instead of posing it.
+      HLOG(kError,
+           "Admin pool creation reported success but pool is not found "
+           "(pool_manager initialized={}, pools known={}). {}",
+           pool_manager->IsInitialized(), pool_manager->GetPoolCount(),
+           pool_manager->IsInitialized()
+               ? "The manager is up, so the admin pool's metadata is genuinely "
+                 "absent -- it was inserted and lost, or never durably inserted."
+               : "The manager reports NOT initialized, so this is an ordering "
+                 "problem in startup, not a missing pool.");
       return false;
     }
 
@@ -103,36 +118,151 @@ bool InductNode() {
   return true;
 }
 
+/**
+ * Block until the runtime should exit: either a SIGTERM/SIGINT flipped
+ * g_keep_running, or a StopRuntimeTask requested a graceful stop via
+ * RuntimeManager::RequestStop. Returning lets main() exit normally so the
+ * atexit teardown (ServerFinalize) runs on this main thread.
+ */
+void RunUntilStopped() {
+  auto* runtime_manager = CLIO_RUNTIME_MANAGER;
+  while (g_keep_running &&
+         !(runtime_manager && runtime_manager->IsStopRequested())) {
+    CTP_THREAD_MODEL->SleepForUs(100000);
+  }
+  // Signal-triggered exit (SIGTERM/SIGINT): arm the same teardown watchdog
+  // the task-driven stop uses, so a wedged ServerFinalize can never leave a
+  // half-dead daemon behind (`docker stop` / Jarvis Kill rely on SIGTERM).
+  // No-op if the stop was already requested through RequestStop.
+  if (runtime_manager && !runtime_manager->IsStopRequested()) {
+    runtime_manager->RequestStop(
+        clio::run::RuntimeManager::StopMode::kGraceful, 0);
+  }
+}
+
+void PrintVizUsage() {
+  HIPRINT("  --viz / --no-viz: Serve (or don't serve) the web dashboard on this");
+  HIPRINT("      node. Served by default; a `viz: enabled:` key in the config or");
+  HIPRINT("      CLIO_VIZ_ENABLE in the environment wins over the default.");
+  HIPRINT("  --viz-port <port>: Dashboard TCP port (default 8080, 0 = pick a");
+  HIPRINT("      free one). Also CLIO_VIZ_PORT / `viz: port:`.");
+  HIPRINT("  --viz-bind <addr>: Dashboard bind address (default 127.0.0.1).");
+  HIPRINT("      Also CLIO_VIZ_BIND / `viz: bind:`.");
+}
+
 void PrintRuntimeStartUsage() {
-  HIPRINT("Usage: clio runtime start [--induct] [--ephemeral]");
+  HIPRINT("Usage: clio runtime start [--induct] [--ephemeral] [viz options]");
   HIPRINT("  Starts the Clio runtime server");
   HIPRINT("  --induct: Register this node with all existing cluster nodes");
   HIPRINT("  --ephemeral: Skip the default compose; start bare (admin only)");
+  PrintVizUsage();
 }
 
 void PrintRuntimeRestartUsage() {
-  HIPRINT("Usage: clio runtime restart [--induct]");
+  HIPRINT("Usage: clio runtime restart [--induct] [viz options]");
   HIPRINT("  Restarts the Clio runtime, replaying WAL to recover address table");
   HIPRINT("  --induct: Register this node with all existing cluster nodes");
+  PrintVizUsage();
+}
+
+/** Set an environment variable portably. The CLI communicates with
+ *  ConfigManager through the environment (as --ephemeral already did) because
+ *  the manager does not exist yet at argument-parsing time, and because
+ *  environment overrides are re-applied after every config (re)load, so the
+ *  setting survives one. */
+void SetEnv(const char* name, const std::string& value) {
+#ifdef _WIN32
+  _putenv_s(name, value.c_str());
+#else
+  setenv(name, value.c_str(), 1);
+#endif
+}
+
+/** Outcome of looking at one argument through the viz flags' eyes. */
+enum class VizArg {
+  kNotMine,   ///< not a viz flag; the caller should handle it
+  kConsumed,  ///< consumed (i advanced past any value)
+  kBadValue,  ///< a viz flag, but malformed
+  // NOTE: not kError -- logging.h #defines kError as a log level, so it cannot
+  // be used as an identifier anywhere in this tree.
+};
+
+/**
+ * Parse one argument as a viz flag.
+ *
+ * The values are pushed into the environment rather than into ConfigManager
+ * because ConfigManager does not exist yet (this runs before CLIO_INIT) and
+ * because environment overrides are re-applied after every config load -- the
+ * same reason --ephemeral uses CLIO_EPHEMERAL.
+ */
+VizArg ParseVizArg(int argc, char* argv[], int& i) {
+  const std::string arg = argv[i];
+  if (arg == "--no-viz") {
+    SetEnv("CLIO_VIZ_ENABLE", "0");
+    return VizArg::kConsumed;
+  }
+  if (arg == "--viz") {
+    SetEnv("CLIO_VIZ_ENABLE", "1");
+    return VizArg::kConsumed;
+  }
+  if (arg == "--viz-port" || arg == "--viz-bind") {
+    if (i + 1 >= argc) {
+      HLOG(kError, "{} requires a value", arg);
+      return VizArg::kBadValue;
+    }
+    SetEnv(arg == "--viz-port" ? "CLIO_VIZ_PORT" : "CLIO_VIZ_BIND", argv[i + 1]);
+    // Naming an endpoint means the operator wants the dashboard.
+    SetEnv("CLIO_VIZ_ENABLE", "1");
+    ++i;
+    return VizArg::kConsumed;
+  }
+  return VizArg::kNotMine;
+}
+
+/**
+ * Serve the dashboard for a daemon whose operator neither asked for it nor
+ * refused it.
+ *
+ * A real daemon gets the dashboard by default; an embedded runtime (a unit test,
+ * an adapter, a library user's CLIO_INIT) does not -- which is why the default
+ * lives here in the daemon CLI instead of in ConfigManager, whose default is
+ * off. An explicit `viz: enabled:` key or CLIO_VIZ_ENABLE always wins, and this
+ * has to run after CLIO_INIT to know whether one of them spoke, by which point
+ * the admin container has already started the dashboard if it was enabled --
+ * hence the IsRunning() check rather than an unconditional Start().
+ */
+void EnableVizForDaemon() {
+  auto* config = CLIO_CONFIG_MANAGER;
+  if (!config) {
+    return;
+  }
+  config->SetVizEnabledDefault(true);
+  auto* viz = CLIO_VIZ;
+  if (viz && !viz->IsRunning()) {
+    viz->Start();
+  }
 }
 
 }  // namespace
 
 int RuntimeStart(int argc, char* argv[]) {
   bool induct = false;
-  bool ephemeral = false;
   for (int i = 0; i < argc; ++i) {
+    VizArg viz_arg = ParseVizArg(argc, argv, i);
+    if (viz_arg == VizArg::kBadValue) {
+      PrintRuntimeStartUsage();
+      return 1;
+    }
+    if (viz_arg == VizArg::kConsumed) {
+      continue;
+    }
     if (std::strcmp(argv[i], "--induct") == 0) {
       induct = true;
     } else if (std::strcmp(argv[i], "--ephemeral") == 0) {
       // Skip the default compose: start bare (admin only), to be composed
       // explicitly. Communicated to ConfigManager via CLIO_EPHEMERAL, read
       // during the CLIO_INIT below.
-#ifdef _WIN32
-      _putenv_s("CLIO_EPHEMERAL", "1");
-#else
-      setenv("CLIO_EPHEMERAL", "1", 1);
-#endif
+      SetEnv("CLIO_EPHEMERAL", "1");
     } else if (std::strcmp(argv[i], "--help") == 0 ||
                std::strcmp(argv[i], "-h") == 0) {
       PrintRuntimeStartUsage();
@@ -163,6 +293,8 @@ int RuntimeStart(int argc, char* argv[]) {
 
   HLOG(kDebug, "Admin ChiMod initialized successfully with pool ID {}", clio::run::kAdminPoolId);
 
+  EnableVizForDaemon();
+
   if (induct) {
     if (!InductNode()) {
       HLOG(kError, "FATAL ERROR: Failed to induct node into cluster");
@@ -170,9 +302,7 @@ int RuntimeStart(int argc, char* argv[]) {
     }
   }
 
-  while (g_keep_running) {
-    CTP_THREAD_MODEL->SleepForUs(100000);
-  }
+  RunUntilStopped();
 
   HLOG(kDebug, "Shutting down Clio runtime...");
   ShutdownAdminChiMod();
@@ -183,6 +313,14 @@ int RuntimeStart(int argc, char* argv[]) {
 int RuntimeRestart(int argc, char* argv[]) {
   bool induct = false;
   for (int i = 0; i < argc; ++i) {
+    VizArg viz_arg = ParseVizArg(argc, argv, i);
+    if (viz_arg == VizArg::kBadValue) {
+      PrintRuntimeRestartUsage();
+      return 1;
+    }
+    if (viz_arg == VizArg::kConsumed) {
+      continue;
+    }
     if (std::strcmp(argv[i], "--induct") == 0) {
       induct = true;
     } else if (std::strcmp(argv[i], "--help") == 0 ||
@@ -216,6 +354,8 @@ int RuntimeRestart(int argc, char* argv[]) {
 
   HLOG(kDebug, "Admin ChiMod initialized successfully with pool ID {}", clio::run::kAdminPoolId);
 
+  EnableVizForDaemon();
+
   if (induct) {
     if (!InductNode()) {
       HLOG(kError, "FATAL ERROR: Failed to induct node into cluster");
@@ -223,9 +363,7 @@ int RuntimeRestart(int argc, char* argv[]) {
     }
   }
 
-  while (g_keep_running) {
-    CTP_THREAD_MODEL->SleepForUs(100000);
-  }
+  RunUntilStopped();
 
   HLOG(kDebug, "Shutting down Clio runtime...");
   ShutdownAdminChiMod();

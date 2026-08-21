@@ -3,6 +3,8 @@
  * All rights reserved.
  */
 
+#include <cerrno>
+#include <cstring>
 #include <clio_runtime/bdev/transports/fs_bdev_transport.h>
 #include <clio_ctp/introspect/system_info.h>
 #include <clio_runtime/clio_runtime.h>
@@ -74,7 +76,13 @@ bool FsBdevTransport::Init(const CreateParams& params,
 
   auto setup_io = OpenBackingFile(io_depth_, file_path_);
   if (!setup_io) {
-    HLOG(kError, "Failed to open bdev file: {}", file_path_);
+    // errno from the last open attempt. Without it this message says only
+    // "it did not work", and a permission problem on a leftover file is
+    // indistinguishable from a missing io_uring or a full disk -- which is
+    // exactly the ambiguity that made a stale scratch file look like a broken
+    // driver.
+    HLOG(kError, "Failed to open bdev file: {} ({})", file_path_,
+         strerror(errno));
     return false;
   }
 
@@ -226,10 +234,29 @@ bool FsBdevTransport::InitializeWorkerIOContexts() {
   clio::run::WorkOrchestrator *work_orchestrator = CLIO_WORK_ORCHESTRATOR;
   size_t num_workers = work_orchestrator ? work_orchestrator->GetWorkerCount() : 16;
 
-  io_contexts_.resize(num_workers);
+  // Reserve slots for workers that do not exist yet. The worker pool GROWS at
+  // runtime: WorkOrchestrator::SpawnAdditionalWorker() hands out ids past the
+  // startup count (the #781/#785 lane-rescue path, and any scheduler that
+  // sizes pools on demand). This vector used to be sized once at pool
+  // creation, so GetWorkerIOContext(id) returned nullptr for every such worker
+  // and its I/O silently failed — writes logged "WriteToFile called with
+  // invalid I/O context" and reads returned 0 bytes, which the CTE read path
+  // treats as a hole rather than an error. Sizing to the same elastic headroom
+  // the lane table reserves keeps a context available for any id the
+  // orchestrator can produce.
+  //
+  // Only the startup contexts are opened eagerly; the reserved tail is opened
+  // lazily by GetWorkerIOContext the first time a spawned worker uses it, so
+  // this costs a vector of empty structs, not file descriptors.
+  const size_t reserved =
+      num_workers + clio::run::WorkOrchestrator::ElasticHeadroom();
+  std::lock_guard<std::mutex> lock(io_contexts_mu_);
+  io_contexts_.resize(reserved);
   bool success = true;
   for (size_t i = 0; i < num_workers; ++i) {
-    if (!io_contexts_[i].Init(file_path_, io_depth_, static_cast<clio::run::u32>(i))) {
+    io_contexts_[i] = std::make_unique<WorkerIOContext>();
+    if (!io_contexts_[i]->Init(file_path_, io_depth_,
+                               static_cast<clio::run::u32>(i))) {
       success = false;
     }
   }
@@ -237,16 +264,24 @@ bool FsBdevTransport::InitializeWorkerIOContexts() {
 }
 
 void FsBdevTransport::CleanupWorkerIOContexts() {
+  std::lock_guard<std::mutex> lock(io_contexts_mu_);
   for (auto &ctx : io_contexts_) {
-    ctx.Cleanup();
+    if (ctx != nullptr) {
+      ctx->Cleanup();
+    }
   }
+  io_contexts_.clear();
 }
 
 WorkerIOContext *FsBdevTransport::GetWorkerIOContext(size_t worker_id) {
+  std::lock_guard<std::mutex> lock(io_contexts_mu_);
   if (worker_id >= io_contexts_.size()) {
-    return nullptr;
+    io_contexts_.resize(worker_id + 1);
   }
-  WorkerIOContext *ctx = &io_contexts_[worker_id];
+  if (io_contexts_[worker_id] == nullptr) {
+    io_contexts_[worker_id] = std::make_unique<WorkerIOContext>();
+  }
+  WorkerIOContext *ctx = io_contexts_[worker_id].get();
   if (!ctx->is_initialized_) {
     if (!ctx->Init(file_path_, io_depth_, static_cast<clio::run::u32>(worker_id))) {
       return nullptr;

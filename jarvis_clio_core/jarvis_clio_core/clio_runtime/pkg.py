@@ -6,7 +6,8 @@ and container deployment modes via deploy_mode configuration.
 """
 from jarvis_cd.core.pkg import Service
 from jarvis_cd.shell import Exec, PsshExecInfo
-from jarvis_cd.shell.process import Kill, GdbServer
+from jarvis_cd.shell.process import GdbServer
+from jarvis_cd.util.container_utils import container_kwargs
 from jarvis_cd.util import SizeType
 from jarvis_cd.util.logger import Color
 import os
@@ -318,6 +319,34 @@ class ClioRuntime(Service):
 
         self.log("Starting IOWarp runtime")
 
+        # Self-heal BEFORE launching a fresh runtime: kill any stale chimaera
+        # left alive by a prior combo, THEN reclaim its chi_* shm. Both are
+        # host-side (unwrapped) on purpose — apptainer shares the host /dev/shm
+        # and PID space, and the stale process we're hunting has, by definition,
+        # ESCAPED the prior combo's instance:// PID namespace, so the wrapped
+        # `clio_run runtime stop` in the previous stop() could not reach it.
+        #
+        # Why this matters (observed on single_node job 21563, combo 18): the
+        # sweep is sequential in ONE allocation, so combo N+1's runtime start
+        # inherits whatever combo N's teardown left behind. Every teardown logs
+        # `ERROR ... Server dead` — the runtime dies hard, not gracefully — so a
+        # wedged/re-parented chimaera CAN survive. If it does and we only rm the
+        # shm, the fresh runtime comes up alongside the survivor with an
+        # inconsistent pool registry; a client task then routes to the null pool
+        # (`worker.cc ... Container not found for pool_id=PoolId(0,0)`) and, with
+        # no IPC failover, HANGS forever (combo 18 stalled ~8 h to the wall
+        # clock). Killing first makes the old "no live chimaera here" assumption
+        # actually true. Idempotent: in the healthy case nothing matches, so this
+        # is a no-op that leaves startup state unchanged. The `[c]himaera` /
+        # `[c]lio_run` bracket keeps pkill from matching its own argv; `|| true`
+        # keeps a no-match (exit 1) from looking like a failure. Without the shm
+        # reclaim a single mid-startup death also snowballs into a /dev/shm
+        # ENOSPC cascade for every subsequent combo.
+        Exec("pkill -9 -f '[c]himaera' || true; "
+             "pkill -9 -f '[c]lio_run' || true; "
+             'rm -f /dev/shm/chi_*',
+             PsshExecInfo(hostfile=self.hostfile)).run()
+
         cmd = 'clio_run runtime start'
         # Jarvis runs default to a fresh session; a persistent deployment
         # (ephemeral=false) recomposes saved pools + replays the WAL instead.
@@ -328,10 +357,9 @@ class ClioRuntime(Service):
             env=self.env,
             hostfile=self.hostfile,
             exec_async=True,
-            container=self._container_engine,
-            container_image=self.deploy_image_name(),
             private_dir=self.private_dir,
             bind_mounts=self.container_mounts,
+            **container_kwargs(self),
         )
         if self.config.get('do_dbg', False):
             GdbServer(cmd, self.config['dbg_port'], exec_info).run()
@@ -372,35 +400,48 @@ class ClioRuntime(Service):
 
         self.log("Stopping IOWarp runtime")
 
+        # `clio_run runtime stop` is now a convergent graceful shutdown: it
+        # runs the full ServerFinalize teardown, blocks until the daemon is
+        # gone (escalating SIGTERM->SIGKILL itself if the runtime is
+        # unresponsive), and unlinks this runtime's shm/socket artifacts.
+        # Wrap it in container_kwargs so the stop client runs INSIDE the same
+        # apptainer instance as the runtime (symmetric with start()) — the
+        # earlier intermittent "shm_attach shm_open failed" was a host-side
+        # client trying to attach shm owned by an in-instance runtime, which
+        # this now avoids by construction. The old external Kill() + timeout +
+        # /dev/tcp port-poll scaffolding is no longer needed — the CLI
+        # converges (and escalates) entirely on its own.
         Exec('clio_run runtime stop',
-             PsshExecInfo(env=self.env, hostfile=self.hostfile)).run()
-        Kill('clio_run',
-             PsshExecInfo(env=self.env, hostfile=self.hostfile)).run()
-
-        port = self.config['port']
-        host = self.hostfile.hosts[0] if self.hostfile.hosts else '127.0.0.1'
-        for i in range(10):
-            try:
-                ret = subprocess.run(
-                    ['bash', '-c', f'echo > /dev/tcp/{host}/{port}'],
-                    capture_output=True, timeout=2)
-                if ret.returncode != 0:
-                    break
-            except subprocess.TimeoutExpired:
-                break
-            time.sleep(1)
-        time.sleep(1)
+             PsshExecInfo(env=self.env, hostfile=self.hostfile,
+                          **container_kwargs(self))).run()
 
         self.log("IOWarp runtime stopped")
 
     def kill(self):
         self.log("Forcibly killing IOWarp runtime")
-        Kill('clio_run', PsshExecInfo(
-            hostfile=self.hostfile
-        )).run()
+        # `--force` is an immediate ungraceful shutdown: the runtime unlinks
+        # its own shm/socket artifacts and _exit()s, with the client
+        # escalating SIGTERM->SIGKILL if it doesn't die promptly. It is
+        # pid/port-scoped, so unlike a blanket Kill('chimaera')/Kill('clio_run')
+        # it won't disturb a co-resident runtime on the same host. Wrapped in
+        # container_kwargs for the same in-instance reason as stop().
+        Exec('clio_run runtime stop --force',
+             PsshExecInfo(env=self.env, hostfile=self.hostfile,
+                          **container_kwargs(self))).run()
 
     def clean(self):
         self.log("Cleaning IOWarp runtime data")
+
+        # Force-stop any runtime still bound to this port and let it sweep its
+        # own shm/socket artifacts. Idempotent (a no-op if the runtime already
+        # died) and pid/port-scoped, so it reclaims the memfd-backed artifacts
+        # the blanket rm below cannot see, without touching a co-resident
+        # runtime's segments. Wrapped so it can still reach a live in-instance
+        # runtime.
+        if self.config.get('do_start', True):
+            Exec('clio_run runtime stop --force',
+                 PsshExecInfo(env=self.env, hostfile=self.hostfile,
+                              **container_kwargs(self))).run()
 
         if self.config_file and os.path.exists(self.config_file):
             os.remove(self.config_file)
@@ -409,6 +450,19 @@ class ClioRuntime(Service):
         if os.path.exists(log_file):
             os.remove(log_file)
 
+        # BACKSTOP to the scoped force-stop above, which cannot help in one
+        # real case: the pipeline may tear the apptainer instance down before
+        # clean() runs, leaving the wrapped Exec above with nothing to reach.
+        # HOST-SIDE (deliberately NOT wrapped): clean() runs *after* stop() has
+        # already torn the apptainer instance down, so a wrapped `apptainer exec
+        # instance://…` here would target a dead instance and silently no-op —
+        # leaking the runtime's shm across every sweep combo until /dev/shm
+        # (a 48 GiB tmpfs on Ares) fills and later combos die with ENOSPC
+        # ([Errno 28]). Apptainer shares the host /dev/shm by default (no
+        # --contain), so chimaera's shm_open segments physically live on the
+        # host /dev/shm; a bare host-side rm reaches the exact same files and
+        # reclaims them regardless of instance state. On distributed runs the
+        # hostfile fans this out host-side to every node's local /dev/shm.
         Exec('rm -f /dev/shm/chi_*', PsshExecInfo(
             hostfile=self.hostfile
         )).run()

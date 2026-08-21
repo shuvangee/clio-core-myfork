@@ -106,6 +106,23 @@ inline Timestamp GetCurrentTimeNs() {
 }
 #endif
 
+/** UTC WALL-clock nanoseconds. For the POSIX-visible tag timestamps
+ *  (mtime/ctime served to stat) — GetCurrentTimeNs above is STEADY-clock
+ *  (process-uptime-like) and reads as 1970-era when interpreted as an
+ *  epoch: fine for relative bookkeeping (scores, LRU), wrong for stat.
+ *  Host-only paths use this; a device pass has no wall clock and the tag
+ *  metadata never lives there. */
+inline Timestamp GetWallTimeNs() {
+#if CTP_IS_GPU_COMPILER && defined(__CUDA_ARCH__)
+  return 0;
+#elif CTP_IS_SYCL_COMPILER && CTP_IS_DEVICE_PASS
+  return 0;
+#else
+  return static_cast<clio::run::u64>(
+      std::chrono::system_clock::now().time_since_epoch().count());
+#endif
+}
+
 /**
  * CreateParams for CTE Core chimod
  * Contains configuration parameters for CTE container creation
@@ -841,6 +858,8 @@ static constexpr clio::run::u32 REPLICA_UPDATE_ONLY = 0x8;
 static constexpr clio::run::u32 REPLICA_VERIFY_COMPLETE = 0x10;
 /** Return code of an UPDATE_ONLY replica write against an absent slot. */
 static constexpr clio::run::u32 kReplicaAbsentRc = 12;
+/** Return code of GetBlob when the requested primary blob does not exist. */
+static constexpr clio::run::u32 kCteBlobNotFoundRc = 13;
 
 /**
  * One replica of a blob's data (issue #886): an independent block list,
@@ -1012,6 +1031,9 @@ struct BlobInfo {
   // under-refusing hands back codec bytes as if they were data. Cleared only
   // when the blob itself is destroyed.
   clio::run::u32 transform_flags_;
+  // Non-zero when this blob is an expendable cache copy the tier may evict.
+  // Write-once: set at creation, never changed. See kCtePutDroppable.
+  clio::run::u32 droppable_;
   int compress_lib_;     // Compression library ID *requested* for this blob
                          // (0 = none). Provenance/telemetry only -- NOT a
                          // reliable answer to "is this blob compressed?";
@@ -1048,11 +1070,12 @@ struct BlobInfo {
   // drainer waits only on pin holders, and pin holders only wait on bdev I/O.
   // Same atomic_ref discipline as write_owner_ above.
   clio::run::u64 read_state_;
-  // Maintained mirror of sum(blocks_[i].size_). GetTotalSize() returns this in
-  // O(1) instead of an O(blocks) sum; every blocks_ mutation MUST keep it in
-  // sync (ExtendBlob updates it incrementally; cold paths call
-  // RecomputeTotalSize()). Without it, a file built by millions of tiny
-  // O_APPEND writes pays an O(blocks) sum on every put -> O(N^2) (generic/069).
+  // Atomically accessed mirror of sum(blocks_[i].size_). GetTotalSize() returns
+  // this in O(1) instead of racing an O(blocks) sum against a concurrent
+  // ExtendBlob; every blocks_ mutation MUST keep it in sync (ExtendBlob updates
+  // it incrementally; cold paths call RecomputeTotalSize()). Without it, a file
+  // built by millions of tiny O_APPEND writes pays an O(blocks) sum on every
+  // put -> O(N^2) (generic/069).
   clio::run::u64 total_size_cache_;
   // Monotonic counter bumped by EVERY mutation of blocks_ (issue #817). It is
   // copied into ShmBlobRecord::placement_gen_, which a client reads before and
@@ -1179,6 +1202,7 @@ struct BlobInfo {
         last_read_(0),
         access_count_(0),
         transform_flags_(kBlobTransformNone),
+        droppable_(0),
         compress_lib_(0),
         compress_preset_(2),
         trace_key_(0),
@@ -1200,6 +1224,7 @@ struct BlobInfo {
         last_read_(0),
         access_count_(0),
         transform_flags_(kBlobTransformNone),
+        droppable_(0),
         compress_lib_(0),
         compress_preset_(2),
         trace_key_(0),
@@ -1222,6 +1247,7 @@ struct BlobInfo {
         last_read_(GetCurrentTimeNs()),
         access_count_(0),
         transform_flags_(kBlobTransformNone),
+        droppable_(0),
         compress_lib_(0),
         compress_preset_(2),
         trace_key_(0),
@@ -1244,13 +1270,14 @@ struct BlobInfo {
         last_read_(other.last_read_),
         access_count_(other.access_count_),
         transform_flags_(other.transform_flags_),
+        droppable_(other.droppable_),
         compress_lib_(other.compress_lib_),
         compress_preset_(other.compress_preset_),
         trace_key_(other.trace_key_),
         preallocated_size_(other.preallocated_size_),
         write_owner_(0),  // a fresh copy is unlocked; never inherit lock state
         read_state_(0),  // ...and has no readers pinned
-        total_size_cache_(other.total_size_cache_),
+        total_size_cache_(other.GetTotalSize()),
         placement_gen_(other.placement_gen_) {
     prealloc_lock_.Init();
   }
@@ -1270,7 +1297,7 @@ struct BlobInfo {
       compress_preset_ = other.compress_preset_;
       trace_key_ = other.trace_key_;
       preallocated_size_ = other.preallocated_size_;
-      total_size_cache_ = other.total_size_cache_;
+      StoreTotalSize(other.GetTotalSize());
       placement_gen_ = other.placement_gen_;
     }
     return *this;
@@ -1313,18 +1340,48 @@ struct BlobInfo {
   // that does not update the cache incrementally (Resize/Truncate/WAL replay/
   // restore) -- these are cold paths where the O(blocks) recompute is fine.
   CTP_CROSS_FUN void RecomputeTotalSize() {
-    total_size_cache_ = ComputeTotalSizeSlow();
+    StoreTotalSize(ComputeTotalSizeSlow());
   }
 
-  // O(1) total size. Returns the maintained cache; a debug/sanitizer build
-  // asserts it still equals the authoritative sum so any missed mutation site
-  // is caught during testing before it can corrupt a size in release.
-  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
-#if !defined(NDEBUG) && CTP_IS_HOST
-    assert(ComputeTotalSizeSlow() == total_size_cache_ &&
-           "BlobInfo::total_size_cache_ drifted from sum(blocks_)");
+  /**
+   * Atomically replace the maintained primary-blob size.
+   * @param size New logical size in bytes.
+   */
+  CTP_CROSS_FUN void StoreTotalSize(clio::run::u64 size) {
+#if CTP_IS_HOST
+    ctp::ipc::atomic_ref<clio::run::u64>(total_size_cache_).store(size);
+#else
+    total_size_cache_ = size;
 #endif
+  }
+
+  /**
+   * Atomically grow the maintained primary-blob size.
+   * @param size Number of logical bytes added.
+   * @return Logical size before the addition.
+   */
+  CTP_CROSS_FUN clio::run::u64 AddTotalSize(clio::run::u64 size) {
+#if CTP_IS_HOST
+    return ctp::ipc::atomic_ref<clio::run::u64>(total_size_cache_)
+        .fetch_add(size);
+#else
+    clio::run::u64 old = total_size_cache_;
+    total_size_cache_ += size;
+    return old;
+#endif
+  }
+
+  /**
+   * Return the maintained primary-blob logical size in O(1).
+   * @return Current logical size in bytes.
+   */
+  CTP_CROSS_FUN clio::run::u64 GetTotalSize() const {
+#if CTP_IS_HOST
+    auto &size = const_cast<clio::run::u64 &>(total_size_cache_);
+    return ctp::ipc::atomic_ref<clio::run::u64>(size).load();
+#else
     return total_size_cache_;
+#endif
   }
 
 #if CTP_IS_HOST
@@ -1680,6 +1737,41 @@ enum class CteOp : clio::run::u32 {
 GLOBAL_CROSS_CONST clio::run::u32 kCtePutReplace = 0x1u;
 
 /**
+ * kCtePutDroppable: this blob's bytes are EXPENDABLE -- a cache copy of data
+ * that is authoritative elsewhere, which the tier may discard at any time.
+ *
+ * Only the writer can know this, so only the writer may say it. Two effects,
+ * and both are needed for the guarantee to hold: the put may trigger eviction
+ * when placement fails, and the blob becomes eligible to BE evicted by such a
+ * put. Without the flag a put neither evicts nor is evicted.
+ *
+ * Droppability is decided at creation and never changes. Eviction selects
+ * candidates from a scan and deletes them afterwards, so a blob that changed
+ * sides in between would be deleted on an answer that is no longer true. A put
+ * WITHOUT the flag to a blob that has it is therefore refused with
+ * kCteDroppabilityConflictRc: a cache copy and authoritative data claiming one
+ * name is a collision worth surfacing. The reverse is allowed and leaves the
+ * blob authoritative.
+ */
+GLOBAL_CROSS_CONST clio::run::u32 kCtePutDroppable = 0x2u;
+
+/**
+ * PutBlob refused: the blob is an expendable cache copy (kCtePutDroppable) and
+ * this put would take ownership of bytes the tier may discard.
+ */
+GLOBAL_CROSS_CONST clio::run::u32 kCteDroppabilityConflictRc = 14;
+
+/**
+ * GetBlobTask::flags_ bits.
+ *
+ * A consistent read bypasses the client-side shared-memory payload shortcut
+ * and serializes the runtime read with PutBlob using the blob's write token.
+ * This is required by filesystem consumers that must never observe a mixture
+ * of bytes from an in-place write racing the read.
+ */
+GLOBAL_CROSS_CONST clio::run::u32 kCteGetConsistent = 0x1u;
+
+/**
  * CTE Telemetry data structure for performance monitoring
  */
 struct CteTelemetry {
@@ -1728,10 +1820,15 @@ template <typename CreateParamsT = CreateParams>
 struct GetOrCreateTagTask : public clio::run::Task {
   IN clio::run::priv::string tag_name_;  // Tag name (required)
   INOUT TagId tag_id_;  // Tag unique ID (default null, output on creation)
+  // Fused metadata (one round trip instead of three for callers like the
+  // clio-fs Open, which needed existence + id + size):
+  OUT clio::run::u32 created_;    // 1 = this call created the tag
+  OUT clio::run::u64 tag_size_;   // total bytes (0 for a fresh tag)
 
   // SHM constructor
   CTP_CROSS_FUN GetOrCreateTagTask()
-      : clio::run::Task(), tag_name_(CLIO_PRIV_ALLOC), tag_id_(TagId::GetNull()) {}
+      : clio::run::Task(), tag_name_(CLIO_PRIV_ALLOC), tag_id_(TagId::GetNull()),
+        created_(0), tag_size_(0) {}
 
   // Emplace constructor
   CTP_CROSS_FUN explicit GetOrCreateTagTask(
@@ -1740,7 +1837,7 @@ struct GetOrCreateTagTask : public clio::run::Task {
       const TagId &tag_id = TagId::GetNull())
       : clio::run::Task(task_id, pool_id, pool_query, Method::kGetOrCreateTag),
         tag_name_(CLIO_PRIV_ALLOC, tag_name),
-        tag_id_(tag_id) {
+        tag_id_(tag_id), created_(0), tag_size_(0) {
     task_id_ = task_id;
     pool_id_ = pool_id;
     method_ = Method::kGetOrCreateTag;
@@ -1763,7 +1860,7 @@ struct GetOrCreateTagTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(tag_id_);
+    ar(tag_id_, created_, tag_size_);
   }
 
   /**
@@ -1774,6 +1871,8 @@ struct GetOrCreateTagTask : public clio::run::Task {
     Task::Copy(other.template Cast<Task>());
     tag_name_ = other->tag_name_;
     tag_id_ = other->tag_id_;
+    created_ = other->created_;
+    tag_size_ = other->tag_size_;
   }
 
   /**
@@ -2384,6 +2483,10 @@ struct ReorganizeBlobTask : public clio::run::Task {
 struct EvictTask : public clio::run::Task {
   IN float min_tier_score_;   // Only evict blobs on targets with score >= this
   IN clio::run::u64 bytes_;   // Reclaim at least this many bytes from the tier
+  // Non-zero: reclaim only from blobs marked kCtePutDroppable, so eviction
+  // cannot destroy data somebody still owns. Set by PutBlob's make-room retry;
+  // 0 for callers that ask for eviction directly.
+  IN clio::run::u32 droppable_only_;
   OUT clio::run::u64 bytes_evicted_;  // Physical bytes actually reclaimed
   OUT clio::run::u64 blobs_evicted_;  // Number of blobs evicted
 
@@ -2392,6 +2495,7 @@ struct EvictTask : public clio::run::Task {
       : clio::run::Task(),
         min_tier_score_(0.0f),
         bytes_(0),
+        droppable_only_(0),
         bytes_evicted_(0),
         blobs_evicted_(0) {}
 
@@ -2399,10 +2503,12 @@ struct EvictTask : public clio::run::Task {
   CTP_CROSS_FUN explicit EvictTask(const clio::run::TaskId &task_id,
                                    const clio::run::PoolId &pool_id,
                                    const clio::run::PoolQuery &pool_query,
-                                   float min_tier_score, clio::run::u64 bytes)
+                                   float min_tier_score, clio::run::u64 bytes,
+                                   clio::run::u32 droppable_only = 0)
       : clio::run::Task(task_id, pool_id, pool_query, Method::kEvict),
         min_tier_score_(min_tier_score),
         bytes_(bytes),
+        droppable_only_(droppable_only),
         bytes_evicted_(0),
         blobs_evicted_(0) {
     task_id_ = task_id;
@@ -2415,7 +2521,7 @@ struct EvictTask : public clio::run::Task {
   template <typename Archive>
   CTP_CROSS_FUN void SerializeIn(Archive &ar) {
     Task::SerializeIn(ar);
-    ar(min_tier_score_, bytes_);
+    ar(min_tier_score_, bytes_, droppable_only_);
   }
 
   template <typename Archive>
@@ -2428,6 +2534,9 @@ struct EvictTask : public clio::run::Task {
     Task::Copy(other.template Cast<Task>());
     min_tier_score_ = other->min_tier_score_;
     bytes_ = other->bytes_;
+    // Every IN field must be copied here: this is the per-replica duplication
+    // path, so an omission silently reverts to the default on remote shards.
+    droppable_only_ = other->droppable_only_;
     bytes_evicted_ = other->bytes_evicted_;
     blobs_evicted_ = other->blobs_evicted_;
   }
@@ -3158,7 +3267,19 @@ struct RenameTagTask : public clio::run::Task {
 
   void AggregateOut(const ctp::ipc::FullPtr<clio::run::Task> &other_base) {
     Task::AggregateOut(other_base);
-    Copy(other_base.template Cast<RenameTagTask>());
+    // OUT fields ONLY (issue #856). RenameTag is BROADCAST (every container
+    // holding part of the tag must rename), so this runs per surviving
+    // replica. Delegating to Copy() ran Task::Copy — overwriting the
+    // ORIGIN's task_id_/pool_query_/completer_ with the replica's while
+    // send_map_ and completion bookkeeping still referenced the origin —
+    // and re-assigned the IN priv::strings old_name_/new_name_ across
+    // shared-memory segments (free() through the wrong allocator). tag_id_
+    // is the only INOUT the replicas resolve; take the first non-null so a
+    // container that did not host the tag cannot erase it.
+    auto other = other_base.template Cast<RenameTagTask>();
+    if (tag_id_.IsNull()) {
+      tag_id_ = other->tag_id_;
+    }
   }
 };
 
@@ -3390,9 +3511,9 @@ struct GetTagSizeTask : public clio::run::Task {
    * the aggregate, which poisoned the result: on a multi-node cluster the
    * reader's own container often holds none of a just-written file's blobs, so
    * its rc=1 replica made the aggregate rc=1 even though another container
-   * returned the real size. CfsIo::Open only trusts the size when rc==0, so it
-   * discarded the correct size and every cross-node read of that file returned
-   * 0 bytes (issue #714, Bug 2).
+   * returned the real size. Client::OpenFd only trusts the size when rc==0,
+   * so it discarded the correct size and every cross-node read of that file
+   * returned 0 bytes (issue #714, Bug 2).
    *
    * Correct semantics — "found if ANY": the aggregate succeeds (rc=0) if at
    * least one replica found the tag, summing the found replicas' shares; it

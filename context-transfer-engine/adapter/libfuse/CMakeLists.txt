@@ -43,7 +43,18 @@ endif()
 
 message(STATUS "Found FUSE3: ${FUSE3_VERSION}")
 
+# Export the discovery results for the fuse test dir (processed after this
+# one). test_fuse_ops previously re-probed with pkg-config, which silently
+# skipped the suite on Windows (WinFsp has no .pc file) and macOS setups
+# where only these hand-found paths exist (#903).
+set(CLIO_FUSE3_FOUND TRUE CACHE INTERNAL "FUSE3 backend located (adapter/libfuse)")
+set(CLIO_FUSE3_INCLUDEDIR "${FUSE3_INCLUDEDIR}" CACHE INTERNAL "")
+set(CLIO_FUSE3_INCLUDE_DIRS "${FUSE3_INCLUDE_DIRS}" CACHE INTERNAL "")
+set(CLIO_FUSE3_LIBRARY_DIRS "${FUSE3_LIBRARY_DIRS}" CACHE INTERNAL "")
+set(CLIO_FUSE3_LIBRARIES "${FUSE3_LIBRARIES}" CACHE INTERNAL "")
+
 add_executable(clio_cte_fuse
+    fuse_cte_args.cc
     fuse_cte.cc       # FUSE operation callbacks (unit-tested, coverage-tracked)
     fuse_cte_main.cc) # process entry / mount glue (coverage-excluded)
 
@@ -65,6 +76,30 @@ target_link_libraries(clio_cte_fuse
     clio_cte_filesystem_client  # the FUSE adapter now delegates to the chimod
     clio_cte_core_client
     ctp::cxx)
+
+# EXPERIMENTAL low-level adapter (issue #1007 follow-up): same delegated
+# operations, low-level session — attrs ride in create/lookup replies and
+# readdirplus, eliminating the per-create GETATTR round trips. Linux-only.
+if(NOT WIN32)
+  add_executable(clio_cte_fuse_ll
+      fuse_cte.cc
+      fuse_cte_ll.cc)
+  target_compile_definitions(clio_cte_fuse_ll PRIVATE
+      FUSE_USE_VERSION=35
+      CLIO_CTE_FUSE_ENABLED)
+  target_include_directories(clio_cte_fuse_ll PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}
+      ${CLIO_CTE_ROOT}
+      ${CMAKE_SOURCE_DIR}/context-transfer-engine/filesystem/include
+      ${FUSE3_INCLUDE_DIRS}
+      ${FUSE3_INCLUDEDIR})
+  target_link_directories(clio_cte_fuse_ll PRIVATE ${FUSE3_LIBRARY_DIRS})
+  target_link_libraries(clio_cte_fuse_ll
+      ${FUSE3_LIBRARIES}
+      clio_cte_filesystem_client
+      clio_cte_core_client
+      ctp::cxx)
+endif()
 
 install(TARGETS clio_cte_fuse
     RUNTIME DESTINATION bin)

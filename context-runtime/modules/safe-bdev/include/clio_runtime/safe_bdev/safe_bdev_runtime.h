@@ -208,6 +208,15 @@ class Runtime : public clio::run::Container {
 
   clio::run::u64 GetWorkRemaining() const override;
 
+  /**
+   * Register the safe-bdev dashboard page's endpoints (issue #990):
+   * the pool index, the add/remove member actions, and the create form. The
+   * page itself ships in this module's viz/ directory. Defined in
+   * safe_bdev_viz.cc.
+   */
+  void RegisterViz(clio::run::viz::VizServer &viz,
+                   const std::string &mod_name) override;
+
   void SaveTask(clio::run::u32 method, clio::run::SaveTaskArchive &archive,
                 clio::run::shared_ptr<clio::run::Task> &task_ptr) override;
 
@@ -346,7 +355,7 @@ class Runtime : public clio::run::Container {
   //==========================================================================
   // Recovery observability. RecoverBdev rebuilds a failed member's chunk for
   // EVERY slot it participates in; each such slot is one "recovery operation".
-  // These atomics let Monitor() -- and the context-visualizer safe-bdev
+  // These atomics let Monitor() -- and the dashboard safe-bdev
   // dashboard -- report live rebuild progress. Reset at the start of every
   // RecoverBdev. Atomic because Monitor() may run on a different worker fiber
   // than the in-progress rebuild.
@@ -368,6 +377,26 @@ class Runtime : public clio::run::Container {
   std::set<clio::run::u64> dirty_slots_;
   std::set<clio::run::u64> written_slots_;
   mutable std::mutex slot_mu_;
+
+  // Slot-allocator lock. A container's methods are NOT serialized: client
+  // threads hash to different lanes (map_by_pid_tid), so several workers can
+  // be inside this container at once. data_alloc_ (per-member std::set + free
+  // list), rr_cursor_ and alloc_log_ are mutated by AllocateBlocks/FreeBlocks
+  // and read by GetStats, so every access takes this lock. Without it,
+  // concurrent Take()/Release() corrupt the heap (observed as
+  // "malloc(): unaligned tcache chunk detected" under >= 4 client threads,
+  // preceded by "block ... not live" warnings from lost set updates).
+  //
+  // Lock order is alloc_mu_ -> slot_mu_ (FreeBlocks marks slots dirty while
+  // holding it); never take alloc_mu_ while holding slot_mu_. Helpers that
+  // read data_alloc_ (StripeMembers, ForgetSlotIfEmpty) require the caller to
+  // hold alloc_mu_ and must not re-acquire it.
+  //
+  // NOT covered: the membership-change paths (AddBdev / RemoveBdev /
+  // RecoverBdev) push_back/pop_back on data_alloc_ across co_awaits, which can
+  // reallocate the vector under a concurrent data-plane task. Serializing
+  // those against I/O needs a suspension-aware lock (CoMutex), not this one.
+  mutable std::mutex alloc_mu_;
 
   /** Mark a slot as holding data and needing (re)parity. */
   void MarkSlotDirty(clio::run::u64 s) {

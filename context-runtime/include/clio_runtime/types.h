@@ -137,6 +137,18 @@ struct Host {
   u64 node_id;             // 64-bit representation of IP address
   NodeState state;         // SWIM failure detection state
   std::chrono::steady_clock::time_point state_changed_at;
+  /**
+   * When we last received ANY traffic from this peer (issue #856).
+   *
+   * SWIM's probe/ack round trip rides ordinary admin tasks, so a node whose
+   * workers are merely STARVED — not gone — can miss its probe window and be
+   * declared dead. That is destructive: recovery then redistributes a live
+   * node's containers, and once enough peers look bad the survivors
+   * self-fence and stop recovering anything at all. A node that is actively
+   * sending us bytes is demonstrably alive no matter what the probe did, so
+   * this timestamp is consulted before promoting kSuspected -> kDead.
+   */
+  std::chrono::steady_clock::time_point last_inbound;
 
   /**
    * Default constructor
@@ -144,7 +156,8 @@ struct Host {
   Host()
       : node_id(0),
         state(NodeState::kAlive),
-        state_changed_at(std::chrono::steady_clock::now()) {}
+        state_changed_at(std::chrono::steady_clock::now()),
+        last_inbound(std::chrono::steady_clock::now()) {}
 
   /**
    * Constructor with IP address and node ID (required)
@@ -156,7 +169,8 @@ struct Host {
       : ip_address(ip),
         node_id(id),
         state(NodeState::kAlive),
-        state_changed_at(std::chrono::steady_clock::now()) {}
+        state_changed_at(std::chrono::steady_clock::now()),
+        last_inbound(std::chrono::steady_clock::now()) {}
 
   bool IsAlive() const { return state == NodeState::kAlive; }
 
@@ -417,6 +431,12 @@ using WorkerId = u32;
 using LaneId = u32;
 using ContainerId = u32;
 static constexpr ContainerId kInvalidContainerId = static_cast<ContainerId>(-1);
+/** Container id of a pool's static container. The static container is not a
+ *  member of the pool's container set (it is never addressed, never routed to,
+ *  and holds no module state) — it exists once per pool per node to own the
+ *  task-stat model and to serve the stateless task APIs, so it gets a reserved
+ *  id that can never collide with a real node-derived container id. */
+static constexpr ContainerId kStaticContainerId = static_cast<ContainerId>(-2);
 using MinorId = u32;
 
 // Container addressing system types

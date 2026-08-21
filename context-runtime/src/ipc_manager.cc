@@ -39,6 +39,7 @@
 
 #include <clio_ctp/lightbeam/transport_factory_impl.h>
 #include <zmq.h>
+#include <limits>
 
 #include <algorithm>
 #include <cerrno>
@@ -64,6 +65,7 @@
 #include "clio_runtime/container.h"
 #include "clio_runtime/local_task_archives.h"
 #include "clio_runtime/pool_manager.h"
+#include "clio_runtime/runtime_pid_record.h"
 #include "clio_runtime/scheduler/scheduler_factory.h"
 #include "clio_runtime/task_archives.h"
 
@@ -91,6 +93,14 @@ static std::string DefaultServerBindAddr() {
     if (*tm && std::string(tm) != "0") return std::string("127.0.0.1");
   }
   return std::string("0.0.0.0");
+}
+
+// True for bind addresses that can only ever serve this machine. A loopback
+// listener is single-node by construction: no process on another host can
+// reach it, so there is no such thing as a loopback-bound cluster peer.
+static bool IsLoopbackBindAddr(const std::string &addr) {
+  return addr == "localhost" || addr == "::1" ||
+         addr.compare(0, 4, "127.") == 0;
 }
 
 // ChiServerBootstrap{Hip,Sycl}Gpu are defined in the GPU companion lib
@@ -468,6 +478,17 @@ bool IpcManager::ServerInit() {
     return false;
   }
 
+  // Publish this runtime's pid as soon as its segments exist, and withdraw it
+  // in UnlinkOwnArtifacts when they go: the record's lifetime brackets the
+  // segments' exactly like the /proc/<pid>/fd symlink Linux memfds carry. It
+  // is what `clio_run stop`/`status` fall back to on platforms whose segments
+  // are plain files naming no owner (macOS/BSD) — including against a runtime
+  // that wedges partway through this ServerInit.
+  if (ConfigManager *config = CLIO_CONFIG_MANAGER) {
+    WriteRuntimePidRecord(config->GetPort(),
+                          static_cast<int>(ctp::SystemInfo::GetPid()));
+  }
+
   // Initialize priority queues
   if (!ServerInitQueues()) {
     return false;
@@ -647,7 +668,11 @@ void IpcManager::ClientFinalize() {
   ClearClientPool();
   zmq_transport_.reset();
 
-  // Clients should not destroy shared resources
+  // Clients must not destroy SHARED resources (the runtime's segments), but
+  // they should remove their OWN memfd-dir entries (per-thread MPSC receive
+  // segments, on-demand data segments) so short-lived clients don't pile up
+  // dead symlinks that only the next runtime start would reap.
+  UnlinkOwnPidEntries();
 }
 
 void IpcManager::RegisterTransportShutdownHook(std::function<void()> hook) {
@@ -732,6 +757,11 @@ void IpcManager::ServerFinalize() {
   // the CLIO_IPC global is intentionally leaked, so ~IpcManager rarely runs.
   // No-op unless built with CTP_ALLOC_TRACK_SIZE (CLIO_CORE_ENABLE_LEAK_CHECK).
   ReportRuntimeLeaks("ServerFinalize");
+
+  // Remove this runtime's directory entries (main/queue segment symlinks,
+  // control sockets) so a clean stop leaves the per-user memfd dir empty.
+  // Unlink-only: the segments stay mapped for the leaked singletons above.
+  UnlinkOwnArtifacts();
 
   is_initialized_ = false;
 }
@@ -1585,6 +1615,30 @@ bool IpcManager::LoadHostfile() {
   hostfile_map_.clear();
   hosts_cache_valid_ = false;
 
+  // A loopback bind target means "single node, this machine only", so a
+  // configured hostfile cannot apply: we could not serve any peer listed in it,
+  // nor could a peer reach us. Drop the hostfile and take the single-node path
+  // below. DefaultServerBindAddr() only yields loopback when CLIO_BIND_ADDR
+  // says so explicitly or CLIO_TEST_MODE is set -- a real deployment gets
+  // 0.0.0.0 -- so this cannot change multi-node behavior.
+  //
+  // This matters because the hostfile comes from the *developer's* config
+  // (~/.clio/clio.yaml). Without this, running the unit tests on a machine that
+  // is also a node of a real cluster silently promotes each test into a peer of
+  // that cluster: it binds the cluster IP as node N, and any cluster-wide
+  // operation then blocks waiting for peers that aren't running (the config's
+  // `wait_for_restart`), so the test hangs until its ctest timeout instead of
+  // running single-node on loopback as CLIO_TEST_MODE asked.
+  if (!hostfile_path.empty()) {
+    const std::string bind_addr = DefaultServerBindAddr();
+    if (IsLoopbackBindAddr(bind_addr)) {
+      HLOG(kInfo,
+           "Bind address {} is loopback (single-node); ignoring hostfile {}",
+           bind_addr, hostfile_path);
+      hostfile_path.clear();
+    }
+  }
+
   if (hostfile_path.empty()) {
     // No hostfile configured: bind on all local interfaces (0.0.0.0) by
     // default. GetServerAddr() defaults to 127.0.0.1 — fine for the
@@ -1684,6 +1738,11 @@ bool IpcManager::IsAlive(u64 node_id) const {
 }
 
 void IpcManager::SetDead(u64 node_id) {
+  // Every confirmed membership change advances the epoch (issue #856):
+  // recovery claims are scoped by (epoch, dead node), so a node that dies,
+  // rejoins and dies again is recoverable each time, while duplicate
+  // coordinators within one epoch are still refused.
+  membership_epoch_.fetch_add(1, std::memory_order_acq_rel);
   auto it = hostfile_map_.find(node_id);
   if (it == hostfile_map_.end()) return;
   if (it->second.state == NodeState::kDead) return;  // Already dead
@@ -1710,6 +1769,11 @@ void IpcManager::SetDead(u64 node_id) {
 }
 
 void IpcManager::SetAlive(u64 node_id) {
+  // Every confirmed membership change advances the epoch (issue #856):
+  // recovery claims are scoped by (epoch, dead node), so a node that dies,
+  // rejoins and dies again is recoverable each time, while duplicate
+  // coordinators within one epoch are still refused.
+  membership_epoch_.fetch_add(1, std::memory_order_acq_rel);
   auto it = hostfile_map_.find(node_id);
   if (it == hostfile_map_.end()) return;
   if (it->second.state == NodeState::kAlive) return;  // Already alive
@@ -1731,6 +1795,22 @@ NodeState IpcManager::GetNodeState(u64 node_id) const {
   auto it = hostfile_map_.find(node_id);
   if (it == hostfile_map_.end()) return NodeState::kDead;
   return it->second.state;
+}
+
+void IpcManager::NoteInbound(u64 node_id) {
+  auto it = hostfile_map_.find(node_id);
+  if (it == hostfile_map_.end()) return;
+  it->second.last_inbound = std::chrono::steady_clock::now();
+}
+
+float IpcManager::SecondsSinceInbound(u64 node_id) const {
+  auto it = hostfile_map_.find(node_id);
+  if (it == hostfile_map_.end()) {
+    return std::numeric_limits<float>::max();
+  }
+  return std::chrono::duration<float>(std::chrono::steady_clock::now() -
+                                      it->second.last_inbound)
+      .count();
 }
 
 void IpcManager::SetNodeState(u64 node_id, NodeState new_state) {
@@ -2860,6 +2940,25 @@ size_t IpcManager::ClearUserIpcs() {
       }
     }
 
+    // The runtime pid record (chi_runtime_pid_<user>_<port>) is a plain file,
+    // so the symlink test above cannot see its owner — it names the owner in
+    // its contents instead. Keep it while that runtime is alive: it is the
+    // only handle `clio_run stop` has on a co-resident runtime whose segments
+    // are not /proc symlinks (macOS/BSD).
+    if (name.rfind(kRuntimePidRecordPrefix, 0) == 0) {
+      std::ifstream pid_file(full_path);
+      std::string pid_line;
+      if (pid_file.is_open() && std::getline(pid_file, pid_line)) {
+        int owner_pid = std::atoi(pid_line.c_str());
+        if (owner_pid > 0 && owner_pid != current_pid &&
+            ctp::SystemInfo::IsProcessAlive(owner_pid)) {
+          HLOG(kDebug, "ClearUserIpcs: keeping {} (runtime pid {} alive)", name,
+               owner_pid);
+          continue;
+        }
+      }
+    }
+
     if (ctp::SystemInfo::RemoveFile(full_path)) {
       HLOG(kDebug, "ClearUserIpcs: Removed memfd symlink: {}", name);
       removed_count++;
@@ -2873,6 +2972,91 @@ size_t IpcManager::ClearUserIpcs() {
          removed_count);
   }
 
+  return removed_count;
+}
+
+size_t IpcManager::UnlinkOwnPidEntries() {
+  size_t removed_count = 0;
+  const std::string memfd_dir = ctp::SystemInfo::GetMemfdDir();
+  const int current_pid = ctp::SystemInfo::GetPid();
+
+  // Entries owned by THIS process — on-demand data segments
+  // (clio_<pid>_<idx>) and per-thread MPSC receive segments
+  // (clio-<pid>-<tid>) — identified by their symlink target /proc/<pid>/fd/N.
+  // On platforms where the entries are regular files (macOS), fall back to
+  // the name prefixes. Unlink-only: mapped memory stays valid.
+  const std::string own_proc_prefix =
+      "/proc/" + std::to_string(current_pid) + "/";
+  const std::string own_name_prefixes[] = {
+      "clio_" + std::to_string(current_pid) + "_",
+      "clio-" + std::to_string(current_pid) + "-",
+  };
+  for (const auto &name : ctp::SystemInfo::ListDirectory(memfd_dir)) {
+    const std::string full_path = memfd_dir + "/" + name;
+    bool owned = false;
+    std::error_code ec;
+    auto target = std::filesystem::read_symlink(full_path, ec);
+    if (!ec) {
+      owned = target.string().rfind(own_proc_prefix, 0) == 0;
+    } else {
+      for (const auto &prefix : own_name_prefixes) {
+        if (name.rfind(prefix, 0) == 0) {
+          owned = true;
+          break;
+        }
+      }
+    }
+    if (owned && ctp::SystemInfo::RemoveFile(full_path)) {
+      removed_count++;
+    }
+  }
+  return removed_count;
+}
+
+size_t IpcManager::UnlinkOwnArtifacts() {
+  size_t removed_count = 0;
+  ConfigManager *config = CLIO_CONFIG_MANAGER;
+
+  // Named segments (main + queue) — unlink by name. The backing memfd stays
+  // alive through this process's fds/mappings; only the directory entry goes.
+  if (config) {
+    for (MemorySegment seg : {kMainSegment, kQueueSegment}) {
+      const std::string name = config->GetSharedMemorySegmentName(seg);
+      if (ctp::SystemInfo::RemoveFile(
+              ctp::SystemInfo::GetMemfdPath(name))) {
+        removed_count++;
+      }
+    }
+  }
+
+  // Everything else this pid owns (on-demand + per-thread MPSC segments).
+  removed_count += UnlinkOwnPidEntries();
+
+  // Local control socket files for this runtime's port. Normally unlinked by
+  // ~SocketTransport during graceful teardown; on the force/watchdog paths the
+  // transports are never destroyed, so remove them here (no-op if gone).
+  if (config) {
+    const u32 port = config->GetPort();
+    const std::string socket_paths[] = {
+        ctp::SystemInfo::GetMemfdPath("clio_" + std::to_string(port) +
+                                      ".ipc"),
+        ctp::SystemInfo::GetMemfdPath("clio_zmq_" + std::to_string(port + 3) +
+                                      ".ipc"),
+    };
+    for (const auto &path : socket_paths) {
+      if (ctp::SystemInfo::RemoveFile(path)) {
+        removed_count++;
+      }
+    }
+    // The pid record published in ServerInit: this runtime no longer owns the
+    // port, so nothing must be able to escalate a kill against it.
+    RemoveRuntimePidRecord(port);
+  }
+
+  if (removed_count > 0) {
+    HLOG(kInfo, "UnlinkOwnArtifacts: Removed {} filesystem entries",
+         removed_count);
+  }
   return removed_count;
 }
 
@@ -3119,15 +3303,41 @@ bool IpcManager::WaitForServerAndReconnect(
     return false;
   }
 
-  // Pick random hosts and try each (may retry same host — that's fine)
-  std::mt19937 rng(std::random_device{}());
-  std::uniform_int_distribution<size_t> dist(0, hosts.size() - 1);
+  // Build a DETERMINISTIC candidate order (issue #856), replacing uniform
+  // random sampling over every host in the file:
+  //   1. the presumptive leader (lowest alive node id) — it coordinates
+  //      recovery, so it is the most useful node to be attached to;
+  //   2. the remaining ALIVE hosts;
+  //   3. hosts believed dead, last and only as a fallback — "dead" is a local
+  //      opinion that can be stale (a peer may have rejoined without this
+  //      client hearing about it), so they are tried rather than excluded.
+  // Random sampling could burn every attempt re-dialling the node that just
+  // died, and made post-failover behaviour irreproducible under test.
+  std::vector<std::string> candidates;
+  {
+    const u64 leader = GetLeaderNodeId();
+    std::vector<std::string> alive, dead;
+    for (const auto &h : hosts) {
+      if (h.node_id == GetNodeId()) continue;  // our own dead runtime
+      if (h.node_id == leader && h.IsAlive()) continue;  // added first below
+      (h.IsAlive() ? alive : dead).push_back(h.ip_address);
+    }
+    const Host *lh = GetHost(leader);
+    if (lh != nullptr && lh->IsAlive() && leader != GetNodeId()) {
+      candidates.push_back(lh->ip_address);
+    }
+    candidates.insert(candidates.end(), alive.begin(), alive.end());
+    candidates.insert(candidates.end(), dead.begin(), dead.end());
+    if (candidates.empty()) {  // degenerate: single-host file
+      for (const auto &h : hosts) candidates.push_back(h.ip_address);
+    }
+  }
 
-  HLOG(kInfo, "WaitForServerAndReconnect: Trying {} random hosts",
-       client_try_new_servers_);
+  HLOG(kInfo,
+       "WaitForServerAndReconnect: trying up to {} host(s), leader-first: {}",
+       client_try_new_servers_, candidates.front());
   for (int i = 0; i < client_try_new_servers_; ++i) {
-    size_t idx = dist(rng);
-    const std::string &addr = hosts[idx].ip_address;
+    const std::string &addr = candidates[i % candidates.size()];
     HLOG(kInfo, "WaitForServerAndReconnect: Trying {}/{}: {}",
          i + 1, client_try_new_servers_, addr);
     if (ReconnectToNewHost(addr)) {
@@ -3136,7 +3346,7 @@ bool IpcManager::WaitForServerAndReconnect(
     }
   }
 
-  HLOG(kError, "WaitForServerAndReconnect: All {} random hosts failed",
+  HLOG(kError, "WaitForServerAndReconnect: All {} candidate hosts failed",
        client_try_new_servers_);
   reconnecting_.store(false, std::memory_order_release);
   return false;
@@ -3899,9 +4109,10 @@ RouteResult IpcManager::RouteTask(Future<Task> &future, bool force_enqueue) {
         const auto inline_retry_budget = (task_ptr->pool_id_ == kAdminPoolId)
                                              ? std::chrono::seconds(30)
                                              : kInlineRetryBudget;
-        const auto deadline =
-            std::chrono::steady_clock::now() + inline_retry_budget;
-        while (!task_ptr->IsPeriodic() &&
+        const auto retry_start = std::chrono::steady_clock::now();
+        const auto deadline = retry_start + inline_retry_budget;
+        const bool is_periodic = task_ptr->IsPeriodic();
+        while (!is_periodic &&
                (result == RouteResult::Retry || result == RouteResult::Dne) &&
                std::chrono::steady_clock::now() < deadline) {
           std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3918,12 +4129,30 @@ RouteResult IpcManager::RouteTask(Future<Task> &future, bool force_enqueue) {
           // entry once the popping iteration's owning reference died: the icx
           // windows-2025 cte_tag_large SEGFAULT. Terminal failure is the
           // correct end state.)
-          HLOG(kError,
-               "RouteTask: inline retry exhausted ({} ms) on non-worker "
-               "thread; failing task pool={} method={}",
-               std::chrono::duration_cast<std::chrono::milliseconds>(
-                   inline_retry_budget).count(),
-               task_ptr->pool_id_, task_ptr->method_);
+          // Report what actually happened, not the budget. A PERIODIC task
+          // skips the loop entirely (see above) and is failed instantly and
+          // by design -- printing the budget for it made five harmless drops
+          // read as five 30-second stalls, and that misreading has cost real
+          // diagnosis time twice (issue #923). Log elapsed time and say which
+          // of the two cases this is.
+          const auto elapsed_ms =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - retry_start).count();
+          if (is_periodic) {
+            HLOG(kError,
+                 "RouteTask: periodic task not routable at spawn time; failing "
+                 "it immediately by design (no retry attempted) -- pool={} "
+                 "method={}",
+                 task_ptr->pool_id_, task_ptr->method_);
+          } else {
+            HLOG(kError,
+                 "RouteTask: inline retry exhausted after {} ms (budget {} ms) "
+                 "on non-worker thread; failing task pool={} method={}",
+                 elapsed_ms,
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     inline_retry_budget).count(),
+                 task_ptr->pool_id_, task_ptr->method_);
+          }
           task_ptr->SetReturnCode(static_cast<u32>(-1));
           task_ptr->SetComplete();
         }
@@ -4068,8 +4297,26 @@ RouteResult IpcManager::RouteLocal(Future<Task> &future, bool force_enqueue) {
     // lines, and a green coverage run logs ~19k of these (issue #849). The
     // callers in RouteTask log the kError summary on first failure and on
     // retry exhaustion.
-    HLOG(kDebug, "RouteLocal: Container not found for pool={} container_id={} method={}",
-         task_ptr->pool_id_, container_id, task_ptr->method_);
+    // Include the pool manager's own state. GetContainer can only return an
+    // invalid handle three ways: the manager is not initialized, the pool has
+    // no metadata entry, or the entry exists but has no usable container --
+    // and those want opposite fixes (issue #923). Printing initialized/pool
+    // count here says which, without needing to reproduce.
+    // The instance ADDRESS is the discriminator. CLIO_POOL_MANAGER resolves
+    // through GetGlobalPtrVar, which lazily `new`s a blank PoolManager when the
+    // global pointer is null -- so "initialized=0, pools=0" can mean either a
+    // second, duplicated instance (one per module) or a genuine
+    // access-before-init window on the one instance. Those want different
+    // fixes. Compare this against the address ServerInit logs: two addresses
+    // is duplication, one address is ordering. (issue #923)
+    auto *pm_diag = pool_manager;
+    HLOG(kDebug,
+         "RouteLocal: Container not found for pool={} container_id={} "
+         "method={} (pool_manager={} initialized={}, pools known={})",
+         task_ptr->pool_id_, container_id, task_ptr->method_,
+         static_cast<const void *>(pm_diag),
+         pm_diag != nullptr && pm_diag->IsInitialized(),
+         pm_diag != nullptr ? pm_diag->GetPoolCount() : 0);
     return RouteResult::Dne;
   }
   if (exec_dc.IsPlugged()) {

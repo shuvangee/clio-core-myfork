@@ -62,6 +62,8 @@
 #include <clio_cte/core/core_client.h>
 #include <clio_cte/core/core_tasks.h>
 
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -132,7 +134,9 @@ TEST_CASE("ConcurrentSameBlob - many threads write disjoint regions of ONE "
   const clio::run::u64 kMaxSz =
       static_cast<clio::run::u64>(FromEnv("SAME_BLOB_MAXKB", 128)) * 1024;
 
-  clio::cte::core::Tag tag("same_blob_race_tag");
+  const std::string tag_name =
+      "same_blob_race_tag_" + std::to_string(getpid());
+  clio::cte::core::Tag tag(tag_name);
   clio::cte::core::TagId tag_id = tag.GetTagId();
   const std::string blob = "shared";
 
@@ -208,6 +212,168 @@ TEST_CASE("ConcurrentSameBlob - many threads write disjoint regions of ONE "
          total);
   }
   REQUIRE(total_mismatches == 0);
+}
+
+/**
+ * Check whether a buffer contains exactly one byte generation.
+ *
+ * @param data Buffer to inspect.
+ * @param size Number of bytes in the buffer.
+ * @return True when every byte equals the first byte and that byte is one of
+ * the two generations used by the consistent-read regression.
+ */
+bool IsCompleteGeneration(const char *data, clio::run::u64 size) {
+  if (size == 0) return false;
+  const char generation = data[0];
+  if (generation != static_cast<char>(0x55) &&
+      generation != static_cast<char>(0xaa)) {
+    return false;
+  }
+  return std::all_of(data, data + size,
+                     [generation](char value) { return value == generation; });
+}
+
+TEST_CASE("ConcurrentSameBlob - consistent reads never observe a torn write",
+          "[cte][concurrent][same_blob][consistent_read]") {
+  REQUIRE(g_fixture != nullptr);
+  REQUIRE(g_fixture->initialized_);
+
+  constexpr clio::run::u64 kBlobSize = 1024 * 1024;
+  constexpr int kWriteIterations = 256;
+  const std::string tag_name =
+      "same_blob_consistent_read_tag_" + std::to_string(getpid());
+  clio::cte::core::Tag tag(tag_name);
+  const clio::cte::core::TagId tag_id = tag.GetTagId();
+  const std::string blob = "whole_page";
+  auto *ipc = CLIO_IPC;
+
+  ctp::ipc::FullPtr<char> first = ipc->AllocateBuffer(kBlobSize);
+  ctp::ipc::FullPtr<char> second = ipc->AllocateBuffer(kBlobSize);
+  REQUIRE_FALSE(first.IsNull());
+  REQUIRE_FALSE(second.IsNull());
+  std::memset(first.ptr_, 0x55, kBlobSize);
+  std::memset(second.ptr_, 0xaa, kBlobSize);
+  auto initial = tag.AsyncPutBlob(blob, first.shm_.template Cast<void>(),
+                                  kBlobSize, 0, 1.0f);
+  initial.Wait();
+  REQUIRE(initial->GetReturnCode() == 0);
+
+  std::atomic<bool> start{false};
+  std::atomic<bool> writer_done{false};
+  std::atomic<bool> failed{false};
+  std::atomic<int> reads{0};
+  std::thread writer([&]() {
+    while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+    for (int i = 0; i < kWriteIterations; ++i) {
+      auto &source = (i & 1) == 0 ? second : first;
+      auto put = tag.AsyncPutBlob(blob, source.shm_.template Cast<void>(),
+                                  kBlobSize, 0, 1.0f);
+      put.Wait();
+      if (put->GetReturnCode() != 0) {
+        failed.store(true, std::memory_order_release);
+        break;
+      }
+    }
+    writer_done.store(true, std::memory_order_release);
+  });
+  std::thread reader([&]() {
+    ctp::ipc::FullPtr<char> output = ipc->AllocateBuffer(kBlobSize);
+    if (output.IsNull()) {
+      failed.store(true, std::memory_order_release);
+      return;
+    }
+    while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+    do {
+      auto get = CLIO_CTE_CLIENT->AsyncGetBlob(
+          tag_id, blob, 0, kBlobSize, clio::cte::core::kCteGetConsistent,
+          output.shm_.template Cast<void>(), clio::run::PoolQuery::Local());
+      get.Wait();
+      if (get->GetReturnCode() != 0 ||
+          !IsCompleteGeneration(output.ptr_, kBlobSize)) {
+        failed.store(true, std::memory_order_release);
+        break;
+      }
+      reads.fetch_add(1, std::memory_order_relaxed);
+    } while (!writer_done.load(std::memory_order_acquire));
+    ipc->FreeBuffer(output);
+  });
+
+  start.store(true, std::memory_order_release);
+  writer.join();
+  reader.join();
+  REQUIRE_FALSE(failed.load(std::memory_order_acquire));
+  REQUIRE(reads.load(std::memory_order_relaxed) > 0);
+  ipc->FreeBuffer(second);
+  ipc->FreeBuffer(first);
+}
+
+TEST_CASE("ConcurrentSameBlob - size queries are safe while blob grows",
+          "[cte][concurrent][same_blob][size]") {
+  REQUIRE(g_fixture != nullptr);
+  REQUIRE(g_fixture->initialized_);
+
+  constexpr clio::run::u64 kAppendSize = 4 * 1024;
+  constexpr int kAppendIterations = 4096;
+  const std::string tag_name =
+      "same_blob_size_growth_tag_" + std::to_string(getpid());
+  clio::cte::core::Tag tag(tag_name);
+  const clio::cte::core::TagId tag_id = tag.GetTagId();
+  const std::string blob = "growing_blob";
+  auto *ipc = CLIO_IPC;
+  ctp::ipc::FullPtr<char> data = ipc->AllocateBuffer(kAppendSize);
+  REQUIRE_FALSE(data.IsNull());
+  std::memset(data.ptr_, 0x6d, kAppendSize);
+
+  auto initial = tag.AsyncPutBlob(blob, data.shm_.template Cast<void>(),
+                                  kAppendSize, 0, 1.0f);
+  initial.Wait();
+  REQUIRE(initial->GetReturnCode() == 0);
+
+  std::atomic<bool> start{false};
+  std::atomic<bool> writer_done{false};
+  std::atomic<bool> failed{false};
+  std::atomic<int> queries{0};
+  std::thread writer([&]() {
+    while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+    for (int i = 1; i <= kAppendIterations; ++i) {
+      const clio::run::u64 offset =
+          static_cast<clio::run::u64>(i) * kAppendSize;
+      auto put = tag.AsyncPutBlob(blob, data.shm_.template Cast<void>(),
+                                  kAppendSize, offset, 1.0f);
+      put.Wait();
+      if (put->GetReturnCode() != 0) {
+        failed.store(true, std::memory_order_release);
+        break;
+      }
+    }
+    writer_done.store(true, std::memory_order_release);
+  });
+  std::thread size_reader([&]() {
+    while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+    do {
+      auto size = CLIO_CTE_CLIENT->AsyncGetBlobSize(
+          tag_id, blob, clio::run::PoolQuery::Local());
+      size.Wait();
+      if (size->GetReturnCode() != 0) {
+        failed.store(true, std::memory_order_release);
+        break;
+      }
+      queries.fetch_add(1, std::memory_order_relaxed);
+    } while (!writer_done.load(std::memory_order_acquire));
+  });
+
+  start.store(true, std::memory_order_release);
+  writer.join();
+  size_reader.join();
+  REQUIRE_FALSE(failed.load(std::memory_order_acquire));
+  REQUIRE(queries.load(std::memory_order_relaxed) > 0);
+  auto final_size = CLIO_CTE_CLIENT->AsyncGetBlobSize(
+      tag_id, blob, clio::run::PoolQuery::Local());
+  final_size.Wait();
+  REQUIRE(final_size->GetReturnCode() == 0);
+  REQUIRE(final_size->size_ ==
+          static_cast<clio::run::u64>(kAppendIterations + 1) * kAppendSize);
+  ipc->FreeBuffer(data);
 }
 
 int main(int argc, char **argv) {

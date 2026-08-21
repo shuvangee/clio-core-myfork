@@ -122,12 +122,22 @@ install(TARGETS test_fuse_adapter test_fuse_copy_workspace RUNTIME DESTINATION b
 # that having succeeded at configure time.
 # ------------------------------------------------------------------------------
 if(TARGET clio_cte_fuse)
-  find_package(PkgConfig QUIET)
-  if(PkgConfig_FOUND)
-    pkg_check_modules(FUSE3 QUIET fuse3)
-  endif()
+  # Reuse the adapter's FUSE3 discovery (CLIO_FUSE3_* cache-internal vars set
+  # in adapter/libfuse/CMakeLists.txt, which is processed first). The previous
+  # pkg-config re-probe here silently skipped this suite on Windows — WinFsp
+  # has no .pc file — so the callback coverage never ran there (#903).
+  if(CLIO_FUSE3_FOUND)
+    add_executable(test_fuse_args
+        test_fuse_args.cc
+        ${CLIO_CTE_ROOT}/adapter/libfuse/fuse_cte_args.cc)
+    target_include_directories(test_fuse_args PRIVATE ${CLIO_CTE_ROOT})
+    target_link_libraries(test_fuse_args ctp::cxx)
 
-  if(FUSE3_FOUND)
+    add_test(NAME fuse_args COMMAND test_fuse_args)
+    set_tests_properties(fuse_args PROPERTIES
+        TIMEOUT 30
+        LABELS "unit;adapter;fuse")
+
     add_executable(test_fuse_ops test_fuse_ops.cc)
 
     target_compile_definitions(test_fuse_ops PRIVATE
@@ -138,9 +148,10 @@ if(TARGET clio_cte_fuse)
         ${CLIO_CTE_ROOT}
         ${CLIO_CTE_ROOT}/adapter/libfuse
         ${CMAKE_SOURCE_DIR}/context-transfer-engine/filesystem/include
-        ${FUSE3_INCLUDE_DIRS})
+        ${CLIO_FUSE3_INCLUDE_DIRS}
+        ${CLIO_FUSE3_INCLUDEDIR})
 
-    target_link_directories(test_fuse_ops PRIVATE ${FUSE3_LIBRARY_DIRS})
+    target_link_directories(test_fuse_ops PRIVATE ${CLIO_FUSE3_LIBRARY_DIRS})
     target_link_libraries(test_fuse_ops
         clio_cte_filesystem_client
         clio_cte_core_runtime
@@ -150,7 +161,7 @@ if(TARGET clio_cte_fuse)
         clio::run::bdev_runtime
         clio::run::bdev_client
         ctp::cxx
-        ${FUSE3_LIBRARIES}
+        ${CLIO_FUSE3_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT})
 
     add_custom_command(TARGET test_fuse_ops POST_BUILD
@@ -159,13 +170,16 @@ if(TARGET clio_cte_fuse)
             ${CMAKE_CURRENT_BINARY_DIR}/cte_config.yaml)
 
     add_test(NAME fuse_ops COMMAND test_fuse_ops)
+    # 900s: the suite runs 15 cases against one embedded runtime in a single
+    # process; the MSVC Debug build on the Windows adapters runner blew the
+    # old 300s ceiling (#903) — distinguish slow from hung before excluding.
     set_tests_properties(fuse_ops PROPERTIES
-        TIMEOUT 300
+        TIMEOUT 900
         LABELS "unit;adapter;fuse"
         ENVIRONMENT "CLIO_WITH_RUNTIME=1;CTP_LOG_LEVEL=error;CLIO_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/cte_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
         RESOURCE_LOCK "clio_runtime")
 
-    install(TARGETS test_fuse_ops RUNTIME DESTINATION bin)
+    install(TARGETS test_fuse_args test_fuse_ops RUNTIME DESTINATION bin)
   endif()
 endif()
 

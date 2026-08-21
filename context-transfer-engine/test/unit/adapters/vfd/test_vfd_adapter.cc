@@ -42,12 +42,12 @@
 #include "clio_runtime/clio_runtime.h"
 #include "clio_runtime/bdev/bdev_client.h"
 #include "clio_cte/core/core_client.h"
-#include "adapter/cfs/cfs_io.h"
+#include <clio_cte/filesystem/filesystem_client.h>
 #include "adapter/vfd/H5FDclio.h"
 
 namespace {
 const char *kBackend = "/tmp/clio_cte_vfd_test.dat";
-const char *kClioFile = "clio::/tmp/clio_cte_vfd_suite.h5";
+const char *kClioFile = "/tmp/clio_cte_vfd_suite.h5";
 const char *kNativeFile = "/tmp/clio_cte_vfd_suite.h5";
 
 constexpr hsize_t kBig = 512 * 1024;  // multi-page (>4 MiB of doubles)
@@ -65,6 +65,15 @@ bool InitRuntime() {
   if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, true)) return false;
   if (!clio::cte::core::CLIO_CTE_CLIENT_INIT()) return false;
   auto *cte = CLIO_CTE_CLIENT;
+  // Start from a file we know we can use. Every .h5 fixture in this suite is
+  // removed before it is written; the bdev backing file was the one exception,
+  // and it silently inherited whatever happened to be at this path. A leftover
+  // from an earlier session -- different size, or owned by a different uid and
+  // no longer openable -- made the whole suite fail in setup with "Failed to
+  // open bdev file", which reads like a broken driver rather than stale scratch
+  // state. The fixture should depend on nothing but its own run.
+  std::remove(kBackend);
+
   clio::run::PoolId bdev_pool_id(953, 0);
   clio::run::bdev::Client bdev(bdev_pool_id);
   auto ct = bdev.AsyncCreate(clio::run::PoolQuery::Dynamic(), kBackend,
@@ -242,6 +251,24 @@ int RunCmd(const std::string &cmd) {
   return std::system((cmd + " >/dev/null 2>&1").c_str());
 }
 
+// Is a missing HDF5 CLI tool an environment gap (skip) or a broken build (fail)?
+//
+// It depends entirely on WHERE we are running, which is why this is a switch and
+// not a policy baked into the test. On a developer's box the tools may genuinely
+// not be installed, and skipping is right -- the rest of the suite still runs.
+// In CI it is the opposite: the deps-cpu image ships h5dump/h5ls/h5repack/h5diff,
+// so "not found" means the environment regressed, and the tool matrix is the
+// ONLY evidence in this binary for native compatibility as external readers see
+// it (§1.1(c)). Letting that warn-and-pass meant the single most load-bearing
+// check in the suite was allowed to silently not run while the job stayed green.
+//
+// CI sets CLIO_REQUIRE_HDF5_TOOLS=1 (see .github/workflows/ci-vfd.yml) to turn
+// every such skip into a failure.
+bool ToolsAreRequired() {
+  const char *v = std::getenv("CLIO_REQUIRE_HDF5_TOOLS");
+  return v && *v && std::strcmp(v, "0") != 0;
+}
+
 // H5Ewalk callback: set *data if any error on the stack is the driver's own
 // push, identified by the message text the driver emits.
 herr_t FindClioErr(unsigned n, const H5E_error2_t *err, void *data) {
@@ -306,7 +333,7 @@ int main() {
   // === 3. Differential vs sec2 (native oracle) ============================
   {
     const char *kSec2 = "/tmp/clio_cte_vfd_sec2.h5";
-    const char *kClioDiff = "clio::/tmp/clio_cte_vfd_diff.h5";
+    const char *kClioDiff = "/tmp/clio_cte_vfd_diff.h5";
     const char *kNativeDiff = "/tmp/clio_cte_vfd_diff.h5";
     std::remove(kSec2);
     std::remove(kNativeDiff);
@@ -322,13 +349,43 @@ int main() {
     CHECK(VerifyRich(rs), "3: sec2 file content correct");
     CHECK(VerifyRich(rn), "3: VFD's native file content correct (read w/o VFD)");
     CHECK(H5Fclose(rs) >= 0 && H5Fclose(rn) >= 0, "3: close diff files");
+
+    // The two VerifyRich calls above are each a SELF-consistency check: they
+    // assert that a file contains what this test wrote. Two independent
+    // self-checks are not a differential test -- they would both still pass if
+    // the VFD and sec2 produced files that differed in any way VerifyRich does
+    // not happen to look at (anything outside the datasets and attribute it
+    // reads: layout, filter pipeline, object header contents, fill values,
+    // storage sizes). "Differential vs sec2" is what this section is called, so
+    // it should actually compare the two files.
+    //
+    // h5diff is the same oracle §1.1(a) of VFD_VOL_TECHNICAL_GOALS.md names, and
+    // the same one the Python compat suite uses, which keeps the two suites
+    // saying the same thing by the same means. Not byte-identity: HDF5 is
+    // permitted to vary allocation order and free-space layout, which is
+    // precisely why the criterion is h5diff and not cmp(1).
+    //
+    // Skipped, loudly, when h5diff is absent -- but CI requires it (ci-vfd.yml),
+    // so the skip only ever fires on a bare local box.
+    if (!HasTool("h5diff")) {
+      CHECK(!ToolsAreRequired(),
+            "3: h5diff required (CLIO_REQUIRE_HDF5_TOOLS=1) but not on PATH");
+      std::printf("[vfd-suite] WARN 3: h5diff not on PATH; SKIPPING the "
+                  "VFD-vs-sec2 file comparison (the differential half of this "
+                  "section is NOT verified here)\n");
+    } else {
+      CHECK(RunCmd(std::string("h5diff '") + kNativeDiff + "' '" + kSec2 +
+                   "'") == 0,
+            "3: h5diff(VFD-produced, sec2-produced) reports no differences");
+      std::printf("[vfd-suite] ok 3: h5diff VFD-produced == sec2-produced\n");
+    }
     std::printf("[vfd-suite] ok 3: differential vs sec2 (rich content)\n");
   }
 
   // === 5. Partial I/O: hyperslab overwrite-in-place =======================
   // (Section 4 -- the external tool matrix -- runs last, after H5close.)
   {
-    const char *kClioPart = "clio::/tmp/clio_cte_vfd_partial.h5";
+    const char *kClioPart = "/tmp/clio_cte_vfd_partial.h5";
     const hsize_t N = kSmall;
     std::vector<int32_t> base(N);
     for (hsize_t i = 0; i < N; ++i) base[i] = static_cast<int32_t>(i);
@@ -374,8 +431,8 @@ int main() {
 
   // === 6. Two VFD files open simultaneously ===============================
   {
-    const char *kA = "clio::/tmp/clio_cte_vfd_a.h5";
-    const char *kB = "clio::/tmp/clio_cte_vfd_b.h5";
+    const char *kA = "/tmp/clio_cte_vfd_a.h5";
+    const char *kB = "/tmp/clio_cte_vfd_b.h5";
     hid_t fa = H5Fcreate(kA, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
     hid_t fb = H5Fcreate(kB, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
     CHECK(fa >= 0 && fb >= 0, "6: create two files at once");
@@ -401,7 +458,7 @@ int main() {
   // an in-process read hits the same page cache, so durability itself is not
   // unit-observable. get_handle must hand back the authoritative POSIX fd.
   {
-    const char *kClioFl = "clio::/tmp/clio_cte_vfd_flush.h5";
+    const char *kClioFl = "/tmp/clio_cte_vfd_flush.h5";
     const char *kNativeFl = "/tmp/clio_cte_vfd_flush.h5";
     std::remove(kNativeFl);
     hid_t f = H5Fcreate(kClioFl, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
@@ -447,7 +504,7 @@ int main() {
   // process), so an independent flock is denied while held and granted after
   // the VFD unlocks on close.
   {
-    const char *kClioLk = "clio::/tmp/clio_cte_vfd_lock.h5";
+    const char *kClioLk = "/tmp/clio_cte_vfd_lock.h5";
     const char *kNativeLk = "/tmp/clio_cte_vfd_lock.h5";
     std::remove(kNativeLk);
     hid_t fapl_lk = H5Pcopy(fapl);
@@ -482,7 +539,7 @@ int main() {
     H5Eget_auto2(H5E_DEFAULT, &old_func, &old_data);
     H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
     H5Eclear2(H5E_DEFAULT);
-    hid_t missing = H5Fopen("clio::/tmp/clio_cte_vfd_absent_xyz.h5",
+    hid_t missing = H5Fopen("/tmp/clio_cte_vfd_absent_xyz.h5",
                             H5F_ACC_RDONLY, fapl);
     bool found_clio_err = false;
     H5Ewalk2(H5E_DEFAULT, H5E_WALK_UPWARD, FindClioErr, &found_clio_err);
@@ -503,7 +560,7 @@ int main() {
   // instant but not in size.)
   {
     const char *kSec2 = "/tmp/clio_cte_vfd_flagsec2.h5";
-    const char *kClioFf = "clio::/tmp/clio_cte_vfd_flagvfd.h5";
+    const char *kClioFf = "/tmp/clio_cte_vfd_flagvfd.h5";
     const char *kNativeFf = "/tmp/clio_cte_vfd_flagvfd.h5";
     std::remove(kSec2);
     std::remove(kNativeFf);
@@ -527,7 +584,7 @@ int main() {
   // File locking is disabled on the FAPL (standard for SWMR): the writer's
   // advisory flock would otherwise block the in-process reader -- same as sec2.
   {
-    const char *kClioSwmr = "clio::/tmp/clio_cte_vfd_swmr.h5";
+    const char *kClioSwmr = "/tmp/clio_cte_vfd_swmr.h5";
     const char *kNativeSwmr = "/tmp/clio_cte_vfd_swmr.h5";
     std::remove(kNativeSwmr);
     hid_t fapl_sw = H5Pcopy(fapl);
@@ -626,7 +683,7 @@ int main() {
               static_cast<const ClioFaplProbe *>(di1)->cache_enabled == 1,
           "12: FAPL round-trips cache_enabled=true");
     H5Pclose(fapl_c);
-    const char *kClioFapl = "clio::/tmp/clio_cte_vfd_fapl.h5";
+    const char *kClioFapl = "/tmp/clio_cte_vfd_fapl.h5";
     std::remove("/tmp/clio_cte_vfd_fapl.h5");
     hid_t f = H5Fcreate(kClioFapl, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_nc);
     CHECK(f >= 0 && WriteRich(f) && H5Fclose(f) >= 0,
@@ -659,7 +716,7 @@ int main() {
   {
     extern unsigned long H5FDclio_read_vector_calls_g;
     extern unsigned long H5FDclio_write_vector_calls_g;
-    const char *kClioVec = "clio::/tmp/clio_cte_vfd_vec.h5";
+    const char *kClioVec = "/tmp/clio_cte_vfd_vec.h5";
     std::remove("/tmp/clio_cte_vfd_vec.h5");
     hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
     CHECK(dxpl >= 0 && H5Pset_selection_io(dxpl, H5D_SELECTION_IO_MODE_ON) >= 0,
@@ -708,7 +765,7 @@ int main() {
   // on the HDF5 side via stat/reopen and on the CLIO side via the CFS tag) so a
   // deleted file leaves nothing behind in either the filesystem or CTE.
   {
-    const char *kClioDel = "clio::/tmp/clio_cte_vfd_del.h5";
+    const char *kClioDel = "/tmp/clio_cte_vfd_del.h5";
     const char *kNativeDel = "/tmp/clio_cte_vfd_del.h5";
     std::remove(kNativeDel);
     hid_t f = H5Fcreate(kClioDel, H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
@@ -720,7 +777,7 @@ int main() {
     struct stat nst;
     CHECK(::stat(kNativeDel, &nst) == 0, "14: native file exists before delete");
     struct stat cst;
-    CHECK(CLIO_CTE_CFS->StatPath(kClioDel, &cst) == 0,
+    CHECK(CLIO_CFS_CLIENT->StatPath(kClioDel, &cst) == 0,
           "14: CTE cache tag exists before delete");
 
     // Delete through the VFD (drives H5FD__clio_del via H5Fdelete).
@@ -739,7 +796,7 @@ int main() {
     CHECK(reopened < 0, "14: deleted file no longer opens");
 
     // Postcondition (CLIO side): the CTE cache tag is gone, not orphaned.
-    CHECK(CLIO_CTE_CFS->StatPath(kClioDel, &cst) != 0,
+    CHECK(CLIO_CFS_CLIENT->StatPath(kClioDel, &cst) != 0,
           "14: CTE cache tag removed after H5Fdelete (not orphaned)");
     std::printf("[vfd-suite] ok 14: del removes both native file and CTE tag\n");
   }
@@ -753,7 +810,7 @@ int main() {
   // an in-process read hits the page cache. Locking is off so the reader is not
   // blocked by the writer.
   {
-    const char *kClioDur = "clio::/tmp/clio_cte_vfd_durable.h5";
+    const char *kClioDur = "/tmp/clio_cte_vfd_durable.h5";
     const char *kNativeDur = "/tmp/clio_cte_vfd_durable.h5";
     std::remove(kNativeDur);
     std::vector<int32_t> w = MakeI32(kSmall);
@@ -802,11 +859,14 @@ int main() {
   // different file, so the library could open it twice with two independent
   // metadata caches -- corruption, not a performance bug. H5Fget_fileno exposes
   // the shared file struct HDF5 settled on, so equal filenos == cmp() matched.
-  // Three spellings that must all resolve to one file: with the clio:: marker,
-  // without it, and via a redundant path component.
+  // Three spellings that must all resolve to one file. These used to be the
+  // clio::-marked path, the bare path and a dotted path; the marked form is no
+  // longer an accepted input (see section 20), so the distinct spellings are
+  // now bare, doubled-separator, and dotted. The property under test is
+  // unchanged: cmp() must answer on dev/ino, not on the string.
   {
-    const char *kClioId = "clio::/tmp/clio_cte_vfd_ident.h5";
-    const char *kNativeId = "/tmp/clio_cte_vfd_ident.h5";
+    const char *kClioId = "/tmp/clio_cte_vfd_ident.h5";
+    const char *kNativeId = "//tmp/clio_cte_vfd_ident.h5";
     const char *kDotted = "/tmp/../tmp/clio_cte_vfd_ident.h5";
     std::remove(kNativeId);
     hid_t fapl_id_ = H5Pcopy(fapl);
@@ -829,12 +889,12 @@ int main() {
               H5Fget_fileno(e, &fe_no) >= 0,
           "16: H5Fget_fileno on all three");
     CHECK(fa_no == fb_no,
-          "16: clio::-marked and bare paths are ONE file (cmp by dev/ino)");
+          "16: differently-spelled paths are ONE file (cmp by dev/ino)");
     CHECK(fa_no == fe_no,
           "16: redundant path components resolve to the same file");
 
     // Two genuinely different files must still compare different.
-    const char *kOther = "clio::/tmp/clio_cte_vfd_ident_other.h5";
+    const char *kOther = "/tmp/clio_cte_vfd_ident_other.h5";
     std::remove("/tmp/clio_cte_vfd_ident_other.h5");
     hid_t o = H5Fcreate(kOther, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id_);
     CHECK(o >= 0 && WriteDset(o, "d", H5T_NATIVE_INT32, MakeI32(kSmall)) &&
@@ -902,7 +962,7 @@ int main() {
   // The value must survive intact across many passes, including a final pass
   // shorter than the cap and a dataset that is an exact multiple of it.
   {
-    const char *kClioMp = "clio::/tmp/clio_cte_vfd_multipass.h5";
+    const char *kClioMp = "/tmp/clio_cte_vfd_multipass.h5";
     std::remove("/tmp/clio_cte_vfd_multipass.h5");
     // 64 KiB of doubles against a 4 KiB cap => 16+ passes per transfer.
     const hsize_t kN = 8192;
@@ -944,7 +1004,7 @@ int main() {
   // match what they would get natively. Compare against sec2 rather than
   // asserting one particular behavior.
   {
-    const char *kClioCd = "clio::/tmp/clio_cte_vfd_closedeg.h5";
+    const char *kClioCd = "/tmp/clio_cte_vfd_closedeg.h5";
     const char *kSec2Cd = "/tmp/clio_cte_vfd_closedeg_sec2.h5";
     std::remove("/tmp/clio_cte_vfd_closedeg.h5");
     std::remove(kSec2Cd);
@@ -987,9 +1047,16 @@ int main() {
   }
 
   // === 20. Rejecting unusable file names =================================
-  // An empty name -- directly, or one that is empty once the clio:: marker is
-  // stripped -- has no authoritative file behind it. It must be refused with a
-  // real error, not dereferenced.
+  // An empty name has no authoritative file behind it and must be refused with
+  // a real error rather than dereferenced.
+  //
+  // A clio::-marked name is refused too, and that is a CONTRACT, not a
+  // convenience: the marker is CLIO-internal, and a driver that required it
+  // would make "add CLIO without editing your application" false -- every
+  // filename in the program would have to be rewritten. Refusing it is also
+  // what lets query() advertise POSIX_COMPAT_HANDLE / DEFAULT_VFD_COMPATIBLE,
+  // both of which promise HDF5 that the name it holds is a real path. A marked
+  // name is checked here in its own right, not merely as "empty once stripped".
   {
     H5E_auto2_t of = nullptr;
     void *od = nullptr;
@@ -997,12 +1064,20 @@ int main() {
     H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
     hid_t empty = H5Fcreate("", H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
     hid_t marker_only = H5Fcreate("clio::", H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
+    hid_t marked = H5Fcreate("clio::/tmp/clio_cte_vfd_marked.h5",
+                             H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
     H5Eset_auto2(H5E_DEFAULT, of, od);
     CHECK(empty < 0, "20: an empty file name is refused");
-    CHECK(marker_only < 0, "20: a name that is empty once stripped is refused");
+    CHECK(marker_only < 0, "20: a bare marker with no path is refused");
+    CHECK(marked < 0, "20: a clio::-marked path is refused (marker is internal)");
+    // ...and nothing was created behind our back at either spelling.
+    CHECK(::access("/tmp/clio_cte_vfd_marked.h5", F_OK) != 0 &&
+              ::access("clio::/tmp/clio_cte_vfd_marked.h5", F_OK) != 0,
+          "20: a refused marked name creates no file");
     if (empty >= 0) H5Fclose(empty);
     if (marker_only >= 0) H5Fclose(marker_only);
-    std::printf("[vfd-suite] ok 20: unusable file names are refused\n");
+    if (marked >= 0) H5Fclose(marked);
+    std::printf("[vfd-suite] ok 20: unusable and marked file names are refused\n");
   }
 
   // === 21. A file already locked by another opener =======================
@@ -1011,7 +1086,7 @@ int main() {
   // Lock contention is the failure a user is most likely to hit and least able
   // to diagnose from a bare error code.
   {
-    const char *kClioBusy = "clio::/tmp/clio_cte_vfd_busy.h5";
+    const char *kClioBusy = "/tmp/clio_cte_vfd_busy.h5";
     const char *kNativeBusy = "/tmp/clio_cte_vfd_busy.h5";
     std::remove(kNativeBusy);
     hid_t fapl_lk = H5Pcopy(fapl);
@@ -1054,6 +1129,9 @@ int main() {
   {
     if (!HasTool("h5dump") || !HasTool("h5ls") || !HasTool("h5repack") ||
         !HasTool("h5diff")) {
+      CHECK(!ToolsAreRequired(),
+            "4: native HDF5 CLI tools required (CLIO_REQUIRE_HDF5_TOOLS=1) but "
+            "not on PATH");
       std::fprintf(stderr,
                    "[vfd-suite] WARN 4: native HDF5 CLI tools not on PATH; "
                    "SKIPPING the tool matrix (native-compat NOT verified here). "
@@ -1069,6 +1147,223 @@ int main() {
             "4: h5diff repacked == original");
       std::printf("[vfd-suite] ok 4: native tool matrix (h5dump/h5ls/h5repack/h5diff)\n");
     }
+  }
+
+  // === 22. Driver config string ==========================================
+  // The other half of "configurable without source edits". HDF5_DRIVER already
+  // selected this driver; HDF5_DRIVER_CONFIG is how a caller says something
+  // ABOUT it. HDF5 copies that string onto the FAPL and the driver pulls it
+  // with H5Pget_driver_config_str -- there is no H5FD_class_t callback for it,
+  // so this exercises the same code path the environment variable reaches.
+  //
+  // The grammar is the shared CLIO one (key=value;...), matching the dialect the
+  // registered HDF5 VOL connectors already use so a user spells CLIO the way
+  // they spell the rest of a stack.
+  //
+  // A bad config FAILS THE OPEN rather than being ignored. That is the point of
+  // the second half of this section: silently defaulting on a knob the caller
+  // asked for is how someone ends up believing the cache is off when it is on.
+  {
+    H5E_auto2_t of = nullptr;
+    void *od = nullptr;
+    const char *kCfgFile = "/tmp/clio_cte_vfd_cfg.h5";
+
+    struct { const char *cfg; bool want_ok; const char *what; } cases[] = {
+      {"cache=0",           true,  "22: cache=0 accepted"},
+      {"cache=off;",        true,  "22: trailing ';' tolerated"},
+      {"  cache = 1  ",     true,  "22: whitespace tolerated"},
+      {"",                  true,  "22: empty config is valid (says nothing)"},
+      {"bogus=1",           false, "22: unknown key REFUSED, not ignored"},
+      {"cache=maybe",       false, "22: non-boolean cache value REFUSED"},
+      {"cache",             false, "22: entry with no '=' REFUSED"},
+      {"sieve=0",           true,  "22: sieve=0 accepted (coalescing off)"},
+      {"sieve=4096",        true,  "22: explicit sieve window accepted"},
+      {"cache=1;sieve=8192", true, "22: both keys in one string"},
+      // strtoull WRAPS a negative rather than rejecting it, so "-1" would
+      // otherwise install a SIZE_MAX coalescing window -- i.e. an unbounded
+      // scratch allocation -- from a string that looks like a typo.
+      {"sieve=-1",          false, "22: negative sieve REFUSED (no SIZE_MAX wrap)"},
+      // The window sizes a per-call scratch buffer, so an absurd value is an
+      // out-of-memory rather than a slow open. 1 GiB is the stated maximum.
+      {"sieve=1073741825",  false, "22: sieve above the 1 GiB maximum REFUSED"},
+      {"sieve=abc",         false, "22: non-numeric sieve REFUSED"},
+      {"sieve=",            false, "22: empty sieve value REFUSED"},
+    };
+    for (auto &c : cases) {
+      std::remove(kCfgFile);
+      hid_t cfapl = H5Pcreate(H5P_FILE_ACCESS);
+      H5Eget_auto2(H5E_DEFAULT, &of, &od);
+      H5Eset_auto2(H5E_DEFAULT, nullptr, nullptr);
+      herr_t set = H5Pset_driver_by_name(cfapl, "clio_vfd", c.cfg);
+      hid_t h = (set >= 0)
+                    ? H5Fcreate(kCfgFile, H5F_ACC_TRUNC, H5P_DEFAULT, cfapl)
+                    : H5I_INVALID_HID;
+      H5Eset_auto2(H5E_DEFAULT, of, od);
+      CHECK(c.want_ok ? (h >= 0) : (h < 0), c.what);
+      if (h >= 0) H5Fclose(h);
+      H5Pclose(cfapl);
+    }
+    std::remove(kCfgFile);
+    std::printf("[vfd-suite] ok 22: driver config string parsed and validated\n");
+  }
+
+  // === 23. Byte-altitude access telemetry ================================
+  // The VFD's half of the two-altitude telemetry contract. What is asserted is
+  // not "a file appeared" but the two properties the contract actually rests
+  // on, because both are the kind that rot silently:
+  //
+  //   (a) ABSENT MEANS ABSENT. No byte-altitude record may carry a `dataset`
+  //       key. The driver cannot know which dataset an access belongs to, and
+  //       emitting null/""/0 would let a consumer confuse "not measured" with
+  //       "measured as zero" -- which drive opposite recommendations.
+  //   (b) SESSIONS DO NOT CLOBBER. "create, write, close; open, read, close" is
+  //       two sessions on one path in one process. Keyed by pid alone, the read
+  //       session truncated the write session's artifacts and the summary
+  //       reported ZERO writes for a workload that wrote the whole file.
+  //
+  // Telemetry is checked here rather than trusted because nothing else reads it
+  // yet: until `hdf5 diagnose` exists, a wrong field would sit wrong for months.
+  {
+    const char *kTraceDir = "/tmp/clio_cte_vfd_trace_t";
+    RunCmd(std::string("rm -rf '") + kTraceDir + "'");
+    RunCmd(std::string("mkdir -p '") + kTraceDir + "'");
+    // The trace directory is read once per process, so exercising it needs a
+    // fresh process: re-run this same binary's workload under a child that has
+    // CLIO_VFD_TRACE set. h5cc-free -- we just need SOME HDF5 traffic.
+    // The plugin path is supplied to the CHILD, never required of the parent.
+    // Setting HDF5_PLUGIN_PATH for this test binary would make HDF5 dlopen a
+    // SECOND copy of the driver alongside the one this binary links, each with
+    // its own error-class id -- and section 9, which walks the stack for this
+    // driver's class, would then look for the wrong id and fail. That cost an
+    // hour once; keep the parent environment clean.
+    const char *repo = std::getenv("CLIO_REPO_PATH");
+    const std::string child =
+        std::string("CLIO_VFD_TRACE='") + kTraceDir + "' " +
+        "HDF5_PLUGIN_PATH='" + (repo ? repo : ".") + "' " +
+        "HDF5_DRIVER=clio_vfd CLIO_VFD_CACHE=0 " +
+        "h5dump -H '" + kNativeFile + "' >/dev/null 2>&1";
+    const int rc = RunCmd(child);
+    (void)rc;  /* h5dump may be absent; the assertions below handle that */
+
+    const bool produced =
+        RunCmd(std::string("ls '") + kTraceDir + "'/*.access.json >/dev/null 2>&1") == 0;
+    if (!produced) {
+      std::printf("[vfd-suite] WARN 23: no trace produced (h5dump absent?); "
+                  "skipping telemetry assertions\n");
+    } else {
+      // (a) the absent-field guarantee, checked against the raw records.
+      CHECK(RunCmd(std::string("grep -q dataset '") + kTraceDir +
+                   "'/*.access.jsonl") != 0,
+            "23: byte-altitude records carry NO dataset key (absent==absent)");
+      // The envelope and the self-describing limits must both be present.
+      CHECK(RunCmd(std::string("grep -q '\"altitude\":\"byte\"' '") + kTraceDir +
+                   "'/*.access.json") == 0,
+            "23: summary declares its altitude");
+      CHECK(RunCmd(std::string("grep -q 'cannot_see' '") + kTraceDir +
+                   "'/*.access.json") == 0,
+            "23: summary states what it cannot see");
+      CHECK(RunCmd(std::string("grep -q 'mem_class' '") + kTraceDir +
+                   "'/*.access.json") == 0,
+            "23: metadata-vs-raw split present (the VOL cannot produce this)");
+      std::printf("[vfd-suite] ok 23: byte-altitude telemetry contract\n");
+    }
+    RunCmd(std::string("rm -rf '") + kTraceDir + "'");
+  }
+
+  // === 24. The coalescing window is a bound, not a suggestion =============
+  // The window (`sieve=`, 64 KiB by default) exists to cap the scratch buffer
+  // the coalescing path allocates. Two shapes break a naive cap check, and both
+  // are reachable through H5FDread_vector, which -- unlike a write vector --
+  // may legitimately carry overlapping elements:
+  //
+  //   (a) a first element already larger than the window. Nothing can be
+  //       coalesced around it without exceeding the window, so it has to stay
+  //       a group of one.
+  //   (b) a later element CONTAINED in the span accumulated so far. Its own end
+  //       is small, so testing that instead of the group's span admits it while
+  //       the span -- and the allocation -- stays above the window.
+  //
+  // Driven through the H5FD* API rather than H5Dread: the library never emits
+  // a vector this shape, which is exactly why the arithmetic has to be pinned
+  // here. H5FDclio_vec_max_span_g reports the largest span serviced as one
+  // coalesced I/O, so the assertion is on the bound itself rather than on data
+  // that round-trips either way.
+  {
+    extern unsigned long H5FDclio_vec_max_span_g;
+    const char *kVecCap = "/tmp/clio_cte_vfd_veccap.h5";
+    std::remove(kVecCap);
+    const size_t kWindow = 4096;
+    const size_t kBig = 8192;   /* deliberately larger than the window */
+
+    hid_t vfapl = H5Pcreate(H5P_FILE_ACCESS);
+    CHECK(H5Pset_driver_by_name(vfapl, "clio_vfd", "cache=0;sieve=4096") >= 0,
+          "24: FAPL with a 4 KiB coalescing window");
+
+    H5FD_t *raw = H5FDopen(kVecCap, H5F_ACC_RDWR | H5F_ACC_CREAT | H5F_ACC_TRUNC,
+                           vfapl, HADDR_UNDEF);
+    CHECK(raw != nullptr, "24: H5FDopen");
+    if (raw) {
+      const haddr_t kEnd = (haddr_t)(kBig * 4);
+      CHECK(H5FDset_eoa(raw, H5FD_MEM_DEFAULT, kEnd) >= 0, "24: set EOA");
+
+      // Seed the range so the reads below have something defined to return.
+      std::vector<char> seed(kEnd, 0x5a);
+      CHECK(H5FDwrite(raw, H5FD_MEM_DEFAULT, H5P_DEFAULT, 0, seed.size(),
+                      seed.data()) >= 0, "24: seed the file");
+
+      H5FDclio_vec_max_span_g = 0;
+
+      // (a) big first element, then a small adjacent one.
+      {
+        std::vector<char> b0(kBig, 0), b1(16, 0);
+        H5FD_mem_t types[2] = {H5FD_MEM_DRAW, H5FD_MEM_DRAW};
+        haddr_t addrs[2] = {0, (haddr_t)kBig};
+        size_t sizes[2] = {kBig, 16};
+        void *bufs[2] = {b0.data(), b1.data()};
+        CHECK(H5FDread_vector(raw, H5P_DEFAULT, 2, types, addrs, sizes, bufs) >= 0,
+              "24: read_vector with an oversized first element");
+      }
+
+      // (b) big first element, then one contained inside its span.
+      {
+        std::vector<char> b0(kBig, 0), b1(16, 0);
+        H5FD_mem_t types[2] = {H5FD_MEM_DRAW, H5FD_MEM_DRAW};
+        haddr_t addrs[2] = {0, 8};
+        size_t sizes[2] = {kBig, 16};
+        void *bufs[2] = {b0.data(), b1.data()};
+        CHECK(H5FDread_vector(raw, H5P_DEFAULT, 2, types, addrs, sizes, bufs) >= 0,
+              "24: read_vector with a contained element");
+        CHECK(std::memcmp(b1.data(), seed.data() + 8, 16) == 0,
+              "24: the contained element still reads the right bytes");
+      }
+
+      // (c) a run that SHOULD coalesce, so the assertion below is not
+      // vacuously satisfied by a driver that never groups anything.
+      {
+        std::vector<char> b(64, 0);
+        H5FD_mem_t types[4] = {H5FD_MEM_DRAW, H5FD_MEM_DRAW, H5FD_MEM_DRAW,
+                               H5FD_MEM_DRAW};
+        haddr_t addrs[4] = {0, 64, 128, 192};
+        size_t sizes[4] = {64, 64, 64, 64};
+        std::vector<char> b0(64), b1(64), b2(64), b3(64);
+        void *bufs[4] = {b0.data(), b1.data(), b2.data(), b3.data()};
+        CHECK(H5FDread_vector(raw, H5P_DEFAULT, 4, types, addrs, sizes, bufs) >= 0,
+              "24: read_vector over four adjacent elements");
+        CHECK(std::memcmp(b2.data(), seed.data() + 128, 64) == 0,
+              "24: a coalesced element reads the right bytes");
+      }
+
+      CHECK(H5FDclio_vec_max_span_g > 0,
+            "24: elements within the window were actually coalesced");
+      CHECK(H5FDclio_vec_max_span_g <= (unsigned long)kWindow,
+            "24: no coalesced span exceeded the configured window");
+
+      CHECK(H5FDclose(raw) >= 0, "24: H5FDclose");
+    }
+    H5Pclose(vfapl);
+    std::remove(kVecCap);
+    std::printf("[vfd-suite] ok 24: coalescing window enforced (max span %lu <= %zu)\n",
+                H5FDclio_vec_max_span_g, kWindow);
   }
 
   std::printf("[vfd-suite] PASS: native write-through verified\n");

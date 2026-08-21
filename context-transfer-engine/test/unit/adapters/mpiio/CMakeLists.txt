@@ -18,7 +18,7 @@ add_executable(clio_cte_mpiio_unit_tests
 
 target_link_libraries(clio_cte_mpiio_unit_tests
     clio_cte_mpiio
-    clio_cte_cfs_adapter      # cfs-backed I/O core (context-filesystem chimod)
+    clio_cte_filesystem_client  # descriptor layer + chimod client
     clio_cte_filesystem_client
     clio_cte_core_client
     MPI::MPI_CXX
@@ -48,7 +48,7 @@ if(CLIO_CORE_ENABLE_TESTS)
     )
     set_tests_properties(clio_cte_mpiio_unit_tests PROPERTIES
         ENVIRONMENT "CLIO_REPO_PATH=${CMAKE_BINARY_DIR}/bin;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1"
-        RESOURCE_LOCK "clio_runtime_port"
+        RESOURCE_LOCK "clio_runtime"
         TIMEOUT 120
         LABELS "msan_skip")
 endif()

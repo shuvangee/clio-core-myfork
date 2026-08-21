@@ -125,11 +125,76 @@ namespace clio::run::detail {
     boost::context::fiber caller_;
     bool done = false;
     clio::run::Worker* worker_ = nullptr;
+#if defined(CLIO_ASAN_FIBERS)
+    // ASan stack-switch bookkeeping (issue #856). Without these annotations
+    // AddressSanitizer cannot follow a Boost.Context stack switch: it keeps
+    // shadow state for the stack it thinks is current, so the first fault on a
+    // fiber stack lands it in "DEADLYSIGNAL / nested bug in the same thread"
+    // and it reports nothing. That currently makes ASan useless for most of
+    // this runtime, which is exactly where hard memory bugs live.
+    const void* fiber_bottom_ = nullptr;  // low address of this fiber's stack
+    size_t fiber_size_ = 0;
+    const void* caller_bottom_ = nullptr;  // the resuming thread's stack
+    size_t caller_size_ = 0;
+    void* fake_stack_ = nullptr;  // ASan's per-switch save slot
+#endif
   };
+
+#if defined(CLIO_ASAN_FIBERS)
+  extern "C" {
+  void __sanitizer_start_switch_fiber(void** fake_stack_save, const void* bottom,
+                                      size_t size);
+  void __sanitizer_finish_switch_fiber(void* fake_stack_save,
+                                       const void** bottom_old,
+                                       size_t* size_old);
+  }
+#endif
+
+  /** Tell ASan we are about to switch ONTO the fiber's stack. */
+  inline void fiber_asan_pre_switch_to_fiber(FiberState* fs) {
+#if defined(CLIO_ASAN_FIBERS)
+    __sanitizer_start_switch_fiber(&fs->fake_stack_, fs->fiber_bottom_,
+                                   fs->fiber_size_);
+#else
+    (void)fs;
+#endif
+  }
+
+  /** Called once we are running ON the fiber: record where we came from. */
+  inline void fiber_asan_post_switch_to_fiber(FiberState* fs) {
+#if defined(CLIO_ASAN_FIBERS)
+    __sanitizer_finish_switch_fiber(nullptr, &fs->caller_bottom_,
+                                    &fs->caller_size_);
+#else
+    (void)fs;
+#endif
+  }
+
+  /** Tell ASan we are about to switch BACK to the resuming thread's stack. */
+  inline void fiber_asan_pre_switch_to_caller(FiberState* fs) {
+#if defined(CLIO_ASAN_FIBERS)
+    __sanitizer_start_switch_fiber(&fs->fake_stack_, fs->caller_bottom_,
+                                   fs->caller_size_);
+#else
+    (void)fs;
+#endif
+  }
+
+  /** Called once we are back on the thread stack (or back on the fiber). */
+  inline void fiber_asan_post_switch(FiberState* fs) {
+#if defined(CLIO_ASAN_FIBERS)
+    __sanitizer_finish_switch_fiber(fs->fake_stack_, nullptr, nullptr);
+#else
+    (void)fs;
+#endif
+  }
 
   // Suspend the running fiber back to the worker (inverse of FiberHandle::resume).
   inline void fiber_suspend_to_caller(FiberState* fs) {
+    fiber_asan_pre_switch_to_caller(fs);
     fs->caller_ = std::move(fs->caller_).resume();
+    // Back on the fiber stack again (the worker resumed us).
+    fiber_asan_post_switch(fs);
   }
 
   // Non-owning handle to a FiberState (owned by the RunContext). resume() drives
@@ -143,7 +208,10 @@ namespace clio::run::detail {
     bool done() const noexcept { return !state_ || state_->done; }
     void resume() {
       if (!state_ || state_->done) return;
+      fiber_asan_pre_switch_to_fiber(state_);
       state_->task_ = std::move(state_->task_).resume();
+      // Back on the worker's own stack.
+      fiber_asan_post_switch(state_);
     }
     void destroy() {
       if (state_) {
@@ -864,6 +932,12 @@ class RunContext {
   ctp::abitfield32_t gpu_flags_;   /**< GPU device-completion bit (gpu2gpu) */
   uintptr_t gpu_task_device_ptr_;  /**< Device addr of the task POD (kDeviceMem) */
   u32 gpu_task_size_;              /**< sizeof(TaskT) for the H2D writeback */
+  /** Submit-probe record for this task (gpu::SubmitProbeHostRec*), opened by
+   *  IpcGpu2Cpu::RecvIn at the Pop. Carried here so the later hops stamp through
+   *  a plain pointer instead of hashing the task address on the dispatch path.
+   *  0 for every task the probe did not open — which is every CPU-origin task,
+   *  and all tasks when the probe is off. */
+  uintptr_t probe_rec_;
 
  private:
   std::atomic<bool> is_notified_; /**< Atomic flag to prevent duplicate event
@@ -919,6 +993,7 @@ class RunContext {
         send_fail_count_(0),
         gpu_task_device_ptr_(0),
         gpu_task_size_(0),
+        probe_rec_(0),
         is_notified_(false),
         awaited_fshm_(nullptr),
         coro_completed_(false),

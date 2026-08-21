@@ -11,7 +11,9 @@
 #include <clio_ctp/io/async_io_factory.h>
 
 #include <atomic>
+#include <memory>
 #include <mutex>
+#include <vector>
 
 namespace clio::run::bdev {
 
@@ -46,7 +48,8 @@ class FsBdevTransport : public BdevTransport {
 
  private:
   StandardBlockAllocator allocator_;
-  std::vector<WorkerIOContext> io_contexts_;
+  std::vector<std::unique_ptr<WorkerIOContext>> io_contexts_;
+  std::mutex io_contexts_mu_;
   std::string file_path_;
   clio::run::u32 io_depth_;
 

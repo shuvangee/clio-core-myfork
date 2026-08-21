@@ -136,6 +136,9 @@ CMakeUserPresents.json
 external/boost-*.tar.gz
 external/boost-*/
 external/boost/
+# jarvis-cd checkout provisioned by the distributed docker CI test
+# (context-runtime/test/integration/chimaera_stop/run_tests.sh)
+external/jarvis-cd/
 
 # Model weights (large binaries)
 models/
@@ -145,6 +148,11 @@ models/
 
 claude-log.json
 
+# Benchmark output trees (logs/csv/raw/progress.log). The DRIVERS are tracked (e.g.
+# context-transfer-engine/adapter/kvhdf5/test/e2e/scaling_campaign/run_campaign.sh);
+# their multi-hundred-MB results are not. Override per-run with CAMPAIGN_RESULTS=<dir>.
+bench_results/
+
 # Windows firewall allow-rule marker (scripts/windows/allow_firewall.ps1)
 .clio_firewall_allowed
 context-runtime/test/integration/collective_restart/docker-compose.override.yml
@@ -152,3 +160,12 @@ build-tsan/
 
 # Local-only compose overrides (per-box mounts/debug shims) must never be committed
 docker-compose.override.yml
+
+# Local-only ASan/backtrace debug shim (issue #856) — built ad hoc inside the
+# test containers, never part of the build.
+abrt_bt.c
+abrt_bt.so
+
+# Per-session HDF5 artifacts written by demo/benchmark runs (UUID-named .h5).
+# Generated output, never source.
+demologs/
