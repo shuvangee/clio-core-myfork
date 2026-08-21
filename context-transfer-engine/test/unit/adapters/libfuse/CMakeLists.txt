@@ -127,6 +127,17 @@ if(TARGET clio_cte_fuse)
   # pkg-config re-probe here silently skipped this suite on Windows — WinFsp
   # has no .pc file — so the callback coverage never ran there (#903).
   if(CLIO_FUSE3_FOUND)
+    add_executable(test_fuse_args
+        test_fuse_args.cc
+        ${CLIO_CTE_ROOT}/adapter/libfuse/fuse_cte_args.cc)
+    target_include_directories(test_fuse_args PRIVATE ${CLIO_CTE_ROOT})
+    target_link_libraries(test_fuse_args ctp::cxx)
+
+    add_test(NAME fuse_args COMMAND test_fuse_args)
+    set_tests_properties(fuse_args PROPERTIES
+        TIMEOUT 30
+        LABELS "unit;adapter;fuse")
+
     add_executable(test_fuse_ops test_fuse_ops.cc)
 
     target_compile_definitions(test_fuse_ops PRIVATE
@@ -168,7 +179,7 @@ if(TARGET clio_cte_fuse)
         ENVIRONMENT "CLIO_WITH_RUNTIME=1;CTP_LOG_LEVEL=error;CLIO_SERVER_CONF=${CMAKE_CURRENT_SOURCE_DIR}/cte_config.yaml;LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_BIND_ADDR=127.0.0.1;CLIO_PORT=10500"
         RESOURCE_LOCK "clio_runtime")
 
-    install(TARGETS test_fuse_ops RUNTIME DESTINATION bin)
+    install(TARGETS test_fuse_args test_fuse_ops RUNTIME DESTINATION bin)
   endif()
 endif()
 
