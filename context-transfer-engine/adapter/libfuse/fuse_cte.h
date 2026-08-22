@@ -476,14 +476,22 @@ static inline std::string RegexEscape(const std::string &s) {
 extern const struct fuse_operations cte_fuse_ops;
 
 #if !defined(_WIN32)
+#ifdef __APPLE__
+#include <sys/mount.h>
+#else
 #include <sys/statvfs.h>
+#endif
 // Linux spellings of the shared-callback types (identical alias
 // redeclarations are legal; fuse_cte.cc declares the same set).
 using cte_stat_t = struct stat;
 using cte_off_t = off_t;
 using cte_mode_t = mode_t;
 using cte_timespec_t = struct timespec;
+#ifdef __APPLE__
+using cte_statvfs_t = struct statfs;
+#else
 using cte_statvfs_t = struct statvfs;
+#endif
 #endif
 
 #ifndef _WIN32

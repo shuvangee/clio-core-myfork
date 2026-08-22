@@ -67,8 +67,8 @@ CLIO_CORE_ENABLE_MPI = "OFF"
 CLIO_CORE_ENABLE_HDF5 = "OFF"
 CLIO_CORE_ENABLE_ELF = "OFF"
 CLIO_CTE_ENABLE_COMPRESS = "OFF"
-# FUSE adapter: OFF here is the macOS value; Linux and Windows wheels turn
-# it ON via the per-OS overrides at the bottom of this file (#899).
+# FUSE adapter: OFF in the base table; every supported wheel platform turns
+# it ON via the per-OS overrides at the bottom of this file (#899/#972).
 CLIO_CTE_ENABLE_FUSE_ADAPTER = "OFF"
 # Cache + replication chimods ship by default (#886/#899). They already
 # default ON in CMake; pin them here so a future default flip cannot
@@ -97,8 +97,9 @@ regex = 'project\(iowarp-core VERSION (?P<value>[\d.]+)'
 #   - Windows: WinFsp (https://winfsp.dev). The build finds WinFsp's
 #     FUSE3-compatible SDK (adapter/libfuse/CMakeLists.txt); end users need
 #     the WinFsp runtime installed.
-#   - macOS: stays OFF — there is no fuse3 pkg-config on macOS (macFUSE
-#     exposes the FUSE2 API), so the base define above applies.
+#   - macOS: macFUSE 5 ships a FUSE3-compatible SDK, including fuse3.pc under
+#     /usr/local/lib/pkgconfig. The wheel build installs macFUSE first; end
+#     users need the macFUSE runtime installed to mount the filesystem.
 # ---------------------------------------------------------------------------
 # inherit.cmake.define = "append" is load-bearing: without it an override's
 # cmake.define table REPLACES the whole base table (verified against
@@ -111,5 +112,10 @@ cmake.define.CLIO_CTE_ENABLE_FUSE_ADAPTER = "ON"
 
 [[tool.scikit-build.overrides]]
 if.platform-system = "win32"
+inherit.cmake.define = "append"
+cmake.define.CLIO_CTE_ENABLE_FUSE_ADAPTER = "ON"
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "darwin"
 inherit.cmake.define = "append"
 cmake.define.CLIO_CTE_ENABLE_FUSE_ADAPTER = "ON"

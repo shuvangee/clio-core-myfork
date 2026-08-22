@@ -286,6 +286,7 @@ jobs:
         brew update
         brew install cmake pkg-config \
           yaml-cpp cereal msgpack-c libsodium zeromq cppzmq
+        brew install --cask macfuse
 
     - name: Install cibuildwheel
       run: pip install cibuildwheel
@@ -309,9 +310,16 @@ jobs:
         # bundle into the wheel.
         CIBW_ENVIRONMENT_MACOS: >-
           CMAKE_PREFIX_PATH=${{ matrix.brew_prefix }}
-          PKG_CONFIG_PATH=${{ matrix.brew_prefix }}/lib/pkgconfig
+          PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${{ matrix.brew_prefix }}/lib/pkgconfig
           MACOSX_DEPLOYMENT_TARGET=${{ matrix.macosx_deployment_target }}
           SKBUILD_CMAKE_DEFINE='CLIO_CORE_ENABLE_RPATH=ON'
+        # macFUSE is a separately installed, system-authorized filesystem
+        # runtime. Keep its dylib external while delocating CLIO/Homebrew
+        # dependencies into the wheel.
+        CIBW_REPAIR_WHEEL_COMMAND_MACOS: >-
+          delocate-wheel --require-archs {delocate_archs}
+          --exclude /usr/local/lib/libfuse3
+          -w {dest_dir} -v {wheel}
         CIBW_TEST_COMMAND: >
           python -c "import iowarp_core; print('Version:', iowarp_core.get_version())"
       run: cibuildwheel --output-dir installers/pip/wheelhouse
@@ -570,6 +578,9 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
 
+    - name: Install macFUSE runtime
+      run: brew install --cask macfuse
+
     - name: Download macOS wheels
       uses: actions/download-artifact@v4
       with:
@@ -596,6 +607,14 @@ jobs:
 
         echo "=== CLI test ==="
         clio_run --help
+
+        echo "=== macFUSE adapter test ==="
+        FUSE_BIN=$(python -c "import iowarp_core, pathlib; print(pathlib.Path(iowarp_core.__file__).parent / 'bin' / 'clio_cte_fuse')")
+        test -x "$FUSE_BIN"
+        "$FUSE_BIN" --help
+        otool -L "$FUSE_BIN"
+        otool -L "$FUSE_BIN" | grep -F /usr/local/lib/libfuse3
+        python -c "import iowarp_core, pathlib; root = pathlib.Path(iowarp_core.__file__).parent; assert not list(root.rglob('libfuse3*.dylib')), 'macFUSE must remain an external runtime dependency'"
 
         echo "=== Benchmark binaries: --help smoke test ==="
         # Catch SIGSEGV / abort at load time. Bench --help exit codes

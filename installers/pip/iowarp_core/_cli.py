@@ -109,7 +109,8 @@ def cte_fuse_main():
     If libfuse3 is absent the binary exits with a dynamic-linker error.
     Windows: requires WinFsp (https://winfsp.dev); its bin dir is added to
     PATH below so ``winfsp-x64.dll`` resolves without a system-wide PATH
-    edit. macOS wheels do not ship this binary (no FUSE3 API on macOS).
+    edit. macOS requires macFUSE 5, which provides the FUSE3-compatible SDK
+    used by the wheel and the runtime needed to mount the filesystem.
     """
     if sys.platform == "win32":
         winfsp_bin = os.path.join(
@@ -125,6 +126,16 @@ def cte_fuse_main():
             print(
                 "Error: WinFsp not found (looked in %s). Install it from "
                 "https://winfsp.dev to use the FUSE adapter." % winfsp_bin,
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    elif sys.platform == "darwin":
+        macfuse_bundle = "/Library/Filesystems/macfuse.fs"
+        if not os.path.isdir(macfuse_bundle):
+            print(
+                "Error: macFUSE not found (looked for %s). Install the latest "
+                "release from https://macfuse.github.io/ before mounting."
+                % macfuse_bundle,
                 file=sys.stderr,
             )
             sys.exit(1)

@@ -28,6 +28,29 @@ cd installers/pip
 pip install -v .
 ```
 
+### macOS and macFUSE
+
+The macOS wheel includes `clio_cte_fuse`, built against the FUSE3-compatible
+SDK shipped by macFUSE 5. Install the latest macFUSE release from the
+[official project](https://macfuse.github.io/) before building the wheel or
+mounting a Clio filesystem. The official installer places `fuse3.pc` in
+`/usr/local/lib/pkgconfig`; if your `pkg-config` does not search that directory,
+set:
+
+```bash
+export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+pip install -v .
+```
+
+Installing the Python wheel does not install or authorize macFUSE itself.
+macOS may require approval in **System Settings → Privacy & Security** before
+the first mount. Verify the packaged adapter without mounting with:
+
+```bash
+python -c "import iowarp_core, pathlib; print(pathlib.Path(iowarp_core.__file__).parent / 'bin' / 'clio_cte_fuse')"
+clio_cte_fuse --help
+```
+
 ### Verify
 
 ```bash

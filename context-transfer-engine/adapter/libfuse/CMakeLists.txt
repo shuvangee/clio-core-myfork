@@ -1,11 +1,13 @@
 # Find FUSE3.
 #   Linux:   libfuse3, discovered via pkg-config.
+#   macOS:   macFUSE 5's FUSE3-compatible SDK, discovered via pkg-config or
+#            its official /usr/local install layout.
 #   Windows: WinFsp ships a FUSE3-compatible header (inc/fuse3/fuse.h) and an
 #            import library (lib/winfsp-x64.lib) but NO pkg-config file, so
 #            locate it directly. Default install dir is "%ProgramFiles(x86)%\
 #            WinFsp"; override with -DWINFSP_ROOT=... if installed elsewhere.
-# Both branches set FUSE3_FOUND, FUSE3_INCLUDEDIR and FUSE3_LIBRARIES so the
-# target wiring below is identical on either platform.
+# Every branch sets FUSE3_FOUND, FUSE3_INCLUDEDIR and FUSE3_LIBRARIES so the
+# target wiring below is identical on each platform.
 if(WIN32)
   if(NOT WINFSP_ROOT)
     set(WINFSP_ROOT "$ENV{ProgramFiles\(x86\)}/WinFsp")
@@ -25,6 +27,27 @@ if(WIN32)
     set(FUSE3_FOUND TRUE)
     set(FUSE3_VERSION "WinFsp")
   endif()
+elseif(APPLE)
+  # macFUSE 5 installs its FUSE3-compatible SDK in /usr/local even on Apple
+  # Silicon. Prefer its pkg-config metadata, but do not require Homebrew's
+  # pkg-config for source installs: the official macFUSE installer supplies
+  # stable header/library locations that CMake can discover directly.
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(FUSE3 QUIET fuse3)
+  endif()
+  if(NOT FUSE3_FOUND)
+    find_path(FUSE3_INCLUDEDIR
+      NAMES fuse3/fuse.h
+      HINTS /usr/local/include)
+    find_library(FUSE3_LIBRARIES
+      NAMES fuse3
+      HINTS /usr/local/lib)
+    if(FUSE3_INCLUDEDIR AND FUSE3_LIBRARIES)
+      set(FUSE3_FOUND TRUE)
+      set(FUSE3_VERSION "macFUSE")
+    endif()
+  endif()
 else()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(FUSE3 QUIET fuse3)
@@ -32,13 +55,20 @@ endif()
 
 if(NOT FUSE3_FOUND)
   if(WIN32)
-    message(WARNING "WinFsp not found. FUSE adapter will not be built.")
-    message(STATUS "Install WinFsp (https://winfsp.dev) or pass -DWINFSP_ROOT=<dir>")
+    message(FATAL_ERROR
+      "WinFsp not found, but CLIO_CTE_ENABLE_FUSE_ADAPTER=ON. "
+      "Install WinFsp (https://winfsp.dev) or pass -DWINFSP_ROOT=<dir>.")
+  elseif(APPLE)
+    message(FATAL_ERROR
+      "macFUSE 5 FUSE3 SDK not found, but CLIO_CTE_ENABLE_FUSE_ADAPTER=ON. "
+      "Install the latest macFUSE release, ensure pkg-config is installed, "
+      "and add /usr/local/lib/pkgconfig to PKG_CONFIG_PATH if needed.")
   else()
-    message(WARNING "FUSE3 not found. FUSE adapter will not be built.")
-    message(STATUS "To install FUSE3: sudo apt install libfuse3-dev")
+    message(FATAL_ERROR
+      "FUSE3 not found, but CLIO_CTE_ENABLE_FUSE_ADAPTER=ON. "
+      "Install the FUSE3 development package (for example, "
+      "sudo apt install libfuse3-dev).")
   endif()
-  return()
 endif()
 
 message(STATUS "Found FUSE3: ${FUSE3_VERSION}")
@@ -80,7 +110,7 @@ target_link_libraries(clio_cte_fuse
 # EXPERIMENTAL low-level adapter (issue #1007 follow-up): same delegated
 # operations, low-level session — attrs ride in create/lookup replies and
 # readdirplus, eliminating the per-create GETATTR round trips. Linux-only.
-if(NOT WIN32)
+if(NOT WIN32 AND NOT APPLE)
   add_executable(clio_cte_fuse_ll
       fuse_cte.cc
       fuse_cte_ll.cc)
