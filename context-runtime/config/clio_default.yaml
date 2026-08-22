@@ -284,15 +284,15 @@ compose:
   # === Context Filesystem (CFS) ===
   # POSIX-style filesystem chimod that the libfuse / POSIX adapters drive. It
   # sits at the canonical filesystem pool 560.0 (clio::cte::filesystem::
-  # kCfsPoolId) over the interposition chain at next_pool_id: paths map to CTE
-  # tags and offsets to 1 MiB page-blobs, and every page ride the full chain
-  # (cache -> [compressor ->] replication -> core). Composing it here means a
-  # filesystem pool exists out of the box; the adapters create-or-bind it
-  # idempotently, so this is safe whether or not an adapter is also used. Must
-  # come AFTER the chain entries above. Remove it if you do not need the
-  # filesystem layer; point next_pool_id at 512.0 to bypass the chain.
+  # kCfsPoolId). Paths map to CTE tags and offsets to 1 MiB page-blobs. The
+  # default route goes directly through replication so filesystem writes are
+  # durable without passing through the cache/indexer stack: that stack does
+  # not yet preserve Git pack/index consistency under a Linux-kernel clone
+  # workload (#995). Applications that specifically need those layers may
+  # opt in by pointing next_pool_id at 563.0 after validating their workload.
+  # Point next_pool_id at 512.0 to bypass persistence as well.
   - mod_name: clio_cte_filesystem
     pool_name: clio_cte_filesystem
     pool_query: local
     pool_id: "560.0"
-    next_pool_id: "563.0"               # chain top (cache) — see entries above
+    next_pool_id: "561.0"               # persistent replication -> CTE core
