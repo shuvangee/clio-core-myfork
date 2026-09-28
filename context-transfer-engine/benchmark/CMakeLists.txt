@@ -35,6 +35,22 @@ install(TARGETS clio_prefetch_bench
   RUNTIME DESTINATION bin
 )
 
+# DLIO-style prefetch benchmark (Benchmark 2, semester research 2026-09-28):
+# models dlio_benchmark 2.0.0's published unet3d_v100.yaml workload (real
+# file count/batch size/computation time; record_length scaled down to fit
+# local disk) against the same ReorganizeBlob client-side prefetcher.
+add_executable(clio_dlio_prefetch_bench
+  clio_dlio_prefetch_bench.cc
+)
+target_link_libraries(clio_dlio_prefetch_bench
+  clio::cte::core_client
+  clio::run::cxx
+)
+target_compile_features(clio_dlio_prefetch_bench PRIVATE cxx_std_17)
+install(TARGETS clio_dlio_prefetch_bench
+  RUNTIME DESTINATION bin
+)
+
 # Create clio_cte_semantic_bench executable — ingests N keyword blobs under a
 # single tag, then runs one broadcast SemanticSearch over them.
 add_executable(clio_cte_semantic_bench
