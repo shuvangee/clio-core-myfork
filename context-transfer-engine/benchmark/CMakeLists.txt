@@ -20,6 +20,20 @@ install(TARGETS clio_cte_bench
   RUNTIME DESTINATION bin
 )
 
+# Synthetic sequential-read benchmark for evaluating client-side one-block
+# look-ahead with CTE's asynchronous ReorganizeBlob tier promotion.
+add_executable(clio_cte_prefetch_bench
+  clio_cte_prefetch_bench.cc
+)
+target_link_libraries(clio_cte_prefetch_bench
+  clio::cte::core_client
+  clio::run::cxx
+)
+target_compile_features(clio_cte_prefetch_bench PRIVATE cxx_std_17)
+install(TARGETS clio_cte_prefetch_bench
+  RUNTIME DESTINATION bin
+)
+
 # Create clio_cte_semantic_bench executable — ingests N keyword blobs under a
 # single tag, then runs one broadcast SemanticSearch over them.
 add_executable(clio_cte_semantic_bench

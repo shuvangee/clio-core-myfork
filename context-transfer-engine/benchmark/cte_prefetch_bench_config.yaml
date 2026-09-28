@@ -1,0 +1,40 @@
+# Two-tier configuration for clio_cte_prefetch_bench.
+# Score 1.0 selects the 512 MiB DRAM tier; score 0.0 selects the file-backed
+# disk tier.  The disk path is directly under /tmp so no parent directory must
+# be created before launching the embedded runtime.
+runtime:
+  num_threads: 4
+  queue_depth: 1024
+  first_busy_wait: 10000
+  max_sleep: 50000
+
+compose:
+  - mod_name: clio_cte_core
+    pool_name: clio_cte
+    pool_query: local
+    pool_id: 512.0
+
+    targets:
+      neighborhood: 1
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
+
+    storage:
+      - path: "ram::cte_prefetch_ram_tier"
+        bdev_type: "ram"
+        capacity_limit: "512m"
+        score: 1.0
+
+      - path: "/tmp/cte_prefetch_disk.bin"
+        bdev_type: "file"
+        capacity_limit: "16GB"
+        score: 0.0
+
+    dpe:
+      dpe_type: "max_bw"
+
+    performance:
+      target_stat_interval_ms: 1000
+      max_concurrent_operations: 64
+      score_threshold: 0.7
+      score_difference_threshold: 0.05
