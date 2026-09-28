@@ -20,6 +20,21 @@ install(TARGETS clio_cte_bench
   RUNTIME DESTINATION bin
 )
 
+# Prefetch benchmark (semester research, 2026-09-28): synthetic read/spin-wait
+# workload comparing ReorganizeBlob-driven client-side prefetching against a
+# no-prefetch baseline. No MPI; single process embeds its own runtime.
+add_executable(clio_prefetch_bench
+  clio_prefetch_bench.cc
+)
+target_link_libraries(clio_prefetch_bench
+  clio::cte::core_client
+  clio::run::cxx
+)
+target_compile_features(clio_prefetch_bench PRIVATE cxx_std_17)
+install(TARGETS clio_prefetch_bench
+  RUNTIME DESTINATION bin
+)
+
 # Create clio_cte_semantic_bench executable — ingests N keyword blobs under a
 # single tag, then runs one broadcast SemanticSearch over them.
 add_executable(clio_cte_semantic_bench
