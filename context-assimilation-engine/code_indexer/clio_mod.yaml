@@ -1,0 +1,20 @@
+# Code Indexer ChiMod — a pool that wraps the in-memory summarize -> embed ->
+# search pipeline (see README.md). Unlike the summarizer it is NOT an
+# interposer: it owns its index and answers three verbs of its own, so its
+# autogen is produced by `clio_run repo refresh` (module listed in
+# ../clio_repo.yaml).
+module_name: code_indexer
+namespace: clio::cae
+version: 1.0.0
+
+kCreate: 0
+kDestroy: 1
+kMonitor: 9
+
+# Scan a directory on the node running the pool, summarize + embed every
+# source file under it, and add them to the in-memory index.
+kIndexPath: 10
+# Rank indexed files for a natural-language query.
+kQuery: 11
+# Index size (files / chunks) without searching.
+kStatus: 12

@@ -10,5 +10,10 @@ description: "Content Assimilation Engine (CAE) ChiMod Repository"
 # hand-maintained so every unhandled core method falls through to the pool
 # below. `clio_run repo refresh` would regenerate a plain switch with no
 # default-case forwarding and break interposition.
+#
+# `code_indexer` is absent for a different reason: the refresh template emits
+# SaveTask/LoadTask/... taking the task handle by value and a `client_` member,
+# which no longer matches clio::run::Container (handle by reference). Its
+# autogen/ is hand-maintained until the generator is brought back in sync.
 modules:
   - core

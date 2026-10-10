@@ -23,9 +23,12 @@ add_library(clio_cae_code_indexer STATIC
 target_include_directories(clio_cae_code_indexer PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-target_link_libraries(clio_cae_code_indexer
-  PUBLIC  CURL::libcurl
-  PRIVATE nlohmann_json::nlohmann_json
+target_link_libraries(clio_cae_code_indexer PUBLIC CURL::libcurl)
+# nlohmann_json is header-only and may be a FetchContent (non-imported) target;
+# take its include path without a link dependency so the static libraries can
+# join this module's install(EXPORT) set.
+target_include_directories(clio_cae_code_indexer PRIVATE
+  $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 add_library(clio_cae_code_indexer_summarize STATIC
@@ -40,6 +43,31 @@ target_link_libraries(clio_cae_code_indexer_summarize
     ctp::cxx
 )
 
+# The runtime plugin links these statics, so they must be in the module's
+# export set (named after the project, as add_clio_module_* installs it).
+install(TARGETS clio_cae_code_indexer clio_cae_code_indexer_summarize
+  EXPORT clio_cae_code_indexer
+  ARCHIVE DESTINATION lib
+)
+
+#------------------------------------------------------------------------------
+# ChiMod: a pool owning one in-memory index, answering IndexPath / Query /
+# Status. Autogen (methods header + lib_exec) comes from `clio_run repo
+# refresh` (module listed in ../clio_repo.yaml).
+#------------------------------------------------------------------------------
+add_clio_module_client(
+  SOURCES
+    src/code_indexer_client.cc
+)
+
+add_clio_module_runtime(
+  SOURCES
+    src/code_indexer_runtime.cc
+    src/autogen/code_indexer_lib_exec.cc
+  LINK_LIBRARIES
+    clio_cae_code_indexer_summarize
+)
+
 #------------------------------------------------------------------------------
 # clio_code_index CLI
 #------------------------------------------------------------------------------
@@ -52,6 +80,17 @@ target_link_libraries(clio_code_index
     ${CMAKE_THREAD_LIBS_INIT}
 )
 install(TARGETS clio_code_index DESTINATION bin)
+
+# Client for a running pool (connects to the CLIO runtime as a client).
+add_executable(clio_code_index_client util/clio_code_index_client.cc)
+target_link_libraries(clio_code_index_client
+  PRIVATE
+    clio_cae_code_indexer_client
+    clio::run::cxx
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+install(TARGETS clio_code_index_client DESTINATION bin)
 
 #------------------------------------------------------------------------------
 # Unit tests (in-process HTTP stub, no inference server needed)
@@ -78,6 +117,38 @@ if(BUILD_TESTING)
   if(WIN32)
     target_link_libraries(test_code_indexer PRIVATE ws2_32)
   endif()
+
+  # The pool, end to end through a running runtime (HTTP stub as the model).
+  add_executable(test_code_indexer_pool
+    test/test_code_indexer_pool.cc
+    ${CAE_UNIT_TEST_DIR}/summarizer_http_stub.cc
+  )
+  target_include_directories(test_code_indexer_pool
+    PRIVATE
+      ${CAE_UNIT_TEST_DIR}
+      ${CMAKE_SOURCE_DIR}/context-runtime/test
+  )
+  target_link_libraries(test_code_indexer_pool
+    PRIVATE
+      clio_cae_code_indexer_client
+      clio_cae_code_indexer_runtime
+      clio::run::cxx
+      clio::run::admin_runtime
+      clio::run::bdev_runtime
+      ctp::cxx
+      ${YAML_CPP_LIBS}
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  if(WIN32)
+    target_link_libraries(test_code_indexer_pool PRIVATE ws2_32)
+  endif()
+  add_test(NAME code_indexer_pool COMMAND test_code_indexer_pool)
+  set_tests_properties(code_indexer_pool PROPERTIES
+    TIMEOUT 120
+    LABELS "cae;code_indexer;integration;msan_skip"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+  )
+  install(TARGETS test_code_indexer_pool DESTINATION bin)
 
   add_test(NAME code_indexer COMMAND test_code_indexer)
   set_tests_properties(code_indexer PROPERTIES

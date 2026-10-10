@@ -1,0 +1,19 @@
+networking:
+  port: 9418
+
+runtime:
+  num_threads: 4
+  queue_depth: 1024
+
+compose:
+  # The Code Indexer pool. Embeddings come from an in-process stub on a fixed
+  # port; embed_batch 1 keeps every request at one input so the stub's fixed
+  # one-vector reply is always well-formed. No summarize_model: code only.
+  - mod_name: clio_cae_code_indexer
+    pool_name: code_indexer
+    pool_query: local
+    pool_id: "402.0"
+    embed_endpoint: "http://127.0.0.1:21435"
+    embed_model: "stub-embed"
+    embed_api: "ollama"
+    embed_batch: 1
