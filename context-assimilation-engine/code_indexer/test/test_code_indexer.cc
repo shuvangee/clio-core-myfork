@@ -468,6 +468,93 @@ TEST_CASE("CodeIndexer keyword mode needs no embedder",
   REQUIRE(hits[0].path == "net/http_server.cc");
 }
 
+// ------------------------------------------------- re-indexing and caching
+
+TEST_CASE("VectorIndex and Bm25Index support Erase",
+          "[code_indexer][erase]") {
+  VectorIndex v;
+  v.Add(1, {1.0f, 0.0f});
+  v.Add(2, {0.0f, 1.0f});
+  REQUIRE(v.Erase(1));
+  REQUIRE_FALSE(v.Erase(1));
+  REQUIRE(v.size() == 1);
+  REQUIRE(v.Search({1.0f, 0.0f}, 5)[0].id == 2);
+
+  Bm25Index b;
+  b.Add(1, "alpha beta");
+  b.Add(2, "alpha gamma");
+  REQUIRE(b.Erase(1));
+  REQUIRE_FALSE(b.Erase(1));
+  std::vector<ScoredId> r = b.Search("alpha", 5);
+  REQUIRE(r.size() == 1);
+  REQUIRE(r[0].id == 2);
+  REQUIRE(b.Search("beta", 5).empty());
+}
+
+TEST_CASE("Re-indexing a path replaces the old entry",
+          "[code_indexer][reindex]") {
+  auto emb = std::make_shared<BagOfWordsEmbedder>();
+  CodeIndexer idx(CodeIndexerConfig{}, emb, nullptr);
+  idx.IndexFile({"a.cc", "int StaleGadget;\n"}, nullptr, nullptr);
+  idx.IndexFile({"b.cc", "int Other;\n"}, nullptr, nullptr);
+  REQUIRE(idx.NumFiles() == 2);
+  idx.IndexFile({"a.cc", "int FreshWidget;\n"}, nullptr, nullptr);
+  REQUIRE(idx.NumFiles() == 2);
+  REQUIRE(idx.NumChunks() == 2);
+
+  std::vector<SearchHit> hits;
+  REQUIRE(idx.Query("StaleGadget", 5, SearchMode::kKeyword, &hits));
+  REQUIRE(hits.empty());
+  REQUIRE(idx.Query("FreshWidget", 5, SearchMode::kKeyword, &hits));
+  REQUIRE(hits.size() == 1);
+  REQUIRE(idx.Query("FreshWidget", 5, SearchMode::kCode, &hits));
+  REQUIRE(hits.size() == 2);        // both files embed; no duplicate of a.cc
+  REQUIRE(hits[0].path == "a.cc");
+  REQUIRE(hits[1].path == "b.cc");
+}
+
+TEST_CASE("A supplied summary skips the summarizer",
+          "[code_indexer][cache]") {
+  auto emb = std::make_shared<BagOfWordsEmbedder>();
+  int calls = 0;
+  SummarizeFn counting = [&calls](const SourceFile &) {
+    ++calls;
+    return std::string("generated");
+  };
+  CodeIndexer idx(CodeIndexerConfig{}, emb, counting);
+
+  std::string cached = "persisted summary";
+  std::string out;
+  IndexStats hit = idx.IndexFile({"a.cc", "int x;\n"}, &cached, &out);
+  REQUIRE(calls == 0);
+  REQUIRE(hit.cache_hits == 1);
+  REQUIRE(hit.summaries == 0);
+  REQUIRE(out == "persisted summary");
+  REQUIRE(idx.SummaryOf("a.cc") == "persisted summary");
+
+  IndexStats miss = idx.IndexFile({"b.cc", "int y;\n"}, nullptr, &out);
+  REQUIRE(calls == 1);
+  REQUIRE(miss.summaries == 1);
+  REQUIRE(out == "generated");
+}
+
+TEST_CASE("Fingerprint tracks content and summarizer settings",
+          "[code_indexer][cache]") {
+  CodeIndexerConfig a;
+  a.summary_fingerprint = "model-a|prompt";
+  CodeIndexerConfig b = a;
+  b.summary_fingerprint = "model-b|prompt";
+  CodeIndexer ia(a, nullptr, nullptr), ib(b, nullptr, nullptr);
+
+  SourceFile f1{"x.cc", "int a;\n"};
+  SourceFile f2{"x.cc", "int b;\n"};
+  REQUIRE(ia.Fingerprint(f1) == ia.Fingerprint(f1));   // stable
+  REQUIRE(ia.Fingerprint(f1) != ia.Fingerprint(f2));   // content changed
+  REQUIRE(ia.Fingerprint(f1) != ib.Fingerprint(f1));   // model changed
+  // The path is not part of the fingerprint: a moved file keeps its summary.
+  REQUIRE(ia.Fingerprint(f1) == ia.Fingerprint({"y.cc", "int a;\n"}));
+}
+
 // ---------------------------------------------------------------- summarizer
 
 TEST_CASE("MakeOllamaSummarizer sends path, prompt and content",

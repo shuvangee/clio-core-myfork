@@ -36,6 +36,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <cstdio>
 #include <unordered_map>
 #include <utility>
 
@@ -51,6 +53,16 @@ double Since(Clock::time_point t0) {
 
 /** Reciprocal-rank-fusion constant; 60 is the value from the original paper. */
 constexpr double kRrfK = 60.0;
+
+/** 64-bit FNV-1a: stable across platforms and runs, unlike std::hash. */
+uint64_t Fnv1a64(const std::string &s) {
+  uint64_t h = 1469598103934665603ULL;
+  for (unsigned char c : s) {
+    h ^= c;
+    h *= 1099511628211ULL;
+  }
+  return h;
+}
 
 }  // namespace
 
@@ -88,68 +100,118 @@ bool CodeIndexer::EmbedOne(const std::string &text,
   return !out->empty();
 }
 
-IndexStats CodeIndexer::IndexFiles(const std::vector<SourceFile> &files) {
-  IndexStats st;
-  for (const SourceFile &f : files) {
-    uint32_t fid = static_cast<uint32_t>(files_.size());
-    FileEntry entry;
-    entry.path = f.path;
+std::string CodeIndexer::Fingerprint(const SourceFile &file) const {
+  auto hex = [](uint64_t v) {
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%016llx",
+                  static_cast<unsigned long long>(v));
+    return std::string(buf);
+  };
+  return hex(Fnv1a64(file.content)) + ":" + hex(Fnv1a64(cfg_.summary_fingerprint));
+}
 
-    if (summarize_) {
-      auto t0 = Clock::now();
-      entry.summary = summarize_(f);
-      st.seconds_summarize += Since(t0);
-      if (entry.summary.empty()) {
-        ++st.summary_failures;
-      } else {
-        ++st.summaries;
-      }
-    }
-
-    std::vector<CodeChunk> chunks = ChunkLines(
-        f.content, cfg_.chunk_lines, cfg_.max_chunk_chars,
-        cfg_.max_chunks_per_file);
-
-    // One Embed() call per file: a failure costs this file's vectors, never
-    // another file's. Slot 0 is the summary when there is one.
-    std::vector<std::string> texts;
-    bool has_summary = !entry.summary.empty();
-    if (has_summary) texts.push_back(FormatDoc(f.path, entry.summary));
-    for (const CodeChunk &c : chunks) {
-      texts.push_back(FormatDoc(
-          f.path + ":" + std::to_string(c.start_line) + "-" +
-              std::to_string(c.end_line),
-          c.text));
-    }
-
-    std::vector<std::vector<float>> vecs;
-    auto t1 = Clock::now();
-    bool ok = !texts.empty() && embedder_ && embedder_->Embed(texts, &vecs) &&
-              vecs.size() == texts.size();
-    st.seconds_embed += Since(t1);
-
-    if (ok) {
-      size_t slot = 0;
-      if (has_summary) {
-        TruncateAndNormalize(&vecs[0], cfg_.truncate_dim);
-        summary_index_.Add(fid, std::move(vecs[0]));
-        slot = 1;
-      }
-      for (size_t i = 0; i < chunks.size(); ++i) {
-        TruncateAndNormalize(&vecs[slot + i], cfg_.truncate_dim);
-        uint32_t cid = static_cast<uint32_t>(chunks_.size());
-        chunks_.push_back({fid, chunks[i].start_line, chunks[i].end_line});
-        code_index_.Add(cid, std::move(vecs[slot + i]));
-      }
-    } else if (!texts.empty() && embedder_) {
-      ++st.embed_failures;
-    }
-
-    keyword_index_.Add(fid, f.path + "\n" + f.content);
-    st.chunks += chunks.size();
-    ++st.files;
-    files_.push_back(std::move(entry));
+// Drop every trace of `file` from the three indexes. The FileEntry stays (ids
+// are positions) but is marked dead and never returned.
+void CodeIndexer::Remove(uint32_t file) {
+  if (!files_[file].live) return;
+  files_[file].live = false;
+  files_[file].summary.clear();
+  --live_files_;
+  summary_index_.Erase(file);
+  keyword_index_.Erase(file);
+  for (uint32_t c = 0; c < chunks_.size(); ++c) {
+    if (chunks_[c].file == file) code_index_.Erase(c);
   }
+}
+
+IndexStats CodeIndexer::IndexFiles(const std::vector<SourceFile> &files) {
+  IndexStats total;
+  for (const SourceFile &f : files) {
+    IndexStats s = IndexFile(f, nullptr, nullptr);
+    total.files += s.files;
+    total.chunks += s.chunks;
+    total.summaries += s.summaries;
+    total.summary_failures += s.summary_failures;
+    total.cache_hits += s.cache_hits;
+    total.embed_failures += s.embed_failures;
+    total.seconds_summarize += s.seconds_summarize;
+    total.seconds_embed += s.seconds_embed;
+  }
+  return total;
+}
+
+IndexStats CodeIndexer::IndexFile(const SourceFile &f,
+                                  const std::string *cached_summary,
+                                  std::string *summary_out) {
+  IndexStats st;
+  // Re-indexing a path replaces it: erase the old entry first.
+  for (uint32_t i = 0; i < files_.size(); ++i) {
+    if (files_[i].live && files_[i].path == f.path) Remove(i);
+  }
+
+  uint32_t fid = static_cast<uint32_t>(files_.size());
+  FileEntry entry;
+  entry.path = f.path;
+
+  if (cached_summary != nullptr && !cached_summary->empty()) {
+    entry.summary = *cached_summary;
+    ++st.cache_hits;
+  } else if (summarize_) {
+    auto t0 = Clock::now();
+    entry.summary = summarize_(f);
+    st.seconds_summarize += Since(t0);
+    if (entry.summary.empty()) {
+      ++st.summary_failures;
+    } else {
+      ++st.summaries;
+    }
+  }
+  if (summary_out != nullptr) *summary_out = entry.summary;
+
+  std::vector<CodeChunk> chunks = ChunkLines(
+      f.content, cfg_.chunk_lines, cfg_.max_chunk_chars,
+      cfg_.max_chunks_per_file);
+
+  // One Embed() call per file: a failure costs this file's vectors, never
+  // another file's. Slot 0 is the summary when there is one.
+  std::vector<std::string> texts;
+  bool has_summary = !entry.summary.empty();
+  if (has_summary) texts.push_back(FormatDoc(f.path, entry.summary));
+  for (const CodeChunk &c : chunks) {
+    texts.push_back(FormatDoc(
+        f.path + ":" + std::to_string(c.start_line) + "-" +
+            std::to_string(c.end_line),
+        c.text));
+  }
+
+  std::vector<std::vector<float>> vecs;
+  auto t1 = Clock::now();
+  bool ok = !texts.empty() && embedder_ && embedder_->Embed(texts, &vecs) &&
+            vecs.size() == texts.size();
+  st.seconds_embed += Since(t1);
+
+  if (ok) {
+    size_t slot = 0;
+    if (has_summary) {
+      TruncateAndNormalize(&vecs[0], cfg_.truncate_dim);
+      summary_index_.Add(fid, std::move(vecs[0]));
+      slot = 1;
+    }
+    for (size_t i = 0; i < chunks.size(); ++i) {
+      TruncateAndNormalize(&vecs[slot + i], cfg_.truncate_dim);
+      uint32_t cid = static_cast<uint32_t>(chunks_.size());
+      chunks_.push_back({fid, chunks[i].start_line, chunks[i].end_line});
+      code_index_.Add(cid, std::move(vecs[slot + i]));
+    }
+  } else if (!texts.empty() && embedder_) {
+    ++st.embed_failures;
+  }
+
+  keyword_index_.Add(fid, f.path + "\n" + f.content);
+  st.chunks += chunks.size();
+  ++st.files;
+  ++live_files_;
+  files_.push_back(std::move(entry));
   return st;
 }
 
@@ -254,7 +316,7 @@ bool CodeIndexer::Query(const std::string &query, size_t k, SearchMode mode,
 
 std::string CodeIndexer::SummaryOf(const std::string &path) const {
   for (const FileEntry &f : files_) {
-    if (f.path == path) return f.summary;
+    if (f.live && f.path == path) return f.summary;
   }
   return "";
 }

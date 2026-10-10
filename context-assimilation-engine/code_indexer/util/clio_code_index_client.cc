@@ -97,6 +97,8 @@ int RunIndex(ci::Client *c, const std::string &path, clio::run::u32 max_files) {
   std::cout << "indexed files=" << t->files_ << " chunks=" << t->chunks_
             << " summaries=" << t->summaries_
             << " summary_failures=" << t->summary_failures_
+            << " cache_hits=" << t->cache_hits_
+            << " persist_failures=" << t->persist_failures_
             << " embed_failures=" << t->embed_failures_
             << " | seconds: summarize=" << t->seconds_summarize_
             << " embed=" << t->seconds_embed_ << "\n";

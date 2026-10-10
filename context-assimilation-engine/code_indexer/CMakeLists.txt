@@ -59,6 +59,8 @@ add_clio_module_client(
   SOURCES
     src/code_indexer_client.cc
 )
+target_include_directories(clio_cae_code_indexer_client PRIVATE
+  ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include)
 
 add_clio_module_runtime(
   SOURCES
@@ -66,7 +68,10 @@ add_clio_module_runtime(
     src/autogen/code_indexer_lib_exec.cc
   LINK_LIBRARIES
     clio_cae_code_indexer_summarize
+    clio_cte_core_client
 )
+target_include_directories(clio_cae_code_indexer_runtime PRIVATE
+  ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include)
 
 #------------------------------------------------------------------------------
 # clio_code_index CLI
@@ -149,6 +154,41 @@ if(BUILD_TESTING)
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
   )
   install(TARGETS test_code_indexer_pool DESTINATION bin)
+
+  # Summary persistence through a CTE core (RAM tier) in the same runtime.
+  add_executable(test_code_indexer_persist
+    test/test_code_indexer_persist.cc
+    ${CAE_UNIT_TEST_DIR}/summarizer_http_stub.cc
+  )
+  target_include_directories(test_code_indexer_persist
+    PRIVATE
+      ${CAE_UNIT_TEST_DIR}
+      ${CMAKE_SOURCE_DIR}/context-runtime/test
+      ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include
+  )
+  target_link_libraries(test_code_indexer_persist
+    PRIVATE
+      clio_cae_code_indexer_client
+      clio_cae_code_indexer_runtime
+      clio_cte_core_client
+      clio_cte_core_runtime
+      clio::run::cxx
+      clio::run::admin_runtime
+      clio::run::bdev_runtime
+      ctp::cxx
+      ${YAML_CPP_LIBS}
+      ${CMAKE_THREAD_LIBS_INIT}
+  )
+  if(WIN32)
+    target_link_libraries(test_code_indexer_persist PRIVATE ws2_32)
+  endif()
+  add_test(NAME code_indexer_persist COMMAND test_code_indexer_persist)
+  set_tests_properties(code_indexer_persist PROPERTIES
+    TIMEOUT 120
+    LABELS "cae;code_indexer;integration;msan_skip"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}"
+  )
+  install(TARGETS test_code_indexer_persist DESTINATION bin)
 
   add_test(NAME code_indexer COMMAND test_code_indexer)
   set_tests_properties(code_indexer PROPERTIES

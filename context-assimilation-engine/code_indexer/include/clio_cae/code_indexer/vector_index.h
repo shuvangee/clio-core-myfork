@@ -106,6 +106,23 @@ class VectorIndex {
   size_t dim() const { return dim_; }
 
   /**
+   * Remove the vector stored under `id` (swap-erase, O(n) to locate). Used
+   * when a file is re-indexed. Returns false when `id` is absent. Ties in
+   * Search() still break by id, so removal order never affects results.
+   */
+  bool Erase(uint32_t id) {
+    for (size_t i = 0; i < ids_.size(); ++i) {
+      if (ids_[i] != id) continue;
+      ids_[i] = ids_.back();
+      vecs_[i] = std::move(vecs_.back());
+      ids_.pop_back();
+      vecs_.pop_back();
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Top-`k` items by cosine similarity to `query`, best first. Ties break by
    * lower id, so results are deterministic. A query of the wrong dimension
    * returns nothing.
@@ -186,6 +203,22 @@ class Bm25Index {
   }
 
   size_t size() const { return docs_.size(); }
+
+  /** Remove document `id` and its term statistics. False when absent. */
+  bool Erase(uint32_t id) {
+    for (size_t i = 0; i < docs_.size(); ++i) {
+      if (docs_[i].id != id) continue;
+      for (const auto &kv : docs_[i].tf) {
+        auto it = df_.find(kv.first);
+        if (it != df_.end() && --it->second == 0) df_.erase(it);
+      }
+      total_len_ -= static_cast<double>(docs_[i].len);
+      docs_[i] = std::move(docs_.back());
+      docs_.pop_back();
+      return true;
+    }
+    return false;
+  }
 
   /** Top-`k` documents with a positive score for `query`, best first. */
   std::vector<ScoredId> Search(const std::string &query, size_t k) const {

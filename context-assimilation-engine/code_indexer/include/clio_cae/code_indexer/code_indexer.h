@@ -88,6 +88,12 @@ struct CodeIndexerConfig {
   std::string query_prefix = "task: code retrieval | query: ";
   /** Prepended to every document; "{title}" becomes the file path/range. */
   std::string doc_prefix = "title: {title} | text: ";
+  /**
+   * Identifies how summaries are produced (model, prompt, limits). Folded into
+   * Fingerprint() so a persisted summary is reused only while the thing that
+   * made it is unchanged. "" when summaries are not generated.
+   */
+  std::string summary_fingerprint;
 };
 
 /** What an IndexFiles() call did. Counters are cumulative per call. */
@@ -96,6 +102,8 @@ struct IndexStats {
   size_t chunks = 0;
   size_t summaries = 0;
   size_t summary_failures = 0;
+  /** Summaries supplied by the caller (a persisted copy) instead of generated. */
+  size_t cache_hits = 0;
   size_t embed_failures = 0;
   double seconds_summarize = 0.0;
   double seconds_embed = 0.0;
@@ -123,6 +131,24 @@ class CodeIndexer {
   IndexStats IndexFiles(const std::vector<SourceFile> &files);
 
   /**
+   * Index one file, replacing any earlier entry with the same path.
+   *
+   * @param cached_summary When non-null and non-empty it is used as the
+   *        file's summary and the summarizer is NOT called (cache hit).
+   * @param summary_out When non-null, receives the summary the file ended up
+   *        with, so the caller can persist a freshly generated one.
+   */
+  IndexStats IndexFile(const SourceFile &file, const std::string *cached_summary,
+                       std::string *summary_out);
+
+  /**
+   * Stable identifier of (file content, summarizer settings): hex FNV-1a of
+   * the content, a colon, hex FNV-1a of cfg.summary_fingerprint. A persisted
+   * summary is valid for a file exactly when its stored value equals this.
+   */
+  std::string Fingerprint(const SourceFile &file) const;
+
+  /**
    * Top-`k` files for `query`. Returns false when an embedding was needed and
    * failed (hits is then empty); a query that simply matches nothing is
    * true with no hits.
@@ -130,8 +156,9 @@ class CodeIndexer {
   bool Query(const std::string &query, size_t k, SearchMode mode,
              std::vector<SearchHit> *hits) const;
 
-  size_t NumFiles() const { return files_.size(); }
-  size_t NumChunks() const { return chunks_.size(); }
+  /** Live (not replaced) files / their code chunks. */
+  size_t NumFiles() const { return live_files_; }
+  size_t NumChunks() const { return code_index_.size(); }
 
   /** The stored summary of an indexed file ("" if none / unknown path). */
   std::string SummaryOf(const std::string &path) const;
@@ -140,6 +167,7 @@ class CodeIndexer {
   struct FileEntry {
     std::string path;
     std::string summary;
+    bool live = true;
   };
   struct ChunkRef {
     uint32_t file = 0;
@@ -158,8 +186,11 @@ class CodeIndexer {
   CodeIndexerConfig cfg_;
   std::shared_ptr<Embedder> embedder_;
   SummarizeFn summarize_;
+  void Remove(uint32_t file);
+
   std::vector<FileEntry> files_;
   std::vector<ChunkRef> chunks_;
+  size_t live_files_ = 0;
   VectorIndex summary_index_;  // id = file index
   VectorIndex code_index_;     // id = chunk index
   Bm25Index keyword_index_;    // id = file index

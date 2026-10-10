@@ -11,9 +11,10 @@ Engine: given a directory of code it produces
 It ships three ways to use the same pipeline: a C++ library, a standalone
 command-line tool (`clio_code_index`), and a **ChiMod pool**
 (`clio_cae_code_indexer`) with a client CLI (`clio_code_index_client`) so it
-can be composed into a CLIO runtime next to the CTE and Summarizer. Nothing is
-stored in the CTE and nothing persists across process runs: persistence,
-tiering and summary evolution are deliberately later layers.
+can be composed into a CLIO runtime next to the CTE and Summarizer. The index is
+kept in memory; only the pool can additionally persist **summaries** into a
+CTE tag (see below). Vectors are never persisted, and tiering and summary
+evolution are deliberately later layers.
 
 ## Layout
 
@@ -29,6 +30,7 @@ tiering and summary evolution are deliberately later layers.
 | `util/clio_code_index_client.cc` | `clio_code_index_client`: talks to a running pool |
 | `test/test_code_indexer.cc` | unit tests (fake embedder + in-process HTTP stub) |
 | `test/test_code_indexer_pool.cc` | the pool through a live runtime (HTTP stub as the model) |
+| `test/test_code_indexer_persist.cc` | summary persistence + reuse through a CTE core |
 
 Two static libraries: `clio_cae_code_indexer` (pipeline; libcurl +
 nlohmann_json only) and `clio_cae_code_indexer_summarize` (adds the CAE
@@ -81,6 +83,8 @@ compose:
     summarize_model: "gemma3:1b" # omit to index code without summaries
     summarize_ctx: 8192
     summarize_num_predict: 256
+    cte_pool_id: "513.0"         # persist summaries here; omit for memory-only
+    cte_tag: "code_indexer"
 ```
 
 Then, with `CLIO_SERVER_CONF` pointing at that file and the runtime started
@@ -101,13 +105,45 @@ query during a long `index` sees a partial index and waits at most one file.
 `IndexPath` blocks one runtime worker for the whole directory (inference is
 synchronous), so keep `runtime.num_threads` above 1.
 
+## Persisting summaries in the CTE
+
+Summarizing is the expensive step (~4.6 s/file with gemma3:1b on a Mac, versus
+~0.5 s/file to embed), so the pool can keep generated summaries in a CTE tag
+and reuse them. Set `cte_pool_id` (and optionally `cte_tag`) in the compose
+entry; the CTE core pool must be composed first.
+
+For each file two blobs are written to the tag:
+
+| Blob | Contents |
+|---|---|
+| `{path}#summary` | the summary text |
+| `{path}#fp` | fingerprint of (file content, summarizer model/prompt/limits) |
+
+`IndexPath` loads `{path}#fp` and reuses `{path}#summary` only when the
+fingerprint equals the current one, so editing a file, or changing
+`summarize_model`, `summarize_prompt`, `summarize_ctx` or `summarize_num_predict`,
+regenerates it. The summary is written before its fingerprint, so a crash
+between the two reads as a miss, never as a hit on wrong text. A file's
+fingerprint does not include its path: a moved file keeps its summary.
+
+Re-indexing a path replaces its earlier entry; the index does not grow.
+`IndexPath` reports `cache_hits` (reused) and `persist_failures` (could not be
+stored; indexing continues in memory).
+
+What survives a restart is the **summaries**, not the index: after restarting
+the runtime, run `index` again. Embeddings are recomputed (cheap) and no
+summarizer call is made for unchanged files. The blobs are only as durable as
+the CTE tier they land on: use a file-backed tier with `restart: true` and a
+metadata log (see `context-transfer-engine/test/integration/indexer_restart`);
+a RAM tier loses them with the process.
+
 ## Building and testing
 
 ```bash
 cmake --preset release            # CAE is on by default
 cmake --build build -j --target test_code_indexer test_code_indexer_pool \
-    clio_code_index clio_code_index_client
-ctest --test-dir build -R 'code_indexer' --output-on-failure
+    test_code_indexer_persist clio_code_index clio_code_index_client
+ctest --test-dir build -R 'code_indexer' --output-on-failure   # incl. _pool, _persist
 ```
 
 ## Command line
@@ -123,7 +159,8 @@ summaries. Run with no arguments for the full option list.
 
 ## Known limits (MVP)
 
-- In-memory only; the index is rebuilt every run.
+- The index (vectors, chunks) is rebuilt on every start; only summaries persist.
+- Summaries are not evicted when a file is deleted from disk.
 - Exact brute-force search: fine for thousands of chunks, not millions.
 - Files are summarized one at a time and embedded one file per request group;
   no parallelism.

@@ -57,6 +57,11 @@ CodeIndexerConfig ToPipelineConfig(const CreateParams &p) {
   c.truncate_dim = p.embed_dim;
   if (!p.query_prefix.empty()) c.query_prefix = p.query_prefix;
   if (!p.doc_prefix.empty()) c.doc_prefix = p.doc_prefix;
+  if (!p.summarize_model.empty()) {
+    c.summary_fingerprint = p.summarize_model + "|" + p.summarize_prompt + "|" +
+                            std::to_string(p.summarize_ctx) + "|" +
+                            std::to_string(p.summarize_num_predict);
+  }
   return c;
 }
 
@@ -95,6 +100,20 @@ SearchMode ToSearchMode(clio::run::u32 wire) {
 clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   CLIO_TASK_BODY_BEGIN
   params_ = task->GetParams();
+  if (!params_.cte_pool_id.empty()) {
+    size_t dot = params_.cte_pool_id.find('.');
+    if (dot != std::string::npos) {
+      clio::run::PoolId cte_pool(
+          static_cast<clio::run::u32>(
+              std::stoul(params_.cte_pool_id.substr(0, dot))),
+          static_cast<clio::run::u32>(
+              std::stoul(params_.cte_pool_id.substr(dot + 1))));
+      cte_ = std::make_unique<clio::cte::core::Client>(cte_pool);
+    } else {
+      HLOG(kWarning, "CodeIndexer: bad cte_pool_id '{}', persistence off",
+           params_.cte_pool_id);
+    }
+  }
   {
     std::lock_guard<std::mutex> lock(mu_);
     indexer_ = std::make_unique<CodeIndexer>(
@@ -133,6 +152,115 @@ clio::run::TaskResume Runtime::Monitor(
 }
 // LCOV_EXCL_STOP
 
+// ---------------------------------------------------------------------------
+// Persisted-summary cache (CTE tag)
+// ---------------------------------------------------------------------------
+
+clio::run::TaskResume Runtime::EnsureTag(bool *ok) {
+  CLIO_TASK_BODY_BEGIN
+  *ok = false;
+  if (!cte_) CLIO_CO_RETURN;
+  if (tag_ready_) {
+    *ok = true;
+    CLIO_CO_RETURN;
+  }
+  {
+    auto fut = cte_->AsyncGetOrCreateTag(params_.cte_tag,
+                                         clio::cte::core::TagId::GetNull(),
+                                         clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(fut);
+    if (fut->GetReturnCode() == 0) {
+      tag_id_ = fut->tag_id_;
+      tag_ready_ = true;
+      *ok = true;
+    } else {
+      HLOG(kWarning, "CodeIndexer: cannot open CTE tag '{}' (rc={})",
+           params_.cte_tag, fut->GetReturnCode());
+    }
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::ReadBlob(const std::string &name,
+                                        std::string *out, bool *found) {
+  CLIO_TASK_BODY_BEGIN
+  *found = false;
+  out->clear();
+  {
+    auto sz = cte_->AsyncGetBlobSize(tag_id_, name,
+                                     clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(sz);
+    size_t n = sz->GetReturnCode() == 0 ? static_cast<size_t>(sz->size_) : 0;
+    if (n == 0) CLIO_CO_RETURN;
+    std::string buf(n, '\0');
+    auto get = cte_->AsyncGetBlob(tag_id_, name, 0, n, 0, &buf[0],
+                                  clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(get);
+    if (get->GetReturnCode() == 0) {
+      *out = std::move(buf);
+      *found = true;
+    }
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::WriteBlob(const std::string &name,
+                                         const std::string &data, bool *ok) {
+  CLIO_TASK_BODY_BEGIN
+  *ok = false;
+  if (data.empty()) CLIO_CO_RETURN;
+  {
+    auto put = cte_->AsyncPutBlob(tag_id_, name, 0, data.size(), data.data(),
+                                  1.0f, clio::cte::core::Context(), 0,
+                                  clio::run::PoolQuery::Local());
+    CLIO_CO_AWAIT(put);
+    *ok = put.get() != nullptr && put->GetReturnCode() == 0;
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::LoadSummary(const std::string &path,
+                                           const std::string &fingerprint,
+                                           std::string *summary_out) {
+  CLIO_TASK_BODY_BEGIN
+  summary_out->clear();
+  bool tag_ok = false;
+  CLIO_CO_AWAIT(EnsureTag(&tag_ok));
+  if (!tag_ok) CLIO_CO_RETURN;
+  std::string stored_fp;
+  bool found = false;
+  CLIO_CO_AWAIT(ReadBlob(path + "#fp", &stored_fp, &found));
+  if (!found || stored_fp != fingerprint) CLIO_CO_RETURN;
+  CLIO_CO_AWAIT(ReadBlob(path + "#summary", summary_out, &found));
+  if (!found) summary_out->clear();
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
+clio::run::TaskResume Runtime::StoreSummary(const std::string &path,
+                                            const std::string &fingerprint,
+                                            const std::string &summary,
+                                            bool *ok) {
+  CLIO_TASK_BODY_BEGIN
+  *ok = false;
+  bool tag_ok = false;
+  CLIO_CO_AWAIT(EnsureTag(&tag_ok));
+  if (!tag_ok) CLIO_CO_RETURN;
+  // Summary first, fingerprint last: a crash between the two leaves a summary
+  // with a stale/missing fingerprint, which reads as a miss, never as a hit
+  // on the wrong text.
+  bool put_summary = false;
+  bool put_fp = false;
+  CLIO_CO_AWAIT(WriteBlob(path + "#summary", summary, &put_summary));
+  if (put_summary) CLIO_CO_AWAIT(WriteBlob(path + "#fp", fingerprint, &put_fp));
+  *ok = put_summary && put_fp;
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 clio::run::TaskResume Runtime::IndexPath(
     clio::run::shared_ptr<IndexPathTask> &task) {
   CLIO_TASK_BODY_BEGIN
@@ -146,15 +274,37 @@ clio::run::TaskResume Runtime::IndexPath(
     CLIO_CO_RETURN;
   }
   IndexStats total;
+  size_t persist_failures = 0;
   // One file per lock acquisition so Query is not starved for the whole scan.
+  // The lock is never held across a CTE await.
   for (const SourceFile &f : files) {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (!indexer_) break;
-    IndexStats s = indexer_->IndexFiles({f});
+    std::string fingerprint;
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      if (!indexer_) break;
+      fingerprint = indexer_->Fingerprint(f);
+    }
+    std::string cached;
+    if (cte_) CLIO_CO_AWAIT(LoadSummary(f.path, fingerprint, &cached));
+
+    IndexStats s;
+    std::string summary;
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      if (!indexer_) break;
+      s = indexer_->IndexFile(f, cached.empty() ? nullptr : &cached, &summary);
+    }
+    // Persist only what was freshly generated; a cache hit is already there.
+    if (cte_ && s.summaries > 0 && !summary.empty()) {
+      bool stored = false;
+      CLIO_CO_AWAIT(StoreSummary(f.path, fingerprint, summary, &stored));
+      if (!stored) ++persist_failures;
+    }
     total.files += s.files;
     total.chunks += s.chunks;
     total.summaries += s.summaries;
     total.summary_failures += s.summary_failures;
+    total.cache_hits += s.cache_hits;
     total.embed_failures += s.embed_failures;
     total.seconds_summarize += s.seconds_summarize;
     total.seconds_embed += s.seconds_embed;
@@ -163,6 +313,8 @@ clio::run::TaskResume Runtime::IndexPath(
   task->chunks_ = static_cast<clio::run::u32>(total.chunks);
   task->summaries_ = static_cast<clio::run::u32>(total.summaries);
   task->summary_failures_ = static_cast<clio::run::u32>(total.summary_failures);
+  task->cache_hits_ = static_cast<clio::run::u32>(total.cache_hits);
+  task->persist_failures_ = static_cast<clio::run::u32>(persist_failures);
   task->embed_failures_ = static_cast<clio::run::u32>(total.embed_failures);
   task->seconds_summarize_ = static_cast<float>(total.seconds_summarize);
   task->seconds_embed_ = static_cast<float>(total.seconds_embed);

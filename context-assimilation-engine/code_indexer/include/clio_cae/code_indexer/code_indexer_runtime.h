@@ -37,6 +37,7 @@
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/code_indexer_client.h>
 #include <clio_cae/code_indexer/code_indexer_tasks.h>
+#include <clio_cte/core/core_client.h>
 #include <clio_runtime/clio_runtime.h>
 
 #include <memory>
@@ -105,9 +106,30 @@ class Runtime : public clio::run::Container {
       const clio::run::shared_ptr<clio::run::Task> &member_task) override;
 
  private:
+  /**
+   * Persisted-summary cache in a CTE tag. For file `path` two blobs exist:
+   * `{path}#fp` holds the CodeIndexer::Fingerprint the summary was made for
+   * and `{path}#summary` the text. All three helpers are no-ops (miss / not
+   * persisted) when the pool has no cte_pool_id; failures never fail indexing.
+   */
+  clio::run::TaskResume EnsureTag(bool *ok);
+  clio::run::TaskResume LoadSummary(const std::string &path,
+                                    const std::string &fingerprint,
+                                    std::string *summary_out);
+  clio::run::TaskResume StoreSummary(const std::string &path,
+                                     const std::string &fingerprint,
+                                     const std::string &summary, bool *ok);
+  clio::run::TaskResume ReadBlob(const std::string &name, std::string *out,
+                                 bool *found);
+  clio::run::TaskResume WriteBlob(const std::string &name,
+                                  const std::string &data, bool *ok);
+
   CreateParams params_;
   std::mutex mu_;
   std::unique_ptr<CodeIndexer> indexer_;
+  std::unique_ptr<clio::cte::core::Client> cte_;
+  clio::cte::core::TagId tag_id_ = clio::cte::core::TagId::GetNull();
+  bool tag_ready_ = false;
 };
 
 }  // namespace clio::cae::code_indexer

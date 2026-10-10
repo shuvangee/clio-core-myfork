@@ -81,6 +81,9 @@ constexpr clio::run::u32 kKeyword = 3;
  *   chunk_lines / max_chunk_chars / max_chunks_per_file   chunking
  *   query_prefix / doc_prefix   model-specific retrieval prefixes ("" keeps
  *                   the EmbeddingGemma defaults)
+ *   cte_pool_id / cte_tag   where summaries are persisted: the CTE core pool
+ *                   ("major.minor", e.g. "513.0") and the tag the blobs go in.
+ *                   cte_pool_id "" keeps summaries in memory only.
  */
 struct CreateParams {
   // Required: chimod library name for the module manager.
@@ -105,6 +108,9 @@ struct CreateParams {
   std::string query_prefix;
   std::string doc_prefix;
 
+  std::string cte_pool_id;
+  std::string cte_tag = "code_indexer";
+
   CreateParams() = default;
   CreateParams(const CreateParams &other) = default;
 
@@ -120,7 +126,7 @@ struct CreateParams {
     ar(embed_endpoint, embed_model, embed_api, embed_dim, embed_batch,
        summarize_endpoint, summarize_model, summarize_prompt, summarize_ctx,
        summarize_num_predict, chunk_lines, max_chunk_chars,
-       max_chunks_per_file, query_prefix, doc_prefix);
+       max_chunks_per_file, query_prefix, doc_prefix, cte_pool_id, cte_tag);
   }
 
   /** Load from the compose entry's YAML. Best-effort, like the summarizer. */
@@ -153,6 +159,8 @@ struct CreateParams {
       u32("max_chunks_per_file", &max_chunks_per_file);
       str("query_prefix", &query_prefix);
       str("doc_prefix", &doc_prefix);
+      str("cte_pool_id", &cte_pool_id);
+      str("cte_tag", &cte_tag);
     } catch (...) {
       // Config parsing is best-effort
     }
@@ -214,6 +222,8 @@ struct IndexPathTask : public clio::run::Task {
   OUT clio::run::u32 chunks_;
   OUT clio::run::u32 summaries_;
   OUT clio::run::u32 summary_failures_;
+  OUT clio::run::u32 cache_hits_;  // summaries reused from the CTE
+  OUT clio::run::u32 persist_failures_;  // summaries that could not be stored
   OUT clio::run::u32 embed_failures_;
   OUT float seconds_summarize_;
   OUT float seconds_embed_;
@@ -227,6 +237,8 @@ struct IndexPathTask : public clio::run::Task {
         chunks_(0),
         summaries_(0),
         summary_failures_(0),
+        cache_hits_(0),
+        persist_failures_(0),
         embed_failures_(0),
         seconds_summarize_(0.0f),
         seconds_embed_(0.0f) {}
@@ -243,6 +255,8 @@ struct IndexPathTask : public clio::run::Task {
         chunks_(0),
         summaries_(0),
         summary_failures_(0),
+        cache_hits_(0),
+        persist_failures_(0),
         embed_failures_(0),
         seconds_summarize_(0.0f),
         seconds_embed_(0.0f) {
@@ -262,8 +276,9 @@ struct IndexPathTask : public clio::run::Task {
   template <typename Archive>
   void SerializeOut(Archive &ar) {
     Task::SerializeOut(ar);
-    ar(files_, chunks_, summaries_, summary_failures_, embed_failures_,
-       seconds_summarize_, seconds_embed_);
+    ar(files_, chunks_, summaries_, summary_failures_, cache_hits_,
+       persist_failures_, embed_failures_, seconds_summarize_,
+       seconds_embed_);
   }
 
   void Copy(const ctp::ipc::FullPtr<IndexPathTask> &other) {
@@ -274,6 +289,8 @@ struct IndexPathTask : public clio::run::Task {
     chunks_ = other->chunks_;
     summaries_ = other->summaries_;
     summary_failures_ = other->summary_failures_;
+    cache_hits_ = other->cache_hits_;
+    persist_failures_ = other->persist_failures_;
     embed_failures_ = other->embed_failures_;
     seconds_summarize_ = other->seconds_summarize_;
     seconds_embed_ = other->seconds_embed_;
@@ -287,6 +304,8 @@ struct IndexPathTask : public clio::run::Task {
     chunks_ += other->chunks_;
     summaries_ += other->summaries_;
     summary_failures_ += other->summary_failures_;
+    cache_hits_ += other->cache_hits_;
+    persist_failures_ += other->persist_failures_;
     embed_failures_ += other->embed_failures_;
     seconds_summarize_ += other->seconds_summarize_;
     seconds_embed_ += other->seconds_embed_;
