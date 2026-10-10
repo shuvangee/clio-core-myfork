@@ -107,7 +107,8 @@ std::string CodeIndexer::Fingerprint(const SourceFile &file) const {
                   static_cast<unsigned long long>(v));
     return std::string(buf);
   };
-  return hex(Fnv1a64(file.content)) + ":" + hex(Fnv1a64(cfg_.summary_fingerprint));
+  return hex(Fnv1a64(file.content)) + ":" +
+         hex(Fnv1a64(cfg_.summary_fingerprint));
 }
 
 // Drop every trace of `file` from the three indexes. The FileEntry stays (ids

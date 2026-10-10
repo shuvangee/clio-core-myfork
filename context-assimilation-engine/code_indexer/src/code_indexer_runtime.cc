@@ -353,10 +353,10 @@ clio::run::TaskResume Runtime::Status(clio::run::shared_ptr<StatusTask> &task) {
   CLIO_TASK_BODY_BEGIN
   {
     std::lock_guard<std::mutex> lock(mu_);
-    task->files_ = indexer_ ? static_cast<clio::run::u32>(indexer_->NumFiles())
-                            : 0;
-    task->chunks_ = indexer_ ? static_cast<clio::run::u32>(indexer_->NumChunks())
-                             : 0;
+    task->files_ =
+        indexer_ ? static_cast<clio::run::u32>(indexer_->NumFiles()) : 0;
+    task->chunks_ =
+        indexer_ ? static_cast<clio::run::u32>(indexer_->NumChunks()) : 0;
   }
   task->SetReturnCode(0);
   CLIO_CO_RETURN;

@@ -102,7 +102,7 @@ struct IndexStats {
   size_t chunks = 0;
   size_t summaries = 0;
   size_t summary_failures = 0;
-  /** Summaries supplied by the caller (a persisted copy) instead of generated. */
+  /** Summaries supplied by the caller (a persisted copy), not generated. */
   size_t cache_hits = 0;
   size_t embed_failures = 0;
   double seconds_summarize = 0.0;
@@ -138,7 +138,8 @@ class CodeIndexer {
    * @param summary_out When non-null, receives the summary the file ended up
    *        with, so the caller can persist a freshly generated one.
    */
-  IndexStats IndexFile(const SourceFile &file, const std::string *cached_summary,
+  IndexStats IndexFile(const SourceFile &file,
+                       const std::string *cached_summary,
                        std::string *summary_out);
 
   /**

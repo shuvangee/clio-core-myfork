@@ -74,8 +74,8 @@ class Client : public clio::run::ContainerClient {
   }
 
   /** Index every source file under `root` (a path on the pool's node). */
-  clio::run::Future<IndexPathTask> AsyncIndexPath(const std::string &root,
-                                                  clio::run::u32 max_files = 0) {
+  clio::run::Future<IndexPathTask> AsyncIndexPath(
+      const std::string &root, clio::run::u32 max_files = 0) {
     auto *ipc = CLIO_IPC;
     auto task = ipc->NewTask<IndexPathTask>(
         clio::run::CreateTaskId(), pool_id_, clio::run::PoolQuery::Local(),
