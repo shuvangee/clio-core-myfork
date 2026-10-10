@@ -95,6 +95,13 @@ add_subdirectory(core)
 # Composed BETWEEN a CAE/CTE client and the CTE core; see its clio_mod.yaml.
 add_subdirectory(summarizer)
 
+# Code Indexer: summarize -> embed -> search over a source tree, in memory.
+# A plain library + CLI (not yet a chimod); needs the same libcurl +
+# nlohmann_json pair as the summarizer's inference path.
+if(CAE_SUMMARIZATION_ENABLED)
+  add_subdirectory(code_indexer)
+endif()
+
 # -----------------------------------------------------------------------------
 # Build Benchmarks
 # -----------------------------------------------------------------------------
