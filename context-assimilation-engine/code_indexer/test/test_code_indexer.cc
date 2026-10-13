@@ -42,6 +42,7 @@
 #include "summarizer_http_stub.h"
 
 #include <clio_cae/code_indexer/code_indexer.h>
+#include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
 
 #include <chrono>
@@ -553,6 +554,76 @@ TEST_CASE("Fingerprint tracks content and summarizer settings",
   REQUIRE(ia.Fingerprint(f1) != ib.Fingerprint(f1));   // model changed
   // The path is not part of the fingerprint: a moved file keeps its summary.
   REQUIRE(ia.Fingerprint(f1) == ia.Fingerprint({"y.cc", "int a;\n"}));
+}
+
+// ------------------------------------------------------------ embed cache
+
+TEST_CASE("CachingEmbedder serves repeats from memory and from disk",
+          "[code_indexer][cache]") {
+  TempDir d;
+  std::string file = (d.path / "emb.cache").string();
+  auto inner = std::make_shared<BagOfWordsEmbedder>();
+  {
+    CachingEmbedder c(inner, "model-a", file);
+    std::vector<std::vector<float>> v1, v2;
+    REQUIRE(c.Embed({"alpha", "beta"}, &v1));
+    REQUIRE(inner->seen.size() == 2);
+    REQUIRE(c.Embed({"beta", "gamma"}, &v2));   // beta cached, gamma new
+    REQUIRE(inner->seen.size() == 3);
+    REQUIRE(v2[0] == v1[1]);
+    REQUIRE(c.hits() == 1);
+    REQUIRE(c.misses() == 3);
+    REQUIRE(c.Save());
+  }
+  // A new process: everything is a hit, the inner embedder is not touched.
+  auto inner2 = std::make_shared<BagOfWordsEmbedder>();
+  CachingEmbedder c2(inner2, "model-a", file);
+  std::vector<std::vector<float>> v;
+  REQUIRE(c2.size() == 3);
+  REQUIRE(c2.Embed({"gamma", "alpha"}, &v));
+  REQUIRE(inner2->seen.empty());
+  REQUIRE(v.size() == 2);
+  REQUIRE(v[0].size() == 256);
+}
+
+TEST_CASE("CachingEmbedder keys on the model and fails closed",
+          "[code_indexer][cache]") {
+  TempDir d;
+  std::string file = (d.path / "emb.cache").string();
+  auto inner = std::make_shared<BagOfWordsEmbedder>();
+  {
+    CachingEmbedder c(inner, "model-a", file);
+    std::vector<std::vector<float>> v;
+    REQUIRE(c.Embed({"alpha"}, &v));
+    REQUIRE(c.Save());
+  }
+  // Same text, different model: must NOT reuse model-a's vector.
+  auto inner2 = std::make_shared<BagOfWordsEmbedder>();
+  CachingEmbedder other(inner2, "model-b", file);
+  std::vector<std::vector<float>> v;
+  REQUIRE(other.Embed({"alpha"}, &v));
+  REQUIRE(inner2->seen.size() == 1);
+  // An inner failure returns false and leaves nothing half-cached.
+  inner2->fail = true;
+  REQUIRE_FALSE(other.Embed({"fresh text"}, &v));
+  REQUIRE(v.empty());
+  inner2->fail = false;
+  REQUIRE(other.Embed({"fresh text"}, &v));
+  REQUIRE(inner2->seen.size() == 2);
+}
+
+TEST_CASE("CachingEmbedder ignores a corrupt cache file",
+          "[code_indexer][cache]") {
+  TempDir d;
+  d.Write("emb.cache", "this is not a cache file");
+  auto inner = std::make_shared<BagOfWordsEmbedder>();
+  CachingEmbedder c(inner, "m", (d.path / "emb.cache").string());
+  REQUIRE(c.size() == 0);
+  std::vector<std::vector<float>> v;
+  REQUIRE(c.Embed({"x"}, &v));
+  REQUIRE(c.Save());                // overwrites the junk with a valid file
+  CachingEmbedder again(inner, "m", (d.path / "emb.cache").string());
+  REQUIRE(again.size() == 1);
 }
 
 // ---------------------------------------------------------------- summarizer

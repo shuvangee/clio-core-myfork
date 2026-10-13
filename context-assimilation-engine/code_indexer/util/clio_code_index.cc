@@ -44,6 +44,7 @@
  */
 
 #include <clio_cae/code_indexer/code_indexer.h>
+#include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
 
 #include <chrono>
@@ -67,6 +68,7 @@ struct Args {
   int embed_dim = 0;
   size_t embed_batch = 16;
   bool no_embed = false;
+  std::string cache_file;  // persistent embedding cache; empty = none
   std::string summ_endpoint = "http://127.0.0.1:11434";
   std::string summ_model;  // empty = no summaries
   int summ_ctx = 8192;
@@ -87,6 +89,8 @@ void Usage() {
          "  --embed-dim N          Matryoshka truncation (768/512/256/128)\n"
          "  --embed-batch N        inputs per request (default 16)\n"
          "  --no-embed             keyword (BM25) search only\n"
+         "  --cache-file FILE      persistent embedding cache; later runs "
+         "re-embed only new/changed text\n"
          "  --summ-endpoint URL    default http://127.0.0.1:11434\n"
          "  --summ-model NAME      omit to index code without summaries\n"
          "  --summ-ctx N           summarizer context tokens (default 8192)\n"
@@ -121,6 +125,7 @@ bool ParseArgs(int argc, char **argv, Args *a) {
       else if (s == "openai") a->embed_api = EmbedApi::kOpenAI;
       else { std::cerr << "bad --embed-api\n"; return false; }
     }
+    else if (k == "--cache-file") a->cache_file = v;
     else if (k == "--embed-dim") a->embed_dim = std::atoi(v);
     else if (k == "--embed-batch") {
       a->embed_batch = std::strtoul(v, nullptr, 10);
@@ -202,6 +207,7 @@ int main(int argc, char **argv) {
   if (files.empty()) return 1;
 
   std::shared_ptr<Embedder> embedder;
+  std::shared_ptr<CachingEmbedder> cache;
   if (!a.no_embed) {
     EmbedConfig ec;
     ec.endpoint = a.embed_endpoint;
@@ -209,6 +215,11 @@ int main(int argc, char **argv) {
     ec.api = a.embed_api;
     ec.batch_size = a.embed_batch;
     embedder = std::make_shared<HttpEmbedder>(ec);
+    if (!a.cache_file.empty()) {
+      cache = std::make_shared<CachingEmbedder>(embedder, a.embed_model,
+                                                a.cache_file);
+      embedder = cache;
+    }
   }
   SummarizeFn summarize;
   if (!a.summ_model.empty()) {
@@ -235,6 +246,11 @@ int main(int argc, char **argv) {
             << " | seconds: total=" << total
             << " summarize=" << st.seconds_summarize
             << " embed=" << st.seconds_embed << "\n";
+  if (cache) {
+    std::cout << "embedding cache: hits=" << cache->hits()
+              << " misses=" << cache->misses()
+              << (cache->Save() ? "" : " (SAVE FAILED)") << "\n";
+  }
 
   int rc = 0;
   for (const std::string &q : a.queries) {

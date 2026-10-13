@@ -23,6 +23,7 @@ evolution are deliberately later layers.
 | `include/.../code_scanner.h` | directory walk + line-window chunking (std only) |
 | `include/.../vector_index.h` | exact cosine `VectorIndex`, identifier-aware `Bm25Index` |
 | `include/.../embed_client.h` | `Embedder` interface, `HttpEmbedder` (Ollama + OpenAI wire formats) |
+| `include/.../embed_cache.h` | `CachingEmbedder`: persistent on-disk embedding cache decorator |
 | `include/.../code_indexer.h` | `CodeIndexer`: `IndexFiles()`, `Query()` |
 | `include/.../ollama_summarizer.h` | `MakeOllamaSummarizer()` over `summarizer::GenerateSummary` |
 | `util/clio_code_index.cc` | `clio_code_index` standalone command-line tool |
@@ -156,6 +157,14 @@ clio_code_index --root path/to/src --summ-model gemma3:1b \
 
 `--no-embed` runs keyword-only; omitting `--summ-model` indexes code without
 summaries. Run with no arguments for the full option list.
+
+`--cache-file FILE` keeps a persistent embedding cache (a `CachingEmbedder`
+around the HTTP embedder, keyed by model name + the exact prefixed text). The
+first run over a tree pays for every chunk (about 8 minutes for ~5,700 chunks
+with embeddinggemma on a laptop); later runs re-embed only text that changed,
+so a query costs the scan + one query embedding (~3 s for a 1,000-file tree).
+This is how the CLI can serve as a shell tool for an agent without a CLIO
+runtime. The cache holds vectors only; summaries are not cached by the CLI.
 
 ## Known limits (MVP)
 
