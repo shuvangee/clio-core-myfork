@@ -47,6 +47,7 @@
  *                    kCode     best code-chunk cosine per file
  *                    kHybrid   reciprocal-rank fusion of the two
  *                    kKeyword  BM25 over path + source (no model needed)
+ *                    kKeywordSummary  BM25 over path + summary + source
  *
  * Summary and code retrieval are kept as separate modes on purpose: whether
  * an LLM summary is a better retrieval key than the code itself is an open
@@ -60,6 +61,7 @@
 
 #include <clio_cae/code_indexer/code_scanner.h>
 #include <clio_cae/code_indexer/embed_client.h>
+#include <clio_cae/code_indexer/file_graph.h>
 #include <clio_cae/code_indexer/vector_index.h>
 
 #include <cstddef>
@@ -75,7 +77,19 @@ namespace clio::cae::code_indexer {
 using SummarizeFn = std::function<std::string(const SourceFile &)>;
 
 /** How Query() ranks files. */
-enum class SearchMode { kSummary, kCode, kHybrid, kKeyword };
+enum class SearchMode {
+  kSummary,
+  kCode,
+  kHybrid,
+  kKeyword,
+  /** BM25 over path + summary + source: summary text injected as keywords. */
+  kKeywordSummary,
+  /**
+   * BM25 over path + source, then each file also gains half the best BM25
+   * score among its graph neighbours (includes/imports, test/impl siblings).
+   */
+  kKeywordGraph
+};
 
 /** Chunking, prefixes and truncation. Defaults suit EmbeddingGemma. */
 struct CodeIndexerConfig {
@@ -157,6 +171,9 @@ class CodeIndexer {
   bool Query(const std::string &query, size_t k, SearchMode mode,
              std::vector<SearchHit> *hits) const;
 
+  /** Edge count of the file-relationship graph (builds it if stale). */
+  size_t NumGraphEdges() const;
+
   /** Live (not replaced) files / their code chunks. */
   size_t NumFiles() const { return live_files_; }
   size_t NumChunks() const { return code_index_.size(); }
@@ -168,6 +185,7 @@ class CodeIndexer {
   struct FileEntry {
     std::string path;
     std::string summary;
+    std::vector<std::string> refs;  // include/import targets
     bool live = true;
   };
   struct ChunkRef {
@@ -179,6 +197,7 @@ class CodeIndexer {
   std::string FormatDoc(const std::string &title,
                         const std::string &text) const;
   bool EmbedOne(const std::string &text, std::vector<float> *out) const;
+  void EnsureGraph() const;
   SearchHit MakeHit(uint32_t file, float score, const ChunkRef *chunk) const;
   std::vector<ScoredId> RankFilesByCode(const std::vector<float> &q,
                                         size_t limit,
@@ -195,6 +214,11 @@ class CodeIndexer {
   VectorIndex summary_index_;  // id = file index
   VectorIndex code_index_;     // id = chunk index
   Bm25Index keyword_index_;    // id = file index
+  Bm25Index keyword_summary_index_;  // id = file index; path+summary+source
+  // Lazily rebuilt on the first graph query after any index change. Query()
+  // is const but callers already serialize it (see the runtime's lock).
+  mutable FileGraph graph_;
+  mutable bool graph_dirty_ = true;
 };
 
 /**

@@ -91,6 +91,8 @@ SearchMode ToSearchMode(clio::run::u32 wire) {
     case QueryMode::kSummary: return SearchMode::kSummary;
     case QueryMode::kCode: return SearchMode::kCode;
     case QueryMode::kKeyword: return SearchMode::kKeyword;
+    case QueryMode::kKeywordSummary: return SearchMode::kKeywordSummary;
+    case QueryMode::kKeywordGraph: return SearchMode::kKeywordGraph;
     default: return SearchMode::kHybrid;
   }
 }

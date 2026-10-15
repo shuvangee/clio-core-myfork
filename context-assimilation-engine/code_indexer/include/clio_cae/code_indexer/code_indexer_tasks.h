@@ -67,6 +67,8 @@ constexpr clio::run::u32 kSummary = 0;
 constexpr clio::run::u32 kCode = 1;
 constexpr clio::run::u32 kHybrid = 2;
 constexpr clio::run::u32 kKeyword = 3;
+constexpr clio::run::u32 kKeywordSummary = 4;
+constexpr clio::run::u32 kKeywordGraph = 5;
 }  // namespace QueryMode
 
 /**

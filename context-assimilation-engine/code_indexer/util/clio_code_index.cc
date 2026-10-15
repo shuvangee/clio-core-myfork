@@ -97,7 +97,7 @@ void Usage() {
          "  --summ-num-predict N   cap per summary response (default 256)\n"
          "  --query TEXT           repeatable\n"
          "  --queries-file FILE    one query per line\n"
-         "  --mode summary|code|hybrid|keyword|all   default hybrid\n"
+         "  --mode summary|code|hybrid|keyword|keyword+summary|keyword+graph|all   default hybrid\n"
          "  --top-k N              default 5\n"
          "  --show-summaries       print each hit's summary\n";
 }
@@ -155,17 +155,21 @@ const char *ModeName(SearchMode m) {
     case SearchMode::kCode: return "code";
     case SearchMode::kHybrid: return "hybrid";
     case SearchMode::kKeyword: return "keyword";
+    case SearchMode::kKeywordSummary: return "keyword+summary";
+    case SearchMode::kKeywordGraph: return "keyword+graph";
   }
   return "?";
 }
 
 std::vector<SearchMode> ModesFor(const Args &a) {
   if (a.mode == "all") {
-    std::vector<SearchMode> m = {SearchMode::kKeyword};
+    std::vector<SearchMode> m = {SearchMode::kKeyword,
+                                 SearchMode::kKeywordGraph};
     if (!a.no_embed) {
       m.push_back(SearchMode::kCode);
       if (!a.summ_model.empty()) {
         m.push_back(SearchMode::kSummary);
+        m.push_back(SearchMode::kKeywordSummary);
         m.push_back(SearchMode::kHybrid);
       }
     }
@@ -174,6 +178,8 @@ std::vector<SearchMode> ModesFor(const Args &a) {
   if (a.mode == "summary") return {SearchMode::kSummary};
   if (a.mode == "code") return {SearchMode::kCode};
   if (a.mode == "keyword") return {SearchMode::kKeyword};
+  if (a.mode == "keyword+summary") return {SearchMode::kKeywordSummary};
+  if (a.mode == "keyword+graph") return {SearchMode::kKeywordGraph};
   return {SearchMode::kHybrid};
 }
 

@@ -35,7 +35,7 @@
  * clio_code_index_client: talk to a running Code Indexer pool.
  *
  *   clio_code_index_client index PATH [--max-files N]
- *   clio_code_index_client query "text" [--mode summary|code|hybrid|keyword]
+ *   clio_code_index_client query "text" [--mode summary|code|hybrid|keyword|keyword+summary|keyword+graph]
  *                                       [--top-k N] [--show-summaries]
  *   clio_code_index_client status
  *
@@ -82,6 +82,8 @@ clio::run::u32 ModeFromName(const std::string &m, bool *ok) {
   if (m == "code") return ci::QueryMode::kCode;
   if (m == "hybrid") return ci::QueryMode::kHybrid;
   if (m == "keyword") return ci::QueryMode::kKeyword;
+  if (m == "keyword+summary") return ci::QueryMode::kKeywordSummary;
+  if (m == "keyword+graph") return ci::QueryMode::kKeywordGraph;
   *ok = false;
   return ci::QueryMode::kHybrid;
 }

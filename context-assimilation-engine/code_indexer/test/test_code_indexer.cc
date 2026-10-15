@@ -653,3 +653,74 @@ TEST_CASE("MakeOllamaSummarizer returns empty when the model is unreachable",
 }
 
 SIMPLE_TEST_MAIN()
+
+TEST_CASE("CodeIndexer keyword+summary mode finds files by summary-only terms",
+          "[code_indexer][pipeline]") {
+  // "prefetcher" appears only in the summary, never in the path or source.
+  SummarizeFn summ = [](const SourceFile &f) -> std::string {
+    return f.path == "tiering/reorganize.cc" ? "A prefetcher for hot blobs."
+                                              : "Unrelated helper.";
+  };
+  CodeIndexer idx(CodeIndexerConfig{}, nullptr, summ);
+  idx.IndexFiles(SampleFiles());
+  std::vector<SearchHit> hits;
+  REQUIRE(idx.Query("prefetcher", 3, SearchMode::kKeyword, &hits));
+  REQUIRE(hits.empty());  // plain keyword mode cannot see the summary
+  REQUIRE(idx.Query("prefetcher", 3, SearchMode::kKeywordSummary, &hits));
+  REQUIRE(hits.size() == 1);
+  REQUIRE(hits[0].path == "tiering/reorganize.cc");
+  // Source terms still match in the summary-augmented index.
+  REQUIRE(idx.Query("HttpServer", 1, SearchMode::kKeywordSummary, &hits));
+  REQUIRE(hits.size() == 1);
+  REQUIRE(hits[0].path == "net/http_server.cc");
+}
+
+TEST_CASE("ExtractReferences reads C++ includes and Python imports",
+          "[code_indexer][graph]") {
+  auto r = ExtractReferences(
+      "#include <vector>\n  #include \"a/b.h\"\nimport os.path\n"
+      "from pkg.mod import x, y\nint x;\n");
+  REQUIRE(r.size() == 4);
+  REQUIRE(r[0] == "vector");
+  REQUIRE(r[1] == "a/b.h");
+  REQUIRE(r[2] == "os/path");
+  REQUIRE(r[3] == "pkg/mod");
+}
+
+TEST_CASE("FileGraph links includes and test/impl siblings",
+          "[code_indexer][graph]") {
+  std::vector<FileGraph::Node> n = {
+      {0, "core/src/foo.cc", {"core/foo.h"}},
+      {1, "core/include/core/foo.h", {}},
+      {2, "test/test_foo.cc", {"core/foo.h"}},
+      {3, "util/bar.cc", {"stdio.h"}},
+  };
+  FileGraph g;
+  g.Build(n);
+  REQUIRE(g.NumNodes() == 4);
+  REQUIRE(g.Neighbors(3).empty());
+  // 0-1 (include) and 0-2, 1-2 (include / stem foo).
+  REQUIRE(g.Neighbors(0) == std::vector<uint32_t>({1, 2}));
+  REQUIRE(g.Neighbors(1) == std::vector<uint32_t>({0, 2}));
+  REQUIRE(g.NumEdges() == 3);
+}
+
+TEST_CASE("CodeIndexer keyword+graph surfaces a neighbour with no term match",
+          "[code_indexer][graph]") {
+  std::vector<SourceFile> files = {
+      {"core/include/core/widget.h", "// zorbulate the quux\nclass Widget {};\n"},
+      {"core/src/widget.cc",
+       "#include \"core/widget.h\"\nvoid Widget::Run() { int a = 1; }\n"},
+      {"net/other.cc", "int unrelated = 0;\n"},
+  };
+  CodeIndexer idx(CodeIndexerConfig{}, nullptr, nullptr);
+  idx.IndexFiles(files);
+  std::vector<SearchHit> hits;
+  REQUIRE(idx.Query("zorbulate", 3, SearchMode::kKeyword, &hits));
+  REQUIRE(hits.size() == 1);
+  REQUIRE(idx.Query("zorbulate", 3, SearchMode::kKeywordGraph, &hits));
+  REQUIRE(hits.size() == 2);
+  REQUIRE(hits[0].path == "core/include/core/widget.h");
+  REQUIRE(hits[1].path == "core/src/widget.cc");
+  REQUIRE(idx.NumGraphEdges() == 1);
+}

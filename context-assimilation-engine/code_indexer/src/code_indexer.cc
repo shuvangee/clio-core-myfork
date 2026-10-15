@@ -54,6 +54,9 @@ double Since(Clock::time_point t0) {
 /** Reciprocal-rank-fusion constant; 60 is the value from the original paper. */
 constexpr double kRrfK = 60.0;
 
+/** Weight of the best neighbouring BM25 score in kKeywordGraph (fixed). */
+constexpr double kGraphNeighborWeight = 0.5;
+
 /** 64-bit FNV-1a: stable across platforms and runs, unlike std::hash. */
 uint64_t Fnv1a64(const std::string &s) {
   uint64_t h = 1469598103934665603ULL;
@@ -117,9 +120,12 @@ void CodeIndexer::Remove(uint32_t file) {
   if (!files_[file].live) return;
   files_[file].live = false;
   files_[file].summary.clear();
+  files_[file].refs.clear();
+  graph_dirty_ = true;
   --live_files_;
   summary_index_.Erase(file);
   keyword_index_.Erase(file);
+  keyword_summary_index_.Erase(file);
   for (uint32_t c = 0; c < chunks_.size(); ++c) {
     if (chunks_[c].file == file) code_index_.Erase(c);
   }
@@ -153,6 +159,8 @@ IndexStats CodeIndexer::IndexFile(const SourceFile &f,
   uint32_t fid = static_cast<uint32_t>(files_.size());
   FileEntry entry;
   entry.path = f.path;
+  entry.refs = ExtractReferences(f.content);
+  graph_dirty_ = true;
 
   if (cached_summary != nullptr && !cached_summary->empty()) {
     entry.summary = *cached_summary;
@@ -209,11 +217,29 @@ IndexStats CodeIndexer::IndexFile(const SourceFile &f,
   }
 
   keyword_index_.Add(fid, f.path + "\n" + f.content);
+  keyword_summary_index_.Add(
+      fid, f.path + "\n" + entry.summary + "\n" + f.content);
   st.chunks += chunks.size();
   ++st.files;
   ++live_files_;
   files_.push_back(std::move(entry));
   return st;
+}
+
+void CodeIndexer::EnsureGraph() const {
+  if (!graph_dirty_) return;
+  std::vector<FileGraph::Node> nodes;
+  for (uint32_t i = 0; i < files_.size(); ++i) {
+    if (!files_[i].live) continue;
+    nodes.push_back({i, files_[i].path, files_[i].refs});
+  }
+  graph_.Build(nodes);
+  graph_dirty_ = false;
+}
+
+size_t CodeIndexer::NumGraphEdges() const {
+  EnsureGraph();
+  return graph_.NumEdges();
 }
 
 SearchHit CodeIndexer::MakeHit(uint32_t file, float score,
@@ -263,8 +289,44 @@ bool CodeIndexer::Query(const std::string &query, size_t k, SearchMode mode,
   hits->clear();
   if (k == 0 || files_.empty()) return true;
 
-  if (mode == SearchMode::kKeyword) {
-    for (const ScoredId &s : keyword_index_.Search(query, k)) {
+  if (mode == SearchMode::kKeywordGraph) {
+    EnsureGraph();
+    std::vector<ScoredId> all = keyword_index_.Search(query, files_.size());
+    std::unordered_map<uint32_t, double> s;
+    double top = all.empty() ? 0.0 : all[0].score;
+    for (const ScoredId &x : all) s[x.id] = top > 0 ? x.score / top : 0.0;
+    std::unordered_map<uint32_t, double> fin = s;
+    for (const ScoredId &x : all) {
+      for (uint32_t n : graph_.Neighbors(x.id)) {
+        if (!files_[n].live) continue;
+        fin[n] = std::max(fin[n], 0.0);
+      }
+    }
+    std::vector<ScoredId> ranked;
+    for (auto &kv : fin) {
+      double nb = 0.0;
+      for (uint32_t n : graph_.Neighbors(kv.first)) {
+        auto it = s.find(n);
+        if (it != s.end()) nb = std::max(nb, it->second);
+      }
+      double own = s.count(kv.first) ? s[kv.first] : 0.0;
+      double sc = own + kGraphNeighborWeight * nb;
+      if (sc > 0.0) ranked.push_back({kv.first, static_cast<float>(sc)});
+    }
+    std::sort(ranked.begin(), ranked.end(),
+              [](const ScoredId &a, const ScoredId &b) {
+                return a.score != b.score ? a.score > b.score : a.id < b.id;
+              });
+    if (ranked.size() > k) ranked.resize(k);
+    for (const ScoredId &x : ranked) hits->push_back(MakeHit(x.id, x.score, nullptr));
+    return true;
+  }
+
+  if (mode == SearchMode::kKeyword || mode == SearchMode::kKeywordSummary) {
+    const Bm25Index &bm = mode == SearchMode::kKeyword
+                              ? keyword_index_
+                              : keyword_summary_index_;
+    for (const ScoredId &s : bm.Search(query, k)) {
       hits->push_back(MakeHit(s.id, s.score, nullptr));
     }
     return true;
