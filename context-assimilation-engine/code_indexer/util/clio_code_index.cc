@@ -46,6 +46,7 @@
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
+#include <clio_cae/code_indexer/query_rerank.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -53,6 +54,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 using namespace clio::cae::code_indexer;  // NOLINT: small CLI translation unit
@@ -77,6 +79,10 @@ struct Args {
   std::string mode = "hybrid";
   size_t top_k = 5;
   bool show_summaries = false;
+  std::string judge_model;     // empty = no query-conditioned rerank
+  size_t judge_top = 10;
+  size_t judge_history = 0;    // earlier (query -> file) pairs in the prompt
+  std::string feedback_file;   // 'query<TAB>path[,path]' simulated feedback
 };
 
 void Usage() {
@@ -99,7 +105,15 @@ void Usage() {
          "  --queries-file FILE    one query per line\n"
          "  --mode summary|code|hybrid|keyword|keyword+summary|keyword+graph|all   default hybrid\n"
          "  --top-k N              default 5\n"
-         "  --show-summaries       print each hit's summary\n";
+         "  --show-summaries       print each hit's summary\n"
+         "  --judge-model NAME     also print [keyword+judge]: top hits of\n"
+         "                         keyword reranked by a query-conditioned model\n"
+         "  --judge-top N          hits to judge (default 10)\n"
+         "  --judge-history N      earlier (query -> file) pairs fed to the\n"
+         "                         prompt (evolving prompt, default 0)\n"
+         "  --feedback-file FILE   'query<TAB>path[,path]' lines: after each\n"
+         "                         query the first path is recorded as the\n"
+         "                         file that answered it (simulated feedback)\n";
 }
 
 bool ParseArgs(int argc, char **argv, Args *a) {
@@ -142,6 +156,12 @@ bool ParseArgs(int argc, char **argv, Args *a) {
         if (!line.empty() && line[0] != '#') a->queries.push_back(line);
       }
     }
+    else if (k == "--judge-model") a->judge_model = v;
+    else if (k == "--judge-top") a->judge_top = std::strtoul(v, nullptr, 10);
+    else if (k == "--judge-history") {
+      a->judge_history = std::strtoul(v, nullptr, 10);
+    }
+    else if (k == "--feedback-file") a->feedback_file = v;
     else if (k == "--mode") a->mode = v;
     else if (k == "--top-k") a->top_k = std::strtoul(v, nullptr, 10);
     else { std::cerr << "unknown option " << k << "\n"; return false; }
@@ -258,9 +278,55 @@ int main(int argc, char **argv) {
               << (cache->Save() ? "" : " (SAVE FAILED)") << "\n";
   }
 
+  // Query-conditioned rerank (evolving prompt). Simulated feedback: after
+  // each query the file named in --feedback-file is recorded as the one that
+  // answered it, so later prompts carry that history.
+  JudgeFn judge;
+  PromptEvolver evolver;
+  std::unordered_map<std::string, std::string> feedback;
+  std::unordered_map<std::string, const SourceFile *> by_path;
+  for (const SourceFile &f : files) by_path[f.path] = &f;
+  if (!a.judge_model.empty()) {
+    OllamaSummarizeConfig jc;
+    jc.endpoint = a.summ_endpoint;
+    jc.model = a.judge_model;
+    jc.context_length = a.summ_ctx;
+    jc.num_predict = 8;
+    judge = MakeOllamaJudge(jc);
+    std::ifstream fb(a.feedback_file);
+    std::string line;
+    while (std::getline(fb, line)) {
+      size_t t = line.find('\t');
+      if (t == std::string::npos || line[0] == '#') continue;
+      std::string path = line.substr(t + 1);
+      path = path.substr(0, path.find_first_of(",\t"));
+      feedback[line.substr(0, t)] = path;
+    }
+  }
+
   int rc = 0;
   for (const std::string &q : a.queries) {
     std::cout << "\nQUERY: " << q << "\n";
+    if (judge) {
+      std::vector<SearchHit> base;
+      indexer.Query(q, a.judge_top, SearchMode::kKeyword, &base);
+      RerankStats rs;
+      auto content_of = [&](const std::string &p, SourceFile *out) {
+        auto it = by_path.find(p);
+        if (it == by_path.end()) return false;
+        *out = *it->second;
+        return true;
+      };
+      std::vector<SearchHit> rr =
+          RerankByJudge(q, base, a.judge_top, content_of, judge,
+                        evolver.History(a.judge_history), &rs);
+      std::cout << " [keyword+judge]  judged=" << rs.judged
+                << " failures=" << rs.failures << "\n";
+      if (rr.size() > a.top_k) rr.resize(a.top_k);
+      PrintHits(rr, false);
+      auto fb = feedback.find(q);
+      if (fb != feedback.end()) evolver.RecordUseful(q, fb->second);
+    }
     for (SearchMode m : ModesFor(a)) {
       std::vector<SearchHit> hits;
       bool ok = indexer.Query(q, a.top_k, m, &hits);

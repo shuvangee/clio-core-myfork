@@ -60,4 +60,40 @@ SummarizeFn MakeOllamaSummarizer(const OllamaSummarizeConfig &cfg) {
   };
 }
 
+JudgeFn MakeOllamaJudge(const OllamaSummarizeConfig &cfg,
+                        size_t max_file_chars) {
+  namespace sm = clio::cae::summarizer;
+  sm::LabelMatch rule;
+  rule.tag_re_ = ".*";
+  rule.blob_re_ = ".*";
+  rule.model_ = cfg.model;
+  rule.prompt_ = "code_indexer_judge";
+  rule.context_length_ = cfg.context_length;
+  rule.num_predict_ = cfg.num_predict > 0 ? cfg.num_predict : 8;
+  std::string endpoint = cfg.endpoint;
+
+  return [rule, endpoint, max_file_chars](const std::string &query,
+                                          const std::string &history,
+                                          const SourceFile &f) -> double {
+    std::string prompt =
+        "You help a developer find source files. The developer's question "
+        "is:\n\"" + query + "\"\n\n" + history +
+        "Below is one source file. How likely is it that this is a file the "
+        "developer needs for that question? Reply with ONLY one integer from "
+        "0 (irrelevant) to 10 (exactly the file needed).";
+    std::string payload = "File: " + f.path + "\n\n" +
+                          f.content.substr(0, max_file_chars);
+    std::string out = sm::GenerateSummary(endpoint, rule, prompt, payload,
+                                          "code_indexer_judge", f.path);
+    for (size_t i = 0; i < out.size(); ++i) {
+      if (out[i] >= '0' && out[i] <= '9') {
+        int v = out[i] - '0';
+        if (v == 1 && i + 1 < out.size() && out[i + 1] == '0') v = 10;
+        return static_cast<double>(v);
+      }
+    }
+    return -1.0;
+  };
+}
+
 }  // namespace clio::cae::code_indexer

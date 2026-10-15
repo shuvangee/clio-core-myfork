@@ -46,6 +46,7 @@
  */
 
 #include <clio_cae/code_indexer/code_indexer.h>
+#include <clio_cae/code_indexer/query_rerank.h>
 
 #include <string>
 
@@ -70,6 +71,15 @@ struct OllamaSummarizeConfig {
  * Returns "" on failure (the indexer still indexes the code).
  */
 SummarizeFn MakeOllamaSummarizer(const OllamaSummarizeConfig &cfg);
+
+/**
+ * A JudgeFn backed by an Ollama-compatible model. The prompt contains the
+ * query, the evolver's history text and the file (truncated to
+ * `max_file_chars`); the model must answer with one integer 0..10. cfg.prompt
+ * is ignored; cfg.num_predict should be small (the answer is one number).
+ */
+JudgeFn MakeOllamaJudge(const OllamaSummarizeConfig &cfg,
+                        size_t max_file_chars = 6000);
 
 }  // namespace clio::cae::code_indexer
 

@@ -724,3 +724,41 @@ TEST_CASE("CodeIndexer keyword+graph surfaces a neighbour with no term match",
   REQUIRE(hits[1].path == "core/src/widget.cc");
   REQUIRE(idx.NumGraphEdges() == 1);
 }
+
+TEST_CASE("RerankByJudge reorders the top hits by query-conditioned score",
+          "[code_indexer][rerank]") {
+  std::vector<SourceFile> files = {
+      {"a.cc", "alpha alpha alpha"}, {"b.cc", "alpha beta"},
+      {"c.cc", "alpha gamma"}};
+  CodeIndexer idx(CodeIndexerConfig{}, nullptr, nullptr);
+  idx.IndexFiles(files);
+  std::vector<SearchHit> hits;
+  REQUIRE(idx.Query("alpha", 3, SearchMode::kKeyword, &hits));
+  REQUIRE(hits.size() == 3);
+  std::string seen_history;
+  JudgeFn judge = [&](const std::string &q, const std::string &hist,
+                      const SourceFile &f) {
+    seen_history = hist;
+    REQUIRE(q == "alpha");
+    return f.path == "c.cc" ? 9.0 : (f.path == "b.cc" ? 4.0 : 0.0);
+  };
+  auto content_of = [&](const std::string &p, SourceFile *out) {
+    for (const SourceFile &f : files) {
+      if (f.path == p) { *out = f; return true; }
+    }
+    return false;
+  };
+  PromptEvolver ev;
+  ev.RecordUseful("where is beta", "b.cc");
+  ev.RecordUseful("where is gamma", "c.cc");
+  RerankStats st;
+  auto out = RerankByJudge("alpha", hits, 2, content_of, judge,
+                           ev.History(1), &st);
+  REQUIRE(out.size() == 3);
+  REQUIRE(st.judged == 2);
+  // Only the first two hits were judged; the third keeps its place.
+  REQUIRE(out[2].path == hits[2].path);
+  REQUIRE(seen_history.find("where is gamma") != std::string::npos);
+  REQUIRE(seen_history.find("where is beta") == std::string::npos);  // max 1
+  REQUIRE(ev.History(0).empty());
+}
