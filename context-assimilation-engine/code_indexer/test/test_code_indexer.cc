@@ -41,12 +41,14 @@
 #include "simple_test.h"
 #include "summarizer_http_stub.h"
 
+#include <clio_cae/code_indexer/claude_client.h>
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
 
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -761,4 +763,140 @@ TEST_CASE("RerankByJudge reorders the top hits by query-conditioned score",
   REQUIRE(seen_history.find("where is gamma") != std::string::npos);
   REQUIRE(seen_history.find("where is beta") == std::string::npos);  // max 1
   REQUIRE(ev.History(0).empty());
+}
+
+TEST_CASE("VerifyGraphEdges drops edges the verifier rejects",
+          "[code_indexer][graph][verify]") {
+  std::vector<SourceFile> files = {
+      {"core/include/core/widget.h", "// zorbulate the quux\nclass Widget {};\n"},
+      {"core/src/widget.cc",
+       "#include \"core/widget.h\"\nvoid Widget::Run() { int a = 1; }\n"},
+      {"net/other.cc", "int unrelated = 0;\n"},
+  };
+  CodeIndexer idx(CodeIndexerConfig{}, nullptr, nullptr);
+  idx.IndexFiles(files);
+  auto content_of = [&](const std::string &p, SourceFile *out) {
+    for (const SourceFile &f : files) {
+      if (f.path == p) { *out = f; return true; }
+    }
+    return false;
+  };
+  std::vector<SearchHit> hits;
+  // Before verification the verified mode equals the plain graph mode.
+  REQUIRE(idx.Query("zorbulate", 3, SearchMode::kKeywordGraphVerified, &hits));
+  REQUIRE(hits.size() == 2);
+  auto r = idx.VerifyGraphEdges(
+      [](const SourceFile &, const SourceFile &) { return false; }, content_of);
+  REQUIRE(r.first == 1);
+  REQUIRE(r.second == 1);
+  REQUIRE(idx.Query("zorbulate", 3, SearchMode::kKeywordGraphVerified, &hits));
+  REQUIRE(hits.size() == 1);  // the rejected neighbour is gone
+  REQUIRE(idx.Query("zorbulate", 3, SearchMode::kKeywordGraph, &hits));
+  REQUIRE(hits.size() == 2);  // the unverified mode still sees it
+  // Re-indexing resets the verification.
+  idx.IndexFiles({files[2]});
+  REQUIRE(idx.Query("zorbulate", 3, SearchMode::kKeywordGraphVerified, &hits));
+  REQUIRE(hits.size() == 2);
+}
+
+TEST_CASE("LLM roles parse model answers and degrade safely",
+          "[code_indexer][roles]") {
+  SourceFile a{"a.cc", "int a;"}, b{"b.cc", "int b;"};
+  REQUIRE_FALSE(MakeEdgeVerifierFromLlm(
+      [](const std::string &, const std::string &) { return std::string(" No."); })(a, b));
+  REQUIRE(MakeEdgeVerifierFromLlm(
+      [](const std::string &, const std::string &) { return std::string("Yes"); })(a, b));
+  // A failed call or garbage keeps the edge.
+  REQUIRE(MakeEdgeVerifierFromLlm(
+      [](const std::string &, const std::string &) { return std::string(); })(a, b));
+  JudgeFn j = MakeJudgeFromLlm(
+      [](const std::string &, const std::string &) { return std::string("Score: 10"); });
+  REQUIRE(j("q", "", a) == 10.0);
+  JudgeFn j2 = MakeJudgeFromLlm(
+      [](const std::string &, const std::string &) { return std::string("n/a"); });
+  REQUIRE(j2("q", "", a) < 0.0);
+  std::string seen;
+  FocusFn f = MakeFocusFromLlm([&](const std::string &p, const std::string &) {
+    seen = p;
+    return std::string("It parses things.");
+  });
+  REQUIRE(f("find the parser", "H\n", a) == "It parses things.");
+  REQUIRE(seen.find("find the parser") != std::string::npos);
+  REQUIRE(seen.find("H\n") != std::string::npos);
+}
+
+TEST_CASE("RerankByFocusedSummary orders by the question-focused description",
+          "[code_indexer][rerank][focus]") {
+  std::vector<SearchHit> hits(3);
+  hits[0].path = "a.cc"; hits[0].score = 10.0f;
+  hits[1].path = "b.cc"; hits[1].score = 8.0f;
+  hits[2].path = "c.cc"; hits[2].score = 1.0f;
+  auto content_of = [](const std::string &p, SourceFile *out) {
+    *out = {p, "x"};
+    return true;
+  };
+  FocusFn focus = [](const std::string &, const std::string &,
+                     const SourceFile &f) {
+    return f.path == "b.cc" ? std::string("prefetch") : std::string("other");
+  };
+  // 2-d toy space: "prefetch" -> (1,0), everything else -> (0,1).
+  EmbedTextFn eq = [](const std::string &) { return std::vector<float>{1, 0}; };
+  EmbedDocFn ed = [](const std::string &, const std::string &t) {
+    return t == "prefetch" ? std::vector<float>{1, 0} : std::vector<float>{0, 1};
+  };
+  FocusRerank r = RerankByFocusedSummary("prefetch code", hits, 2, content_of,
+                                         focus, eq, ed, "");
+  REQUIRE(r.failures == 0);
+  REQUIRE(r.by_focus.size() == 3);
+  REQUIRE(r.by_focus[0].path == "b.cc");   // focus alone puts b first
+  REQUIRE(r.by_focus[2].path == "c.cc");   // beyond top_n: unchanged tail
+  REQUIRE(r.fused[0].path == "b.cc");      // 8/10 + 1.0 beats 1.0 + 0
+  REQUIRE(r.by_focus[0].summary == "prefetch");
+}
+
+TEST_CASE("Claude request/response helpers and client against a stub",
+          "[code_indexer][claude]") {
+  std::string body = BuildClaudeRequest("haiku-test", 77, "PROMPT", "PAYLOAD");
+  REQUIRE(body.find("\"model\":\"haiku-test\"") != std::string::npos);
+  REQUIRE(body.find("\"max_tokens\":77") != std::string::npos);
+  REQUIRE(body.find("PROMPT\\n\\nPAYLOAD") != std::string::npos);
+
+  std::string text;
+  uint64_t in = 0, out = 0;
+  REQUIRE(ParseClaudeResponse(
+      R"({"content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":12,"output_tokens":3}})",
+      &text, &in, &out));
+  REQUIRE(text == "hello");
+  REQUIRE(in == 12);
+  REQUIRE(out == 3);
+  REQUIRE_FALSE(ParseClaudeResponse(R"({"error":{"type":"x"}})", &text, &in, &out));
+  REQUIRE_FALSE(ParseClaudeResponse("not json", &text, &in, &out));
+  REQUIRE_FALSE(ParseClaudeResponse(R"({"content":[]})", &text, &in, &out));
+
+  clio_cae_test::OneShotHttpServer srv(
+      "HTTP/1.1 200 OK\r\n",
+      R"({"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":5,"output_tokens":2}})");
+  ::setenv("CLIO_TEST_CLAUDE_KEY", "test-key-not-real", 1);
+  ClaudeConfig cc;
+  cc.endpoint = srv.Endpoint();
+  cc.model = "haiku-test";
+  cc.api_key_env = "CLIO_TEST_CLAUDE_KEY";
+  cc.retries = 0;
+  ClaudeClient client(cc);
+  REQUIRE(client.HasKey());
+  REQUIRE(client.Complete("p", "x") == "ok");
+  ClaudeUsage u = client.Usage();
+  REQUIRE(u.calls == 1);
+  REQUIRE(u.failures == 0);
+  REQUIRE(u.input_tokens == 5);
+  REQUIRE(u.output_tokens == 2);
+  REQUIRE(srv.RequestCount() == 1);
+  // The key travels in a header, never in the JSON body.
+  REQUIRE(srv.RequestBodies()[0].find("test-key-not-real") == std::string::npos);
+
+  ::unsetenv("CLIO_TEST_CLAUDE_KEY");
+  ClaudeClient nokey(cc);
+  REQUIRE_FALSE(nokey.HasKey());
+  REQUIRE(nokey.Complete("p", "x").empty());
+  REQUIRE(nokey.Usage().failures == 1);
 }

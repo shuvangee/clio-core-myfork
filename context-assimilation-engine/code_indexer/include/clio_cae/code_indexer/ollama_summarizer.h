@@ -46,6 +46,7 @@
  */
 
 #include <clio_cae/code_indexer/code_indexer.h>
+#include <clio_cae/code_indexer/llm_roles.h>
 #include <clio_cae/code_indexer/query_rerank.h>
 
 #include <string>
@@ -78,6 +79,12 @@ SummarizeFn MakeOllamaSummarizer(const OllamaSummarizeConfig &cfg);
  * `max_file_chars`); the model must answer with one integer 0..10. cfg.prompt
  * is ignored; cfg.num_predict should be small (the answer is one number).
  */
+/**
+ * Generic prompt+payload -> text over Ollama (cfg.num_predict caps the
+ * answer). Lets the model roles in llm_roles.h run on a local model.
+ */
+LlmFn MakeOllamaLlm(const OllamaSummarizeConfig &cfg);
+
 JudgeFn MakeOllamaJudge(const OllamaSummarizeConfig &cfg,
                         size_t max_file_chars = 6000);
 

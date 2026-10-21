@@ -235,6 +235,27 @@ void CodeIndexer::EnsureGraph() const {
   }
   graph_.Build(nodes);
   graph_dirty_ = false;
+  dropped_edges_.clear();
+  edges_verified_ = false;
+}
+
+std::pair<size_t, size_t> CodeIndexer::VerifyGraphEdges(
+    const EdgeVerifyFn &verify,
+    const std::function<bool(const std::string &, SourceFile *)> &content_of) {
+  EnsureGraph();
+  dropped_edges_.clear();
+  size_t asked = 0;
+  for (const auto &e : graph_.Edges()) {
+    SourceFile a, b;
+    if (!content_of(files_[e.first].path, &a) ||
+        !content_of(files_[e.second].path, &b)) {
+      continue;
+    }
+    ++asked;
+    if (!verify(a, b)) dropped_edges_.insert(e);
+  }
+  edges_verified_ = true;
+  return {asked, dropped_edges_.size()};
 }
 
 size_t CodeIndexer::NumGraphEdges() const {
@@ -289,15 +310,27 @@ bool CodeIndexer::Query(const std::string &query, size_t k, SearchMode mode,
   hits->clear();
   if (k == 0 || files_.empty()) return true;
 
-  if (mode == SearchMode::kKeywordGraph) {
+  if (mode == SearchMode::kKeywordGraph ||
+      mode == SearchMode::kKeywordGraphVerified) {
     EnsureGraph();
+    const bool verified = mode == SearchMode::kKeywordGraphVerified;
+    auto neighbors = [&](uint32_t id) {
+      std::vector<uint32_t> out;
+      for (uint32_t n : graph_.Neighbors(id)) {
+        if (verified && dropped_edges_.count({std::min(id, n), std::max(id, n)})) {
+          continue;
+        }
+        out.push_back(n);
+      }
+      return out;
+    };
     std::vector<ScoredId> all = keyword_index_.Search(query, files_.size());
     std::unordered_map<uint32_t, double> s;
     double top = all.empty() ? 0.0 : all[0].score;
     for (const ScoredId &x : all) s[x.id] = top > 0 ? x.score / top : 0.0;
     std::unordered_map<uint32_t, double> fin = s;
     for (const ScoredId &x : all) {
-      for (uint32_t n : graph_.Neighbors(x.id)) {
+      for (uint32_t n : neighbors(x.id)) {
         if (!files_[n].live) continue;
         fin[n] = std::max(fin[n], 0.0);
       }
@@ -305,7 +338,7 @@ bool CodeIndexer::Query(const std::string &query, size_t k, SearchMode mode,
     std::vector<ScoredId> ranked;
     for (auto &kv : fin) {
       double nb = 0.0;
-      for (uint32_t n : graph_.Neighbors(kv.first)) {
+      for (uint32_t n : neighbors(kv.first)) {
         auto it = s.find(n);
         if (it != s.end()) nb = std::max(nb, it->second);
       }

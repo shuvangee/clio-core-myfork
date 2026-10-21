@@ -60,6 +60,23 @@ SummarizeFn MakeOllamaSummarizer(const OllamaSummarizeConfig &cfg) {
   };
 }
 
+LlmFn MakeOllamaLlm(const OllamaSummarizeConfig &cfg) {
+  namespace sm = clio::cae::summarizer;
+  sm::LabelMatch rule;
+  rule.tag_re_ = ".*";
+  rule.blob_re_ = ".*";
+  rule.model_ = cfg.model;
+  rule.prompt_ = "code_indexer_llm";
+  rule.context_length_ = cfg.context_length;
+  rule.num_predict_ = cfg.num_predict;
+  std::string endpoint = cfg.endpoint;
+  return [rule, endpoint](const std::string &prompt,
+                          const std::string &payload) {
+    return sm::GenerateSummary(endpoint, rule, prompt, payload,
+                               "code_indexer_llm", "llm");
+  };
+}
+
 JudgeFn MakeOllamaJudge(const OllamaSummarizeConfig &cfg,
                         size_t max_file_chars) {
   namespace sm = clio::cae::summarizer;

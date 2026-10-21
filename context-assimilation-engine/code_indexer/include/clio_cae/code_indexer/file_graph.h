@@ -59,6 +59,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace clio::cae::code_indexer {
@@ -170,6 +171,18 @@ class FileGraph {
     static const std::vector<uint32_t> kNone;
     auto it = adj_.find(id);
     return it == adj_.end() ? kNone : it->second;
+  }
+
+  /** Every undirected edge once, as (low id, high id), sorted. */
+  std::vector<std::pair<uint32_t, uint32_t>> Edges() const {
+    std::vector<std::pair<uint32_t, uint32_t>> out;
+    for (const auto &kv : adj_) {
+      for (uint32_t n : kv.second) {
+        if (kv.first < n) out.push_back({kv.first, n});
+      }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
   }
 
   size_t NumNodes() const { return adj_.size(); }

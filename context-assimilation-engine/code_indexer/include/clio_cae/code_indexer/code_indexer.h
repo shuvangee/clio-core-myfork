@@ -68,13 +68,18 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace clio::cae::code_indexer {
 
 /** Returns a file's summary, or "" on failure (the file is still indexed). */
 using SummarizeFn = std::function<std::string(const SourceFile &)>;
+
+/** True when files `a` and `b` are really related (a model's judgment). */
+using EdgeVerifyFn = std::function<bool(const SourceFile &a, const SourceFile &b)>;
 
 /** How Query() ranks files. */
 enum class SearchMode {
@@ -88,7 +93,12 @@ enum class SearchMode {
    * BM25 over path + source, then each file also gains half the best BM25
    * score among its graph neighbours (includes/imports, test/impl siblings).
    */
-  kKeywordGraph
+  kKeywordGraph,
+  /**
+   * Like kKeywordGraph but only over edges that VerifyGraphEdges() kept.
+   * Before any verification it behaves exactly like kKeywordGraph.
+   */
+  kKeywordGraphVerified
 };
 
 /** Chunking, prefixes and truncation. Defaults suit EmbeddingGemma. */
@@ -171,6 +181,16 @@ class CodeIndexer {
   bool Query(const std::string &query, size_t k, SearchMode mode,
              std::vector<SearchHit> *hits) const;
 
+  /**
+   * Ask `verify` about every structural graph edge and drop the ones it
+   * rejects (used by kKeywordGraphVerified). `content_of` maps a path to its
+   * source. Returns {edges asked, edges dropped}. Re-indexing any file resets
+   * the verification.
+   */
+  std::pair<size_t, size_t> VerifyGraphEdges(
+      const EdgeVerifyFn &verify,
+      const std::function<bool(const std::string &, SourceFile *)> &content_of);
+
   /** Edge count of the file-relationship graph (builds it if stale). */
   size_t NumGraphEdges() const;
 
@@ -219,6 +239,8 @@ class CodeIndexer {
   // is const but callers already serialize it (see the runtime's lock).
   mutable FileGraph graph_;
   mutable bool graph_dirty_ = true;
+  mutable std::set<std::pair<uint32_t, uint32_t>> dropped_edges_;
+  mutable bool edges_verified_ = false;
 };
 
 /**

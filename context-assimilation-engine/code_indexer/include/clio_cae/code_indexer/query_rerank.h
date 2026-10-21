@@ -51,6 +51,7 @@
 #include <clio_cae/code_indexer/code_indexer.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -132,6 +133,98 @@ inline std::vector<SearchHit> RerankByJudge(
     out.push_back(std::move(h));
   }
   for (size_t i = n; i < hits.size(); ++i) out.push_back(hits[i]);
+  return out;
+}
+
+/** A question-focused description of `file` ("" on failure). */
+using FocusFn = std::function<std::string(const std::string &query,
+                                          const std::string &history,
+                                          const SourceFile &file)>;
+
+/** Embeds one query string; empty vector on failure. */
+using EmbedTextFn = std::function<std::vector<float>(const std::string &)>;
+
+/** Embeds a document (title = file path, text = its description). */
+using EmbedDocFn = std::function<std::vector<float>(const std::string &title,
+                                                    const std::string &text)>;
+
+/** Outcome of RerankByFocusedSummary(). */
+struct FocusRerank {
+  /** Candidates ordered by cosine(query, embedded focused summary) only. */
+  std::vector<SearchHit> by_focus;
+  /** norm(BM25) + min-max-normalized focus cosine, ties by BM25 rank. */
+  std::vector<SearchHit> fused;
+  size_t failures = 0;
+};
+
+inline float CosineUnit(const std::vector<float> &a, const std::vector<float> &b) {
+  if (a.size() != b.size() || a.empty()) return 0.0f;
+  double dot = 0.0, na = 0.0, nb = 0.0;
+  for (size_t i = 0; i < a.size(); ++i) {
+    dot += static_cast<double>(a[i]) * b[i];
+    na += static_cast<double>(a[i]) * a[i];
+    nb += static_cast<double>(b[i]) * b[i];
+  }
+  return (na > 0 && nb > 0) ? static_cast<float>(dot / std::sqrt(na * nb)) : 0.0f;
+}
+
+/**
+ * Re-describe each of the first `top_n` hits *for this question*, embed that
+ * description and compare it with the question's embedding. `hits[i].score`
+ * must be the BM25 score. A failed focus/embed gives the file cosine 0 and is
+ * counted. Hits after top_n are appended unchanged to both outputs.
+ */
+inline FocusRerank RerankByFocusedSummary(
+    const std::string &query, const std::vector<SearchHit> &hits, size_t top_n,
+    const std::function<bool(const std::string &, SourceFile *)> &content_of,
+    const FocusFn &focus, const EmbedTextFn &embed_query,
+    const EmbedDocFn &embed_doc, const std::string &history) {
+  FocusRerank out;
+  size_t n = std::min(top_n, hits.size());
+  std::vector<float> q = embed_query(query);
+  std::vector<float> cos(n, 0.0f);
+  std::vector<std::string> fs(n);
+  for (size_t i = 0; i < n; ++i) {
+    SourceFile f;
+    if (!content_of(hits[i].path, &f)) continue;
+    fs[i] = focus(query, history, f);
+    std::vector<float> d = fs[i].empty() ? std::vector<float>{}
+                                         : embed_doc(hits[i].path, fs[i]);
+    if (q.empty() || d.empty()) {
+      ++out.failures;
+      continue;
+    }
+    cos[i] = CosineUnit(q, d);
+  }
+  float lo = n ? *std::min_element(cos.begin(), cos.end()) : 0.0f;
+  float hi = n ? *std::max_element(cos.begin(), cos.end()) : 0.0f;
+  float mx = 0.0f;
+  for (size_t i = 0; i < n; ++i) mx = std::max(mx, hits[i].score);
+  std::vector<std::pair<double, size_t>> a, b;
+  for (size_t i = 0; i < n; ++i) {
+    double cn = hi > lo ? (cos[i] - lo) / (hi - lo) : 0.0;
+    a.push_back({cos[i], i});
+    b.push_back({(mx > 0 ? hits[i].score / mx : 0.0) + cn, i});
+  }
+  auto by_desc = [](const auto &x, const auto &y) { return x.first > y.first; };
+  std::stable_sort(a.begin(), a.end(), by_desc);
+  std::stable_sort(b.begin(), b.end(), by_desc);
+  for (const auto &p : a) {
+    SearchHit h = hits[p.second];
+    h.score = static_cast<float>(p.first);
+    h.summary = fs[p.second];
+    out.by_focus.push_back(std::move(h));
+  }
+  for (const auto &p : b) {
+    SearchHit h = hits[p.second];
+    h.score = static_cast<float>(p.first);
+    h.summary = fs[p.second];
+    out.fused.push_back(std::move(h));
+  }
+  for (size_t i = n; i < hits.size(); ++i) {
+    out.by_focus.push_back(hits[i]);
+    out.fused.push_back(hits[i]);
+  }
   return out;
 }
 

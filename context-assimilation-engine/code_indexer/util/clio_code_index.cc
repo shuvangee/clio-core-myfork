@@ -43,6 +43,7 @@
  * invocation indexes and then answers every --query / --queries-file entry.
  */
 
+#include <clio_cae/code_indexer/claude_client.h>
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
@@ -83,6 +84,13 @@ struct Args {
   size_t judge_top = 10;
   size_t judge_history = 0;    // earlier (query -> file) pairs in the prompt
   std::string feedback_file;   // 'query<TAB>path[,path]' simulated feedback
+  std::string verify_model;    // model that confirms/drops graph edges
+  std::string focus_model;     // model that writes question-focused summaries
+  size_t focus_top = 5;
+  std::string backend = "ollama";  // ollama | claude (serves every model role)
+  std::string claude_model;
+  std::string claude_endpoint = "https://api.anthropic.com";
+  int claude_max_tokens = 256;
 };
 
 void Usage() {
@@ -103,7 +111,7 @@ void Usage() {
          "  --summ-num-predict N   cap per summary response (default 256)\n"
          "  --query TEXT           repeatable\n"
          "  --queries-file FILE    one query per line\n"
-         "  --mode summary|code|hybrid|keyword|keyword+summary|keyword+graph|all   default hybrid\n"
+         "  --mode summary|code|hybrid|keyword|keyword+summary|keyword+graph|keyword+graph-verified|all   default hybrid\n"
          "  --top-k N              default 5\n"
          "  --show-summaries       print each hit's summary\n"
          "  --judge-model NAME     also print [keyword+judge]: top hits of\n"
@@ -111,6 +119,17 @@ void Usage() {
          "  --judge-top N          hits to judge (default 10)\n"
          "  --judge-history N      earlier (query -> file) pairs fed to the\n"
          "                         prompt (evolving prompt, default 0)\n"
+         "  --verify-model NAME    model that keeps/drops each file-graph edge\n"
+         "                         (adds mode keyword+graph-verified)\n"
+         "  --focus-model NAME     model that re-describes each top hit FOR the\n"
+         "                         question; prints [keyword+focus] and\n"
+         "                         [keyword+focus-fused] (needs the embedder)\n"
+         "  --focus-top N          hits to re-describe (default 5)\n"
+         "  --backend ollama|claude  which service answers every model role\n"
+         "                         (a role is on when its *-model flag is set)\n"
+         "  --claude-model ID      Claude model id (reads ANTHROPIC_API_KEY)\n"
+         "  --claude-endpoint URL  default https://api.anthropic.com\n"
+         "  --claude-max-tokens N  default 256\n"
          "  --feedback-file FILE   'query<TAB>path[,path]' lines: after each\n"
          "                         query the first path is recorded as the\n"
          "                         file that answered it (simulated feedback)\n";
@@ -156,6 +175,13 @@ bool ParseArgs(int argc, char **argv, Args *a) {
         if (!line.empty() && line[0] != '#') a->queries.push_back(line);
       }
     }
+    else if (k == "--verify-model") a->verify_model = v;
+    else if (k == "--focus-model") a->focus_model = v;
+    else if (k == "--focus-top") a->focus_top = std::strtoul(v, nullptr, 10);
+    else if (k == "--backend") a->backend = v;
+    else if (k == "--claude-model") a->claude_model = v;
+    else if (k == "--claude-endpoint") a->claude_endpoint = v;
+    else if (k == "--claude-max-tokens") a->claude_max_tokens = std::atoi(v);
     else if (k == "--judge-model") a->judge_model = v;
     else if (k == "--judge-top") a->judge_top = std::strtoul(v, nullptr, 10);
     else if (k == "--judge-history") {
@@ -177,6 +203,7 @@ const char *ModeName(SearchMode m) {
     case SearchMode::kKeyword: return "keyword";
     case SearchMode::kKeywordSummary: return "keyword+summary";
     case SearchMode::kKeywordGraph: return "keyword+graph";
+    case SearchMode::kKeywordGraphVerified: return "keyword+graph-verified";
   }
   return "?";
 }
@@ -185,6 +212,7 @@ std::vector<SearchMode> ModesFor(const Args &a) {
   if (a.mode == "all") {
     std::vector<SearchMode> m = {SearchMode::kKeyword,
                                  SearchMode::kKeywordGraph};
+    if (!a.verify_model.empty()) m.push_back(SearchMode::kKeywordGraphVerified);
     if (!a.no_embed) {
       m.push_back(SearchMode::kCode);
       if (!a.summ_model.empty()) {
@@ -200,6 +228,9 @@ std::vector<SearchMode> ModesFor(const Args &a) {
   if (a.mode == "keyword") return {SearchMode::kKeyword};
   if (a.mode == "keyword+summary") return {SearchMode::kKeywordSummary};
   if (a.mode == "keyword+graph") return {SearchMode::kKeywordGraph};
+  if (a.mode == "keyword+graph-verified") {
+    return {SearchMode::kKeywordGraphVerified};
+  }
   return {SearchMode::kHybrid};
 }
 
@@ -247,14 +278,52 @@ int main(int argc, char **argv) {
       embedder = cache;
     }
   }
+  const bool use_claude = a.backend == "claude";
+  if (a.backend != "ollama" && !use_claude) {
+    std::cerr << "bad --backend (ollama|claude)\n";
+    return 2;
+  }
+  std::shared_ptr<ClaudeClient> claude;
+  if (use_claude) {
+    if (a.claude_model.empty()) {
+      std::cerr << "--backend claude needs --claude-model\n";
+      return 2;
+    }
+    ClaudeConfig cc;
+    cc.endpoint = a.claude_endpoint;
+    cc.model = a.claude_model;
+    cc.max_tokens = a.claude_max_tokens;
+    claude = std::make_shared<ClaudeClient>(cc);
+    if (!claude->HasKey()) {
+      std::cerr << "ANTHROPIC_API_KEY is not set in this environment\n";
+      return 2;
+    }
+  }
+  // One LlmFn per role (Ollama roles differ in how many tokens they may emit).
+  auto ollama_llm = [&](const std::string &model, int num_predict) {
+    OllamaSummarizeConfig oc;
+    oc.endpoint = a.summ_endpoint;
+    oc.model = model;
+    oc.context_length = a.summ_ctx;
+    oc.num_predict = num_predict;
+    return MakeOllamaLlm(oc);
+  };
+  auto llm_for = [&](const std::string &model, int num_predict) -> LlmFn {
+    return use_claude ? MakeClaudeLlm(claude) : ollama_llm(model, num_predict);
+  };
+
   SummarizeFn summarize;
   if (!a.summ_model.empty()) {
-    OllamaSummarizeConfig sc;
-    sc.endpoint = a.summ_endpoint;
-    sc.model = a.summ_model;
-    sc.context_length = a.summ_ctx;
-    sc.num_predict = a.summ_num_predict;
-    summarize = MakeOllamaSummarizer(sc);
+    if (use_claude) {
+      summarize = MakeSummarizerFromLlm(llm_for(a.summ_model, 0));
+    } else {
+      OllamaSummarizeConfig sc;
+      sc.endpoint = a.summ_endpoint;
+      sc.model = a.summ_model;
+      sc.context_length = a.summ_ctx;
+      sc.num_predict = a.summ_num_predict;
+      summarize = MakeOllamaSummarizer(sc);
+    }
   }
 
   CodeIndexerConfig cfg;
@@ -278,21 +347,58 @@ int main(int argc, char **argv) {
               << (cache->Save() ? "" : " (SAVE FAILED)") << "\n";
   }
 
-  // Query-conditioned rerank (evolving prompt). Simulated feedback: after
-  // each query the file named in --feedback-file is recorded as the one that
-  // answered it, so later prompts carry that history.
-  JudgeFn judge;
-  PromptEvolver evolver;
-  std::unordered_map<std::string, std::string> feedback;
+  // Shared helpers for the model-backed extras below.
   std::unordered_map<std::string, const SourceFile *> by_path;
   for (const SourceFile &f : files) by_path[f.path] = &f;
+  auto content_of = [&](const std::string &p, SourceFile *out) {
+    auto it = by_path.find(p);
+    if (it == by_path.end()) return false;
+    *out = *it->second;
+    return true;
+  };
+
+  // File-graph edge verification: the model keeps or drops each structural
+  // edge; mode keyword+graph-verified then uses only the kept edges.
+  if (!a.verify_model.empty()) {
+    auto t1 = std::chrono::steady_clock::now();
+    EdgeVerifyFn verify =
+        MakeEdgeVerifierFromLlm(llm_for(a.verify_model, 8));
+    auto r = indexer.VerifyGraphEdges(verify, content_of);
+    std::cout << "graph verify: edges=" << indexer.NumGraphEdges()
+              << " asked=" << r.first << " dropped=" << r.second
+              << " seconds="
+              << std::chrono::duration<double>(
+                     std::chrono::steady_clock::now() - t1).count()
+              << "\n";
+  }
+
+  // Query-conditioned judge / focused-summary rerank (evolving prompt).
+  // Simulated feedback: after each query the file named in --feedback-file is
+  // recorded as the one that answered it, so later prompts carry that history.
+  JudgeFn judge;
+  FocusFn focus;
+  PromptEvolver evolver;
+  std::unordered_map<std::string, std::string> feedback;
   if (!a.judge_model.empty()) {
-    OllamaSummarizeConfig jc;
-    jc.endpoint = a.summ_endpoint;
-    jc.model = a.judge_model;
-    jc.context_length = a.summ_ctx;
-    jc.num_predict = 8;
-    judge = MakeOllamaJudge(jc);
+    if (use_claude) {
+      judge = MakeJudgeFromLlm(llm_for(a.judge_model, 8));
+    } else {
+      OllamaSummarizeConfig jc;
+      jc.endpoint = a.summ_endpoint;
+      jc.model = a.judge_model;
+      jc.context_length = a.summ_ctx;
+      jc.num_predict = 8;
+      judge = MakeOllamaJudge(jc);
+    }
+  }
+  if (!a.focus_model.empty()) {
+    if (!embedder) {
+      std::cerr << "--focus-model needs the embedder (drop --no-embed)\n";
+      return 2;
+    }
+    focus = MakeFocusFromLlm(llm_for(a.focus_model, 160));
+  }
+  if (!a.feedback_file.empty()) {
     std::ifstream fb(a.feedback_file);
     std::string line;
     while (std::getline(fb, line)) {
@@ -303,30 +409,52 @@ int main(int argc, char **argv) {
       feedback[line.substr(0, t)] = path;
     }
   }
+  auto embed_text = [&](const std::string &text) -> std::vector<float> {
+    std::vector<std::vector<float>> v;
+    if (!embedder || !embedder->Embed({text}, &v) || v.size() != 1) return {};
+    TruncateAndNormalize(&v[0], cfg.truncate_dim);
+    return v[0];
+  };
+  auto embed_query = [&](const std::string &q) {
+    return embed_text(cfg.query_prefix + q);
+  };
+  auto embed_doc = [&](const std::string &title, const std::string &text) {
+    std::string prefix = cfg.doc_prefix;
+    size_t at = prefix.find("{title}");
+    if (at != std::string::npos) prefix.replace(at, 7, title);
+    return embed_text(prefix + text);
+  };
 
   int rc = 0;
   for (const std::string &q : a.queries) {
     std::cout << "\nQUERY: " << q << "\n";
+    const std::string history = evolver.History(a.judge_history);
     if (judge) {
       std::vector<SearchHit> base;
       indexer.Query(q, a.judge_top, SearchMode::kKeyword, &base);
       RerankStats rs;
-      auto content_of = [&](const std::string &p, SourceFile *out) {
-        auto it = by_path.find(p);
-        if (it == by_path.end()) return false;
-        *out = *it->second;
-        return true;
-      };
-      std::vector<SearchHit> rr =
-          RerankByJudge(q, base, a.judge_top, content_of, judge,
-                        evolver.History(a.judge_history), &rs);
+      std::vector<SearchHit> rr = RerankByJudge(
+          q, base, a.judge_top, content_of, judge, history, &rs);
       std::cout << " [keyword+judge]  judged=" << rs.judged
                 << " failures=" << rs.failures << "\n";
       if (rr.size() > a.top_k) rr.resize(a.top_k);
       PrintHits(rr, false);
-      auto fb = feedback.find(q);
-      if (fb != feedback.end()) evolver.RecordUseful(q, fb->second);
     }
+    if (focus) {
+      std::vector<SearchHit> base;
+      indexer.Query(q, a.focus_top, SearchMode::kKeyword, &base);
+      FocusRerank fr = RerankByFocusedSummary(
+          q, base, a.focus_top, content_of, focus, embed_query,
+          embed_doc, history);
+      std::cout << " [keyword+focus]  failures=" << fr.failures << "\n";
+      if (fr.by_focus.size() > a.top_k) fr.by_focus.resize(a.top_k);
+      PrintHits(fr.by_focus, a.show_summaries);
+      std::cout << " [keyword+focus-fused]\n";
+      if (fr.fused.size() > a.top_k) fr.fused.resize(a.top_k);
+      PrintHits(fr.fused, false);
+    }
+    auto fb = feedback.find(q);
+    if (fb != feedback.end()) evolver.RecordUseful(q, fb->second);
     for (SearchMode m : ModesFor(a)) {
       std::vector<SearchHit> hits;
       bool ok = indexer.Query(q, a.top_k, m, &hits);
@@ -335,6 +463,13 @@ int main(int argc, char **argv) {
       if (!ok) rc = 3;
       PrintHits(hits, a.show_summaries);
     }
+  }
+  if (claude) {
+    ClaudeUsage u = claude->Usage();
+    std::cout << "\nclaude usage: calls=" << u.calls
+              << " failures=" << u.failures
+              << " input_tokens=" << u.input_tokens
+              << " output_tokens=" << u.output_tokens << "\n";
   }
   return rc;
 }
