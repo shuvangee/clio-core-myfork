@@ -20,6 +20,7 @@ add_library(clio_cae_code_indexer STATIC
   src/embed_client.cc
   src/code_indexer.cc
   src/claude_client.cc
+  src/claude_cli.cc
 )
 target_include_directories(clio_cae_code_indexer PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

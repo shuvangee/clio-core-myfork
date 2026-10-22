@@ -118,6 +118,34 @@ inline EdgeVerifyFn MakeEdgeVerifierFromLlm(LlmFn llm, size_t max_chars = 3000) 
   };
 }
 
+/** Relevance of one part (blob) of a file to a question: 0..10, <0 on failure. */
+using BlobJudgeFn = std::function<double(const std::string &query,
+                                         const SourceFile &file,
+                                         const CodeChunk &chunk)>;
+
+inline BlobJudgeFn MakeBlobJudgeFromLlm(LlmFn llm) {
+  return [llm](const std::string &query, const SourceFile &f,
+               const CodeChunk &c) -> double {
+    std::string prompt =
+        "A developer asks:\n\"" + query + "\"\n\nBelow is one part of a source "
+        "file. Does this part contain information that helps answer that "
+        "question? Reply with ONLY one integer from 0 (nothing relevant) to "
+        "10 (exactly the information needed).";
+    std::string payload = "File: " + f.path + " (lines " +
+                          std::to_string(c.start_line) + "-" +
+                          std::to_string(c.end_line) + ")\n\n" + c.text;
+    std::string out = llm(prompt, payload);
+    for (size_t i = 0; i < out.size(); ++i) {
+      if (out[i] >= '0' && out[i] <= '9') {
+        int v = out[i] - '0';
+        if (v == 1 && i + 1 < out.size() && out[i + 1] == '0') v = 10;
+        return static_cast<double>(v);
+      }
+    }
+    return -1.0;
+  };
+}
+
 inline FocusFn MakeFocusFromLlm(LlmFn llm, size_t max_chars = 6000) {
   return [llm, max_chars](const std::string &query, const std::string &history,
                           const SourceFile &f) -> std::string {

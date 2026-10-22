@@ -43,11 +43,13 @@
  * invocation indexes and then answers every --query / --queries-file entry.
  */
 
+#include <clio_cae/code_indexer/claude_cli.h>
 #include <clio_cae/code_indexer/claude_client.h>
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
 #include <clio_cae/code_indexer/query_rerank.h>
+#include <clio_cae/code_indexer/two_phase.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -91,6 +93,10 @@ struct Args {
   std::string claude_model;
   std::string claude_endpoint = "https://api.anthropic.com";
   int claude_max_tokens = 256;
+  std::string tp_model;        // two-phase: model that prunes blobs
+  size_t tp_tags = 3;
+  double tp_threshold = 6.0;
+  bool show_blobs = false;
 };
 
 void Usage() {
@@ -125,11 +131,19 @@ void Usage() {
          "                         question; prints [keyword+focus] and\n"
          "                         [keyword+focus-fused] (needs the embedder)\n"
          "  --focus-top N          hits to re-describe (default 5)\n"
-         "  --backend ollama|claude  which service answers every model role\n"
+         "  --backend ollama|claude|claude-cli  which service answers every model role\n"
          "                         (a role is on when its *-model flag is set)\n"
-         "  --claude-model ID      Claude model id (reads ANTHROPIC_API_KEY)\n"
+         "  --claude-model ID      Claude model id; for claude-cli an alias such as\n"
+         "                         haiku or sonnet (uses the installed claude login)\n"
          "  --claude-endpoint URL  default https://api.anthropic.com\n"
          "  --claude-max-tokens N  default 256\n"
+         "  --two-phase-model NAME  Luke's design: phase 1 BM25 over path+summary+\n"
+         "                         source returns tags (files); phase 2 shows each\n"
+         "                         tag's blobs to the model and prunes; prints\n"
+         "                         [two-phase] (backend ollama|claude|claude-cli)\n"
+         "  --tp-tags N            tags kept by phase 1 (default 3)\n"
+         "  --tp-threshold T       blob kept when model score >= T (default 6)\n"
+         "  --show-blobs           also print the text of kept blobs\n"
          "  --feedback-file FILE   'query<TAB>path[,path]' lines: after each\n"
          "                         query the first path is recorded as the\n"
          "                         file that answered it (simulated feedback)\n";
@@ -143,6 +157,7 @@ bool ParseArgs(int argc, char **argv, Args *a) {
     };
     if (k == "--no-embed") { a->no_embed = true; continue; }
     if (k == "--show-summaries") { a->show_summaries = true; continue; }
+    if (k == "--show-blobs") { a->show_blobs = true; continue; }
     const char *v = val();
     if (v == nullptr) {
       std::cerr << "missing value for " << k << "\n";
@@ -175,6 +190,9 @@ bool ParseArgs(int argc, char **argv, Args *a) {
         if (!line.empty() && line[0] != '#') a->queries.push_back(line);
       }
     }
+    else if (k == "--two-phase-model") a->tp_model = v;
+    else if (k == "--tp-tags") a->tp_tags = std::strtoul(v, nullptr, 10);
+    else if (k == "--tp-threshold") a->tp_threshold = std::atof(v);
     else if (k == "--verify-model") a->verify_model = v;
     else if (k == "--focus-model") a->focus_model = v;
     else if (k == "--focus-top") a->focus_top = std::strtoul(v, nullptr, 10);
@@ -279,9 +297,16 @@ int main(int argc, char **argv) {
     }
   }
   const bool use_claude = a.backend == "claude";
-  if (a.backend != "ollama" && !use_claude) {
-    std::cerr << "bad --backend (ollama|claude)\n";
+  const bool use_cli = a.backend == "claude-cli";
+  if (a.backend != "ollama" && !use_claude && !use_cli) {
+    std::cerr << "bad --backend (ollama|claude|claude-cli)\n";
     return 2;
+  }
+  std::shared_ptr<ClaudeCliClient> claude_cli;
+  if (use_cli) {
+    ClaudeCliConfig cc;
+    cc.model = a.claude_model.empty() ? "haiku" : a.claude_model;
+    claude_cli = std::make_shared<ClaudeCliClient>(cc);
   }
   std::shared_ptr<ClaudeClient> claude;
   if (use_claude) {
@@ -309,12 +334,13 @@ int main(int argc, char **argv) {
     return MakeOllamaLlm(oc);
   };
   auto llm_for = [&](const std::string &model, int num_predict) -> LlmFn {
+    if (use_cli) return MakeClaudeCliLlm(claude_cli);
     return use_claude ? MakeClaudeLlm(claude) : ollama_llm(model, num_predict);
   };
 
   SummarizeFn summarize;
   if (!a.summ_model.empty()) {
-    if (use_claude) {
+    if (use_claude || use_cli) {
       summarize = MakeSummarizerFromLlm(llm_for(a.summ_model, 0));
     } else {
       OllamaSummarizeConfig sc;
@@ -380,7 +406,7 @@ int main(int argc, char **argv) {
   PromptEvolver evolver;
   std::unordered_map<std::string, std::string> feedback;
   if (!a.judge_model.empty()) {
-    if (use_claude) {
+    if (use_claude || use_cli) {
       judge = MakeJudgeFromLlm(llm_for(a.judge_model, 8));
     } else {
       OllamaSummarizeConfig jc;
@@ -408,6 +434,16 @@ int main(int argc, char **argv) {
       path = path.substr(0, path.find_first_of(",\t"));
       feedback[line.substr(0, t)] = path;
     }
+  }
+  BlobJudgeFn blob_judge;
+  TwoPhaseConfig tpc;
+  if (!a.tp_model.empty()) {
+    blob_judge = MakeBlobJudgeFromLlm(llm_for(a.tp_model, 8));
+    tpc.top_tags = a.tp_tags;
+    tpc.keep_threshold = a.tp_threshold;
+    tpc.chunk_lines = cfg.chunk_lines;
+    tpc.max_chunk_chars = cfg.max_chunk_chars;
+    tpc.max_chunks_per_file = cfg.max_chunks_per_file;
   }
   auto embed_text = [&](const std::string &text) -> std::vector<float> {
     std::vector<std::vector<float>> v;
@@ -455,6 +491,23 @@ int main(int argc, char **argv) {
     }
     auto fb = feedback.find(q);
     if (fb != feedback.end()) evolver.RecordUseful(q, fb->second);
+    if (blob_judge) {
+      TwoPhaseResult tp = TwoPhaseQuery(indexer, q, tpc, content_of, blob_judge);
+      std::cout << " [two-phase]  tags=" << tp.tags.size()
+                << " judged=" << tp.judged << " kept=" << tp.kept
+                << " failures=" << tp.failures << " chars_in=" << tp.chars_in
+                << " chars_out=" << tp.chars_out << "\n";
+      for (const TagResult &t : tp.tags) {
+        std::cout << "  T " << t.tag.path << "  (" << t.tag.score
+                  << ") kept_blobs=" << t.kept_blobs << "\n";
+        for (const BlobResult &b : t.blobs) {
+          std::cout << "    B " << b.start_line << " " << b.end_line << " "
+                    << b.judge << " " << b.bm25 << " " << b.text.size() << " "
+                    << (b.kept ? "KEPT" : "dropped") << "\n";
+          if (a.show_blobs && b.kept) std::cout << b.text << "\n";
+        }
+      }
+    }
     for (SearchMode m : ModesFor(a)) {
       std::vector<SearchHit> hits;
       bool ok = indexer.Query(q, a.top_k, m, &hits);
@@ -463,6 +516,14 @@ int main(int argc, char **argv) {
       if (!ok) rc = 3;
       PrintHits(hits, a.show_summaries);
     }
+  }
+  if (claude_cli) {
+    ClaudeCliUsage u = claude_cli->Usage();
+    std::cout << "\nclaude-cli usage: calls=" << u.calls
+              << " failures=" << u.failures
+              << " input_tokens=" << u.input_tokens
+              << " output_tokens=" << u.output_tokens
+              << " cost_usd_reported(notional)=" << u.cost_usd_reported << "\n";
   }
   if (claude) {
     ClaudeUsage u = claude->Usage();

@@ -41,10 +41,12 @@
 #include "simple_test.h"
 #include "summarizer_http_stub.h"
 
+#include <clio_cae/code_indexer/claude_cli.h>
 #include <clio_cae/code_indexer/claude_client.h>
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
+#include <clio_cae/code_indexer/two_phase.h>
 
 #include <chrono>
 #include <cmath>
@@ -900,3 +902,136 @@ TEST_CASE("Claude request/response helpers and client against a stub",
   REQUIRE(nokey.Complete("p", "x").empty());
   REQUIRE(nokey.Usage().failures == 1);
 }
+
+TEST_CASE("Two-phase retrieval returns tags, then prunes their blobs",
+          "[code_indexer][twophase]") {
+  // Long file whose second 60-line window holds the answer.
+  std::string big;
+  for (int i = 1; i <= 120; ++i) {
+    big += (i == 70) ? "int widget_prefetch_policy = 1;  // the answer\n"
+                     : "int filler_" + std::to_string(i) + " = 0;\n";
+  }
+  std::vector<SourceFile> files = {
+      {"core/prefetch.cc", big},
+      {"net/other.cc", "int unrelated = 0;\n"},
+      {"docs/notes.cc", "widget notes only\n"}};
+  // The summary mentions a term that is not in the file's code: phase 1 must
+  // see it because phase 1 is BM25 over path + summary + source.
+  SummarizeFn summ = [](const SourceFile &f) -> std::string {
+    return f.path == "core/prefetch.cc" ? "Chooses blocks to stage early." : "";
+  };
+  CodeIndexer idx(CodeIndexerConfig{}, nullptr, summ);
+  idx.IndexFiles(files);
+  auto content_of = [&](const std::string &p, SourceFile *out) {
+    for (const SourceFile &f : files) {
+      if (f.path == p) { *out = f; return true; }
+    }
+    return false;
+  };
+  // Fake model: a blob is relevant iff it contains the answer line.
+  BlobJudgeFn judge = [](const std::string &, const SourceFile &,
+                         const CodeChunk &c) {
+    return c.text.find("widget_prefetch_policy") != std::string::npos ? 9.0 : 1.0;
+  };
+  TwoPhaseConfig cfg;
+  cfg.top_tags = 2;
+  TwoPhaseResult r = TwoPhaseQuery(idx, "widget prefetch stage early", cfg,
+                                   content_of, judge);
+  REQUIRE(r.tags.size() == 2);
+  REQUIRE(r.tags[0].tag.path == "core/prefetch.cc");
+  REQUIRE(r.tags[0].blobs.size() == 2);           // 120 lines = two windows
+  REQUIRE(r.tags[0].kept_blobs == 1);
+  REQUIRE_FALSE(r.tags[0].blobs[0].kept);
+  REQUIRE(r.tags[0].blobs[1].kept);
+  REQUIRE(r.tags[0].blobs[1].start_line == 61);
+  REQUIRE(r.kept == 1);
+  REQUIRE(r.failures == 0);
+  REQUIRE(r.chars_out < r.chars_in);              // pruning removed text
+  REQUIRE(r.tags[0].blobs[1].bm25 > r.tags[0].blobs[0].bm25);
+  // A failing model keeps nothing and is counted, never silently kept.
+  BlobJudgeFn bad = [](const std::string &, const SourceFile &,
+                       const CodeChunk &) { return -1.0; };
+  TwoPhaseResult r2 = TwoPhaseQuery(idx, "widget prefetch", cfg, content_of, bad);
+  REQUIRE(r2.kept == 0);
+  REQUIRE(r2.failures == r2.judged);
+  REQUIRE(r2.judged > 0);
+}
+
+TEST_CASE("Blob judge role parses the model reply",
+          "[code_indexer][twophase][roles]") {
+  SourceFile f{"a.cc", "x"};
+  CodeChunk c;
+  c.start_line = 3;
+  c.end_line = 9;
+  c.text = "body";
+  std::string seen;
+  BlobJudgeFn j = MakeBlobJudgeFromLlm([&](const std::string &p, const std::string &pay) {
+    seen = p + "|" + pay;
+    return std::string("Score: 7");
+  });
+  REQUIRE(j("how is X done", f, c) == 7.0);
+  REQUIRE(seen.find("how is X done") != std::string::npos);
+  REQUIRE(seen.find("lines 3-9") != std::string::npos);
+  BlobJudgeFn k = MakeBlobJudgeFromLlm(
+      [](const std::string &, const std::string &) { return std::string("none"); });
+  REQUIRE(k("q", f, c) < 0.0);
+}
+
+#if !defined(_WIN32)
+TEST_CASE("Claude CLI client runs the claude command and reads its JSON",
+          "[code_indexer][claude][cli]") {
+  std::vector<std::string> args = BuildClaudeCliArgs(ClaudeCliConfig{});
+  auto has = [&](const std::string &x) {
+    return std::find(args.begin(), args.end(), x) != args.end();
+  };
+  REQUIRE(has("-p"));
+  REQUIRE(has("--no-session-persistence"));
+  REQUIRE(has("--disable-slash-commands"));
+  REQUIRE_FALSE(has("--bare"));   // --bare would force API-key auth
+
+  std::string text;
+  uint64_t in = 0, out = 0;
+  double cost = 0;
+  REQUIRE(ParseClaudeCliOutput(
+      R"({"type":"result","is_error":false,"result":"7","total_cost_usd":0.002,"usage":{"input_tokens":4,"cache_creation_input_tokens":10,"cache_read_input_tokens":6,"output_tokens":2}})",
+      &text, &in, &out, &cost));
+  REQUIRE(text == "7");
+  REQUIRE(in == 20);
+  REQUIRE(out == 2);
+  REQUIRE_FALSE(ParseClaudeCliOutput(R"({"is_error":true,"result":"x"})", &text, &in, &out, &cost));
+  REQUIRE_FALSE(ParseClaudeCliOutput("garbage", &text, &in, &out, &cost));
+
+  // A fake `claude` that echoes how many input bytes it received.
+  namespace fs = std::filesystem;
+  fs::path dir = fs::temp_directory_path() / "clio_fake_claude";
+  fs::create_directories(dir);
+  fs::path script = dir / "claude";
+  {
+    std::ofstream f(script);
+    f << "#!/bin/sh\nn=$(wc -c | tr -d ' ')\n"
+         "printf '{\"is_error\":false,\"result\":\"got %s\",\"usage\":"
+         "{\"input_tokens\":3,\"output_tokens\":1},\"total_cost_usd\":0.01}' \"$n\"\n";
+  }
+  fs::permissions(script, fs::perms::owner_all);
+  ClaudeCliConfig cc;
+  cc.binary = script.string();
+  cc.timeout_seconds = 20;
+  ClaudeCliClient client(cc);
+  std::string big(100000, 'x');   // larger than a pipe buffer
+  std::string reply = client.Complete("P", big);
+  REQUIRE(reply == "got " + std::to_string(std::string("P\n\n").size() + big.size()));
+  ClaudeCliUsage u = client.Usage();
+  REQUIRE(u.calls == 1);
+  REQUIRE(u.failures == 0);
+  REQUIRE(u.input_tokens == 3);
+  REQUIRE(u.output_tokens == 1);
+
+  // A missing binary is a counted failure, not a crash.
+  ClaudeCliConfig bad;
+  bad.binary = (dir / "does_not_exist").string();
+  ClaudeCliClient nobin(bad);
+  REQUIRE(nobin.Complete("p", "x").empty());
+  REQUIRE(nobin.Usage().failures == 1);
+  fs::remove_all(dir);
+}
+#endif
