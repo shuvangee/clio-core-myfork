@@ -988,6 +988,10 @@ TEST_CASE("Claude CLI client runs the claude command and reads its JSON",
   REQUIRE(has("--no-session-persistence"));
   REQUIRE(has("--disable-slash-commands"));
   REQUIRE_FALSE(has("--bare"));   // --bare would force API-key auth
+  // Without these the child loaded ~178K tokens of user hooks/MCP/skills for a
+  // one-line question (measured 2026-10-22: 177,952 vs 510 input tokens).
+  REQUIRE(has("--strict-mcp-config"));
+  REQUIRE(has("--setting-sources"));
 
   std::string text;
   uint64_t in = 0, out = 0;

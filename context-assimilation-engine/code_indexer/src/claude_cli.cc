@@ -60,6 +60,8 @@ std::vector<std::string> BuildClaudeCliArgs(const ClaudeCliConfig &cfg) {
       "--no-session-persistence",
       "--disable-slash-commands",
       "--tools", "",
+      "--strict-mcp-config",
+      "--setting-sources", "local",
       "--system-prompt",
       "You are a precise assistant. Follow the requested output format exactly."};
   for (const std::string &x : cfg.extra_args) a.push_back(x);
