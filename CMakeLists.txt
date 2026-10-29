@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(iowarp-core VERSION 2.3.1 LANGUAGES C CXX)
+project(iowarp-core VERSION 2.3.2 LANGUAGES C CXX)
 
 #------------------------------------------------------------------------------
 # MSVC-like front end detection
@@ -2578,4 +2578,12 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/packaging/CPackConfig.cmake)
 # Only include AppImage support if explicitly enabled
 if(CLIO_CORE_ENABLE_APPIMAGE)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/packaging/AppImage.cmake)
+endif()
+
+# clio-ml (external/clio-ml, its own repo): Spark-MLlib-style algorithms over
+# gpu_vector / cpu_vector. Must come after CTE so the vector targets exist.
+option(CLIO_CORE_ENABLE_CLIO_ML "Add external/clio-ml to the build" OFF)
+if(CLIO_CORE_ENABLE_CLIO_ML)
+  set(CLIO_ML_ENABLE_CUDA ${CLIO_CORE_ENABLE_CUDA} CACHE BOOL "" FORCE)
+  add_subdirectory(external/clio-ml)
 endif()

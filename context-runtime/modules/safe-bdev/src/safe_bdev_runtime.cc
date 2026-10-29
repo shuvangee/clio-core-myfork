@@ -32,6 +32,7 @@
  */
 
 #include <clio_runtime/safe_bdev/safe_bdev_runtime.h>
+#include <clio_runtime/bdev/blocking_offload.h>
 
 #include <clio_ctp/serialize/msgpack_wrapper.h>
 
@@ -1002,7 +1003,10 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
   data_alloc_.reserve(kMaxMembers);
   parity_members_.reserve(kMaxMembers);
   parity_clients_.reserve(kMaxMembers);
-  rs_cache_.clear();
+  {
+    std::lock_guard<std::mutex> g(rs_cache_mu_);
+    rs_cache_.clear();
+  }
   reattached_members_ = 0;
   {
     std::lock_guard<std::mutex> g(slot_mu_);
@@ -1515,9 +1519,21 @@ clio::run::TaskResume Runtime::StoreDegradedParity(clio::run::u64 s,
     rows.push_back(j);
     bufs.push_back(buf);
   }
-  const bool all_sent = rows.size() == ActiveParityCount();
+  // An active row not even sent holds a stale shard. Asked per row, now:
+  // comparing rows.size() with a fresh ActiveParityCount() refused a good
+  // write when another worker faulted a parity row right after its shard
+  // was sent -- the count dropped, the sent row no longer matched, and the
+  // write failed silently with max_failures members down (#1284).
+  bool stale = false;
+  for (size_t j = 0; j < parity_level_; ++j) {
+    if (parity_members_[j].state_ == ec::EcState::kActive &&
+        std::find(rows.begin(), rows.end(), j) == rows.end()) {
+      HLOG(kError, "safe_bdev Write: slot {}: active parity row {} was not "
+           "written (no buffer); refusing the write", s, j);
+      stale = true;
+    }
+  }
   clio::run::u32 written = 0;
-  bool stale = !all_sent;  // an active row not even sent holds a stale shard
   for (size_t i = 0; i < futs.size(); ++i) {
     CLIO_CO_AWAIT(futs[i]);
     const bool wok =
@@ -1529,6 +1545,8 @@ clio::run::TaskResume Runtime::StoreDegradedParity(clio::run::u64 s,
     } else if (parity_members_[rows[i]].state_ == ec::EcState::kActive) {
       // A parity disk that just failed is out of the stripe; one that is
       // still active holds a stale shard, which the stripe cannot carry.
+      HLOG(kError, "safe_bdev Write: slot {}: parity row {} failed the write "
+           "but is still active; refusing the write", s, rows[i]);
       stale = true;
     }
   }
@@ -1664,9 +1682,17 @@ clio::run::TaskResume Runtime::ReconstructStripeAsBefore(
     std::vector<std::vector<uint8_t>> &out, bool &ok) {
   CLIO_TASK_BODY_BEGIN
   ok = false;
-  if (old_bytes.size() != pieces.size() || stripe.empty()) CLIO_CO_RETURN;
+  if (old_bytes.size() != pieces.size() || stripe.empty()) {
+    HLOG(kWarning, "safe_bdev Write: slot {}: cannot rewind ({} old-byte "
+         "entries for {} pieces)", s, old_bytes.size(), pieces.size());
+    CLIO_CO_RETURN;
+  }
   for (size_t i = 0; i < pieces.size(); ++i) {
-    if (pieces[i].slot == s && old_bytes[i].size() != pieces[i].len) {
+    // A down member's column is decoded, not rewound: its bytes are moot.
+    if (pieces[i].slot == s && DataActive(pieces[i].member) &&
+        old_bytes[i].size() != pieces[i].len) {
+      HLOG(kWarning, "safe_bdev Write: slot {}: cannot rewind, the bytes "
+           "member {} replaced were not captured", s, pieces[i].member);
       CLIO_CO_RETURN;  // a replaced range was not captured: cannot rewind
     }
   }
@@ -1676,7 +1702,11 @@ clio::run::TaskResume Runtime::ReconstructStripeAsBefore(
   std::vector<std::vector<uint8_t>> bufs;
   const std::vector<int> none;
   CLIO_CO_AWAIT(GatherSurvivors(s, code, none, idx, bufs));
-  if (static_cast<int>(idx.size()) < k) CLIO_CO_RETURN;
+  if (static_cast<int>(idx.size()) < k) {
+    HLOG(kWarning, "safe_bdev Write: slot {}: cannot rewind, {} of {} "
+         "columns readable", s, idx.size(), k);
+    CLIO_CO_RETURN;
+  }
   // Rewind each data survivor to the bytes the parity still encodes.
   for (size_t si = 0; si < idx.size(); ++si) {
     if (idx[si] >= k) continue;  // a parity shard: untouched by the write
@@ -1803,7 +1833,11 @@ bool Runtime::DispatchMemberWrites(const WriteTask &task, const char *data,
     }
     if (DataActive(d)) {
       ctp::ipc::FullPtr<char> seg = ipc->AllocateBuffer(len);
-      if (seg.IsNull()) return false;
+      if (seg.IsNull()) {
+        HLOG(kError, "safe_bdev Write: no {}-byte buffer for member {}; "
+             "failing the write", len, d);
+        return false;
+      }
       std::memcpy(seg.ptr_, data + buf_pos, len);
       mw.bufs.push_back(seg);
       mw.members.push_back(d);
@@ -2014,10 +2048,15 @@ clio::run::TaskResume Runtime::WriteStripes(
   std::vector<std::vector<uint8_t>> old_bytes;
   const std::set<clio::run::u64> full_slots =
       degraded.empty() ? FullStripes(pieces) : std::set<clio::run::u64>();
-  if (degraded.empty()) {
+  {
+    // Degraded stripes keep their own old bytes (CaptureDegradedOld); skip
+    // them and the whole-stripe writes here.
+    std::set<clio::run::u64> skip =
+        degraded.empty() ? full_slots : FullStripes(pieces);
+    for (const auto &kv : degraded) skip.insert(kv.first);
     const auto read_t0 = std::chrono::steady_clock::now();
-    CLIO_CO_AWAIT(ReadReplacedBytes(pieces, full_slots, delta_slots,
-                                    old_bytes));
+    CLIO_CO_AWAIT(ReadReplacedBytes(pieces, skip, delta_slots, old_bytes));
+    if (!degraded.empty()) delta_slots.clear();  // full encode, as before
     if (phases != nullptr) phases->read_old_ms = MsSince(read_t0);
   }
 
@@ -2621,6 +2660,10 @@ clio::run::TaskResume Runtime::RebuildMember(bool is_data, int idx, bool &ok,
   // meanwhile are covered too.
   {
     clio::run::u64 s = 0;
+    // Progress at warning every ~30 s: a rebuild that outlived its caller's
+    // 960 s wait could not be told apart from a stuck one.
+    auto t_start = std::chrono::steady_clock::now();
+    auto t_last = t_start;
     for (;;) {
       clio::run::u64 hw = 0;
       {
@@ -2628,6 +2671,17 @@ clio::run::TaskResume Runtime::RebuildMember(bool is_data, int idx, bool &ok,
         hw = array_high_water_;
       }
       recovery_ops_total_.store(hw, std::memory_order_relaxed);
+      {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - t_last > std::chrono::seconds(30)) {
+          t_last = now;
+          const double secs =
+              std::chrono::duration<double>(now - t_start).count();
+          HLOG(kWarning, "safe_bdev rebuild of {} member {}: slot {} of {} "
+               "({:.1f} slots/s after {:.0f} s)", is_data ? "data" : "parity",
+               idx, s, hw, secs > 0 ? s / secs : 0.0, secs);
+        }
+      }
       if (s >= hw) break;
       if (max_rows != 0 && s >= max_rows) {
         completed = false;  // interrupted: leave the member recovering
@@ -2941,7 +2995,10 @@ clio::run::TaskResume Runtime::ResumeRecoveries() {
   CLIO_TASK_BODY_BEGIN
   for (size_t i = 0; i < data_members_.size(); ++i) {
     if (!data_members_[i].recovering_) continue;
-    HLOG(kInfo,
+    // Warning, not info: a rebuild resumed after a crash is something an
+    // operator must see (and the fault suite, which logs at warning, checks
+    // for it).
+    HLOG(kWarning,
          "safe_bdev: resuming interrupted recovery of data member {} onto '{}'",
          i, data_members_[i].pool_name_);
     bool ok = false;
@@ -2955,8 +3012,8 @@ clio::run::TaskResume Runtime::ResumeRecoveries() {
       bool wr = false;
       CLIO_CO_AWAIT(WriteSuperblock(false, i, wr));
       PersistMemberManifest();
-      HLOG(kInfo, "safe_bdev: recovery of data member {} completed on restart",
-           i);
+      HLOG(kWarning,
+           "safe_bdev: recovery of data member {} completed on restart", i);
     } else {
       HLOG(kWarning,
            "safe_bdev: resume of data member {} did not complete "
@@ -3044,13 +3101,25 @@ clio::run::TaskResume Runtime::BuildParity(clio::run::shared_ptr<BuildParityTask
 clio::run::TaskResume Runtime::FlushAllocLog(
     clio::run::shared_ptr<FlushAllocLogTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  alloc_log_.Flush();
-  const clio::run::u64 live = alloc_log_.live_block_count();
-  const clio::run::u64 on_disk = alloc_log_.records_on_disk();
-  const clio::run::u64 threshold =
-      std::max<clio::run::u64>(kMinCompactRecords, live * kCompactGrowthFactor);
-  if (on_disk > threshold) {
-    alloc_log_.Compact();
+  {
+    // The log fsync (and an occasional compaction rewrite) off the worker,
+    // and without holding the log lock across the fsync (SyncAppended, not
+    // Flush): Flush blocked every worker logging an allocation for the
+    // whole fsync. AllocatorLog is internally locked, so another thread may
+    // run this.
+    auto *log = &alloc_log_;
+    auto job = clio::run::bdev::BlockingOffload::Get().Submit([log] {
+      log->SyncAppended();
+      const clio::run::u64 live = log->live_block_count();
+      const clio::run::u64 on_disk = log->records_on_disk();
+      const clio::run::u64 threshold = std::max<clio::run::u64>(
+          kMinCompactRecords, live * kCompactGrowthFactor);
+      if (on_disk > threshold) log->Compact();
+      return 0;
+    }, "safe-bdev alloc-log sync");
+    while (!job->done.load(std::memory_order_acquire)) {
+      CLIO_CO_AWAIT(clio::run::yield(clio::run::bdev::kOffloadPollUs));
+    }
   }
   if (MemberManifestNeedsCompaction()) {
     CompactMemberManifest();
@@ -3609,19 +3678,27 @@ clio::run::TaskResume Runtime::ReadReplacedBytes(
   CLIO_TASK_BODY_BEGIN
   slots.clear();
   old_bytes.assign(pieces.size(), std::vector<uint8_t>());
+  // Capture the replaced bytes of EVERY stripe this write changes only in
+  // part, not just the delta-eligible ones: a member that dies mid-write
+  // leaves the stripe decodable only by rewinding what already landed, and
+  // a stripe without them was refused ("changed bytes its parity decode
+  // needs"). The delta set keeps its own rule.
+  std::set<clio::run::u64> capture;
   std::set<clio::run::u64> seen;
   for (const WritePiece &p : pieces) {
-    if (seen.insert(p.slot).second && skip.count(p.slot) == 0 &&
-        DeltaEligible(p.slot)) {
-      slots.insert(p.slot);
+    if (seen.insert(p.slot).second && skip.count(p.slot) == 0) {
+      if (parity_level_ != 0) capture.insert(p.slot);
+      if (DeltaEligible(p.slot)) slots.insert(p.slot);
     }
   }
+  for (clio::run::u64 s : slots) capture.insert(s);
   // Every piece's old bytes in one round trip (#1160).
   std::vector<SegRead> reads;
   std::vector<size_t> piece_of;
   for (size_t i = 0; i < pieces.size(); ++i) {
     const WritePiece &p = pieces[i];
-    if (slots.count(p.slot) == 0) continue;
+    if (capture.count(p.slot) == 0) continue;
+    if (!DataActive(p.member)) continue;  // a down column decodes from parity
     old_bytes[i].assign(p.len, 0);
     SegRead r;
     r.d = p.member;
@@ -3638,8 +3715,12 @@ clio::run::TaskResume Runtime::ReadReplacedBytes(
   }
   CLIO_CO_AWAIT(AwaitDataReads(reads, batch));
   for (size_t i = 0; i < reads.size(); ++i) {
-    // A piece that could not be read: full encode for its stripe instead.
-    if (!reads[i].ok) slots.erase(pieces[piece_of[i]].slot);
+    // A piece that could not be read: full encode for its stripe instead,
+    // and no old bytes for it (zeros would rewind it to garbage).
+    if (!reads[i].ok) {
+      slots.erase(pieces[piece_of[i]].slot);
+      old_bytes[piece_of[i]].clear();
+    }
   }
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END

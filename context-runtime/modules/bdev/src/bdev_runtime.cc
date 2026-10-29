@@ -23,6 +23,7 @@ extern "C" void clio_direct_dev_base_register(unsigned long long pool_id,
                                               char *base);
 extern "C" void clio_direct_dev_base_unregister(unsigned long long pool_id);
 #include <clio_runtime/bdev/bdev_runtime.h>
+#include <clio_runtime/bdev/blocking_offload.h>
 #include <clio_runtime/bdev/transports/mem_bdev_transport.h>
 #include <clio_runtime/comutex.h>
 #include <clio_ctp/util/gpu_api.h>
@@ -35,8 +36,15 @@ extern "C" void clio_direct_dev_base_unregister(unsigned long long pool_id);
 #include <clio_runtime/viz/viz_json.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
+#include <condition_variable>
+#include <deque>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -403,6 +411,9 @@ bool Runtime::InlineOp(clio::run::u32 method, void *in, void *out) {
   return true;
 }
 
+using clio::run::bdev::BlockingOffload;
+using clio::run::bdev::kOffloadPollUs;
+
 clio::run::TaskResume Runtime::AllocateBlocks(clio::run::shared_ptr<AllocateBlocksTask> &task) {
   CLIO_TASK_BODY_BEGIN
 
@@ -415,10 +426,30 @@ clio::run::TaskResume Runtime::AllocateBlocks(clio::run::shared_ptr<AllocateBloc
   int worker_id = (worker != nullptr) ? static_cast<int>(worker->GetId()) : 0;
   std::vector<Block> local_blocks;
 
-  if (!transport_->AllocateBlocks(task->size_, worker_id, local_blocks)) {
+  clio::run::u64 need = 0;
+  if (!transport_->AllocateBlocksDeferred(task->size_, worker_id, local_blocks,
+                                          &need)) {
     task->blocks_.clear();
     task->return_code_ = 1;
     CLIO_CO_RETURN;
+  }
+  if (need != 0) {
+    // Growing the backing file (fallocate) can take seconds: off the worker.
+    BdevTransport *t = transport_.get();
+    auto job = BlockingOffload::Get().Submit(
+        [t, need] { return t->EnsureBacked(need) ? 0 : 1; }, "bdev grow");
+    while (!job->done.load(std::memory_order_acquire)) {
+      CLIO_CO_AWAIT(clio::run::yield(kOffloadPollUs));
+    }
+    // Resumed possibly on another worker: free into the current one's list.
+    clio::run::Worker *now = CLIO_CUR_WORKER;
+    const int wid = now != nullptr ? static_cast<int>(now->GetId()) : 0;
+    transport_->FinishAllocate(job->rc == 0, wid, local_blocks);
+    if (job->rc != 0) {
+      task->blocks_.clear();
+      task->return_code_ = 1;
+      CLIO_CO_RETURN;
+    }
   }
 
   for (const auto& block : local_blocks) {
@@ -680,7 +711,15 @@ clio::run::TaskResume Runtime::FlushAllocLog(
     clio::run::shared_ptr<FlushAllocLogTask> &task) {
   CLIO_TASK_BODY_BEGIN
   if (transport_) {
-    transport_->FlushAllocLog();
+    // fsyncs the allocator log: off the worker (see BlockingOffload).
+    BdevTransport *t = transport_.get();
+    auto job = BlockingOffload::Get().Submit([t] {
+      t->FlushAllocLog();
+      return 0;
+    }, "bdev alloc-log sync");
+    while (!job->done.load(std::memory_order_acquire)) {
+      CLIO_CO_AWAIT(clio::run::yield(kOffloadPollUs));
+    }
   }
   task->return_code_ = 0;
   CLIO_CO_RETURN;
@@ -689,7 +728,21 @@ clio::run::TaskResume Runtime::FlushAllocLog(
 
 clio::run::TaskResume Runtime::Sync(clio::run::shared_ptr<SyncTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  task->return_code_ = (transport_ && !transport_->Sync()) ? 1 : 0;
+  if (!transport_) {
+    task->return_code_ = 0;
+    CLIO_CO_RETURN;
+  }
+  {
+    // fdatasync of a large tier file: seconds to over a minute under load.
+    // Never on the worker (see BlockingOffload).
+    BdevTransport *t = transport_.get();
+    auto job = BlockingOffload::Get().Submit(
+        [t] { return t->Sync() ? 0 : 1; }, "bdev sync");
+    while (!job->done.load(std::memory_order_acquire)) {
+      CLIO_CO_AWAIT(clio::run::yield(kOffloadPollUs));
+    }
+    task->return_code_ = static_cast<clio::run::u32>(job->rc);
+  }
   CLIO_CO_RETURN;
   CLIO_TASK_BODY_END
 }

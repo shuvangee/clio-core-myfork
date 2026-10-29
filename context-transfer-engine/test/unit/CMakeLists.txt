@@ -1281,16 +1281,16 @@ set_tests_properties(cte_reorganize_no_loss PROPERTIES
     LABELS "unit;cte"
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1")
 
-add_executable(test_fs_dir_block test_fs_dir_block.cc)
-target_include_directories(test_fs_dir_block PRIVATE
+add_executable(test_fs_inode_table test_fs_inode_table.cc)
+target_include_directories(test_fs_inode_table PRIVATE
     ${CMAKE_SOURCE_DIR}/context-runtime/test
     ${CMAKE_SOURCE_DIR}/context-transfer-engine/filesystem/include)
-target_link_libraries(test_fs_dir_block
+target_link_libraries(test_fs_inode_table
     clio_cte_core_client
     ctp::cxx
     ${CMAKE_THREAD_LIBS_INIT})
-add_test(NAME cte_fs_dir_block COMMAND test_fs_dir_block)
-set_tests_properties(cte_fs_dir_block PROPERTIES
+add_test(NAME cte_fs_inode_table COMMAND test_fs_inode_table)
+set_tests_properties(cte_fs_inode_table PROPERTIES
     TIMEOUT 120
     LABELS "unit;cte"
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH}")
@@ -1309,6 +1309,24 @@ target_link_libraries(test_cte_conditional_put
     ${CMAKE_THREAD_LIBS_INIT})
 add_test(NAME cte_conditional_put COMMAND test_cte_conditional_put)
 set_tests_properties(cte_conditional_put PROPERTIES
+    TIMEOUT 300
+    LABELS "unit;cte"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1")
+
+add_executable(test_cte_tag_xattr test_cte_tag_xattr.cc)
+target_include_directories(test_cte_tag_xattr PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test)
+target_link_libraries(test_cte_tag_xattr
+    clio_cte_core_runtime
+    clio_cte_core_client
+    clio::run::admin_runtime
+    clio::run::admin_client
+    clio::run::bdev_runtime
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT})
+add_test(NAME cte_tag_xattr COMMAND test_cte_tag_xattr)
+set_tests_properties(cte_tag_xattr PROPERTIES
     TIMEOUT 300
     LABELS "unit;cte"
     ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/bin:$ENV{LD_LIBRARY_PATH};CLIO_TEST_DATA_DIR=${CMAKE_BINARY_DIR};CLIO_BIND_ADDR=127.0.0.1")
@@ -2077,6 +2095,36 @@ add_dependencies(test_putblob_priv
     clio_cte_core_runtime
     clio_bdev_runtime
     clio_admin_runtime)
+
+# cte_tiers' report against an in-process runtime (core/util/cte_tiers.cc
+# is only CLIO_INIT plus this call).
+add_executable(test_cte_tiers
+    test_cte_tiers.cc
+)
+target_include_directories(test_cte_tiers PRIVATE
+    ${CMAKE_SOURCE_DIR}/context-runtime/test
+    ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/util
+)
+target_link_libraries(test_cte_tiers
+    clio_cte_core_client
+    clio_cte_core_runtime
+    clio::run::admin_client
+    clio::run::bdev_client
+    ctp::cxx
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+add_dependencies(test_cte_tiers
+    clio_cte_core_runtime
+    clio_bdev_runtime
+    clio_admin_runtime)
+add_test(NAME cte_tiers_report
+    COMMAND test_cte_tiers
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set_tests_properties(cte_tiers_report PROPERTIES
+    ENVIRONMENT "${_getblob_priv_env}"
+    RESOURCE_LOCK "clio_runtime"
+    TIMEOUT 120
+    LABELS "unit;core;cte;msan_skip")
 
 add_test(NAME cte_putblob_priv_inline
     COMMAND test_putblob_priv
