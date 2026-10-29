@@ -38,11 +38,13 @@
 #include <clio_cae/code_indexer/code_indexer_client.h>
 #include <clio_cae/code_indexer/code_indexer_tasks.h>
 #include <clio_cte/core/core_client.h>
+#include <clio_cte/filesystem/filesystem_client.h>
 #include <clio_runtime/clio_runtime.h>
 
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace clio::cae::code_indexer {
 
@@ -52,7 +54,8 @@ namespace clio::cae::code_indexer {
  * Concurrency: the index is guarded by `mu_`, taken per FILE during indexing
  * and per Query. A Query issued while a large IndexPath runs therefore sees a
  * partially built index and waits at most one file's summarize+embed latency.
- * IndexPath itself blocks its worker for the whole directory (inference is
+ * IndexPath reads its files from the CTE (Clio FS), never from the disk, and
+ * blocks its worker for the whole tree (inference is
  * synchronous libcurl, as in the summarizer), so size num_threads accordingly.
  */
 class Runtime : public clio::run::Container {
@@ -121,6 +124,16 @@ class Runtime : public clio::run::Container {
                                      const std::string &summary, bool *ok);
   clio::run::TaskResume ReadBlob(const std::string &name, std::string *out,
                                  bool *found);
+
+  /**
+   * Read the source files under `root` out of the CTE through the Clio FS
+   * (clio_cte_filesystem) pool: list directories, stat, open, read. The disk
+   * is never touched. `*ok` is false when the Clio FS pool is not composed.
+   * Files come back sorted by path, relative to `root`, with the same
+   * extension / size / ignored-directory rules as a disk scan.
+   */
+  clio::run::TaskResume ReadCteTree(const std::string &root, size_t max_files,
+                                    std::vector<SourceFile> *out, bool *ok);
   clio::run::TaskResume WriteBlob(const std::string &name,
                                   const std::string &data, bool *ok);
 
@@ -128,6 +141,7 @@ class Runtime : public clio::run::Container {
   std::mutex mu_;
   std::unique_ptr<CodeIndexer> indexer_;
   std::unique_ptr<clio::cte::core::Client> cte_;
+  std::unique_ptr<clio::cte::filesystem::Client> fs_;  // Clio FS (CTE files)
   clio::cte::core::TagId tag_id_ = clio::cte::core::TagId::GetNull();
   bool tag_ready_ = false;
 };

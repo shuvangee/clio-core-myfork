@@ -34,7 +34,12 @@
 #include <clio_cae/code_indexer/code_indexer_runtime.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
 
+#include <fcntl.h>
+
+#include <algorithm>
+#include <cstring>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -48,6 +53,8 @@ namespace {
 
 /** Return code QueryTask reports when a needed embedding call failed. */
 constexpr int kEmbedFailed = 2;
+/** Return code IndexPathTask reports when the Clio FS pool is not composed. */
+constexpr int kNoClioFs = 3;
 
 CodeIndexerConfig ToPipelineConfig(const CreateParams &p) {
   CodeIndexerConfig c;
@@ -118,6 +125,8 @@ clio::run::TaskResume Runtime::Create(clio::run::shared_ptr<CreateTask> &task) {
            params_.cte_pool_id);
     }
   }
+  fs_ = std::make_unique<clio::cte::filesystem::Client>(
+      clio::cte::filesystem::kCfsPoolId);
   {
     std::lock_guard<std::mutex> lock(mu_);
     indexer_ = std::make_unique<CodeIndexer>(
@@ -265,14 +274,110 @@ clio::run::TaskResume Runtime::StoreSummary(const std::string &path,
   CLIO_TASK_BODY_END
 }
 
+clio::run::TaskResume Runtime::ReadCteTree(const std::string &root_in,
+                                            size_t max_files,
+                                            std::vector<SourceFile> *out,
+                                            bool *ok) {
+  CLIO_TASK_BODY_BEGIN
+  *ok = false;
+  out->clear();
+  if (!fs_ || !CLIO_POOL_MANAGER->HasPool(clio::cte::filesystem::kCfsPoolId)) {
+    CLIO_CO_RETURN;
+  }
+  *ok = true;
+  ScanOptions scan;  // same extension / size / ignore rules as a disk scan
+  std::string root = root_in;
+  while (root.size() > 1 && root.back() == '/') root.pop_back();
+  if (root.empty()) root = "/";
+  const std::string prefix = root == "/" ? "/" : root + "/";
+
+  std::vector<std::string> stack = {root};
+  std::vector<std::pair<std::string, std::string>> found;  // (path, content)
+  while (!stack.empty()) {
+    std::string dir = std::move(stack.back());
+    stack.pop_back();
+    auto rd = fs_->AsyncReaddir(dir);
+    CLIO_CO_AWAIT(rd);
+    if (rd->GetReturnCode() != 0) continue;
+    std::vector<std::string> names;
+    for (const auto &e : rd->entries_) names.push_back(e.str());
+    std::sort(names.begin(), names.end());
+    for (const std::string &entry : names) {
+      // The Clio FS listing returns full paths; accept bare names too.
+      const std::string path =
+          (!entry.empty() && entry[0] == '/')
+              ? entry
+              : (dir == "/" ? "/" : dir + "/") + entry;
+      const std::string name = path.substr(path.find_last_of('/') + 1);
+      auto ga = fs_->AsyncGetattr(path);
+      CLIO_CO_AWAIT(ga);
+      if (ga->GetReturnCode() != 0 || ga->exists_ == 0 || ga->is_symlink_ != 0) {
+        continue;
+      }
+      if (ga->is_dir_ != 0) {
+        if (scan.ignore_dirs.count(name) == 0) stack.push_back(path);
+        continue;
+      }
+      size_t dot = name.find_last_of('.');
+      if (dot == std::string::npos ||
+          scan.extensions.count(name.substr(dot)) == 0) {
+        continue;
+      }
+      if (ga->size_ == 0 || ga->size_ > scan.max_file_bytes) continue;
+
+      auto op = fs_->AsyncOpen(path, static_cast<clio::run::u32>(O_RDONLY), 0);
+      CLIO_CO_AWAIT(op);
+      if (op->GetReturnCode() != 0 || op->handle_ == 0) continue;
+      const clio::run::u64 handle = op->handle_;
+      const size_t n = static_cast<size_t>(ga->size_);
+      auto buf = CLIO_IPC->AllocateBuffer(n);
+      std::string content;
+      if (!buf.IsNull()) {
+        auto rt = fs_->AsyncRead(handle, 0, n, ctp::ipc::ShmPtr<>(buf.shm_));
+        CLIO_CO_AWAIT(rt);
+        if (rt->GetReturnCode() == 0 && rt->bytes_read_ > 0) {
+          content.assign(buf.ptr_, static_cast<size_t>(rt->bytes_read_));
+        }
+        CLIO_IPC->FreeBuffer(buf);
+      }
+      auto cl = fs_->AsyncClose(handle, 0);
+      CLIO_CO_AWAIT(cl);
+      if (content.empty() || content.find('\0') < std::min<size_t>(content.size(), 4096)) {
+        continue;  // unreadable or binary
+      }
+      found.emplace_back(path, std::move(content));
+    }
+  }
+  std::sort(found.begin(), found.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+  for (auto &f : found) {
+    if (max_files != 0 && out->size() >= max_files) break;
+    SourceFile sf;
+    sf.path = f.first.compare(0, prefix.size(), prefix) == 0
+                  ? f.first.substr(prefix.size())
+                  : f.first;
+    sf.content = std::move(f.second);
+    out->push_back(std::move(sf));
+  }
+  CLIO_CO_RETURN;
+  CLIO_TASK_BODY_END
+}
+
 clio::run::TaskResume Runtime::IndexPath(
     clio::run::shared_ptr<IndexPathTask> &task) {
   CLIO_TASK_BODY_BEGIN
-  ScanOptions scan;
-  scan.max_files = task->max_files_;
-  std::vector<SourceFile> files = ScanDirectory(task->root_.str(), scan);
+  // Luke (2026-10-29): the indexer works only over data stored in the CTE.
+  // root_ is a path in the Clio FS namespace; nothing is read from the disk.
+  std::vector<SourceFile> files;
+  bool fs_ok = false;
+  CLIO_CO_AWAIT(ReadCteTree(task->root_.str(), task->max_files_, &files, &fs_ok));
+  if (!fs_ok) {
+    HLOG(kError, "CodeIndexer: the Clio FS pool (clio_cte_filesystem) is not composed");
+    task->SetReturnCode(kNoClioFs);
+    CLIO_CO_RETURN;
+  }
   if (files.empty()) {
-    HLOG(kWarning, "CodeIndexer: no source files under '{}'",
+    HLOG(kWarning, "CodeIndexer: no source files in the CTE under '{}'",
          task->root_.str());
     task->SetReturnCode(1);
     CLIO_CO_RETURN;

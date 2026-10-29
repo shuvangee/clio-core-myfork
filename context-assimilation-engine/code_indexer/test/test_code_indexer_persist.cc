@@ -43,6 +43,7 @@
 #include "summarizer_http_stub.h"
 
 #include <clio_cae/code_indexer/code_indexer_client.h>
+#include <clio_cae/code_indexer/cte_ingest.h>
 #include <clio_cte/core/core_client.h>
 #include <clio_ctp/introspect/system_info.h>
 #include <clio_runtime/clio_runtime.h>
@@ -112,9 +113,11 @@ TEST_CASE("Summaries persist to the CTE and are reused on re-index",
   std::this_thread::sleep_for(1s);
 
   ci::Client client(ci::kCodeIndexerPoolId);
+  // Files live in the CTE (Clio FS); the indexer never reads the disk.
+  REQUIRE(ci::IngestTree(dir.string(), "/ci_persist").files == 2);
 
   // 1. First index: every summary is generated and persisted.
-  auto first = client.AsyncIndexPath(dir.string());
+  auto first = client.AsyncIndexPath("/ci_persist");
   first.Wait();
   REQUIRE(first->GetReturnCode() == 0);
   REQUIRE(first->files_ == 2);
@@ -135,7 +138,7 @@ TEST_CASE("Summaries persist to the CTE and are reused on re-index",
 
   // 3. Re-index unchanged files: all hits, summarizer not called again, and
   //    the index does not grow (re-indexing replaces).
-  auto second = client.AsyncIndexPath(dir.string());
+  auto second = client.AsyncIndexPath("/ci_persist");
   second.Wait();
   REQUIRE(second->GetReturnCode() == 0);
   REQUIRE(second->cache_hits_ == 2);
@@ -147,7 +150,8 @@ TEST_CASE("Summaries persist to the CTE and are reused on re-index",
 
   // 4. Edit one file: that file misses (new fingerprint), the other hits.
   WriteFile(dir / "a.cc", "int FirstFile; int Changed;\n");
-  auto third = client.AsyncIndexPath(dir.string());
+  REQUIRE(ci::IngestTree(dir.string(), "/ci_persist").files == 2);  // re-put
+  auto third = client.AsyncIndexPath("/ci_persist");
   third.Wait();
   REQUIRE(third->cache_hits_ == 1);
   REQUIRE(third->summaries_ == 1);

@@ -60,7 +60,9 @@ install(TARGETS clio_cae_code_indexer clio_cae_code_indexer_summarize
 add_clio_module_client(
   SOURCES
     src/code_indexer_client.cc
+    src/cte_ingest.cc
 )
+target_link_libraries(clio_cae_code_indexer_client PUBLIC clio_cte_filesystem_client)
 target_include_directories(clio_cae_code_indexer_client PRIVATE
   ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include)
 
@@ -71,6 +73,7 @@ add_clio_module_runtime(
   LINK_LIBRARIES
     clio_cae_code_indexer_summarize
     clio_cte_core_client
+    clio_cte_filesystem_client
 )
 target_include_directories(clio_cae_code_indexer_runtime PRIVATE
   ${CMAKE_SOURCE_DIR}/context-transfer-engine/core/include)
@@ -82,6 +85,8 @@ add_executable(clio_code_index util/clio_code_index.cc)
 target_link_libraries(clio_code_index
   PRIVATE
     clio_cae_code_indexer_summarize
+    clio_cae_code_indexer_client
+    clio::run::cxx
     clio::run::admin_runtime
     clio::run::bdev_runtime
     ${CMAKE_THREAD_LIBS_INIT}

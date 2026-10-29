@@ -6,6 +6,34 @@ runtime:
   queue_depth: 1024
 
 compose:
+  - mod_name: clio_bdev
+    pool_name: "ram::chi_default_bdev"
+    pool_query: local
+    pool_id: "301.0"
+    bdev_type: ram
+    capacity: "256MB"
+
+  # CTE core: where the files live. The indexer reads them back through Clio FS.
+  - mod_name: clio_cte_core
+    pool_name: cte_core
+    pool_query: local
+    pool_id: "513.0"
+    storage:
+      - path: "ram::cte_ram_tier1"
+        bdev_type: "ram"
+        capacity_limit: "128MB"
+        score: 1.0
+    dpe:
+      dpe_type: "max_bw"
+
+  # Clio FS over the CTE core above: the Code Indexer reads files from here,
+  # never from the disk. next_pool_id points at the core pool below it.
+  - mod_name: clio_cte_filesystem
+    pool_name: clio_cte_filesystem
+    pool_query: local
+    pool_id: "560.0"
+    next_pool_id: "513.0"
+
   # The Code Indexer pool. Embeddings come from an in-process stub on a fixed
   # port; embed_batch 1 keeps every request at one input so the stub's fixed
   # one-vector reply is always well-formed. No summarize_model: code only.

@@ -45,6 +45,7 @@
  */
 
 #include <clio_cae/code_indexer/code_indexer_client.h>
+#include <clio_cae/code_indexer/cte_ingest.h>
 #include <clio_runtime/clio_runtime.h>
 
 #include <cstdlib>
@@ -59,7 +60,8 @@ namespace {
 void Usage() {
   std::cerr
       << "usage: clio_code_index_client [--pool MAJOR.MINOR] <command>\n"
-         "  index PATH [--max-files N]\n"
+         "  ingest LOCALDIR CTEROOT   copy source files into the CTE (Clio FS)\n"
+         "  index CTEROOT [--max-files N]   index files already in the CTE\n"
          "  query TEXT [--mode summary|code|hybrid|keyword] [--top-k N] "
          "[--show-summaries]\n"
          "  status\n";
@@ -84,6 +86,7 @@ clio::run::u32 ModeFromName(const std::string &m, bool *ok) {
   if (m == "keyword") return ci::QueryMode::kKeyword;
   if (m == "keyword+summary") return ci::QueryMode::kKeywordSummary;
   if (m == "keyword+graph") return ci::QueryMode::kKeywordGraph;
+  if (m == "keyword+graph-verified") return ci::QueryMode::kKeywordGraphVerified;
   *ok = false;
   return ci::QueryMode::kHybrid;
 }
@@ -93,7 +96,10 @@ int RunIndex(ci::Client *c, const std::string &path, clio::run::u32 max_files) {
   t.Wait();
   if (t->GetReturnCode() != 0) {
     std::cerr << "index failed (rc=" << t->GetReturnCode()
-              << "); is PATH readable on the pool's node and non-empty?\n";
+              << (t->GetReturnCode() == 3
+                      ? "); the Clio FS pool is not composed\n"
+                      : "); are there source files in the CTE under that "
+                        "path? (use `ingest` first)\n");
     return 1;
   }
   std::cout << "indexed files=" << t->files_ << " chunks=" << t->chunks_
@@ -155,6 +161,7 @@ int main(int argc, char **argv) {
 
   std::string cmd = args[0];
   std::string text;          // path or query
+  std::string text2;         // second positional (ingest: the CTE root)
   clio::run::u32 max_files = 0, k = 5, mode = ci::QueryMode::kHybrid;
   bool show_summaries = false;
   for (size_t i = 1; i < args.size(); ++i) {
@@ -175,16 +182,18 @@ int main(int argc, char **argv) {
       show_summaries = true;
     } else if (text.empty()) {
       text = a;
+    } else if (text2.empty() && cmd == "ingest") {
+      text2 = a;
     } else {
       Usage();
       return 2;
     }
   }
-  if ((cmd == "index" || cmd == "query") && text.empty()) {
+  if ((cmd == "index" || cmd == "query" || cmd == "ingest") && text.empty()) {
     Usage();
     return 2;
   }
-  if (cmd != "index" && cmd != "query" && cmd != "status") {
+  if (cmd != "index" && cmd != "query" && cmd != "status" && cmd != "ingest") {
     Usage();
     return 2;
   }
@@ -192,6 +201,14 @@ int main(int argc, char **argv) {
   if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false)) {
     std::cerr << "could not connect to the CLIO runtime; is it running?\n";
     return 1;
+  }
+  if (cmd == "ingest") {
+    // `text` is LOCALDIR; the CTE root is the second positional (--to also ok).
+    std::string cte_root = text2.empty() ? "/code" : text2;
+    ci::IngestStats s = ci::IngestTree(text, cte_root);
+    std::cout << "ingested files=" << s.files << " bytes=" << s.bytes
+              << " failures=" << s.failures << " into " << cte_root << "\n";
+    return s.failures == 0 && s.files > 0 ? 0 : 1;
   }
   ci::Client client(pool);
   if (cmd == "index") return RunIndex(&client, text, max_files);

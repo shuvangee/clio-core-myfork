@@ -42,6 +42,8 @@
 #include "summarizer_http_stub.h"
 
 #include <clio_cae/code_indexer/code_indexer_client.h>
+#include <clio_cae/code_indexer/cte_ingest.h>
+#include <clio_cte/filesystem/filesystem_client.h>
 #include <clio_ctp/introspect/system_info.h>
 #include <clio_runtime/clio_runtime.h>
 
@@ -50,6 +52,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
@@ -95,6 +98,24 @@ TEST_CASE("Code Indexer pool indexes a directory and answers queries",
 
   ci::Client client(ci::kCodeIndexerPoolId);
 
+  // The indexer only reads the CTE: put the files there first (Clio FS stands
+  // in for the transparent mount).
+  ci::IngestStats ing = ci::IngestTree(dir.string(), "/ci_pool");
+  REQUIRE(ing.failures == 0);
+  REQUIRE(ing.files == 2);  // README.md is not source
+  {
+    // Clio FS lists what was put there (full paths).
+    std::vector<std::string> top;
+    REQUIRE(CLIO_CFS_CLIENT->ReaddirPath("/ci_pool", &top) == 0);
+    REQUIRE(top.size() == 2);
+    // And the contents round-trip byte for byte (client-side reader).
+    auto back = ci::ReadTreeFromCte("/ci_pool");
+    REQUIRE(back.size() == 2);
+    REQUIRE(back[0].path == "net/http_server.cc");
+    REQUIRE(back[0].content == "class HttpServer { void AcceptLoop(); };\n");
+    REQUIRE(back[1].path == "tiering/reorganize.cc");
+  }
+
   // 1. Empty index.
   auto st0 = client.AsyncStatus();
   st0.Wait();
@@ -102,7 +123,7 @@ TEST_CASE("Code Indexer pool indexes a directory and answers queries",
   REQUIRE(st0->files_ == 0);
 
   // 2. Index the directory: two source files, README skipped.
-  auto idx = client.AsyncIndexPath(dir.string());
+  auto idx = client.AsyncIndexPath("/ci_pool");
   idx.Wait();
   REQUIRE(idx->GetReturnCode() == 0);
   REQUIRE(idx->files_ == 2);
@@ -130,10 +151,16 @@ TEST_CASE("Code Indexer pool indexes a directory and answers queries",
   REQUIRE(code->hits_.size() == 2);
   REQUIRE(code->hits_[0].start_line_ == 1);
 
-  // 5. An unindexed path reports failure instead of an empty success.
-  auto bad = client.AsyncIndexPath((dir / "does_not_exist").string());
+  // 5. A path that is not in the CTE reports failure instead of an empty
+  //    success, and so does the on-disk directory itself: the files exist on
+  //    disk but were never put in the CTE under that path, and the indexer
+  //    does not scan disk.
+  auto bad = client.AsyncIndexPath("/ci_pool/does_not_exist");
   bad.Wait();
   REQUIRE(bad->GetReturnCode() != 0);
+  auto on_disk = client.AsyncIndexPath(dir.string());
+  on_disk.Wait();
+  REQUIRE(on_disk->GetReturnCode() != 0);
 
   // 6. With the embedding server gone, an embedding query reports rc 2 and
   //    returns nothing; keyword search keeps working.

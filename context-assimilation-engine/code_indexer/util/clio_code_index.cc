@@ -45,6 +45,8 @@
 
 #include <clio_cae/code_indexer/claude_cli.h>
 #include <clio_cae/code_indexer/claude_client.h>
+#include <clio_cae/code_indexer/cte_ingest.h>
+#include <clio_runtime/clio_runtime.h>
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/embed_cache.h>
 #include <clio_cae/code_indexer/ollama_summarizer.h>
@@ -66,6 +68,8 @@ namespace {
 
 struct Args {
   std::string root;
+  std::string cte_root;     // read the files from the CTE (Clio FS) instead
+  std::string ingest_from;  // first copy this local dir into the CTE
   size_t max_files = 0;
   std::string embed_endpoint = "http://127.0.0.1:11434";
   std::string embed_model = "embeddinggemma";
@@ -101,7 +105,12 @@ struct Args {
 
 void Usage() {
   std::cerr
-      << "usage: clio_code_index --root DIR [options]\n"
+      << "usage: clio_code_index (--root DIR | --cte-root PATH) [options]\n"
+         "  --cte-root PATH        read the source files from the CTE (Clio FS);\n"
+         "                         needs a running CLIO runtime with the\n"
+         "                         clio_cte_filesystem pool\n"
+         "  --ingest-from DIR      with --cte-root: first copy DIR into the CTE\n"
+         "  --root DIR             legacy: read a local directory (not CTE-only)\n"
          "  --max-files N          index at most N files (sorted order)\n"
          "  --embed-endpoint URL   default http://127.0.0.1:11434\n"
          "  --embed-model NAME     default embeddinggemma\n"
@@ -164,6 +173,8 @@ bool ParseArgs(int argc, char **argv, Args *a) {
       return false;
     }
     if (k == "--root") a->root = v;
+    else if (k == "--cte-root") a->cte_root = v;
+    else if (k == "--ingest-from") a->ingest_from = v;
     else if (k == "--max-files") a->max_files = std::strtoul(v, nullptr, 10);
     else if (k == "--embed-endpoint") a->embed_endpoint = v;
     else if (k == "--embed-model") a->embed_model = v;
@@ -210,7 +221,7 @@ bool ParseArgs(int argc, char **argv, Args *a) {
     else if (k == "--top-k") a->top_k = std::strtoul(v, nullptr, 10);
     else { std::cerr << "unknown option " << k << "\n"; return false; }
   }
-  return !a->root.empty();
+  return !a->root.empty() || !a->cte_root.empty();
 }
 
 const char *ModeName(SearchMode m) {
@@ -277,8 +288,28 @@ int main(int argc, char **argv) {
 
   ScanOptions scan;
   scan.max_files = a.max_files;
-  std::vector<SourceFile> files = ScanDirectory(a.root, scan);
-  std::cout << "scanned " << files.size() << " files under " << a.root << "\n";
+  std::vector<SourceFile> files;
+  if (!a.cte_root.empty()) {
+    // CTE-only: the files come back out of Clio FS. --ingest-from is the one
+    // step that reads local disk (it stands in for the transparent mount).
+    if (!clio::run::CLIO_INIT(clio::run::RuntimeMode::kClient, false)) {
+      std::cerr << "could not connect to the CLIO runtime; is it running?\n";
+      return 1;
+    }
+    if (!a.ingest_from.empty()) {
+      IngestStats is = IngestTree(a.ingest_from, a.cte_root, scan);
+      std::cout << "ingested files=" << is.files << " bytes=" << is.bytes
+                << " failures=" << is.failures << " into " << a.cte_root
+                << "\n";
+    }
+    files = ReadTreeFromCte(a.cte_root, scan);
+    std::cout << "read " << files.size() << " files from the CTE under "
+              << a.cte_root << "\n";
+  } else {
+    files = ScanDirectory(a.root, scan);
+    std::cout << "scanned " << files.size() << " files under " << a.root
+              << " (local disk, legacy)\n";
+  }
   if (files.empty()) return 1;
 
   std::shared_ptr<Embedder> embedder;

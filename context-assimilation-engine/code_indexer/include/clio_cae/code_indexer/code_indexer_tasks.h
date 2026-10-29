@@ -39,7 +39,9 @@
  *
  * The pool wraps clio::cae::code_indexer::CodeIndexer (the in-memory
  * summarize -> embed -> search pipeline) behind three verbs:
- *   IndexPath  scan a directory on the pool's node and index it
+ *   IndexPath  index the source files stored in the CTE under a Clio FS path
+ *              (the disk is never read; use the client's `ingest` command, or
+ *              a Clio FS mount, to put files into the CTE first)
  *   Query      rank indexed files for a natural-language question
  *   Status     report index size
  */

@@ -26,6 +26,14 @@ compose:
     dpe:
       dpe_type: "max_bw"
 
+  # Clio FS over the CTE core above: the Code Indexer reads files from here,
+  # never from the disk. next_pool_id points at the core pool below it.
+  - mod_name: clio_cte_filesystem
+    pool_name: clio_cte_filesystem
+    pool_query: local
+    pool_id: "560.0"
+    next_pool_id: "513.0"
+
   # Code Indexer: stub embedder + stub summarizer, summaries persisted to
   # tag "ci_summaries" in the CTE core above. embed_batch 1 keeps the stub's
   # fixed one-vector reply well-formed.
