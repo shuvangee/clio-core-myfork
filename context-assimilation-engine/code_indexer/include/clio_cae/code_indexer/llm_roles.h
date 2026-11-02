@@ -146,6 +146,50 @@ inline BlobJudgeFn MakeBlobJudgeFromLlm(LlmFn llm) {
   };
 }
 
+/**
+ * Extraction instead of a gate: the part of one blob that matters for the
+ * question, copied verbatim. Returns false on a failed call; *extracted is
+ * empty when the model says nothing in the blob is relevant.
+ */
+using BlobExtractFn = std::function<bool(const std::string &query,
+                                         const SourceFile &file,
+                                         const CodeChunk &chunk,
+                                         std::string *extracted)>;
+
+inline BlobExtractFn MakeBlobExtractorFromLlm(LlmFn llm) {
+  return [llm](const std::string &query, const SourceFile &f,
+               const CodeChunk &c, std::string *extracted) -> bool {
+    std::string prompt =
+        "A developer asks:\n\"" + query + "\"\n\nBelow is one part of a "
+        "source file. Find the relevant parts of it for that question. Copy "
+        "ONLY the relevant lines, exactly as written and in their original "
+        "order, and leave out everything else. Even if only a small portion "
+        "is relevant, return that portion. If nothing in it is relevant, "
+        "reply with exactly the word NONE. Do not explain.";
+    std::string payload = "File: " + f.path + " (lines " +
+                          std::to_string(c.start_line) + "-" +
+                          std::to_string(c.end_line) + ")\n\n" + c.text;
+    std::string out = llm(prompt, payload);
+    if (out.empty()) return false;
+    size_t b = out.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return false;
+    if (out.compare(b, 4, "NONE") == 0) {
+      extracted->clear();
+      return true;
+    }
+    // Drop a surrounding markdown fence if the model added one.
+    if (out.compare(b, 3, "```") == 0) {
+      size_t nl = out.find('\n', b);
+      size_t end = out.rfind("```");
+      if (nl != std::string::npos && end != std::string::npos && end > nl) {
+        out = out.substr(nl + 1, end - nl - 1);
+      }
+    }
+    *extracted = out;
+    return true;
+  };
+}
+
 inline FocusFn MakeFocusFromLlm(LlmFn llm, size_t max_chars = 6000) {
   return [llm, max_chars](const std::string &query, const std::string &history,
                           const SourceFile &f) -> std::string {

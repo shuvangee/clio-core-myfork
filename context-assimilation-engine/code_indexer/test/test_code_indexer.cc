@@ -1039,3 +1039,31 @@ TEST_CASE("Claude CLI client runs the claude command and reads its JSON",
   fs::remove_all(dir);
 }
 #endif
+
+TEST_CASE("Blob extractor keeps only what the model copies, no gate",
+          "[code_indexer][twophase][roles]") {
+  SourceFile f{"a.cc", "x"};
+  CodeChunk c;
+  c.start_line = 1;
+  c.end_line = 4;
+  c.text = "line one\nwidget_prefetch_policy();\nline three";
+  std::string out;
+  // Model returns a fenced fragment: fence is stripped, text kept.
+  BlobExtractFn e1 = MakeBlobExtractorFromLlm(
+      [](const std::string &p, const std::string &) {
+        REQUIRE(p.find("Find the relevant parts") != std::string::npos);
+        return std::string("```cpp\nwidget_prefetch_policy();\n```");
+      });
+  REQUIRE(e1("q", f, c, &out));
+  REQUIRE(out == "widget_prefetch_policy();\n");
+  // NONE -> call ok, nothing extracted.
+  BlobExtractFn e2 = MakeBlobExtractorFromLlm(
+      [](const std::string &, const std::string &) { return std::string("NONE"); });
+  out = "stale";
+  REQUIRE(e2(  "q", f, c, &out));
+  REQUIRE(out.empty());
+  // Empty reply = failed call.
+  BlobExtractFn e3 = MakeBlobExtractorFromLlm(
+      [](const std::string &, const std::string &) { return std::string(); });
+  REQUIRE_FALSE(e3("q", f, c, &out));
+}

@@ -80,6 +80,8 @@ struct BlobResult {
   double bm25 = 0.0;
   bool kept = false;
   std::string text;
+  /** Extract mode: the model's verbatim relevant part (empty = none). */
+  std::string extracted;
 };
 
 struct TagResult {
@@ -101,7 +103,7 @@ struct TwoPhaseResult {
 inline TwoPhaseResult TwoPhaseQuery(
     const CodeIndexer &idx, const std::string &query, const TwoPhaseConfig &cfg,
     const std::function<bool(const std::string &, SourceFile *)> &content_of,
-    const BlobJudgeFn &judge) {
+    const BlobJudgeFn &judge, const BlobExtractFn &extract = nullptr) {
   TwoPhaseResult out;
   std::vector<SearchHit> hits;
   idx.Query(query, cfg.top_tags, SearchMode::kKeywordSummary, &hits);
@@ -141,6 +143,24 @@ inline TwoPhaseResult TwoPhaseQuery(
       c.start_line = b.start_line;
       c.end_line = b.end_line;
       c.text = b.text;
+      if (extract) {
+        // Extraction mode: no gate. A blob is kept iff the model returned
+        // some text; only the extracted part counts toward chars_out.
+        ++out.judged;
+        if (!extract(query, files[t], c, &b.extracted)) {
+          b.judge = -1.0;
+          ++out.failures;
+        } else if (!b.extracted.empty()) {
+          b.judge = 10.0;
+          b.kept = true;
+          ++tr.kept_blobs;
+          ++out.kept;
+          out.chars_out += b.extracted.size();
+        } else {
+          b.judge = 0.0;
+        }
+        continue;
+      }
       b.judge = judge(query, files[t], c);
       ++out.judged;
       if (b.judge < 0.0) {
