@@ -54,6 +54,7 @@
 #include <clio_cae/code_indexer/code_indexer.h>
 #include <clio_cae/code_indexer/llm_roles.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -69,6 +70,13 @@ struct TwoPhaseConfig {
   size_t chunk_lines = 60;
   size_t max_chunk_chars = 6000;
   size_t max_chunks_per_file = 24;
+  /**
+   * 0 = the model sees every blob. Otherwise only the best blobs by
+   * blob-level BM25 are sent to the model, in BM25 order, until this fraction
+   * of the candidate characters is reached (at least one blob). Unsent blobs
+   * cost no model tokens and are dropped.
+   */
+  double prefilter_frac = 0.0;
 };
 
 struct BlobResult {
@@ -135,10 +143,35 @@ inline TwoPhaseResult TwoPhaseQuery(
     out.tags[where[s.id].first].blobs[where[s.id].second].bm25 = s.score;
   }
 
-  // Phase 2: the model looks at every blob of every returned tag.
+  // Optional BM25 pre-filter: choose which blobs the model may see.
+  std::vector<std::vector<bool>> send(out.tags.size());
+  for (size_t t = 0; t < out.tags.size(); ++t) {
+    send[t].assign(out.tags[t].blobs.size(), cfg.prefilter_frac <= 0.0);
+  }
+  if (cfg.prefilter_frac > 0.0) {
+    std::vector<std::pair<size_t, size_t>> order = where;
+    std::stable_sort(order.begin(), order.end(), [&](auto &x, auto &y) {
+      return out.tags[x.first].blobs[x.second].bm25 >
+             out.tags[y.first].blobs[y.second].bm25;
+    });
+    double budget = cfg.prefilter_frac * static_cast<double>(out.chars_in);
+    size_t used = 0;
+    bool first = true;
+    for (auto &w : order) {
+      size_t n = out.tags[w.first].blobs[w.second].text.size();
+      if (!first && static_cast<double>(used + n) > budget) break;
+      send[w.first][w.second] = true;
+      used += n;
+      first = false;
+    }
+  }
+
+  // Phase 2: the model looks at every selected blob of every returned tag.
   for (size_t t = 0; t < out.tags.size(); ++t) {
     TagResult &tr = out.tags[t];
-    for (BlobResult &b : tr.blobs) {
+    for (size_t bi = 0; bi < tr.blobs.size(); ++bi) {
+      BlobResult &b = tr.blobs[bi];
+      if (!send[t][bi]) continue;
       CodeChunk c;
       c.start_line = b.start_line;
       c.end_line = b.end_line;

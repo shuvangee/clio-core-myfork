@@ -100,6 +100,7 @@ struct Args {
   std::string tp_model;        // two-phase: model that prunes blobs
   size_t tp_tags = 3;
   double tp_threshold = 6.0;
+  double tp_prefilter = 0.0;   // two-phase: BM25 blob pre-filter fraction (0=off)
   bool tp_extract = false;     // two-phase: extract relevant parts, no 0-10 gate
   bool show_blobs = false;
 };
@@ -153,6 +154,8 @@ void Usage() {
          "                         [two-phase] (backend ollama|claude|claude-cli)\n"
          "  --tp-tags N            tags kept by phase 1 (default 3)\n"
          "  --tp-threshold T       blob kept when model score >= T (default 6)\n"
+         "  --tp-prefilter F       send only the best blobs by blob-BM25 (up to fraction F of\n"
+         "                         candidate chars) to the model; 0 = all (default)\n"
          "  --tp-extract 0|1       1 = model copies the relevant lines of each blob\n"
          "                         instead of scoring it 0-10 (no gate)\n"
          "  --show-blobs           also print the text of kept blobs\n"
@@ -207,6 +210,7 @@ bool ParseArgs(int argc, char **argv, Args *a) {
     else if (k == "--two-phase-model") a->tp_model = v;
     else if (k == "--tp-tags") a->tp_tags = std::strtoul(v, nullptr, 10);
     else if (k == "--tp-threshold") a->tp_threshold = std::atof(v);
+    else if (k == "--tp-prefilter") a->tp_prefilter = std::atof(v);
     else if (k == "--tp-extract") a->tp_extract = std::atoi(v) != 0;
     else if (k == "--verify-model") a->verify_model = v;
     else if (k == "--focus-model") a->focus_model = v;
@@ -480,6 +484,7 @@ int main(int argc, char **argv) {
     }
     tpc.top_tags = a.tp_tags;
     tpc.keep_threshold = a.tp_threshold;
+    tpc.prefilter_frac = a.tp_prefilter;
     tpc.chunk_lines = cfg.chunk_lines;
     tpc.max_chunk_chars = cfg.max_chunk_chars;
     tpc.max_chunks_per_file = cfg.max_chunks_per_file;

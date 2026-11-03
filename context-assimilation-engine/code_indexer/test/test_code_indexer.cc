@@ -1067,3 +1067,26 @@ TEST_CASE("Blob extractor keeps only what the model copies, no gate",
       [](const std::string &, const std::string &) { return std::string(); });
   REQUIRE_FALSE(e3("q", f, c, &out));
 }
+
+TEST_CASE("Two-phase BM25 prefilter sends fewer blobs to the model",
+          "[code_indexer][twophase]") {
+  std::string big;
+  for (int i = 0; i < 120; ++i) big += (i == 70 ? "widget_prefetch_policy();\n" : "int filler" + std::to_string(i) + ";\n");
+  CodeIndexer idx(CodeIndexerConfig{}, nullptr, nullptr);
+  idx.IndexFiles({SourceFile{"core/prefetch.cc", big}});
+  auto content_of = [&](const std::string &, SourceFile *f) { *f = SourceFile{"core/prefetch.cc", big}; return true; };
+  size_t calls = 0;
+  BlobJudgeFn judge = [&](const std::string &, const SourceFile &, const CodeChunk &) { ++calls; return 9.0; };
+  TwoPhaseConfig cfg;
+  cfg.top_tags = 1;
+  TwoPhaseResult all = TwoPhaseQuery(idx, "widget_prefetch_policy", cfg, content_of, judge);
+  size_t all_calls = calls;
+  calls = 0;
+  cfg.prefilter_frac = 0.4;
+  TwoPhaseResult pf = TwoPhaseQuery(idx, "widget_prefetch_policy", cfg, content_of, judge);
+  REQUIRE(all_calls == 2);
+  REQUIRE(calls == 1);
+  REQUIRE(pf.judged == 1);
+  REQUIRE(pf.tags[0].blobs[1].kept);  // the blob with the identifier
+  REQUIRE_FALSE(pf.tags[0].blobs[0].kept);
+}
